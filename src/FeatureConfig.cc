@@ -265,8 +265,6 @@ std::string usedCompilerAndPlatform()
   if (strcmp(BUILD, TARGET)) {
     rv << "\n  targeting " << TARGET;
   }
-  rv << "\n  on        " << __DATE__ << " " << __TIME__;
-
   return rv.str();
 }
 

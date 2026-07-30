@@ -24,7 +24,6 @@ public:
   void testInetNtop();
   void testInetPton();
   void testGetBinAddr();
-  void testVerifyHostname();
 #ifdef ENABLE_SSL
   void testClientTlsHandshakeRemoteCloseIsRetriable();
 #ifdef HAVE_WINTLS
@@ -38,7 +37,6 @@ A2_TEST(SocketCoreTest, testGetSocketError)
 A2_TEST(SocketCoreTest, testInetNtop)
 A2_TEST(SocketCoreTest, testInetPton)
 A2_TEST(SocketCoreTest, testGetBinAddr)
-A2_TEST(SocketCoreTest, testVerifyHostname)
 #ifdef ENABLE_SSL
 A2_TEST(SocketCoreTest, testClientTlsHandshakeRemoteCloseIsRetriable)
 #ifdef HAVE_WINTLS
@@ -167,95 +165,12 @@ void SocketCoreTest::testGetBinAddr()
   REQUIRE_EQ((size_t)0, net::getBinAddr(dest, "localhost"));
 }
 
-void SocketCoreTest::testVerifyHostname()
-{
-  {
-    std::vector<std::string> dnsNames, ipAddrs;
-    std::string commonName;
-    REQUIRE(
-        !net::verifyHostname("example.org", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // Only commonName is provided
-    std::vector<std::string> dnsNames, ipAddrs;
-    std::string commonName = "example.org";
-    REQUIRE(
-        net::verifyHostname("example.org", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // Match against dNSName in subjectAltName
-    std::vector<std::string> dnsNames, ipAddrs;
-    dnsNames.push_back("foo");
-    dnsNames.push_back("example.org");
-    std::string commonName = "exampleX.org";
-    REQUIRE(
-        net::verifyHostname("example.org", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // If dNsName is provided, don't match with commonName
-    std::vector<std::string> dnsNames, ipAddrs;
-    dnsNames.push_back("foo");
-    dnsNames.push_back("exampleX.org");
-    ipAddrs.push_back("example.org");
-    std::string commonName = "example.org";
-    REQUIRE(
-        !net::verifyHostname("example.org", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // IPAddress in dnsName don't match.
-    std::vector<std::string> dnsNames, ipAddrs;
-    dnsNames.push_back("192.168.0.1");
-    std::string commonName = "example.org";
-    REQUIRE(
-        !net::verifyHostname("192.168.0.1", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // IPAddress string match with commonName
-    std::vector<std::string> dnsNames, ipAddrs;
-    std::string commonName = "192.168.0.1";
-    REQUIRE(
-        net::verifyHostname("192.168.0.1", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // Match against iPAddress in subjectAltName
-    std::vector<std::string> dnsNames, ipAddrs;
-    unsigned char binAddr[16];
-    size_t len;
-    len = net::getBinAddr(binAddr, "192.168.0.1");
-    ipAddrs.push_back(std::string(binAddr, binAddr + len));
-    std::string commonName = "example.org";
-    REQUIRE(
-        net::verifyHostname("192.168.0.1", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // Match against iPAddress (ipv6) in subjectAltName
-    std::vector<std::string> dnsNames, ipAddrs;
-    unsigned char binAddr[16];
-    size_t len;
-    len = net::getBinAddr(binAddr, "::1");
-    ipAddrs.push_back(std::string(binAddr, binAddr + len));
-    std::string commonName = "example.org";
-    REQUIRE(net::verifyHostname("::1", dnsNames, ipAddrs, commonName));
-  }
-  {
-    // If iPAddress is provided, don't match with commonName
-    std::vector<std::string> dnsNames, ipAddrs;
-    unsigned char binAddr[16];
-    size_t len;
-    len = net::getBinAddr(binAddr, "192.168.0.2");
-    ipAddrs.push_back(std::string(binAddr, binAddr + len));
-    std::string commonName = "192.168.0.1";
-    REQUIRE(
-        !net::verifyHostname("192.168.0.1", dnsNames, ipAddrs, commonName));
-  }
-}
-
 #ifdef ENABLE_SSL
 void SocketCoreTest::testClientTlsHandshakeRemoteCloseIsRetriable()
 {
   auto tlsContext = std::shared_ptr<TLSContext>(TLSContext::make(
       TLS_CLIENT, TLS_PROTO_TLS12));
-  tlsContext->setVerifyPeer(false);
+  tlsContext->configurePeerVerification(TLSVerification::Disabled, "");
   SocketCore::setClientTLSContext(tlsContext);
 
   SocketCore listener;

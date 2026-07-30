@@ -81,6 +81,26 @@ size_t countPublicOption(InputIterator first, InputIterator last)
 } // namespace
 
 namespace {
+bool isPublicInputAlias(const option::InputAlias& alias,
+                        const std::vector<OptionHandler*>& handlers)
+{
+  const auto id = alias.target->i;
+  return id < handlers.size() && handlers[id] && !handlers[id]->isHidden();
+}
+
+size_t countPublicInputAlias(const std::vector<OptionHandler*>& handlers)
+{
+  size_t count = 0;
+  for (const auto& alias : option::inputAliases()) {
+    if (isPublicInputAlias(alias, handlers)) {
+      ++count;
+    }
+  }
+  return count;
+}
+} // namespace
+
+namespace {
 template <typename InputIterator>
 void putOptions(struct option* longOpts, int* plopt, InputIterator first,
                 InputIterator last)
@@ -127,6 +147,48 @@ void putOptions(struct option* longOpts, int* plopt, InputIterator first,
   (*longOpts).flag = nullptr;
   (*longOpts).val = 0;
 }
+
+void putInputAliases(struct option* longOpts, int* plopt,
+                     const std::vector<OptionHandler*>& handlers)
+{
+  for (const auto& alias : option::inputAliases()) {
+    if (!isPublicInputAlias(alias, handlers)) {
+      continue;
+    }
+    const auto handler = handlers[alias.target->i];
+#ifdef HAVE_OPTION_CONST_NAME
+    (*longOpts).name = alias.name;
+#else  // !HAVE_OPTION_CONST_NAME
+    (*longOpts).name = strdup(alias.name);
+    if ((*longOpts).name == nullptr) {
+      auto errNum = errno;
+      A2_LOG_ERROR(
+          fmt("strdup() failed: %s", util::safeStrerror(errNum).c_str()));
+      exit(EXIT_FAILURE);
+    }
+#endif // !HAVE_OPTION_CONST_NAME
+    switch (handler->getArgType()) {
+    case OptionHandler::REQ_ARG:
+      (*longOpts).has_arg = required_argument;
+      break;
+    case OptionHandler::OPT_ARG:
+      (*longOpts).has_arg = optional_argument;
+      break;
+    case OptionHandler::NO_ARG:
+      (*longOpts).has_arg = no_argument;
+      break;
+    default:
+      abort();
+    }
+    (*longOpts).flag = plopt;
+    (*longOpts).val = alias.target->i;
+    ++longOpts;
+  }
+  (*longOpts).name = nullptr;
+  (*longOpts).has_arg = 0;
+  (*longOpts).flag = nullptr;
+  (*longOpts).val = 0;
+}
 } // namespace
 
 namespace {
@@ -157,9 +219,12 @@ void OptionParser::parseArg(std::ostream& out,
 {
   size_t numPublicOption =
       countPublicOption(handlers_.begin(), handlers_.end());
+  size_t numInputAlias = countPublicInputAlias(handlers_);
   int lopt;
-  auto longOpts = make_unique<struct option[]>(numPublicOption + 1);
+  auto longOpts =
+      make_unique<struct option[]>(numPublicOption + numInputAlias + 1);
   putOptions(longOpts.get(), &lopt, handlers_.begin(), handlers_.end());
+  putInputAliases(longOpts.get() + numPublicOption, &lopt, handlers_);
   std::string optstring = createOptstring(handlers_.begin(), handlers_.end());
   while (1) {
     int c = getopt_long(argc, argv, optstring.c_str(), longOpts.get(), nullptr);

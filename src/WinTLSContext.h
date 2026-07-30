@@ -79,18 +79,12 @@ public:
   virtual bool addCredentialFile(const std::string& certfile,
                                  const std::string& keyfile) override;
 
-  virtual bool addSystemTrustedCACerts() override { return true; }
-
-  // certfile can contain multiple certificates.
-  virtual bool addTrustedCACertFile(const std::string& certfile) override;
+  bool configurePeerVerification(TLSVerification verification,
+                                 const std::string& caFile) override;
 
   virtual bool good() const override { return true; }
 
   virtual TLSSessionSide getSide() const override { return side_; }
-
-  virtual bool getVerifyPeer() const override;
-
-  virtual void setVerifyPeer(bool verify) override;
 
   CredHandle* getCredHandle();
 
@@ -102,6 +96,8 @@ private:
 #endif // HAVE_SCH_CREDENTIALS
   HCERTSTORE store_;
   wintls::CredPtr cred_;
+
+  void setVerifyPeer(bool verify);
 };
 
 } // namespace aria2

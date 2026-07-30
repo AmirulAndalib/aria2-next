@@ -412,12 +412,6 @@ namespace net {
 // IPv6. Return 0 if error occurred.
 size_t getBinAddr(void* dest, const std::string& ip);
 
-// Verifies hostname against presented identifiers in the certificate.
-// The implementation is based on the procedure described in RFC 6125.
-bool verifyHostname(const std::string& hostname,
-                    const std::vector<std::string>& dnsNames,
-                    const std::vector<std::string>& ipAddrs,
-                    const std::string& commonName);
 // Checks public IP address are configured for each family: IPv4 and
 // IPv6. The result can be obtained using getIpv4AddrConfigured() and
 // getIpv6AddrConfigured() respectively.

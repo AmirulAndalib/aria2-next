@@ -12,19 +12,19 @@ profile=$1
 
 case "$profile" in
   linux)
-    tools="cmake ninja pkg-config make curl tar strip readelf"
+    tools="cmake ninja pkg-config make curl tar strip readelf strings"
     ;;
   macos)
-    tools="cmake ninja pkg-config make curl tar clang strip otool"
+    tools="cmake ninja pkg-config make curl tar clang strip otool strings"
     ;;
   windows-x86_64)
-    tools="cmake ninja pkg-config make curl tar x86_64-w64-mingw32-gcc-posix x86_64-w64-mingw32-g++-posix x86_64-w64-mingw32-windres x86_64-w64-mingw32-strip x86_64-w64-mingw32-objdump"
+    tools="cmake ninja pkg-config make curl tar x86_64-w64-mingw32-clang x86_64-w64-mingw32-clang++ x86_64-w64-mingw32-ar x86_64-w64-mingw32-ranlib x86_64-w64-mingw32-windres x86_64-w64-mingw32-strip x86_64-w64-mingw32-objdump strings"
     ;;
   windows-arm64)
-    tools="cmake ninja pkg-config make curl tar aarch64-w64-mingw32-clang aarch64-w64-mingw32-clang++ aarch64-w64-mingw32-ar aarch64-w64-mingw32-ranlib aarch64-w64-mingw32-strip aarch64-w64-mingw32-objdump"
+    tools="cmake ninja pkg-config make curl tar aarch64-w64-mingw32-clang aarch64-w64-mingw32-clang++ aarch64-w64-mingw32-ar aarch64-w64-mingw32-ranlib aarch64-w64-mingw32-strip aarch64-w64-mingw32-objdump strings"
     ;;
   android)
-    tools="cmake ninja pkg-config make curl tar unzip dpkg-architecture perl"
+    tools="cmake ninja pkg-config make curl tar unzip dpkg-architecture perl strings"
     ;;
   release-tools)
     tools="git gh sha256sum sed grep sort"

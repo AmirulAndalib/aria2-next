@@ -40,7 +40,9 @@
 
 #include "Log.h"
 #include "util.h"
-#include "SocketCore.h"
+#ifdef __APPLE__
+#  include "AppleTrustVerifier.h"
+#endif // __APPLE__
 
 namespace aria2 {
 
@@ -50,7 +52,8 @@ TLSSession* TLSSession::make(TLSContext* ctx)
 }
 
 OpenSSLTLSSession::OpenSSLTLSSession(OpenSSLTLSContext* tlsContext)
-    : ssl_(nullptr), tlsContext_(tlsContext), rv_(1)
+    : ssl_(nullptr), tlsContext_(tlsContext),
+      peerVerificationConfigured_(false), rv_(1)
 {
 }
 
@@ -79,11 +82,12 @@ int OpenSSLTLSSession::setSNIHostname(const std::string& hostname)
 {
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
   ERR_clear_error();
-  // TLS extensions: SNI.  There is not documentation about the
-  // return code for this function (actually this is macro
-  // wrapping SSL_ctrl at the time of this writing).
-  SSL_set_tlsext_host_name(ssl_, hostname.c_str());
+  if (!util::isNumericHost(hostname) &&
+      SSL_set_tlsext_host_name(ssl_, hostname.c_str()) != 1) {
+    return TLS_ERR_ERROR;
+  }
 #endif // SSL_CTRL_SET_TLSEXT_HOSTNAME
+
   return TLS_ERR_OK;
 }
 
@@ -217,100 +221,41 @@ int OpenSSLTLSSession::tlsConnect(const std::string& hostname,
                                   std::string& handshakeErr)
 {
   handshakeErr = "";
+#ifdef __APPLE__
+  auto useOpenSSLVerification =
+      tlsContext_->getVerification() != TLSVerification::System;
+#else  // !__APPLE__
+  constexpr auto useOpenSSLVerification = true;
+#endif // !__APPLE__
+  if (!peerVerificationConfigured_ &&
+      tlsContext_->isPeerVerificationEnabled() &&
+      useOpenSSLVerification &&
+      (util::isNumericHost(hostname)
+           ? X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl_),
+                                           hostname.c_str()) != 1
+           : SSL_set1_host(ssl_, hostname.c_str()) != 1)) {
+    handshakeErr = "failed to configure certificate hostname verification";
+    return TLS_ERR_ERROR;
+  }
+  peerVerificationConfigured_ = true;
   int ret;
   ret = handshake(version);
   if (ret != TLS_ERR_OK) {
     return ret;
   }
-  if (tlsContext_->getSide() == TLS_CLIENT && tlsContext_->getVerifyPeer()) {
-    // verify peer
-    auto peerCert = SSL_get1_peer_certificate(ssl_);
-    if (!peerCert) {
-      handshakeErr = "certificate not found";
-      return TLS_ERR_ERROR;
+  if (tlsContext_->getSide() == TLS_CLIENT &&
+      tlsContext_->isPeerVerificationEnabled()) {
+#ifdef __APPLE__
+    if (tlsContext_->getVerification() == TLSVerification::System) {
+      if (!verifyAppleSystemTrust(ssl_, hostname, handshakeErr)) {
+        return TLS_ERR_ERROR;
+      }
+      return TLS_ERR_OK;
     }
-    std::unique_ptr<X509, decltype(&X509_free)> certDeleter(peerCert,
-                                                            X509_free);
+#endif // __APPLE__
     long verifyResult = SSL_get_verify_result(ssl_);
     if (verifyResult != X509_V_OK) {
       handshakeErr = X509_verify_cert_error_string(verifyResult);
-      return TLS_ERR_ERROR;
-    }
-    std::string commonName;
-    std::vector<std::string> dnsNames;
-    std::vector<std::string> ipAddrs;
-    GENERAL_NAMES* altNames;
-    altNames = reinterpret_cast<GENERAL_NAMES*>(
-        X509_get_ext_d2i(peerCert, NID_subject_alt_name, nullptr, NULL));
-    if (altNames) {
-      std::unique_ptr<GENERAL_NAMES, decltype(&GENERAL_NAMES_free)>
-          altNamesDeleter(altNames, GENERAL_NAMES_free);
-      size_t n = sk_GENERAL_NAME_num(altNames);
-      for (size_t i = 0; i < n; ++i) {
-        const GENERAL_NAME* altName = sk_GENERAL_NAME_value(altNames, i);
-        if (altName->type == GEN_DNS) {
-          auto name = ASN1_STRING_get0_data(altName->d.ia5);
-          if (!name) {
-            continue;
-          }
-          size_t len = ASN1_STRING_length(altName->d.ia5);
-          if (len == 0) {
-            continue;
-          }
-          if (name[len - 1] == '.') {
-            --len;
-            if (len == 0) {
-              continue;
-            }
-          }
-          dnsNames.push_back(std::string(name, name + len));
-        }
-        else if (altName->type == GEN_IPADD) {
-          auto ipAddr = ASN1_STRING_get0_data(altName->d.iPAddress);
-          if (!ipAddr) {
-            continue;
-          }
-          size_t len = ASN1_STRING_length(altName->d.iPAddress);
-          ipAddrs.push_back(
-              std::string(reinterpret_cast<const char*>(ipAddr), len));
-        }
-      }
-    }
-    const X509_NAME* subjectName = X509_get_subject_name(peerCert);
-    if (!subjectName) {
-      handshakeErr = "could not get X509 name object from the certificate.";
-      return TLS_ERR_ERROR;
-    }
-    int lastpos = -1;
-    while (1) {
-      lastpos =
-          X509_NAME_get_index_by_NID(subjectName, NID_commonName, lastpos);
-      if (lastpos == -1) {
-        break;
-      }
-      const X509_NAME_ENTRY* entry = X509_NAME_get_entry(subjectName, lastpos);
-      unsigned char* out;
-      int outlen = ASN1_STRING_to_UTF8(&out, X509_NAME_ENTRY_get_data(entry));
-      if (outlen < 0) {
-        continue;
-      }
-      if (outlen == 0) {
-        OPENSSL_free(out);
-        continue;
-      }
-      if (out[outlen - 1] == '.') {
-        --outlen;
-        if (outlen == 0) {
-          OPENSSL_free(out);
-          continue;
-        }
-      }
-      commonName.assign(&out[0], &out[outlen]);
-      OPENSSL_free(out);
-      break;
-    }
-    if (!net::verifyHostname(hostname, dnsNames, ipAddrs, commonName)) {
-      handshakeErr = "hostname does not match";
       return TLS_ERR_ERROR;
     }
   }

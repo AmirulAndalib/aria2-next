@@ -10,6 +10,14 @@ fi
 
 section_flags="-Os -ffunction-sections -fdata-sections"
 debug_flags=
+prefix_flags=
+
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  prefix_flags="-ffile-prefix-map=$GITHUB_WORKSPACE=. -fdebug-prefix-map=$GITHUB_WORKSPACE=."
+fi
+
+SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}
+export SOURCE_DATE_EPOCH
 
 case "${ARIA2_BUILD_PROFILE:-release}" in
   release)
@@ -23,7 +31,7 @@ case "${ARIA2_BUILD_PROFILE:-release}" in
     ;;
 esac
 
-profile_flags="$section_flags${debug_flags:+ $debug_flags}"
+profile_flags="$section_flags${prefix_flags:+ $prefix_flags}${debug_flags:+ $debug_flags}"
 
 case "$platform" in
   linux)
@@ -37,7 +45,7 @@ case "$platform" in
     ;;
   windows)
     export RELEASE_CFLAGS="$profile_flags"
-    export RELEASE_LDFLAGS="-L${PREFIX:-/usr/local}/lib -Wl,--gc-sections -static -static-libgcc -static-libstdc++"
+    export RELEASE_LDFLAGS="-L${PREFIX:-/usr/local}/lib -Wl,--gc-sections -Wl,--no-insert-timestamp -static -static-libgcc -static-libstdc++"
     ;;
   android)
     export RELEASE_CFLAGS="$profile_flags"

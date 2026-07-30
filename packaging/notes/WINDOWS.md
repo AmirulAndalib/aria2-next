@@ -6,7 +6,9 @@ The official release binary is checked before packaging so it does not require M
 
 Official Windows releases use WinTLS for HTTPS verification, trust the Windows certificate store, and use WinCNG for libssh2 cryptography. No bundled `cacert.pem` or OpenSSL runtime is required for ordinary HTTPS downloads.
 
-Maintained dependency and Windows ARM64 llvm-mingw versions are recorded in `packaging/dependencies.env` in the source tree. Windows x86_64 builds use the MinGW-w64 POSIX thread model required by the C++ logging runtime.
+Maintained dependency and llvm-mingw versions are recorded in `packaging/dependencies.env` in the source tree. Both Windows architectures use the same pinned LLVM-MinGW UCRT toolchain.
+
+Release executables are cross-compiled on Linux and executed on native Windows x86_64 and ARM64 runners before publication.
 
 Example use from PowerShell:
 

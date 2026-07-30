@@ -69,7 +69,6 @@ public:
   void testNoProxyDomainMatch();
   void testInPrivateAddress();
   void testSecfmt();
-  void testTlsHostnameMatch();
   void testParseDoubleNoThrow();
 };
 
@@ -115,7 +114,6 @@ A2_TEST(UtilTest2, testNextParam)
 A2_TEST(UtilTest2, testNoProxyDomainMatch)
 A2_TEST(UtilTest2, testInPrivateAddress)
 A2_TEST(UtilTest2, testSecfmt)
-A2_TEST(UtilTest2, testTlsHostnameMatch)
 A2_TEST(UtilTest2, testParseDoubleNoThrow)
 
 class Printer {
@@ -979,30 +977,6 @@ void UtilTest2::testSecfmt()
   REQUIRE_EQ(std::string("2m"), util::secfmt(120));
   REQUIRE_EQ(std::string("59m59s"), util::secfmt(3599));
   REQUIRE_EQ(std::string("1h"), util::secfmt(3600));
-}
-
-void UtilTest2::testTlsHostnameMatch()
-{
-  REQUIRE(util::tlsHostnameMatch("Foo.com", "foo.com"));
-  REQUIRE(util::tlsHostnameMatch("*.a.com", "foo.a.com"));
-  REQUIRE(!util::tlsHostnameMatch("*.a.com", "bar.foo.a.com"));
-  REQUIRE(!util::tlsHostnameMatch("f*.com", "foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("*.com", "bar.com"));
-  REQUIRE(util::tlsHostnameMatch("com", "com"));
-  REQUIRE(!util::tlsHostnameMatch("foo.*", "foo.com"));
-  REQUIRE(util::tlsHostnameMatch("a.foo.com", "A.foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("a.foo.com", "b.foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("*a.foo.com", "a.foo.com"));
-  REQUIRE(util::tlsHostnameMatch("*a.foo.com", "ba.foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("a*.foo.com", "a.foo.com"));
-  REQUIRE(util::tlsHostnameMatch("a*.foo.com", "ab.foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("foo.b*z.foo.com", "foo.baz.foo.com"));
-  REQUIRE(util::tlsHostnameMatch("B*z.foo.com", "bAZ.Foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("b*z.foo.com", "bz.foo.com"));
-  REQUIRE(!util::tlsHostnameMatch("*", "foo"));
-  REQUIRE(!util::tlsHostnameMatch("*", ""));
-  REQUIRE(util::tlsHostnameMatch("", ""));
-  REQUIRE(!util::tlsHostnameMatch("xn--*.a.b", "xn--c.a.b"));
 }
 
 void UtilTest2::testParseDoubleNoThrow()

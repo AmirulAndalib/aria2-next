@@ -37,6 +37,7 @@
 
 #include "common.h"
 #include <string>
+#include <vector>
 
 namespace aria2 {
 
@@ -52,15 +53,25 @@ typedef const Pref* PrefPtr;
 
 namespace option {
 
+struct InputAlias {
+  const char* name;
+  PrefPtr target;
+};
+
 // Returns the number of options.
 size_t countOption();
 
 // Returns Pref whose ID is id. id must be less than countOption().
 PrefPtr i2p(size_t id);
 
-// Returns Pref whose keyword is k. If no such Pref is found, returns
-// special null Pref whose ID is 0.
+// Resolves canonical option names and input aliases. If no match is found,
+// returns the special null Pref whose ID is 0.
 PrefPtr k2p(const std::string& k);
+
+const std::vector<InputAlias>& inputAliases();
+
+const std::string& normalizeInputValue(PrefPtr pref,
+                                       const std::string& value);
 
 // Deletes resources allocated for preferences. Call this function at
 // the end of the program only once.

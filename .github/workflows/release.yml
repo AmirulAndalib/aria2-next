@@ -15,7 +15,7 @@ on:
           - debug
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -33,7 +33,7 @@ jobs:
       strip_binary: ${{ steps.resolve.outputs.strip_binary }}
       windows_debug_map_flags: ${{ steps.resolve.outputs.windows_debug_map_flags }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -118,7 +118,7 @@ jobs:
       PREFIX: /usr/local
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -219,13 +219,14 @@ jobs:
           ctest --test-dir build/release --output-on-failure
           packaging/scripts/check-runtime-deps linux build/release/aria2-next
           packaging/scripts/size-audit linux build/release/aria2-next
+          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
           VERSION="${{ needs.resolve-release.outputs.version }}"
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-linux-x86_64"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: linux-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-linux-x86_64
@@ -245,7 +246,7 @@ jobs:
       PREFIX: /usr/local
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -346,13 +347,14 @@ jobs:
           ctest --test-dir build/release --output-on-failure
           packaging/scripts/check-runtime-deps linux build/release/aria2-next
           packaging/scripts/size-audit linux build/release/aria2-next
+          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
           VERSION="${{ needs.resolve-release.outputs.version }}"
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-linux-aarch64"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: linux-aarch64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-linux-aarch64
@@ -373,7 +375,7 @@ jobs:
       MACOSX_VERSION_MIN: "11.0"
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -436,11 +438,12 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-arm64-cc no-shared no-module no-tests \
-            --prefix=$PREFIX --libdir=lib \
+          ./Configure darwin64-arm64-cc no-shared no-module no-tests no-autoload-config \
+            --prefix=/usr/local/aria2-next --openssldir=/etc/ssl --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
-          make install_sw
+          make install_sw DESTDIR="$RUNNER_TEMP/openssl-root"
+          cp -R "$RUNNER_TEMP/openssl-root/usr/local/aria2-next/." "$PREFIX/"
 
       - name: Build libssh2
         run: |
@@ -478,13 +481,14 @@ jobs:
           ctest --test-dir build/release --output-on-failure
           packaging/scripts/check-runtime-deps macos build/release/aria2-next
           packaging/scripts/size-audit macos build/release/aria2-next
+          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
           VERSION="${{ needs.resolve-release.outputs.version }}"
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-macos-arm64"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: macos-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-macos-arm64
@@ -505,7 +509,7 @@ jobs:
       MACOSX_VERSION_MIN: "11.0"
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -568,11 +572,12 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-x86_64-cc no-shared no-module no-tests \
-            --prefix=$PREFIX --libdir=lib \
+          ./Configure darwin64-x86_64-cc no-shared no-module no-tests no-autoload-config \
+            --prefix=/usr/local/aria2-next --openssldir=/etc/ssl --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
-          make install_sw
+          make install_sw DESTDIR="$RUNNER_TEMP/openssl-root"
+          cp -R "$RUNNER_TEMP/openssl-root/usr/local/aria2-next/." "$PREFIX/"
 
       - name: Build libssh2
         run: |
@@ -610,13 +615,14 @@ jobs:
           ctest --test-dir build/release --output-on-failure
           packaging/scripts/check-runtime-deps macos build/release/aria2-next
           packaging/scripts/size-audit macos build/release/aria2-next
+          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
           VERSION="${{ needs.resolve-release.outputs.version }}"
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-macos-x86_64"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: macos-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-macos-x86_64
@@ -635,22 +641,26 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
       HOST: x86_64-w64-mingw32
       PREFIX: /usr/local/x86_64-w64-mingw32
-      CC: x86_64-w64-mingw32-gcc-posix
-      CXX: x86_64-w64-mingw32-g++-posix
+      CC: x86_64-w64-mingw32-clang
+      CXX: x86_64-w64-mingw32-clang++
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
       WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Install cross-compilation toolchain
+      - name: Install llvm-mingw toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip \
-            gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+            patch ca-certificates pkg-config curl tar dpkg-dev lzip
+          . packaging/dependencies.env
+          . packaging/scripts/common.sh
+          curl_fetch "$LLVM_MINGW_URL" "$LLVM_MINGW_ARCHIVE" "$LLVM_MINGW_SHA256"
+          tar xf "$LLVM_MINGW_ARCHIVE"
+          echo "$PWD/llvm-mingw-$LLVM_MINGW_VERSION-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
 
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools windows-x86_64
@@ -779,13 +789,13 @@ jobs:
             cp build/release/aria2-next.map "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-x86_64.map"
           fi
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: windows-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-x86_64.exe
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: needs.resolve-release.outputs.build_profile == 'debug'
         with:
           name: windows-x86_64-debug-map
@@ -814,7 +824,7 @@ jobs:
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
       WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -962,19 +972,61 @@ jobs:
             cp build/release/aria2-next.map "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-arm64.map"
           fi
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: windows-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-arm64.exe
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: needs.resolve-release.outputs.build_profile == 'debug'
         with:
           name: windows-arm64-debug-map
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-arm64.map
           archive: false
           if-no-files-found: error
+
+  test-windows-x64:
+    name: Windows x86_64 Artifact Smoke Test
+    needs:
+      - resolve-release
+      - build-windows-x64
+    runs-on: windows-2025
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
+          path: artifact
+      - name: Run final executable
+        shell: pwsh
+        run: |
+          $binary = Get-ChildItem artifact -Filter *.exe | Select-Object -First 1
+          $output = & $binary.FullName --version | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($output -notmatch [regex]::Escape("Aria2 Next version ${{ needs.resolve-release.outputs.version }}")) {
+            throw "Unexpected version output: $output"
+          }
+
+  test-windows-arm64:
+    name: Windows ARM64 Artifact Smoke Test
+    needs:
+      - resolve-release
+      - build-windows-arm64
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
+          path: artifact
+      - name: Run final executable
+        shell: pwsh
+        run: |
+          $binary = Get-ChildItem artifact -Filter *.exe | Select-Object -First 1
+          $output = & $binary.FullName --version | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($output -notmatch [regex]::Escape("Aria2 Next version ${{ needs.resolve-release.outputs.version }}")) {
+            throw "Unexpected version output: $output"
+          }
 
   # ---------------------------------------------------------------------------
   # Android ARM64
@@ -992,7 +1044,7 @@ jobs:
       PREFIX: ${{ github.workspace }}/packaging/android-deps
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
@@ -1154,7 +1206,7 @@ jobs:
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-android-arm64"
           chmod 755 "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-android-arm64"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: android-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-android-arm64
@@ -1173,20 +1225,26 @@ jobs:
       - build-macos-intel
       - build-windows-x64
       - build-windows-arm64
+      - test-windows-x64
+      - test-windows-arm64
       - build-android-arm64
     runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     env:
       ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
       VERSION: ${{ needs.resolve-release.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools release-tools
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: artifacts
           merge-multiple: true
@@ -1201,16 +1259,21 @@ jobs:
       - name: List release assets
         run: ls -lhR artifacts/
 
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: artifacts/*
+
       - name: Upload assets to GitHub Release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" artifacts/* --clobber
+        run: gh release upload "$RELEASE_TAG" artifacts/*
 
       - name: Upload artifacts for manual validation
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-release-assets
           path: artifacts/*

@@ -931,10 +931,7 @@ bool SocketCore::tlsHandshake(TLSContext* tlsctx, const std::string& hostname)
       tlsSession_.reset();
       throw DL_ABORT_EX(fmt(EX_SSL_INIT_FAILURE, error.c_str()));
     }
-    // Check hostname is not numeric and it includes ".". Setting
-    // "localhost" will produce TLS alert with GNUTLS.
-    if (tlsctx->getSide() == TLS_CLIENT && !util::isNumericHost(hostname) &&
-        hostname.find(".") != std::string::npos) {
+    if (tlsctx->getSide() == TLS_CLIENT && !util::isNumericHost(hostname)) {
       rv = tlsSession_->setSNIHostname(hostname);
       if (rv != TLS_ERR_OK) {
         throw DL_ABORT_EX(fmt(EX_SSL_INIT_FAILURE,
@@ -1532,41 +1529,6 @@ size_t getBinAddr(void* dest, const std::string& ip)
     }
   }
   return len;
-}
-
-bool verifyHostname(const std::string& hostname,
-                    const std::vector<std::string>& dnsNames,
-                    const std::vector<std::string>& ipAddrs,
-                    const std::string& commonName)
-{
-  if (util::isNumericHost(hostname)) {
-    if (ipAddrs.empty()) {
-      return commonName == hostname;
-    }
-    // We need max 16 bytes to store IPv6 address.
-    unsigned char binAddr[16];
-    size_t addrLen = getBinAddr(binAddr, hostname);
-    if (addrLen == 0) {
-      return false;
-    }
-    for (auto& ipAddr : ipAddrs) {
-      if (addrLen == ipAddr.size() &&
-          memcmp(binAddr, ipAddr.c_str(), addrLen) == 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  if (dnsNames.empty()) {
-    return util::tlsHostnameMatch(commonName, hostname);
-  }
-  for (auto& dnsName : dnsNames) {
-    if (util::tlsHostnameMatch(dnsName, hostname)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 namespace {

@@ -164,11 +164,6 @@ WinTLSContext::~WinTLSContext()
   }
 }
 
-bool WinTLSContext::getVerifyPeer() const
-{
-  return credentials_.dwFlags & SCH_CRED_AUTO_CRED_VALIDATION;
-}
-
 void WinTLSContext::setVerifyPeer(bool verify)
 {
   cred_.reset();
@@ -274,11 +269,16 @@ bool WinTLSContext::addCredentialFile(const std::string& certfile,
   return true;
 }
 
-bool WinTLSContext::addTrustedCACertFile(const std::string& certfile)
+bool WinTLSContext::configurePeerVerification(
+    TLSVerification verification, const std::string& caFile)
 {
-  A2_LOG_WARN("TLS CA bundle files are not supported. "
-              "The system trust store will be used.");
-  return false;
+  if (verification == TLSVerification::CustomCA) {
+    A2_LOG_ERROR(fmt("Custom TLS CA file is not supported by WinTLS: %s",
+                     caFile.c_str()));
+    return false;
+  }
+  setVerifyPeer(verification != TLSVerification::Disabled);
+  return true;
 }
 
 } // namespace aria2

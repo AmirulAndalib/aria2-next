@@ -143,7 +143,6 @@ bash -n tools/build_test.sh
 bash -n scripts/bump-version.sh
 bash -n scripts/release.sh
 bash -n packaging/scripts/common.sh
-bash -n packaging/scripts/mingw-release
 ```
 
 ## Failed Release Recovery

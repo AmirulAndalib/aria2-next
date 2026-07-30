@@ -701,6 +701,9 @@ P2P Sharing Options
   queue gets started. But be aware that share-only item is still
   recognized as active download in RPC method.  Default: ``false``
 
+  The input name ``bt-detach-seed-only`` is normalized to this option.
+  Help, RPC, and serialized sessions always use ``detach-share-only``.
+
 .. option:: --seed-ratio=<RATIO>
 
   Specify share ratio. Share completed BitTorrent and ED2K downloads until share
@@ -1289,6 +1292,7 @@ Advanced Options
 
   Set log level to output to console.  LEVEL is either ``trace``, ``debug``,
   ``info``, ``warn`` or ``error``.  Default: ``info``
+  The input value ``notice`` is normalized to ``info``.
 
 .. option:: --content-disposition-default-utf8 [true|false]
 
@@ -1539,6 +1543,7 @@ Advanced Options
   Set log level to output.
   LEVEL is either ``trace``, ``debug``, ``info``, ``warn`` or ``error``.
   Default: ``trace``
+  The input value ``notice`` is normalized to ``info``.
 
 .. option:: --log-max-size=<SIZE>
 

@@ -50,6 +50,8 @@ enum TLSVersion {
   TLS_PROTO_TLS13,
 };
 
+enum class TLSVerification { Disabled, System, CustomCA };
+
 class TLSContext {
 public:
   static TLSContext* make(TLSSessionSide side, TLSVersion minVer);
@@ -59,16 +61,12 @@ public:
   virtual bool addCredentialFile(const std::string& certfile,
                                  const std::string& keyfile) = 0;
 
-  virtual bool addSystemTrustedCACerts() = 0;
-
-  // certfile can contain multiple certificates.
-  virtual bool addTrustedCACertFile(const std::string& certfile) = 0;
+  virtual bool configurePeerVerification(TLSVerification verification,
+                                         const std::string& caFile) = 0;
 
   virtual bool good() const = 0;
 
   virtual TLSSessionSide getSide() const = 0;
-  virtual bool getVerifyPeer() const = 0;
-  virtual void setVerifyPeer(bool) = 0;
 };
 
 } // namespace aria2

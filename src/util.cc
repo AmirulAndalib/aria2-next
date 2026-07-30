@@ -2471,46 +2471,6 @@ bool noProxyDomainMatch(const std::string& hostname, const std::string& domain)
   return hostname == domain;
 }
 
-bool tlsHostnameMatch(const std::string& pattern, const std::string& hostname)
-{
-  std::string::const_iterator ptWildcard =
-      std::find(pattern.begin(), pattern.end(), '*');
-  if (ptWildcard == pattern.end()) {
-    return strieq(pattern.begin(), pattern.end(), hostname.begin(),
-                  hostname.end());
-  }
-  std::string::const_iterator ptLeftLabelEnd =
-      std::find(pattern.begin(), pattern.end(), '.');
-  bool wildcardEnabled = true;
-  // Do case-insensitive match. At least 2 dots are required to enable
-  // wildcard match. Also wildcard must be in the left-most label.
-  // Don't attempt to match a presented identifier where the wildcard
-  // character is embedded within an A-label.
-  if (ptLeftLabelEnd == pattern.end() ||
-      std::find(ptLeftLabelEnd + 1, pattern.end(), '.') == pattern.end() ||
-      ptLeftLabelEnd < ptWildcard || istartsWith(pattern, "xn--")) {
-    wildcardEnabled = false;
-  }
-  if (!wildcardEnabled) {
-    return strieq(pattern.begin(), pattern.end(), hostname.begin(),
-                  hostname.end());
-  }
-  std::string::const_iterator hnLeftLabelEnd =
-      std::find(hostname.begin(), hostname.end(), '.');
-  if (!strieq(ptLeftLabelEnd, pattern.end(), hnLeftLabelEnd, hostname.end())) {
-    return false;
-  }
-  // Perform wildcard match. Here '*' must match at least one
-  // character.
-  if (hnLeftLabelEnd - hostname.begin() < ptLeftLabelEnd - pattern.begin()) {
-    return false;
-  }
-  return istartsWith(hostname.begin(), hnLeftLabelEnd, pattern.begin(),
-                     ptWildcard) &&
-         iendsWith(hostname.begin(), hnLeftLabelEnd, ptWildcard + 1,
-                   ptLeftLabelEnd);
-}
-
 bool strieq(const std::string& a, const char* b)
 {
   return strieq(a.begin(), a.end(), b);

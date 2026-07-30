@@ -187,12 +187,10 @@ void OptionParserTest::testLogRotationOptions()
   catch (Exception&) {
   }
 
-  try {
-    parser->find(PREF_LOG_LEVEL)->parse(configured, "notice");
-    FAIL("notice log level must be rejected");
-  }
-  catch (Exception&) {
-  }
+  parser->find(PREF_LOG_LEVEL)->parse(configured, "notice");
+  parser->find(PREF_CONSOLE_LOG_LEVEL)->parse(configured, "notice");
+  REQUIRE_EQ(V_INFO, configured.get(PREF_LOG_LEVEL));
+  REQUIRE_EQ(V_INFO, configured.get(PREF_CONSOLE_LOG_LEVEL));
 }
 
 void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
@@ -212,11 +210,22 @@ void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
   REQUIRE(detachShareOnly);
   REQUIRE(detachShareOnly->hasTag(TAG_BITTORRENT));
   REQUIRE(detachShareOnly->hasTag(TAG_ED2K));
-  REQUIRE_EQ((size_t)0, oldBtDetachSeedOnly->i);
+  REQUIRE_EQ(PREF_DETACH_SHARE_ONLY, oldBtDetachSeedOnly);
+
+  Option configured;
+  std::stringstream input;
+  input << "bt-detach-seed-only=true\n";
+  parser->parse(configured, input);
+  REQUIRE(configured.getAsBool(PREF_DETACH_SHARE_ONLY));
 }
 
 void OptionParserTest::testParseArg()
 {
+  OptionHandler* detachShareOnly(new BooleanOptionHandler(
+      PREF_DETACH_SHARE_ONLY, NO_DESCRIPTION, A2_V_FALSE,
+      OptionHandler::OPT_ARG));
+  oparser_->addOptionHandler(detachShareOnly);
+
   Option option;
   char prog[7];
   strncpy(prog, "aria2c", sizeof(prog));
@@ -229,14 +238,23 @@ void OptionParserTest::testParseArg()
   strncpy(optionDir, "--dir", sizeof(optionDir));
   char argDir[6];
   strncpy(argDir, "BRAVO", sizeof(argDir));
+  char optionDetachShareOnly[31];
+  strncpy(optionDetachShareOnly, "--bt-detach-seed-only=true",
+          sizeof(optionDetachShareOnly));
 
   char nonopt1[8];
   strncpy(nonopt1, "nonopt1", sizeof(nonopt1));
   char nonopt2[8];
   strncpy(nonopt2, "nonopt2", sizeof(nonopt2));
 
-  char* argv[] = {prog,   optionTimeout, argTimeout, optionDir,
-                  argDir, nonopt1,       nonopt2};
+  char* argv[] = {prog,
+                  optionTimeout,
+                  argTimeout,
+                  optionDir,
+                  argDir,
+                  optionDetachShareOnly,
+                  nonopt1,
+                  nonopt2};
   int argc = arraySize(argv);
 
   std::stringstream s;
@@ -245,7 +263,8 @@ void OptionParserTest::testParseArg()
   oparser_->parseArg(s, nonopts, argc, argv);
 
   REQUIRE_EQ(std::string("timeout=ALPHA\n"
-                                   "dir=BRAVO\n"),
+                         "dir=BRAVO\n"
+                         "detach-share-only=true\n"),
                        s.str());
 
   REQUIRE_EQ((size_t)2, nonopts.size());

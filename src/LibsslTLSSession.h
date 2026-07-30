@@ -65,6 +65,7 @@ private:
   int handshake(TLSVersion& version);
   SSL* ssl_;
   OpenSSLTLSContext* tlsContext_;
+  bool peerVerificationConfigured_;
   // Last error code from openSSL library functions
   int rv_;
 };

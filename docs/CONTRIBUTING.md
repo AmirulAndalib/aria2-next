@@ -69,7 +69,6 @@ bash -n scripts/release.sh
 bash -n packaging/scripts/common.sh
 bash -n packaging/scripts/check-runtime-deps
 bash -n packaging/scripts/verify-runner-tools
-bash -n packaging/scripts/mingw-release
 ```
 
 ## Dependencies

@@ -63,7 +63,7 @@ AbstractOptionHandler::~AbstractOptionHandler() = default;
 void AbstractOptionHandler::parse(Option& option, const std::string& arg) const
 {
   try {
-    parseArg(option, arg);
+    parseArg(option, aria2::option::normalizeInputValue(pref_, arg));
   }
   catch (Exception& e) {
     throw OPTION_HANDLER_EXCEPTION2(pref_, e);

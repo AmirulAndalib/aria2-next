@@ -97,7 +97,9 @@ TLSContext* TLSContext::make(TLSSessionSide side, TLSVersion minVer)
 }
 
 OpenSSLTLSContext::OpenSSLTLSContext(TLSSessionSide side, TLSVersion minVer)
-    : sslCtx_(nullptr), side_(side), verifyPeer_(true)
+    : sslCtx_(nullptr), side_(side),
+      verification_(side == TLS_CLIENT ? TLSVerification::System
+                                       : TLSVerification::Disabled)
 {
   sslCtx_ = SSL_CTX_new(SSLv23_method());
   if (sslCtx_) {
@@ -257,30 +259,38 @@ bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)
   return true;
 }
 
-bool OpenSSLTLSContext::addSystemTrustedCACerts()
+bool OpenSSLTLSContext::configurePeerVerification(
+    TLSVerification verification, const std::string& caFile)
 {
-  if (SSL_CTX_set_default_verify_paths(sslCtx_) != 1) {
+  verification_ = verification;
+  if (verification == TLSVerification::Disabled) {
+    SSL_CTX_set_verify(sslCtx_, SSL_VERIFY_NONE, nullptr);
+    return true;
+  }
+
+#ifdef __APPLE__
+  if (verification == TLSVerification::System) {
+    SSL_CTX_set_verify(sslCtx_, SSL_VERIFY_NONE, nullptr);
+    return true;
+  }
+#endif // __APPLE__
+
+  if (verification == TLSVerification::CustomCA) {
+    if (caFile.empty() ||
+        SSL_CTX_load_verify_locations(sslCtx_, caFile.c_str(), nullptr) != 1) {
+      A2_LOG_ERROR(fmt(MSG_LOADING_TRUSTED_CA_CERT_FAILED, caFile.c_str(),
+                       ERR_error_string(ERR_get_error(), nullptr)));
+      return false;
+    }
+  }
+  else if (SSL_CTX_set_default_verify_paths(sslCtx_) != 1) {
     A2_LOG_DEBUG(fmt(MSG_LOADING_SYSTEM_TRUSTED_CA_CERTS_FAILED,
                     ERR_error_string(ERR_get_error(), nullptr)));
     return false;
   }
-  else {
-    A2_LOG_DEBUG("System trusted CA certificates were successfully added.");
-    return true;
-  }
-}
 
-bool OpenSSLTLSContext::addTrustedCACertFile(const std::string& certfile)
-{
-  if (SSL_CTX_load_verify_locations(sslCtx_, certfile.c_str(), nullptr) != 1) {
-    A2_LOG_ERROR(fmt(MSG_LOADING_TRUSTED_CA_CERT_FAILED, certfile.c_str(),
-                     ERR_error_string(ERR_get_error(), nullptr)));
-    return false;
-  }
-  else {
-    A2_LOG_DEBUG("Trusted CA certificates were successfully added.");
-    return true;
-  }
+  SSL_CTX_set_verify(sslCtx_, SSL_VERIFY_PEER, nullptr);
+  return true;
 }
 
 } // namespace aria2

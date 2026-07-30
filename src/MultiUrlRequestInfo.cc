@@ -257,18 +257,20 @@ int MultiUrlRequestInfo::prepare()
                                       option_->get(PREF_PRIVATE_KEY));
     }
 
-    if (!option_->blank(PREF_CA_CERTIFICATE)) {
-      if (!clTlsContext->addTrustedCACertFile(
-              option_->get(PREF_CA_CERTIFICATE))) {
-        A2_LOG_DEBUG(MSG_WARN_NO_CA_CERT);
+    auto verification = TLSVerification::Disabled;
+    auto caFile = std::string{};
+    if (option_->getAsBool(PREF_CHECK_CERTIFICATE)) {
+      if (option_->blank(PREF_CA_CERTIFICATE)) {
+        verification = TLSVerification::System;
+      }
+      else {
+        verification = TLSVerification::CustomCA;
+        caFile = option_->get(PREF_CA_CERTIFICATE);
       }
     }
-    else if (option_->getAsBool(PREF_CHECK_CERTIFICATE)) {
-      if (!clTlsContext->addSystemTrustedCACerts()) {
-        A2_LOG_DEBUG(MSG_WARN_NO_CA_CERT);
-      }
+    if (!clTlsContext->configurePeerVerification(verification, caFile)) {
+      throw DL_ABORT_EX(MSG_WARN_NO_CA_CERT);
     }
-    clTlsContext->setVerifyPeer(option_->getAsBool(PREF_CHECK_CERTIFICATE));
     SocketCore::setClientTLSContext(clTlsContext);
 #endif
 

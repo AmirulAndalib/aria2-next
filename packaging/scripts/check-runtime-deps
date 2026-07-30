@@ -26,6 +26,18 @@ fail_unexpected() {
   exit 1
 }
 
+check_build_paths() {
+  command -v strings >/dev/null 2>&1 || {
+    echo "Runtime dependency check failed: strings is required" >&2
+    exit 1
+  }
+  if strings "$binary" | grep -E '/Users/runner/work|/home/runner/work|[A-Za-z]:[/\\]a[/\\]' > "$tmp"; then
+    echo "Build runner path leaked into $platform artifact:" >&2
+    cat "$tmp" >&2
+    exit 1
+  fi
+}
+
 check_windows() {
   objdump=${OBJDUMP:-objdump}
   command -v "$objdump" >/dev/null 2>&1 || {
@@ -46,7 +58,7 @@ check_windows() {
       libcrypto*.dll|libssl*.dll|openssl*.dll)
         fail_unexpected "$dep"
         ;;
-      api-ms-win-crt-private-l1-1-0.dll|api-ms-win-*.dll|advapi32.dll|bcrypt.dll|cfgmgr32.dll|crypt32.dll|dnsapi.dll|gdi32.dll|iphlpapi.dll|kernel32.dll|msvcrt.dll|normaliz.dll|ntdll.dll|ole32.dll|oleaut32.dll|psapi.dll|rpcrt4.dll|secur32.dll|shell32.dll|shlwapi.dll|ucrtbase.dll|user32.dll|version.dll|winmm.dll|ws2_32.dll|wsock32.dll)
+      api-ms-win-*.dll|advapi32.dll|bcrypt.dll|cfgmgr32.dll|crypt32.dll|dnsapi.dll|gdi32.dll|iphlpapi.dll|kernel32.dll|normaliz.dll|ntdll.dll|ole32.dll|oleaut32.dll|psapi.dll|rpcrt4.dll|secur32.dll|shell32.dll|shlwapi.dll|ucrtbase.dll|user32.dll|version.dll|winmm.dll|ws2_32.dll|wsock32.dll)
         ;;
       *)
         fail_unexpected "$dep"
@@ -108,6 +120,12 @@ check_elf() {
         ;;
     esac
 
+    max_glibc=$(strings "$binary" | sed -n 's/^GLIBC_\([0-9][0-9.]*\)$/\1/p' | sort -Vu | tail -n 1)
+    if [ -n "$max_glibc" ] &&
+       [ "$(printf '%s\n' "$max_glibc" 2.34 | sort -V | tail -n 1)" != 2.34 ]; then
+      fail_unexpected "GLIBC_$max_glibc (maximum supported version is GLIBC_2.34)"
+    fi
+
     return
   fi
 
@@ -163,5 +181,7 @@ case "$platform" in
     usage
     ;;
 esac
+
+check_build_paths
 
 echo "Runtime dependency check passed for $platform: $binary"

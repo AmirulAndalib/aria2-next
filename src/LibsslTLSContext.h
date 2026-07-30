@@ -57,20 +57,19 @@ public:
                                  const std::string& keyfile) override;
   bool addP12CredentialFile(const std::string& p12file);
 
-  virtual bool addSystemTrustedCACerts() override;
-
-  // certfile can contain multiple certificates.
-  virtual bool addTrustedCACertFile(const std::string& certfile) override;
+  bool configurePeerVerification(TLSVerification verification,
+                                 const std::string& caFile) override;
 
   virtual bool good() const override;
 
   virtual TLSSessionSide getSide() const override { return side_; }
 
-  virtual bool getVerifyPeer() const override { return verifyPeer_; }
-  virtual void setVerifyPeer(bool verify) override
+  bool isPeerVerificationEnabled() const
   {
-    verifyPeer_ = verify;
+    return verification_ != TLSVerification::Disabled;
   }
+
+  TLSVerification getVerification() const { return verification_; }
 
   SSL_CTX* getSSLCtx() const { return sslCtx_; }
 
@@ -78,7 +77,7 @@ private:
   SSL_CTX* sslCtx_;
   TLSSessionSide side_;
   bool good_;
-  bool verifyPeer_;
+  TLSVerification verification_;
 };
 
 } // namespace aria2

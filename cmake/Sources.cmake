@@ -608,6 +608,11 @@ set(ARIA2_SOURCES_HAVE_OPENSSL_TLS
   src/LibsslTLSSession.h
 )
 
+set(ARIA2_SOURCES_APPLE_TRUST
+  src/AppleTrustVerifier.cc
+  src/AppleTrustVerifier.h
+)
+
 set(ARIA2_SOURCES_HAVE_OPENSSL__USE_OPENSSL_MD
   src/LibsslMessageDigestImpl.cc
 )

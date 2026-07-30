@@ -105,7 +105,37 @@ size_t countOption() { return getPrefFactory()->getCount(); }
 
 PrefPtr i2p(size_t id) { return getPrefFactory()->i2p(id); }
 
-PrefPtr k2p(const std::string& key) { return getPrefFactory()->k2p(key); }
+const std::vector<InputAlias>& inputAliases()
+{
+  static const std::vector<InputAlias> aliases = {
+      {"bt-detach-seed-only", PREF_DETACH_SHARE_ONLY},
+  };
+  return aliases;
+}
+
+PrefPtr k2p(const std::string& key)
+{
+  auto pref = getPrefFactory()->k2p(key);
+  if (pref->i != 0) {
+    return pref;
+  }
+  for (const auto& alias : inputAliases()) {
+    if (key == alias.name) {
+      return alias.target;
+    }
+  }
+  return pref;
+}
+
+const std::string& normalizeInputValue(PrefPtr pref,
+                                       const std::string& value)
+{
+  if ((pref == PREF_LOG_LEVEL || pref == PREF_CONSOLE_LOG_LEVEL) &&
+      value == "notice") {
+    return V_INFO;
+  }
+  return value;
+}
 
 void deletePrefResource() { delete getPrefFactory(); }
 
