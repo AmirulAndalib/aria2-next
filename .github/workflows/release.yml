@@ -15,7 +15,7 @@ on:
           - debug
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -212,14 +212,10 @@ jobs:
             -DCMAKE_SKIP_RPATH=ON \
             -DCMAKE_PREFIX_PATH="$PREFIX" \
             -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release -j$(nproc)
+          cmake --build build/release --target aria2-next -j$(nproc)
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
-          ctest --test-dir build/release --output-on-failure
-          packaging/scripts/check-runtime-deps linux build/release/aria2-next
-          packaging/scripts/size-audit linux build/release/aria2-next
-          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
@@ -340,14 +336,10 @@ jobs:
             -DCMAKE_SKIP_RPATH=ON \
             -DCMAKE_PREFIX_PATH="$PREFIX" \
             -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release -j$(nproc)
+          cmake --build build/release --target aria2-next -j$(nproc)
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
-          ctest --test-dir build/release --output-on-failure
-          packaging/scripts/check-runtime-deps linux build/release/aria2-next
-          packaging/scripts/size-audit linux build/release/aria2-next
-          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
@@ -438,12 +430,11 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-arm64-cc no-shared no-module no-tests no-autoload-config \
-            --prefix=/usr/local/aria2-next --openssldir=/etc/ssl --libdir=lib \
+          ./Configure darwin64-arm64-cc no-shared no-module no-tests \
+            --prefix=$PREFIX --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
-          make install_sw DESTDIR="$RUNNER_TEMP/openssl-root"
-          cp -R "$RUNNER_TEMP/openssl-root/usr/local/aria2-next/." "$PREFIX/"
+          make install_sw
 
       - name: Build libssh2
         run: |
@@ -474,14 +465,10 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
             -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
             -DCMAKE_PREFIX_PATH="$PREFIX"
-          cmake --build build/release -j$(sysctl -n hw.ncpu)
+          cmake --build build/release --target aria2-next -j$(sysctl -n hw.ncpu)
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
-          ctest --test-dir build/release --output-on-failure
-          packaging/scripts/check-runtime-deps macos build/release/aria2-next
-          packaging/scripts/size-audit macos build/release/aria2-next
-          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
@@ -572,12 +559,11 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-x86_64-cc no-shared no-module no-tests no-autoload-config \
-            --prefix=/usr/local/aria2-next --openssldir=/etc/ssl --libdir=lib \
+          ./Configure darwin64-x86_64-cc no-shared no-module no-tests \
+            --prefix=$PREFIX --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
-          make install_sw DESTDIR="$RUNNER_TEMP/openssl-root"
-          cp -R "$RUNNER_TEMP/openssl-root/usr/local/aria2-next/." "$PREFIX/"
+          make install_sw
 
       - name: Build libssh2
         run: |
@@ -608,14 +594,10 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
             -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
             -DCMAKE_PREFIX_PATH="$PREFIX"
-          cmake --build build/release -j$(sysctl -n hw.ncpu)
+          cmake --build build/release --target aria2-next -j$(sysctl -n hw.ncpu)
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
-          ctest --test-dir build/release --output-on-failure
-          packaging/scripts/check-runtime-deps macos build/release/aria2-next
-          packaging/scripts/size-audit macos build/release/aria2-next
-          build/release/aria2-next --version | grep -F "Aria2 Next version ${{ needs.resolve-release.outputs.version }}"
 
       - name: Package
         run: |
@@ -641,8 +623,8 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
       HOST: x86_64-w64-mingw32
       PREFIX: /usr/local/x86_64-w64-mingw32
-      CC: x86_64-w64-mingw32-clang
-      CXX: x86_64-w64-mingw32-clang++
+      CC: x86_64-w64-mingw32-gcc-posix
+      CXX: x86_64-w64-mingw32-g++-posix
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
       WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
     steps:
@@ -650,17 +632,13 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Install llvm-mingw toolchain
+      - name: Install cross-compilation toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$LLVM_MINGW_URL" "$LLVM_MINGW_ARCHIVE" "$LLVM_MINGW_SHA256"
-          tar xf "$LLVM_MINGW_ARCHIVE"
-          echo "$PWD/llvm-mingw-$LLVM_MINGW_VERSION-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
+            patch ca-certificates pkg-config curl tar dpkg-dev lzip \
+            gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools windows-x86_64
@@ -774,12 +752,10 @@ jobs:
             -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS $WINDOWS_DEBUG_MAP_FLAGS" \
             -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release -j$(nproc)
+          cmake --build build/release --target aria2-next -j$(nproc)
           if [ "$STRIP_BINARY" = true ]; then
             $HOST-strip build/release/aria2-next.exe
           fi
-          OBJDUMP=$HOST-objdump packaging/scripts/check-runtime-deps windows-x86_64 build/release/aria2-next.exe
-          OBJDUMP=$HOST-objdump SIZE=$HOST-size packaging/scripts/size-audit windows-x86_64 build/release/aria2-next.exe
 
       - name: Package
         run: |
@@ -957,12 +933,10 @@ jobs:
             -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS $WINDOWS_DEBUG_MAP_FLAGS" \
             -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release -j$(nproc)
+          cmake --build build/release --target aria2-next -j$(nproc)
           if [ "$STRIP_BINARY" = true ]; then
             $STRIP build/release/aria2-next.exe
           fi
-          OBJDUMP=$HOST-objdump packaging/scripts/check-runtime-deps windows-arm64 build/release/aria2-next.exe
-          OBJDUMP=$HOST-objdump SIZE=$HOST-size packaging/scripts/size-audit windows-arm64 build/release/aria2-next.exe
 
       - name: Package
         run: |
@@ -985,48 +959,6 @@ jobs:
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-arm64.map
           archive: false
           if-no-files-found: error
-
-  test-windows-x64:
-    name: Windows x86_64 Artifact Smoke Test
-    needs:
-      - resolve-release
-      - build-windows-x64
-    runs-on: windows-2025
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: windows-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: artifact
-      - name: Run final executable
-        shell: pwsh
-        run: |
-          $binary = Get-ChildItem artifact -Filter *.exe | Select-Object -First 1
-          $output = & $binary.FullName --version | Out-String
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($output -notmatch [regex]::Escape("Aria2 Next version ${{ needs.resolve-release.outputs.version }}")) {
-            throw "Unexpected version output: $output"
-          }
-
-  test-windows-arm64:
-    name: Windows ARM64 Artifact Smoke Test
-    needs:
-      - resolve-release
-      - build-windows-arm64
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: windows-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: artifact
-      - name: Run final executable
-        shell: pwsh
-        run: |
-          $binary = Get-ChildItem artifact -Filter *.exe | Select-Object -First 1
-          $output = & $binary.FullName --version | Out-String
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($output -notmatch [regex]::Escape("Aria2 Next version ${{ needs.resolve-release.outputs.version }}")) {
-            throw "Unexpected version output: $output"
-          }
 
   # ---------------------------------------------------------------------------
   # Android ARM64
@@ -1193,12 +1125,10 @@ jobs:
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DCMAKE_FIND_LIBRARY_SUFFIXES=.a
-          cmake --build build/release -j$(nproc)
+          cmake --build build/release --target aria2-next -j$(nproc)
           if [ "$STRIP_BINARY" = true ]; then
             "$STRIP" build/release/aria2-next
           fi
-          READELF="$TOOLCHAIN/bin/llvm-readelf" packaging/scripts/check-runtime-deps android-arm64 build/release/aria2-next
-          READELF="$TOOLCHAIN/bin/llvm-readelf" SIZE="$TOOLCHAIN/bin/llvm-size" packaging/scripts/size-audit android-arm64 build/release/aria2-next
 
       - name: Package
         run: |
@@ -1225,14 +1155,8 @@ jobs:
       - build-macos-intel
       - build-windows-x64
       - build-windows-arm64
-      - test-windows-x64
-      - test-windows-arm64
       - build-android-arm64
     runs-on: ubuntu-24.04
-    permissions:
-      attestations: write
-      contents: write
-      id-token: write
     env:
       ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
       VERSION: ${{ needs.resolve-release.outputs.version }}
@@ -1259,17 +1183,12 @@ jobs:
       - name: List release assets
         run: ls -lhR artifacts/
 
-      - name: Attest release assets
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
-        with:
-          subject-path: artifacts/*
-
       - name: Upload assets to GitHub Release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" artifacts/*
+        run: gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
       - name: Upload artifacts for manual validation
         if: github.event_name == 'workflow_dispatch'

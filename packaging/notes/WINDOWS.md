@@ -2,13 +2,11 @@
 
 This package contains the aria2-next `aria2-next.exe` binary for Windows. It keeps the aria2 command-line and RPC interfaces intact.
 
-The official release binary is checked before packaging so it does not require MinGW, LLVM, OpenSSL, zlib, expat, SQLite, c-ares, or libssh2 DLLs next to `aria2-next.exe`.
+The official release binary statically links its non-system dependencies.
 
 Official Windows releases use WinTLS for HTTPS verification, trust the Windows certificate store, and use WinCNG for libssh2 cryptography. No bundled `cacert.pem` or OpenSSL runtime is required for ordinary HTTPS downloads.
 
-Maintained dependency and llvm-mingw versions are recorded in `packaging/dependencies.env` in the source tree. Both Windows architectures use the same pinned LLVM-MinGW UCRT toolchain.
-
-Release executables are cross-compiled on Linux and executed on native Windows x86_64 and ARM64 runners before publication.
+Maintained dependency and Windows ARM64 llvm-mingw versions are recorded in `packaging/dependencies.env` in the source tree. Windows x86_64 builds use the MinGW-w64 POSIX thread model required by the C++ logging runtime.
 
 Example use from PowerShell:
 
