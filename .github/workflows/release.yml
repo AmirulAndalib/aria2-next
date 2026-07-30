@@ -430,8 +430,8 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-arm64-cc no-shared no-module no-tests \
-            --prefix=$PREFIX --libdir=lib \
+          ./Configure darwin64-arm64-cc no-shared no-module no-tests no-autoload-config \
+            --prefix=$PREFIX --openssldir=/etc/ssl --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
           make install_sw
@@ -559,8 +559,8 @@ jobs:
           source packaging/dependencies.env
           . packaging/scripts/release-size-profile macos
           tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-x86_64-cc no-shared no-module no-tests \
-            --prefix=$PREFIX --libdir=lib \
+          ./Configure darwin64-x86_64-cc no-shared no-module no-tests no-autoload-config \
+            --prefix=$PREFIX --openssldir=/etc/ssl --libdir=lib \
             $RELEASE_CFLAGS
           make -j$(sysctl -n hw.ncpu)
           make install_sw
