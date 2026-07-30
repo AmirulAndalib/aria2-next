@@ -45,16 +45,15 @@
 
 namespace aria2 {
 
-Peer::Peer(std::string ipaddr, uint16_t port, bool incoming)
+Peer::Peer(std::string ipaddr, uint16_t port, ConnectionDirection direction)
     : ipaddr_(std::move(ipaddr)),
-      port_(port),
-      origPort_(port),
+      remotePort_(port),
+      listenPort_(direction == ConnectionDirection::OUTGOING ? port : 0),
       cuid_(0),
       firstContactTime_(global::wallclock()),
       dropStartTime_(Timer::zero()),
       seeder_(false),
-      incoming_(incoming),
-      incomingConnection_(incoming),
+      incomingConnection_(direction == ConnectionDirection::INCOMING),
       localPeer_(false),
       disconnectedGracefully_(false)
 {
@@ -401,8 +400,6 @@ int64_t Peer::getCompletedLength() const
   assert(res_);
   return res_->getCompletedLength();
 }
-
-void Peer::setIncomingPeer(bool incoming) { incoming_ = incoming; }
 
 void Peer::setFirstContactTime(const Timer& time) { firstContactTime_ = time; }
 

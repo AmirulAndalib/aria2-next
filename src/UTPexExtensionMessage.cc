@@ -103,7 +103,7 @@ UTPexExtensionMessage::createCompactPeerListAndFlag(
   for (auto itr = std::begin(peers), eoi = std::end(peers); itr != eoi; ++itr) {
     unsigned char compact[COMPACT_LEN_IPV6];
     int compactlen = bittorrent::packcompact(compact, (*itr)->getIPAddress(),
-                                             (*itr)->getPort());
+                                             (*itr)->getListenPort());
     if (compactlen == COMPACT_LEN_IPV4) {
       addrstring.append(&compact[0], &compact[compactlen]);
       flagstring += (*itr)->isSeeder() ? 0x02u : 0x00u;
@@ -133,7 +133,7 @@ void UTPexExtensionMessage::doReceivedAction()
 
 bool UTPexExtensionMessage::addFreshPeer(const std::shared_ptr<Peer>& peer)
 {
-  if (!peer->isIncomingPeer() &&
+  if (peer->hasListenPort() &&
       peer->getFirstContactTime().difference(global::wallclock()) < interval_) {
     freshPeers_.push_back(peer);
     return true;
@@ -156,7 +156,7 @@ bool UTPexExtensionMessage::freshPeersAreFull() const
 
 bool UTPexExtensionMessage::addDroppedPeer(const std::shared_ptr<Peer>& peer)
 {
-  if (!peer->isIncomingPeer() &&
+  if (peer->hasListenPort() &&
       peer->getDropStartTime().difference(global::wallclock()) < interval_) {
     droppedPeers_.push_back(peer);
     return true;

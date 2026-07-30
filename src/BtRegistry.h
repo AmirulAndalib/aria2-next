@@ -109,6 +109,8 @@ public:
 
   bool remove(a2_gid_t gid);
 
+  size_t removeBlockedPeers();
+
   void setTcpPort(uint16_t port) { tcpPort_ = port; }
   uint16_t getTcpPort() const { return tcpPort_; }
 

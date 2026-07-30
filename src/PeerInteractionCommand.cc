@@ -105,7 +105,7 @@ PeerInteractionCommand::PeerInteractionCommand(
   int family;
   unsigned char compact[COMPACT_LEN_IPV6];
   int compactlen = bittorrent::packcompact(compact, getPeer()->getIPAddress(),
-                                           getPeer()->getPort());
+                                           getPeer()->getRemotePort());
   if (compactlen == COMPACT_LEN_IPV6) {
     family = AF_INET6;
   }

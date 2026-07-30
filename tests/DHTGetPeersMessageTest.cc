@@ -157,17 +157,17 @@ void DHTGetPeersMessageTest::testDoReceivedAction()
     {
       auto peer = m->getValues()[0];
       REQUIRE_EQ(std::string("192.168.0.100"), peer->getIPAddress());
-      REQUIRE_EQ((uint16_t)6888, peer->getPort());
+      REQUIRE_EQ((uint16_t)6888, peer->getListenPort());
     }
     {
       auto peer = m->getValues()[1];
       REQUIRE_EQ(std::string("192.168.0.101"), peer->getIPAddress());
-      REQUIRE_EQ((uint16_t)6889, peer->getPort());
+      REQUIRE_EQ((uint16_t)6889, peer->getListenPort());
     }
     {
       auto peer = m->getValues()[2];
       REQUIRE_EQ(std::string("192.168.0.1"), peer->getIPAddress());
-      REQUIRE_EQ((uint16_t)6890, peer->getPort());
+      REQUIRE_EQ((uint16_t)6890, peer->getListenPort());
     }
   }
   msg.setBtRegistry(nullptr);

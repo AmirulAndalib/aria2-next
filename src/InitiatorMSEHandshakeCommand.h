@@ -78,7 +78,7 @@ protected:
   virtual bool executeInternal() override;
   virtual bool prepareForNextPeer(time_t wait) override;
   virtual void onAbort() override;
-  virtual bool onBlocked() override;
+  virtual bool onBlocked(bool retry) override;
   virtual bool exitBeforeExecute() override;
 
 public:

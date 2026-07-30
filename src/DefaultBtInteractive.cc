@@ -158,7 +158,7 @@ DefaultBtInteractive::receiveHandshake(bool quickReply)
   }
   peer_->setHandshakeCompleted(true);
   A2_LOG_DEBUG(fmt(MSG_RECEIVE_PEER_MESSAGE, cuid_,
-                  peer_->getIPAddress().c_str(), peer_->getPort(),
+                  peer_->getIPAddress().c_str(), peer_->getRemotePort(),
                   message->toString().c_str()));
   return message;
 }
@@ -313,7 +313,7 @@ size_t DefaultBtInteractive::receiveMessages()
     }
     ++msgcount;
     A2_LOG_DEBUG(fmt(MSG_RECEIVE_PEER_MESSAGE, cuid_,
-                    peer_->getIPAddress().c_str(), peer_->getPort(),
+                    peer_->getIPAddress().c_str(), peer_->getRemotePort(),
                     message->toString().c_str()));
     message->doReceivedAction();
 

@@ -132,7 +132,7 @@ std::unique_ptr<Dict> DHTGetPeersReplyMessage::getResponse()
       std::array<unsigned char, COMPACT_LEN_IPV6> compact;
       const auto clen = bittorrent::getCompactLength(family_);
       auto compactlen = bittorrent::packcompact(
-          compact.data(), (*i)->getIPAddress(), (*i)->getPort());
+          compact.data(), (*i)->getIPAddress(), (*i)->getListenPort());
       auto cclen =
           static_cast<std::make_unsigned<decltype(clen)>::type>((clen));
       if (clen > 0 && compactlen == cclen) {

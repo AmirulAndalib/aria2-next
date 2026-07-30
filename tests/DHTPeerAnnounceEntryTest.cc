@@ -101,9 +101,9 @@ void DHTPeerAnnounceEntryTest::testGetPeers()
     entry.getPeers(peers);
     REQUIRE_EQ((size_t)2, peers.size());
     REQUIRE_EQ(std::string("192.168.0.1"), peers[0]->getIPAddress());
-    REQUIRE_EQ((uint16_t)6881, peers[0]->getPort());
+    REQUIRE_EQ((uint16_t)6881, peers[0]->getListenPort());
     REQUIRE_EQ(std::string("192.168.0.2"), peers[1]->getIPAddress());
-    REQUIRE_EQ((uint16_t)6882, peers[1]->getPort());
+    REQUIRE_EQ((uint16_t)6882, peers[1]->getListenPort());
   }
 }
 

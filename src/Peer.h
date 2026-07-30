@@ -54,15 +54,13 @@ class PeerSessionResource;
 class BtMessageDispatcher;
 
 class Peer {
+public:
+  enum class ConnectionDirection { OUTGOING, INCOMING };
+
 private:
   std::string ipaddr_;
-  // TCP port of the other end of communication.  If incoming_ is
-  // true, then this port is not a port the peer is listening to and
-  // we cannot connect to it.
-  uint16_t port_;
-  // This is the port number passed in the constructor arguments. This
-  // is used to distinguish peer identity.
-  uint16_t origPort_;
+  uint16_t remotePort_;
+  uint16_t listenPort_;
 
   cuid_t cuid_;
 
@@ -76,10 +74,6 @@ private:
 
   std::unique_ptr<PeerSessionResource> res_;
 
-  // If true, port is assumed not to be a listening port.
-  bool incoming_;
-
-  // True if the current peer connection was accepted by localhost.
   bool incomingConnection_;
 
   // If true, this peer is from local network.
@@ -94,17 +88,20 @@ private:
   void updateSeeder();
 
 public:
-  Peer(std::string ipaddr, uint16_t port, bool incoming = false);
+  Peer(std::string ipaddr, uint16_t port,
+       ConnectionDirection direction = ConnectionDirection::OUTGOING);
 
   ~Peer();
 
   const std::string& getIPAddress() const { return ipaddr_; }
 
-  uint16_t getPort() const { return port_; }
+  uint16_t getRemotePort() const { return remotePort_; }
 
-  void setPort(uint16_t port) { port_ = port; }
+  uint16_t getListenPort() const { return listenPort_; }
 
-  uint16_t getOrigPort() const { return origPort_; }
+  void setListenPort(uint16_t port) { listenPort_ = port; }
+
+  bool hasListenPort() const { return listenPort_ != 0; }
 
   void usedBy(cuid_t cuid);
 
@@ -261,10 +258,6 @@ public:
   const Timer& getLastAmUnchoking() const;
 
   int64_t getCompletedLength() const;
-
-  bool isIncomingPeer() const { return incoming_; }
-
-  void setIncomingPeer(bool incoming);
 
   bool isIncomingConnection() const { return incomingConnection_; }
 

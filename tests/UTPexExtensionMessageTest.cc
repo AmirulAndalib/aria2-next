@@ -94,12 +94,12 @@ void UTPexExtensionMessageTest::testGetBencodedData()
   unsigned char c4[COMPACT_LEN_IPV6];
   unsigned char c5[COMPACT_LEN_IPV6];
   unsigned char c6[COMPACT_LEN_IPV6];
-  bittorrent::packcompact(c1, p1->getIPAddress(), p1->getPort());
-  bittorrent::packcompact(c2, p2->getIPAddress(), p2->getPort());
-  bittorrent::packcompact(c3, p3->getIPAddress(), p3->getPort());
-  bittorrent::packcompact(c4, p4->getIPAddress(), p4->getPort());
-  bittorrent::packcompact(c5, p5->getIPAddress(), p5->getPort());
-  bittorrent::packcompact(c6, p6->getIPAddress(), p6->getPort());
+  bittorrent::packcompact(c1, p1->getIPAddress(), p1->getListenPort());
+  bittorrent::packcompact(c2, p2->getIPAddress(), p2->getListenPort());
+  bittorrent::packcompact(c3, p3->getIPAddress(), p3->getListenPort());
+  bittorrent::packcompact(c4, p4->getIPAddress(), p4->getListenPort());
+  bittorrent::packcompact(c5, p5->getIPAddress(), p5->getListenPort());
+  bittorrent::packcompact(c6, p6->getIPAddress(), p6->getListenPort());
 
   std::string expected =
       "d5:added12:" + std::string(&c1[0], &c1[6]) +
@@ -157,13 +157,13 @@ void UTPexExtensionMessageTest::testDoReceivedAction()
   {
     std::shared_ptr<Peer> p = peerStorage_->getUnusedPeers()[0];
     REQUIRE_EQ(std::string("192.168.0.1"), p->getIPAddress());
-    REQUIRE_EQ((uint16_t)6881, p->getPort());
+    REQUIRE_EQ((uint16_t)6881, p->getListenPort());
   }
   {
     std::shared_ptr<Peer> p = peerStorage_->getUnusedPeers()[1];
     REQUIRE_EQ(std::string("1002:1035:4527:3546:7854:1237:3247:3217"),
                          p->getIPAddress());
-    REQUIRE_EQ((uint16_t)9999, p->getPort());
+    REQUIRE_EQ((uint16_t)9999, p->getListenPort());
   }
   {
     std::shared_ptr<Peer> p = peerStorage_->getUnusedPeers()[2];
@@ -209,24 +209,24 @@ void UTPexExtensionMessageTest::testCreate()
   REQUIRE_EQ((size_t)3, msg->getFreshPeers().size());
   REQUIRE_EQ(std::string("192.168.0.1"),
                        msg->getFreshPeers()[0]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6881, msg->getFreshPeers()[0]->getPort());
+  REQUIRE_EQ((uint16_t)6881, msg->getFreshPeers()[0]->getListenPort());
   REQUIRE_EQ(std::string("10.1.1.2"),
                        msg->getFreshPeers()[1]->getIPAddress());
-  REQUIRE_EQ((uint16_t)9999, msg->getFreshPeers()[1]->getPort());
+  REQUIRE_EQ((uint16_t)9999, msg->getFreshPeers()[1]->getListenPort());
   REQUIRE_EQ(std::string("1002:1035:4527:3546:7854:1237:3247:3217"),
                        msg->getFreshPeers()[2]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6997, msg->getFreshPeers()[2]->getPort());
+  REQUIRE_EQ((uint16_t)6997, msg->getFreshPeers()[2]->getListenPort());
 
   REQUIRE_EQ((size_t)3, msg->getDroppedPeers().size());
   REQUIRE_EQ(std::string("192.168.0.2"),
                        msg->getDroppedPeers()[0]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6882, msg->getDroppedPeers()[0]->getPort());
+  REQUIRE_EQ((uint16_t)6882, msg->getDroppedPeers()[0]->getListenPort());
   REQUIRE_EQ(std::string("10.1.1.3"),
                        msg->getDroppedPeers()[1]->getIPAddress());
-  REQUIRE_EQ((uint16_t)10000, msg->getDroppedPeers()[1]->getPort());
+  REQUIRE_EQ((uint16_t)10000, msg->getDroppedPeers()[1]->getListenPort());
   REQUIRE_EQ(std::string("2001:db8:bd05:1d2:288a:1fc0:1:10ee"),
                        msg->getDroppedPeers()[2]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6998, msg->getDroppedPeers()[2]->getPort());
+  REQUIRE_EQ((uint16_t)6998, msg->getDroppedPeers()[2]->getListenPort());
   try {
     // 0 length data
     std::string in = "";
@@ -247,7 +247,8 @@ void UTPexExtensionMessageTest::testAddFreshPeer()
   std::shared_ptr<Peer> p2(new Peer("10.1.1.2", 9999));
   p2->setFirstContactTime(Timer(Timer().getTime() - 61_s));
   REQUIRE(!msg.addFreshPeer(p2));
-  std::shared_ptr<Peer> p3(new Peer("10.1.1.3", 9999, true));
+  std::shared_ptr<Peer> p3(new Peer(
+      "10.1.1.3", 9999, Peer::ConnectionDirection::INCOMING));
   REQUIRE(!msg.addFreshPeer(p3));
 }
 
@@ -259,7 +260,8 @@ void UTPexExtensionMessageTest::testAddDroppedPeer()
   std::shared_ptr<Peer> p2(new Peer("10.1.1.2", 9999));
   p2->startDrop();
   REQUIRE(msg.addFreshPeer(p2));
-  std::shared_ptr<Peer> p3(new Peer("10.1.1.3", 9999, true));
+  std::shared_ptr<Peer> p3(new Peer(
+      "10.1.1.3", 9999, Peer::ConnectionDirection::INCOMING));
   p3->startDrop();
   REQUIRE(!msg.addDroppedPeer(p3));
 }

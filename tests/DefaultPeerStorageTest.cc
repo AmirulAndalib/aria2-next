@@ -41,6 +41,7 @@ public:
   void testOnErasingPeer();
   void testTemporarilyRejectPeer();
   void testRejectBlocklistedPeer();
+  void testRemoveBlockedPeers();
 };
 
 A2_TEST(DefaultPeerStorageTest, testCountAllPeer)
@@ -53,6 +54,7 @@ A2_TEST(DefaultPeerStorageTest, testReturnPeer)
 A2_TEST(DefaultPeerStorageTest, testOnErasingPeer)
 A2_TEST(DefaultPeerStorageTest, testTemporarilyRejectPeer)
 A2_TEST(DefaultPeerStorageTest, testRejectBlocklistedPeer)
+A2_TEST(DefaultPeerStorageTest, testRemoveBlockedPeers)
 
 void DefaultPeerStorageTest::testCountAllPeer()
 {
@@ -196,7 +198,7 @@ void DefaultPeerStorageTest::testReturnPeer()
 {
   DefaultPeerStorage ps(std::make_shared<BtPeerBlocklist>());
 
-  std::shared_ptr<Peer> peer1(new Peer("192.168.0.1", 0));
+  std::shared_ptr<Peer> peer1(new Peer("192.168.0.1", 6888));
   peer1->allocateSessionResource(1_m, 10_m);
   std::shared_ptr<Peer> peer2(new Peer("192.168.0.2", 6889));
   peer2->allocateSessionResource(1_m, 10_m);
@@ -243,8 +245,37 @@ void DefaultPeerStorageTest::testRejectBlocklistedPeer()
 
   REQUIRE(!ps.addPeer(std::make_shared<Peer>("192.168.0.1", 6881)));
   REQUIRE(!ps.addAndCheckoutPeer(
-      std::make_shared<Peer>("192.168.0.2", 6881, true), 1));
+      std::make_shared<Peer>("192.168.0.2", 6881,
+                             Peer::ConnectionDirection::INCOMING),
+      1));
+  REQUIRE(!ps.addPeer(std::make_shared<Peer>(
+      "192.168.1.2", 49152, Peer::ConnectionDirection::INCOMING)));
   REQUIRE(ps.addPeer(std::make_shared<Peer>("192.168.1.1", 6881)));
+}
+
+void DefaultPeerStorageTest::testRemoveBlockedPeers()
+{
+  auto blocklist = std::make_shared<BtPeerBlocklist>();
+  DefaultPeerStorage ps(blocklist);
+  auto blocked = std::make_shared<Peer>("192.168.0.1", 6881);
+  auto allowed = std::make_shared<Peer>("192.168.1.1", 6881);
+  auto dropped = std::make_shared<Peer>("192.168.0.2", 6881);
+  dropped->allocateSessionResource(1_m, 10_m);
+  dropped->setDisconnectedGracefully(true);
+  REQUIRE(ps.addPeer(dropped));
+  REQUIRE_EQ(dropped, ps.checkoutPeer(1));
+  ps.returnPeer(dropped);
+  REQUIRE(ps.addPeer(blocked));
+  REQUIRE(ps.addPeer(allowed));
+
+  REQUIRE(blocklist->replace({"192.168.0.0/24"}, "RPC"));
+  REQUIRE_EQ((size_t)2, ps.removeBlockedPeers());
+  REQUIRE_EQ((size_t)1, ps.getUnusedPeers().size());
+  REQUIRE_EQ(allowed, ps.getUnusedPeers().front());
+  REQUIRE(ps.getDroppedPeers().empty());
+
+  blocklist->clear();
+  REQUIRE(ps.addPeer(blocked));
 }
 
 } // namespace aria2

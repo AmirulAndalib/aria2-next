@@ -74,10 +74,11 @@ PeerInitiateConnectionCommand::~PeerInitiateConnectionCommand()
 bool PeerInitiateConnectionCommand::executeInternal()
 {
   A2_LOG_DEBUG(fmt(MSG_CONNECTING_TO_SERVER, getCuid(),
-                  getPeer()->getIPAddress().c_str(), getPeer()->getPort()));
+                  getPeer()->getIPAddress().c_str(),
+                  getPeer()->getListenPort()));
   createSocket();
   getSocket()->establishConnection(getPeer()->getIPAddress(),
-                                   getPeer()->getPort(), false);
+                                   getPeer()->getListenPort(), false);
   getSocket()->applyIpDscp();
   if (mseHandshakeEnabled_) {
     auto c = make_unique<InitiatorMSEHandshakeCommand>(

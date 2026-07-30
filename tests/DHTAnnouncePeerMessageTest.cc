@@ -120,7 +120,7 @@ void DHTAnnouncePeerMessageTest::testDoReceivedAction()
   {
     std::shared_ptr<Peer> peer = peers[0];
     REQUIRE_EQ(std::string("192.168.0.1"), peer->getIPAddress());
-    REQUIRE_EQ((uint16_t)6882, peer->getPort());
+    REQUIRE_EQ((uint16_t)6882, peer->getListenPort());
   }
 }
 

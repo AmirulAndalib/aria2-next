@@ -67,6 +67,7 @@
 #include "wallclock.h"
 #ifdef ENABLE_BITTORRENT
 #  include "BtRegistry.h"
+#  include "PeerAbstractCommand.h"
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_WEBSOCKET
 #  include "WebSocketSessionMan.h"
@@ -626,6 +627,24 @@ void DownloadEngine::addCommand(std::unique_ptr<Command> command)
 {
   commands_.push_back(std::move(command));
 }
+
+#ifdef ENABLE_BITTORRENT
+size_t DownloadEngine::disconnectBlockedBtPeers()
+{
+  size_t disconnected = 0;
+  for (auto i = commands_.begin(); i != commands_.end();) {
+    auto peerCommand = dynamic_cast<PeerAbstractCommand*>(i->get());
+    if (peerCommand && peerCommand->disconnectIfBlocked(false)) {
+      i = commands_.erase(i);
+      ++disconnected;
+    }
+    else {
+      ++i;
+    }
+  }
+  return disconnected;
+}
+#endif // ENABLE_BITTORRENT
 
 void DownloadEngine::setRequestGroupMan(std::unique_ptr<RequestGroupMan> rgman)
 {

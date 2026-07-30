@@ -99,8 +99,7 @@ void HandshakeExtensionMessage::doReceivedAction()
     peer_->setClientName(util::encodeNonUtf8(clientVersion_));
   }
   if (tcpPort_ > 0) {
-    peer_->setPort(tcpPort_);
-    peer_->setIncomingPeer(false);
+    peer_->setListenPort(tcpPort_);
   }
   for (int i = 0; i < ExtensionMessageRegistry::MAX_EXTENSION; ++i) {
     int id = extreg_.getExtensionMessageID(i);

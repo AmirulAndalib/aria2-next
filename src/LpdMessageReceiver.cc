@@ -124,7 +124,7 @@ std::unique_ptr<LpdMessage> LpdMessageReceiver::receiveMessage()
       A2_LOG_DEBUG(fmt("LPD bad request. infohash=%s", infoHashString.c_str()));
       continue;
     }
-    auto peer = std::make_shared<Peer>(remoteEndpoint.addr, port, false);
+    auto peer = std::make_shared<Peer>(remoteEndpoint.addr, port);
     if (util::inPrivateAddress(remoteEndpoint.addr)) {
       peer->setLocalPeer(true);
     }

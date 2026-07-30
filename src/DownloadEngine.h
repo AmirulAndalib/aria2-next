@@ -206,6 +206,10 @@ public:
 
   void addCommand(std::unique_ptr<Command> command);
 
+#ifdef ENABLE_BITTORRENT
+  size_t disconnectBlockedBtPeers();
+#endif // ENABLE_BITTORRENT
+
   const std::unique_ptr<RequestGroupMan>& getRequestGroupMan() const
   {
     return requestGroupMan_;

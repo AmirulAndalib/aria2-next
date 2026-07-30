@@ -130,7 +130,7 @@ void BtSeederStateChoke::unchoke(
     peer->chokingRequired(false);
 
     A2_LOG_DEBUG(fmt("RU: %s:%u, ulspd=%d", peer->getIPAddress().c_str(),
-                    peer->getPort(), (*r).getUploadSpeed()));
+                    peer->getRemotePort(), (*r).getUploadSpeed()));
   }
 
   if (round_ < 2) {
@@ -144,7 +144,8 @@ void BtSeederStateChoke::unchoke(
       peer->optUnchoking(true);
 
       A2_LOG_DEBUG(
-          fmt("POU: %s:%u", peer->getIPAddress().c_str(), peer->getPort()));
+          fmt("POU: %s:%u", peer->getIPAddress().c_str(),
+              peer->getRemotePort()));
     }
   }
 }

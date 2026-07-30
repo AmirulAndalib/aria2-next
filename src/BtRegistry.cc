@@ -95,6 +95,17 @@ BtObject* BtRegistry::get(a2_gid_t gid) const
 
 bool BtRegistry::remove(a2_gid_t gid) { return pool_.erase(gid); }
 
+size_t BtRegistry::removeBlockedPeers()
+{
+  size_t removed = 0;
+  for (auto& entry : pool_) {
+    if (entry.second->peerStorage) {
+      removed += entry.second->peerStorage->removeBlockedPeers();
+    }
+  }
+  return removed;
+}
+
 void BtRegistry::removeAll() { pool_.clear(); }
 
 void BtRegistry::setLpdMessageReceiver(

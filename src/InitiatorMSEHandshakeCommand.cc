@@ -252,10 +252,12 @@ void InitiatorMSEHandshakeCommand::onAbort()
   }
 }
 
-bool InitiatorMSEHandshakeCommand::onBlocked()
+bool InitiatorMSEHandshakeCommand::onBlocked(bool retry)
 {
   peerStorage_->returnPeer(getPeer());
-  tryNewPeer();
+  if (retry) {
+    tryNewPeer();
+  }
   return true;
 }
 

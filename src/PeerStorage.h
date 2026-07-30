@@ -117,6 +117,8 @@ public:
    */
   virtual void returnPeer(const std::shared_ptr<Peer>& peer) = 0;
 
+  virtual size_t removeBlockedPeers() = 0;
+
   virtual bool chokeRoundIntervalElapsed() = 0;
 
   virtual void executeChoke() = 0;

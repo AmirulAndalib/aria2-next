@@ -612,7 +612,7 @@ void DefaultBtAnnounceTest::testProcessUDPTrackerResponse()
     peer = peerStorage_->getUnusedPeers()[i];
     REQUIRE_EQ("192.168.0." + util::uitos(i + 1),
                          peer->getIPAddress());
-    REQUIRE_EQ((uint16_t)(6890 + i), peer->getPort());
+    REQUIRE_EQ((uint16_t)(6890 + i), peer->getListenPort());
   }
 }
 

@@ -153,7 +153,8 @@ void BtLeecherStateChoke::plannedOptimisticUnchoke(
     ent.enableOptUnchoking();
 
     A2_LOG_DEBUG(
-        fmt("POU: %s:%u", peer->getIPAddress().c_str(), peer->getPort()));
+        fmt("POU: %s:%u", peer->getIPAddress().c_str(),
+            peer->getRemotePort()));
   }
 }
 
@@ -180,7 +181,7 @@ void BtLeecherStateChoke::regularUnchoke(std::vector<PeerEntry>& peerEntries)
     peerIter->disableChokingRequired();
 
     A2_LOG_DEBUG(fmt("RU: %s:%u, dlspd=%d", peer->getIPAddress().c_str(),
-                    peer->getPort(), (*peerIter).getDownloadSpeed()));
+                    peer->getRemotePort(), (*peerIter).getDownloadSpeed()));
 
     if (peer->optUnchoking()) {
       fastOptUnchoker = true;
@@ -198,7 +199,8 @@ void BtLeecherStateChoke::regularUnchoke(std::vector<PeerEntry>& peerEntries)
       auto& peer = p.getPeer();
 
       A2_LOG_DEBUG(
-          fmt("OU: %s:%u", peer->getIPAddress().c_str(), peer->getPort()));
+          fmt("OU: %s:%u", peer->getIPAddress().c_str(),
+              peer->getRemotePort()));
 
       break;
     }

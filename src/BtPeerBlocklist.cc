@@ -143,7 +143,7 @@ bool containsAddress(const std::vector<BtPeerBlocklist::Range>& ranges,
 
 } // namespace
 
-BtPeerBlocklist::BtPeerBlocklist() : ruleCount_(0), revision_(1) {}
+BtPeerBlocklist::BtPeerBlocklist() : ruleCount_(0), revision_(0) {}
 
 void BtPeerBlocklist::clear()
 {
@@ -159,6 +159,8 @@ void BtPeerBlocklist::load(const std::string& path)
   std::stringstream input;
   file.transfer(input);
   load(input, path);
+  A2_LOG_DEBUG(fmt("Loaded %lu BT peer blocklist rules from %s",
+                   static_cast<unsigned long>(ruleCount_), path.c_str()));
 }
 
 void BtPeerBlocklist::load(std::istream& input, const std::string& source)
@@ -171,12 +173,11 @@ void BtPeerBlocklist::load(std::istream& input, const std::string& source)
   replace(rules, source);
 }
 
-void BtPeerBlocklist::replace(const std::vector<std::string>& rules,
+bool BtPeerBlocklist::replace(const std::vector<std::string>& rules,
                               const std::string& source)
 {
   std::vector<Range> ipv4Ranges;
   std::vector<Range> ipv6Ranges;
-  size_t ruleCount = 0;
   size_t lineNumber = 0;
   for (auto line : rules) {
     ++lineNumber;
@@ -188,7 +189,6 @@ void BtPeerBlocklist::replace(const std::vector<std::string>& rules,
       size_t addressLength;
       auto range = createRange(line, addressLength);
       (addressLength == 4 ? ipv4Ranges : ipv6Ranges).push_back(range);
-      ++ruleCount;
     }
     catch (RecoverableException& ex) {
       throw DL_ABORT_EX(fmt("Invalid BT peer blocklist rule at %s:%lu: %s",
@@ -199,12 +199,14 @@ void BtPeerBlocklist::replace(const std::vector<std::string>& rules,
 
   mergeRanges(ipv4Ranges, 4);
   mergeRanges(ipv6Ranges, 16);
+  if (ipv4Ranges_ == ipv4Ranges && ipv6Ranges_ == ipv6Ranges) {
+    return false;
+  }
   ipv4Ranges_.swap(ipv4Ranges);
   ipv6Ranges_.swap(ipv6Ranges);
-  ruleCount_ = ruleCount;
+  ruleCount_ = ipv4Ranges_.size() + ipv6Ranges_.size();
   ++revision_;
-  A2_LOG_INFO(fmt("Loaded %lu BT peer blocklist rules from %s",
-                  static_cast<unsigned long>(ruleCount_), source.c_str()));
+  return true;
 }
 
 bool BtPeerBlocklist::contains(const std::string& ipaddr) const

@@ -118,6 +118,8 @@ public:
 
   virtual void returnPeer(const std::shared_ptr<Peer>& peer) override;
 
+  virtual size_t removeBlockedPeers() override;
+
   virtual bool chokeRoundIntervalElapsed() override;
 
   virtual void executeChoke() override;

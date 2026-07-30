@@ -80,10 +80,10 @@ protected:
 
   virtual bool prepareForNextPeer(time_t wait);
   virtual void onAbort(){};
-  virtual bool onBlocked()
+  virtual bool onBlocked(bool retry)
   {
     onAbort();
-    return prepareForNextPeer(0);
+    return retry ? prepareForNextPeer(0) : true;
   }
   // This function is called when DownloadFailureException is caught right after
   // the invocation of onAbort().
@@ -104,6 +104,8 @@ public:
       const std::shared_ptr<SocketCore>& s = std::shared_ptr<SocketCore>());
 
   virtual ~PeerAbstractCommand();
+
+  bool disconnectIfBlocked(bool retry);
 
   virtual bool execute() override;
 };

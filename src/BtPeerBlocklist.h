@@ -28,6 +28,11 @@ public:
   struct Range {
     std::array<unsigned char, 16> first;
     std::array<unsigned char, 16> last;
+
+    bool operator==(const Range& other) const
+    {
+      return first == other.first && last == other.last;
+    }
   };
 
 private:
@@ -42,7 +47,7 @@ public:
   void clear();
   void load(const std::string& path);
   void load(std::istream& input, const std::string& source);
-  void replace(const std::vector<std::string>& rules,
+  bool replace(const std::vector<std::string>& rules,
                const std::string& source);
 
   bool contains(const std::string& ipaddr) const;

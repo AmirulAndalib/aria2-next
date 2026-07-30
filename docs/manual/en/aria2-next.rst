@@ -3169,7 +3169,12 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     IP address of the peer.
 
   ``port``
-    Port number of the peer.
+    Remote TCP port of the current peer connection. This value is always a
+    valid connected or connecting endpoint.
+
+  ``listenPort``
+    TCP listen port advertised by the peer. This key is omitted when the peer
+    has not advertised a listen port.
 
   ``bitfield``
     Hexadecimal representation of the download progress of the peer. The
@@ -3293,9 +3298,11 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   Atomically replaces the active BitTorrent peer blocklist. *rules* is an
   array of IPv4 addresses, IPv6 addresses, or CIDR ranges. An empty array
   clears the blocklist. If any rule is invalid, the existing blocklist remains
-  active and the request fails. The response contains integer ``ruleCount``
-  and ``revision`` values. Existing peer connections are rechecked after a
-  successful replacement.
+  active and the request fails. Equivalent rules are normalized and do not
+  advance the revision. A changed policy removes matching peer candidates and
+  closes matching active connections before the method returns. The response
+  contains integer ``ruleCount``, ``revision``, ``disconnectedPeers``, and
+  ``removedPeers`` values.
 
 .. function:: aria2.getServers([secret], gid)
 
@@ -3734,8 +3741,15 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
 .. function:: aria2.getVersion([secret])
 
-  This method returns the version of aria2 and the list of enabled
-  features. The response is a struct and contains following keys.
+  This method returns the product identity, RPC contract version, application
+  version, and enabled features. The response is a struct and contains the
+  following keys.
+
+  ``product``
+    Product identifier. This value is ``aria2-next``.
+
+  ``rpcVersion``
+    Version of the aria2-next RPC contract.
 
   ``version``
     Version number of aria2 as a string.
@@ -3764,7 +3778,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
                                       'Message Digest',
                                       'Metalink',
                                       'XML-RPC'],
-                 'version': '1.11.0'}}
+                 'product': 'aria2-next',
+                 'rpcVersion': '1.0.0',
+                 'version': '2.5.2'}}
 
   **XML-RPC Example**
   ::
@@ -3783,7 +3799,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
                          'Message Digest',
                          'Metalink',
                          'XML-RPC'],
-     'version': '1.11.0'}
+     'product': 'aria2-next',
+     'rpcVersion': '1.0.0',
+     'version': '2.5.2'}
 
 .. function:: aria2.getSessionInfo([secret])
 

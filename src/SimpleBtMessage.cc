@@ -53,7 +53,8 @@ void SimpleBtMessage::send()
     return;
   }
   A2_LOG_DEBUG(fmt(MSG_SEND_PEER_MESSAGE, getCuid(),
-                  getPeer()->getIPAddress().c_str(), getPeer()->getPort(),
+                  getPeer()->getIPAddress().c_str(),
+                  getPeer()->getRemotePort(),
                   toString().c_str()));
   auto msg = createMessage();
   A2_LOG_TRACE(

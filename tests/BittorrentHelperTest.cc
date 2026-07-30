@@ -894,10 +894,10 @@ void BittorrentHelperTest::testExtractPeerFromString()
   REQUIRE_EQ((size_t)2, peers.size());
   REQUIRE_EQ(std::string("1002:1035:4527:3546:7854:1237:3247:3217"),
                        peers[0]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6881, peers[0]->getPort());
+  REQUIRE_EQ((uint16_t)6881, peers[0]->getListenPort());
   REQUIRE_EQ(std::string("2001:db8:bd05:1d2:288a:1fc0:1:10ee"),
                        peers[1]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6882, peers[1]->getPort());
+  REQUIRE_EQ((uint16_t)6882, peers[1]->getListenPort());
 
   hextext = "c0a800011ae1";
   hextext += "c0a800021ae2";
@@ -907,9 +907,9 @@ void BittorrentHelperTest::testExtractPeerFromString()
   extractPeer(str.get(), AF_INET, std::back_inserter(peers));
   REQUIRE_EQ((size_t)2, peers.size());
   REQUIRE_EQ(std::string("192.168.0.1"), peers[0]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6881, peers[0]->getPort());
+  REQUIRE_EQ((uint16_t)6881, peers[0]->getListenPort());
   REQUIRE_EQ(std::string("192.168.0.2"), peers[1]->getIPAddress());
-  REQUIRE_EQ((uint16_t)6882, peers[1]->getPort());
+  REQUIRE_EQ((uint16_t)6882, peers[1]->getListenPort());
 }
 
 void BittorrentHelperTest::testExtractPeerFromList()
@@ -926,7 +926,7 @@ void BittorrentHelperTest::testExtractPeerFromList()
   REQUIRE_EQ((size_t)1, peers.size());
   auto& peer = *peers.begin();
   REQUIRE_EQ(std::string("192.168.0.1"), peer->getIPAddress());
-  REQUIRE_EQ((uint16_t)2006, peer->getPort());
+  REQUIRE_EQ((uint16_t)2006, peer->getListenPort());
 }
 
 void BittorrentHelperTest::testExtract2PeersFromList()
@@ -944,11 +944,11 @@ void BittorrentHelperTest::testExtract2PeersFromList()
   REQUIRE_EQ((size_t)2, peers.size());
   auto& peer = *peers.begin();
   REQUIRE_EQ(std::string("192.168.0.1"), peer->getIPAddress());
-  REQUIRE_EQ((uint16_t)65535, peer->getPort());
+  REQUIRE_EQ((uint16_t)65535, peer->getListenPort());
 
   peer = *(peers.begin() + 1);
   REQUIRE_EQ(std::string("192.168.0.2"), peer->getIPAddress());
-  REQUIRE_EQ((uint16_t)2007, peer->getPort());
+  REQUIRE_EQ((uint16_t)2007, peer->getListenPort());
 }
 
 void BittorrentHelperTest::testPackcompact()

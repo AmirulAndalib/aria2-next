@@ -93,12 +93,12 @@ bool LpdReceiveMessageCommand::execute()
     auto& peer = m->peer;
     if (peerStorage->addPeer(peer)) {
       A2_LOG_TRACE(fmt("LPD peer %s:%u local=%d added.",
-                       peer->getIPAddress().c_str(), peer->getPort(),
+                       peer->getIPAddress().c_str(), peer->getListenPort(),
                        peer->isLocalPeer() ? 1 : 0));
     }
     else {
       A2_LOG_TRACE(fmt("LPD peer %s:%u local=%d not added.",
-                       peer->getIPAddress().c_str(), peer->getPort(),
+                       peer->getIPAddress().c_str(), peer->getListenPort(),
                        peer->isLocalPeer() ? 1 : 0));
     }
   }

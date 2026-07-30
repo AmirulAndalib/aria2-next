@@ -1083,8 +1083,10 @@ void RpcMethodTest::testGetVersion()
       m.execute(createReq(GetVersionRpcMethod::getMethodName()), e_.get());
   REQUIRE_EQ(0, res.code);
   const Dict* resParams = downcast<Dict>(res.param);
+  REQUIRE_EQ(std::string("aria2-next"), getString(resParams, "product"));
   REQUIRE_EQ(std::string(PACKAGE_VERSION),
                        getString(resParams, "version"));
+  REQUIRE_EQ(std::string("1.0.0"), getString(resParams, "rpcVersion"));
   const List* featureList = downcast<List>(resParams->get("enabledFeatures"));
   std::string features;
   for (auto i = featureList->begin(); i != featureList->end(); ++i) {
@@ -1407,7 +1409,9 @@ void RpcMethodTest::testGetPeers()
 
   auto peerStorage = std::make_shared<DefaultPeerStorage>(
       e_->getBtRegistry()->getPeerBlocklist());
-  auto peer = std::make_shared<Peer>("203.0.113.1", 6881, true);
+  auto peer = std::make_shared<Peer>(
+      "203.0.113.1", 49152, Peer::ConnectionDirection::INCOMING);
+  peer->setListenPort(6881);
   REQUIRE(peerStorage->addAndCheckoutPeer(peer, 1));
   peer->allocateSessionResource(1_k, 2_k);
   const unsigned char peerId[PEER_ID_LENGTH] = {
@@ -1446,6 +1450,9 @@ void RpcMethodTest::testGetPeers()
   REQUIRE_EQ(std::string("0.500000"), getString(entry, "progress"));
   REQUIRE_EQ(std::string("D U O I"), getString(entry, "flags"));
   REQUIRE_EQ(std::string("false"), getString(entry, "handshaking"));
+  REQUIRE_EQ(std::string("true"), getString(entry, "incoming"));
+  REQUIRE_EQ(std::string("49152"), getString(entry, "port"));
+  REQUIRE_EQ(std::string("6881"), getString(entry, "listenPort"));
 }
 
 void RpcMethodTest::testSetBtPeerBlocklist()
@@ -1461,9 +1468,26 @@ void RpcMethodTest::testSetBtPeerBlocklist()
   auto result = downcast<Dict>(response.param);
   REQUIRE_EQ((int64_t)2,
              downcast<Integer>(result->get("ruleCount"))->i());
+  REQUIRE_EQ((int64_t)0,
+             downcast<Integer>(result->get("disconnectedPeers"))->i());
+  REQUIRE_EQ((int64_t)0,
+             downcast<Integer>(result->get("removedPeers"))->i());
+  const auto revision = downcast<Integer>(result->get("revision"))->i();
   const auto& blocklist = e_->getBtRegistry()->getPeerBlocklist();
   REQUIRE(blocklist->contains("203.0.113.9"));
   REQUIRE(blocklist->contains("2001:db8::1"));
+
+  req = createReq(SetBtPeerBlocklistRpcMethod::getMethodName());
+  rules = List::g();
+  rules->append("2001:db8::1");
+  rules->append("203.0.113.0/24");
+  req.params->append(std::move(rules));
+  response = method.execute(std::move(req), e_.get());
+  REQUIRE_EQ(0, response.code);
+  result = downcast<Dict>(response.param);
+  REQUIRE_EQ(revision, downcast<Integer>(result->get("revision"))->i());
+  REQUIRE_EQ((int64_t)0,
+             downcast<Integer>(result->get("disconnectedPeers"))->i());
 }
 #endif // ENABLE_BITTORRENT
 

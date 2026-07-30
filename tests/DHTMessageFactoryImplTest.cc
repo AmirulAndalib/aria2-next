@@ -297,7 +297,7 @@ void DHTMessageFactoryImplTest::testCreateGetPeersReplyMessage()
       unsigned char buffer[COMPACT_LEN_IPV6];
       REQUIRE_EQ(COMPACT_LEN_IPV4,
                            bittorrent::packcompact(buffer, peer->getIPAddress(),
-                                                   peer->getPort()));
+                                                   peer->getListenPort()));
       valuesList->append(String::g(buffer, COMPACT_LEN_IPV4));
       peers.push_back(peer);
     }
@@ -320,7 +320,8 @@ void DHTMessageFactoryImplTest::testCreateGetPeersReplyMessage()
     for (int i = 0; i < 4; ++i) {
       REQUIRE_EQ(peers[i]->getIPAddress(),
                            m->getValues()[i]->getIPAddress());
-      REQUIRE_EQ(peers[i]->getPort(), m->getValues()[i]->getPort());
+      REQUIRE_EQ(peers[i]->getListenPort(),
+                 m->getValues()[i]->getListenPort());
     }
     REQUIRE_EQ(util::toHex(transactionID, DHT_TRANSACTION_ID_LENGTH),
                          util::toHex(m->getTransactionID()));
@@ -366,7 +367,7 @@ void DHTMessageFactoryImplTest::testCreateGetPeersReplyMessage6()
       unsigned char buffer[COMPACT_LEN_IPV6];
       REQUIRE_EQ(COMPACT_LEN_IPV6,
                            bittorrent::packcompact(buffer, peer->getIPAddress(),
-                                                   peer->getPort()));
+                                                   peer->getListenPort()));
       valuesList->append(String::g(buffer, COMPACT_LEN_IPV6));
       peers.push_back(peer);
     }
@@ -389,7 +390,8 @@ void DHTMessageFactoryImplTest::testCreateGetPeersReplyMessage6()
     for (int i = 0; i < 4; ++i) {
       REQUIRE_EQ(peers[i]->getIPAddress(),
                            m->getValues()[i]->getIPAddress());
-      REQUIRE_EQ(peers[i]->getPort(), m->getValues()[i]->getPort());
+      REQUIRE_EQ(peers[i]->getListenPort(),
+                 m->getValues()[i]->getListenPort());
     }
     REQUIRE_EQ(util::toHex(transactionID, DHT_TRANSACTION_ID_LENGTH),
                          util::toHex(m->getTransactionID()));

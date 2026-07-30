@@ -111,18 +111,19 @@ bool PeerListenCommand::execute()
       auto endpoint = peerSocket->getPeerInfo();
 
       if (e_->getBtRegistry()->getPeerBlocklist()->contains(endpoint.addr)) {
-        A2_LOG_INFO(fmt("Rejected blocked BitTorrent peer %s:%u.",
-                        endpoint.addr.c_str(), endpoint.port));
+        A2_LOG_DEBUG(fmt("Rejected blocked BitTorrent peer %s:%u.",
+                         endpoint.addr.c_str(), endpoint.port));
         peerSocket->closeConnection();
         continue;
       }
 
-      auto peer = std::make_shared<Peer>(endpoint.addr, endpoint.port, true);
+      auto peer = std::make_shared<Peer>(
+          endpoint.addr, endpoint.port, Peer::ConnectionDirection::INCOMING);
       cuid_t cuid = e_->newCUID();
       e_->addCommand(
           make_unique<ReceiverMSEHandshakeCommand>(cuid, peer, e_, peerSocket));
       A2_LOG_TRACE(fmt("Accepted the connection from %s:%u.",
-                       peer->getIPAddress().c_str(), peer->getPort()));
+                       peer->getIPAddress().c_str(), peer->getRemotePort()));
       A2_LOG_TRACE(fmt(
           "Added CUID#%" PRId64 " to receive BitTorrent/MSE handshake.", cuid));
     }

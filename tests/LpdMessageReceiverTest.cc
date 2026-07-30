@@ -51,7 +51,7 @@ void LpdMessageReceiverTest::testReceiveMessage()
   REQUIRE(msg);
   REQUIRE_EQ(std::string("cd41c7fdddfd034a15a04d7ff881216e01c4ceaf"),
                        util::toHex(msg->infoHash));
-  REQUIRE_EQ((uint16_t)6000, msg->peer->getPort());
+  REQUIRE_EQ((uint16_t)6000, msg->peer->getListenPort());
 
   // Bad infohash
   std::string badInfoHashString = "cd41c7fdddfd034a15a04d7ff881216e01c4ce";

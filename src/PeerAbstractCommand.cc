@@ -88,27 +88,9 @@ bool PeerAbstractCommand::execute()
     return true;
   }
   const auto& peerBlocklist = e_->getBtRegistry()->getPeerBlocklist();
-  const bool blocklistChanged =
-      peerBlocklistRevision_ != peerBlocklist->revision();
-  if (blocklistChanged) {
-    peerBlocklistRevision_ = peerBlocklist->revision();
-    auto peerAddress = peer_->getIPAddress();
-    if (socket_ && socket_->isOpen()) {
-      try {
-        auto endpoint = socket_->getPeerInfo();
-        if (!endpoint.addr.empty()) {
-          peerAddress = endpoint.addr;
-        }
-      }
-      catch (RecoverableException&) {
-        // The socket may still be connecting; keep the advertised address.
-      }
-    }
-    if (peerBlocklist->contains(peerAddress)) {
-      A2_LOG_INFO(fmt("CUID#%" PRId64 " - Blocked BitTorrent peer %s:%u.",
-                      getCuid(), peerAddress.c_str(), peer_->getPort()));
-      return onBlocked();
-    }
+  if (peerBlocklistRevision_ != peerBlocklist->revision() &&
+      disconnectIfBlocked(true)) {
+    return true;
   }
   try {
     if (noCheck_ || (checkSocketIsReadable_ && readEventEnabled()) ||
@@ -133,10 +115,36 @@ bool PeerAbstractCommand::execute()
   catch (RecoverableException& err) {
     A2_LOG_TRACE_EX(fmt(MSG_TORRENT_DOWNLOAD_ABORTED, getCuid()), err);
     A2_LOG_TRACE(fmt(MSG_PEER_CONNECTION_DROPPED, getCuid(),
-                     peer_->getIPAddress().c_str(), peer_->getPort()));
+                     peer_->getIPAddress().c_str(), peer_->getRemotePort()));
     onAbort();
     return prepareForNextPeer(0);
   }
+}
+
+bool PeerAbstractCommand::disconnectIfBlocked(bool retry)
+{
+  const auto& peerBlocklist = e_->getBtRegistry()->getPeerBlocklist();
+  peerBlocklistRevision_ = peerBlocklist->revision();
+  auto peerAddress = peer_->getIPAddress();
+  if (socket_ && socket_->isOpen()) {
+    try {
+      auto endpoint = socket_->getPeerInfo();
+      if (!endpoint.addr.empty()) {
+        peerAddress = endpoint.addr;
+      }
+    }
+    catch (RecoverableException&) {
+    }
+  }
+  if (!peerBlocklist->contains(peerAddress)) {
+    return false;
+  }
+  A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - Blocked BitTorrent peer %s:%u.",
+                   getCuid(), peerAddress.c_str(), peer_->getRemotePort()));
+  if (socket_ && socket_->isOpen()) {
+    socket_->closeConnection();
+  }
+  return onBlocked(retry);
 }
 
 // TODO this method removed when PeerBalancerCommand is implemented

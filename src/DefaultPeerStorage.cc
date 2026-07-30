@@ -80,20 +80,25 @@ size_t DefaultPeerStorage::countAllPeer() const
 bool DefaultPeerStorage::isPeerAlreadyAdded(const std::shared_ptr<Peer>& peer)
 {
   return uniqPeers_.count(
-      std::make_pair(peer->getIPAddress(), peer->getOrigPort()));
+      std::make_pair(peer->getIPAddress(), peer->getRemotePort()));
 }
 
 void DefaultPeerStorage::addUniqPeer(const std::shared_ptr<Peer>& peer)
 {
-  uniqPeers_.insert(std::make_pair(peer->getIPAddress(), peer->getOrigPort()));
+  uniqPeers_.insert(std::make_pair(peer->getIPAddress(), peer->getRemotePort()));
 }
 
 bool DefaultPeerStorage::addPeer(const std::shared_ptr<Peer>& peer)
 {
+  if (!peer->hasListenPort()) {
+    A2_LOG_TRACE(fmt("Adding %s is rejected because it has no listen port.",
+                     peer->getIPAddress().c_str()));
+    return false;
+  }
   if (unusedPeers_.size() >= maxPeerListSize_) {
     A2_LOG_TRACE(fmt("Adding %s:%u is rejected, since unused peer list is full "
                      "(%lu peers > %lu)",
-                     peer->getIPAddress().c_str(), peer->getPort(),
+                     peer->getIPAddress().c_str(), peer->getRemotePort(),
                      static_cast<unsigned long>(unusedPeers_.size()),
                      static_cast<unsigned long>(maxPeerListSize_)));
     return false;
@@ -101,13 +106,13 @@ bool DefaultPeerStorage::addPeer(const std::shared_ptr<Peer>& peer)
   if (isPeerAlreadyAdded(peer)) {
     A2_LOG_TRACE(fmt("Adding %s:%u is rejected because it has been already"
                      " added.",
-                     peer->getIPAddress().c_str(), peer->getPort()));
+                     peer->getIPAddress().c_str(), peer->getRemotePort()));
     return false;
   }
   if (peerBlocklist_->contains(peer->getIPAddress()) ||
       isTemporarilyRejectedPeer(peer->getIPAddress())) {
     A2_LOG_TRACE(fmt("Adding %s:%u is rejected.",
-                     peer->getIPAddress().c_str(), peer->getPort()));
+                     peer->getIPAddress().c_str(), peer->getRemotePort()));
     return false;
   }
   const size_t peerListSize = unusedPeers_.size();
@@ -126,21 +131,27 @@ void DefaultPeerStorage::addPeer(
 {
   if (unusedPeers_.size() < maxPeerListSize_) {
     for (auto& peer : peers) {
+      if (!peer->hasListenPort()) {
+        A2_LOG_TRACE(fmt(
+            "Adding %s is rejected because it has no listen port.",
+            peer->getIPAddress().c_str()));
+        continue;
+      }
       if (isPeerAlreadyAdded(peer)) {
         A2_LOG_TRACE(fmt("Adding %s:%u is rejected because it has been already"
                          " added.",
-                         peer->getIPAddress().c_str(), peer->getPort()));
+                         peer->getIPAddress().c_str(), peer->getRemotePort()));
         continue;
       }
       else if (peerBlocklist_->contains(peer->getIPAddress()) ||
                isTemporarilyRejectedPeer(peer->getIPAddress())) {
         A2_LOG_TRACE(fmt("Adding %s:%u is rejected.",
-                         peer->getIPAddress().c_str(), peer->getPort()));
+                         peer->getIPAddress().c_str(), peer->getRemotePort()));
         continue;
       }
       else {
         A2_LOG_TRACE(fmt(MSG_ADDING_PEER, peer->getIPAddress().c_str(),
-                         peer->getPort()));
+                         peer->getRemotePort()));
       }
       unusedPeers_.push_back(peer);
       addUniqPeer(peer);
@@ -151,7 +162,7 @@ void DefaultPeerStorage::addPeer(
       A2_LOG_TRACE(
           fmt("Adding %s:%u is rejected, since unused peer list is full "
               "(%lu peers > %lu)",
-              peer->getIPAddress().c_str(), peer->getPort(),
+              peer->getIPAddress().c_str(), peer->getRemotePort(),
               static_cast<unsigned long>(unusedPeers_.size()),
               static_cast<unsigned long>(maxPeerListSize_)));
     }
@@ -171,14 +182,14 @@ DefaultPeerStorage::addAndCheckoutPeer(const std::shared_ptr<Peer>& peer,
   if (peerBlocklist_->contains(peer->getIPAddress()) ||
       isTemporarilyRejectedPeer(peer->getIPAddress())) {
     A2_LOG_TRACE(fmt("Adding %s:%u is rejected.",
-                     peer->getIPAddress().c_str(), peer->getPort()));
+                     peer->getIPAddress().c_str(), peer->getRemotePort()));
     return nullptr;
   }
   if (isPeerAlreadyAdded(peer)) {
     auto it = std::find_if(std::begin(unusedPeers_), std::end(unusedPeers_),
                            [&peer](const std::shared_ptr<Peer>& p) {
                              return p->getIPAddress() == peer->getIPAddress() &&
-                                    p->getOrigPort() == peer->getOrigPort();
+                                    p->getRemotePort() == peer->getRemotePort();
                            });
     if (it == std::end(unusedPeers_)) {
       // peer is in usedPeers_.
@@ -203,7 +214,7 @@ void DefaultPeerStorage::addDroppedPeer(const std::shared_ptr<Peer>& peer)
   for (auto i = std::begin(droppedPeers_), eoi = std::end(droppedPeers_);
        i != eoi; ++i) {
     if ((*i)->getIPAddress() == peer->getIPAddress() &&
-        (*i)->getPort() == peer->getPort()) {
+        (*i)->getRemotePort() == peer->getRemotePort()) {
       droppedPeers_.erase(i);
       break;
     }
@@ -274,7 +285,7 @@ void DefaultPeerStorage::deleteUnusedPeer(size_t delSize)
     auto& peer = unusedPeers_.back();
     onErasingPeer(peer);
     A2_LOG_TRACE(fmt("Remove peer %s:%u", peer->getIPAddress().c_str(),
-                     peer->getOrigPort()));
+                     peer->getRemotePort()));
     unusedPeers_.pop_back();
   }
 }
@@ -289,25 +300,25 @@ std::shared_ptr<Peer> DefaultPeerStorage::checkoutPeer(cuid_t cuid)
   if (peer->usedBy() != 0) {
     A2_LOG_WARN(fmt("CUID#%" PRId64 " is already set for peer %s:%u",
                     peer->usedBy(), peer->getIPAddress().c_str(),
-                    peer->getOrigPort()));
+                    peer->getRemotePort()));
   }
   peer->usedBy(cuid);
   usedPeers_.insert(peer);
   A2_LOG_TRACE(fmt("Checkout peer %s:%u to CUID#%" PRId64,
-                   peer->getIPAddress().c_str(), peer->getOrigPort(),
+                   peer->getIPAddress().c_str(), peer->getRemotePort(),
                    peer->usedBy()));
   return peer;
 }
 
 void DefaultPeerStorage::onErasingPeer(const std::shared_ptr<Peer>& peer)
 {
-  uniqPeers_.erase(std::make_pair(peer->getIPAddress(), peer->getOrigPort()));
+  uniqPeers_.erase(std::make_pair(peer->getIPAddress(), peer->getRemotePort()));
 }
 
 void DefaultPeerStorage::onReturningPeer(const std::shared_ptr<Peer>& peer)
 {
   if (peer->isActive()) {
-    if (peer->isDisconnectedGracefully() && !peer->isIncomingPeer()) {
+    if (peer->isDisconnectedGracefully() && peer->hasListenPort()) {
       peer->startDrop();
       addDroppedPeer(peer);
     }
@@ -323,7 +334,7 @@ void DefaultPeerStorage::onReturningPeer(const std::shared_ptr<Peer>& peer)
 void DefaultPeerStorage::returnPeer(const std::shared_ptr<Peer>& peer)
 {
   A2_LOG_TRACE(fmt("Peer %s:%u returned from CUID#%" PRId64,
-                   peer->getIPAddress().c_str(), peer->getOrigPort(),
+                   peer->getIPAddress().c_str(), peer->getRemotePort(),
                    peer->usedBy()));
   if (usedPeers_.erase(peer)) {
     onReturningPeer(peer);
@@ -331,8 +342,33 @@ void DefaultPeerStorage::returnPeer(const std::shared_ptr<Peer>& peer)
   }
   else {
     A2_LOG_WARN(fmt("Cannot find peer %s:%u in usedPeers_",
-                    peer->getIPAddress().c_str(), peer->getOrigPort()));
+                    peer->getIPAddress().c_str(), peer->getRemotePort()));
   }
+}
+
+size_t DefaultPeerStorage::removeBlockedPeers()
+{
+  size_t removed = 0;
+  for (auto i = unusedPeers_.begin(); i != unusedPeers_.end();) {
+    if (peerBlocklist_->contains((*i)->getIPAddress())) {
+      onErasingPeer(*i);
+      i = unusedPeers_.erase(i);
+      ++removed;
+    }
+    else {
+      ++i;
+    }
+  }
+  for (auto i = droppedPeers_.begin(); i != droppedPeers_.end();) {
+    if (peerBlocklist_->contains((*i)->getIPAddress())) {
+      i = droppedPeers_.erase(i);
+      ++removed;
+    }
+    else {
+      ++i;
+    }
+  }
+  return removed;
 }
 
 bool DefaultPeerStorage::chokeRoundIntervalElapsed()

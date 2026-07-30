@@ -77,7 +77,7 @@ void DHTGetPeersReplyMessageTest::testGetBencodedMessage()
       unsigned char buffer[COMPACT_LEN_IPV6];
       REQUIRE_EQ(COMPACT_LEN_IPV4,
                            bittorrent::packcompact(buffer, peer->getIPAddress(),
-                                                   peer->getPort()));
+                                                   peer->getListenPort()));
       valuesList->append(String::g(buffer, COMPACT_LEN_IPV4));
       peers.push_back(peer);
     }
@@ -140,7 +140,7 @@ void DHTGetPeersReplyMessageTest::testGetBencodedMessage6()
       unsigned char buffer[COMPACT_LEN_IPV6];
       REQUIRE_EQ(COMPACT_LEN_IPV6,
                            bittorrent::packcompact(buffer, peer->getIPAddress(),
-                                                   peer->getPort()));
+                                                   peer->getListenPort()));
       valuesList->append(String::g(buffer, COMPACT_LEN_IPV6));
       peers.push_back(peer);
     }

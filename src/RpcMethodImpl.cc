@@ -119,6 +119,7 @@ const char KEY_NUM_SEEDERS[] = "numSeeders";
 const char KEY_PEER_ID[] = "peerId";
 const char KEY_IP[] = "ip";
 const char KEY_PORT[] = "port";
+const char KEY_LISTEN_PORT[] = "listenPort";
 const char KEY_AM_CHOKING[] = "amChoking";
 const char KEY_AM_INTERESTED[] = "amInterested";
 const char KEY_PEER_CHOKING[] = "peerChoking";
@@ -141,7 +142,12 @@ const char KEY_LENGTH[] = "length";
 const char KEY_URI[] = "uri";
 const char KEY_CURRENT_URI[] = "currentUri";
 const char KEY_VERSION[] = "version";
+const char KEY_PRODUCT[] = "product";
+const char KEY_RPC_VERSION[] = "rpcVersion";
 const char KEY_ENABLED_FEATURES[] = "enabledFeatures";
+
+const char PRODUCT_NAME[] = "aria2-next";
+const char RPC_VERSION[] = "1.0.0";
 const char KEY_METHOD_NAME[] = "methodName";
 const char KEY_PARAMS[] = "params";
 const char KEY_SESSION_ID[] = "sessionId";
@@ -1081,11 +1087,9 @@ void gatherPeer(List* peers, const std::shared_ptr<PeerStorage>& ps,
       peerEntry->put(KEY_PEER_CLIENT_NAME, peer->getClientName());
     }
     peerEntry->put(KEY_IP, peer->getIPAddress());
-    if (peer->isIncomingPeer()) {
-      peerEntry->put(KEY_PORT, VLB_ZERO);
-    }
-    else {
-      peerEntry->put(KEY_PORT, util::uitos(peer->getPort()));
+    peerEntry->put(KEY_PORT, util::uitos(peer->getRemotePort()));
+    if (peer->hasListenPort()) {
+      peerEntry->put(KEY_LISTEN_PORT, util::uitos(peer->getListenPort()));
     }
     peerEntry->put(KEY_BITFIELD,
                    util::toHex(peer->getBitfield(), peer->getBitfieldLength()));
@@ -1355,10 +1359,22 @@ SetBtPeerBlocklistRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   }
 
   const auto& blocklist = e->getBtRegistry()->getPeerBlocklist();
-  blocklist->replace(rules, "RPC");
+  size_t disconnectedPeers = 0;
+  size_t removedPeers = 0;
+  if (blocklist->replace(rules, "RPC")) {
+    removedPeers = e->getBtRegistry()->removeBlockedPeers();
+    disconnectedPeers = e->disconnectBlockedBtPeers();
+    A2_LOG_DEBUG(fmt("Applied %lu BT peer blocklist rules; disconnected %lu "
+                     "and removed %lu peers.",
+                     static_cast<unsigned long>(blocklist->count()),
+                     static_cast<unsigned long>(disconnectedPeers),
+                     static_cast<unsigned long>(removedPeers)));
+  }
   auto result = Dict::g();
   result->put("ruleCount", Integer::g(blocklist->count()));
   result->put("revision", Integer::g(blocklist->revision()));
+  result->put("disconnectedPeers", Integer::g(disconnectedPeers));
+  result->put("removedPeers", Integer::g(removedPeers));
   return result;
 }
 #endif // ENABLE_BITTORRENT
@@ -1526,7 +1542,9 @@ std::unique_ptr<ValueBase> GetVersionRpcMethod::process(const RpcRequest& req,
                                                         DownloadEngine* e)
 {
   auto result = Dict::g();
+  result->put(KEY_PRODUCT, PRODUCT_NAME);
   result->put(KEY_VERSION, PACKAGE_VERSION);
+  result->put(KEY_RPC_VERSION, RPC_VERSION);
   auto featureList = List::g();
   for (int feat = 0; feat < MAX_FEATURE; ++feat) {
     const char* name = strSupportedFeature(feat);
@@ -2017,12 +2035,19 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
 {
 #ifdef ENABLE_BITTORRENT
   if (option.defined(PREF_BT_PEER_BLOCKLIST)) {
+    const auto previousRevision =
+        e->getBtRegistry()->getPeerBlocklist()->revision();
     const auto& path = option.get(PREF_BT_PEER_BLOCKLIST);
     if (path.empty()) {
       e->getBtRegistry()->getPeerBlocklist()->clear();
     }
     else {
       e->getBtRegistry()->getPeerBlocklist()->load(path);
+    }
+    if (previousRevision !=
+        e->getBtRegistry()->getPeerBlocklist()->revision()) {
+      e->getBtRegistry()->removeBlockedPeers();
+      e->disconnectBlockedBtPeers();
     }
   }
 #endif // ENABLE_BITTORRENT

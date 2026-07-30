@@ -101,7 +101,7 @@ void DHTGetPeersMessage::addLocalPeer(std::vector<std::shared_ptr<Peer>>& peers)
   if (std::find_if(std::begin(peers), std::end(peers),
                    [&externalIP, tcpPort](const std::shared_ptr<Peer>& peer) {
                      return peer->getIPAddress() == externalIP &&
-                            peer->getPort() == tcpPort;
+                            peer->getListenPort() == tcpPort;
                    }) != std::end(peers)) {
     return;
   }
