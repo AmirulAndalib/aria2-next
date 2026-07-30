@@ -145,3 +145,18 @@ jobs:
             -t "$image:latest" \
             $refs
           docker buildx imagetools inspect "$image:latest"
+
+      - name: Write publish summary
+        env:
+          IMAGE: ${{ needs.resolve.outputs.image }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
+          {
+            echo "## Docker image published"
+            echo
+            echo "aria2-next \`$VERSION\` was published as \`$IMAGE:$RELEASE_TAG\` and \`$IMAGE:latest\` for \`linux/amd64\` and \`linux/arm64\`."
+            echo
+            echo "The image was assembled from the Linux binaries in [GitHub Release \`$RELEASE_TAG\`]($release_url). Both tags reference the published multi-architecture manifest."
+          } >> "$GITHUB_STEP_SUMMARY"
