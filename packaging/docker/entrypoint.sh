@@ -11,8 +11,8 @@ validate_id() {
   value=$2
 
   case "$value" in
-    ''|0|*[!0-9]*)
-      fatal "$name must be a positive numeric ID"
+    ''|*[!0-9]*)
+      fatal "$name must be a non-negative numeric ID"
       ;;
   esac
 }
@@ -21,6 +21,10 @@ PUID=${PUID:-}
 PGID=${PGID:-}
 validate_id PUID "$PUID"
 validate_id PGID "$PGID"
+
+if [ "$PUID" -eq 0 ] || [ "$PGID" -eq 0 ]; then
+  echo "aria2-next-entrypoint: warning: running with root UID or GID grants elevated access to mounted host paths" >&2
+fi
 
 mkdir -p /downloads /config /var/lib/aria2-next
 chown "$PUID:$PGID" /downloads

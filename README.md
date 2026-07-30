@@ -148,7 +148,7 @@ PUID="$(id -u)" PGID="$(id -g)" \
   docker compose -f packaging/docker/compose.yml up -d
 ```
 
-The container requires `PUID` and `PGID`. The entrypoint assigns writable mounts to those IDs, creates the configuration and session files when absent, and drops privileges before launching aria2-next. The default configuration enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
+The container requires `PUID` and `PGID`. The entrypoint assigns writable mounts to those IDs and creates the configuration and session files when absent. Non-root IDs are recommended. UID or GID `0` is supported for environments that require elevated access and emits a startup warning. The default configuration enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
 
 Release binaries verify HTTPS certificates by default. Windows releases use WinTLS and the Windows trust store. Linux, macOS, and Android builds use OpenSSL 3 with system trust loading so certificate discovery follows the host runtime. Explicit CA files remain available through `--ca-certificate`.
 
