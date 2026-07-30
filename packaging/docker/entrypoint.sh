@@ -1,8 +1,44 @@
 #!/bin/sh
 set -eu
 
+fatal() {
+  echo "aria2-next-entrypoint: $*" >&2
+  exit 1
+}
+
+validate_id() {
+  name=$1
+  value=$2
+
+  case "$value" in
+    ''|0|*[!0-9]*)
+      fatal "$name must be a positive numeric ID"
+      ;;
+  esac
+}
+
+PUID=${PUID:-}
+PGID=${PGID:-}
+validate_id PUID "$PUID"
+validate_id PGID "$PGID"
+
+mkdir -p /downloads /config /var/lib/aria2-next
+chown "$PUID:$PGID" /downloads
+chown -R "$PUID:$PGID" /config /var/lib/aria2-next
+
+for path in /downloads /config /var/lib/aria2-next; do
+  gosu "$PUID:$PGID" test -w "$path" ||
+    fatal "$path is not writable by $PUID:$PGID"
+done
+
+gosu "$PUID:$PGID" touch /var/lib/aria2-next/session.txt
+
 if [ ! -e /config/aria2.conf ]; then
-  cp /usr/share/aria2-next/aria2.conf /config/aria2.conf
+  gosu "$PUID:$PGID" cp /usr/share/aria2-next/aria2.conf /config/aria2.conf
 fi
 
-exec aria2-next "$@"
+gosu "$PUID:$PGID" test -r /config/aria2.conf ||
+  fatal "/config/aria2.conf is not readable by $PUID:$PGID"
+
+export HOME=/var/lib/aria2-next
+exec gosu "$PUID:$PGID" aria2-next "$@"

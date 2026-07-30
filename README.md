@@ -121,7 +121,10 @@ Container images are published to GitHub Container Registry for Linux x86_64 and
 Run the latest container:
 
 ```bash
-docker run --rm ghcr.io/aninsomniacy/aria2-next:latest --version
+docker run --rm \
+  -e PUID="$(id -u)" \
+  -e PGID="$(id -g)" \
+  ghcr.io/aninsomniacy/aria2-next:latest --version
 ```
 
 Run as a JSON-RPC service:
@@ -129,6 +132,8 @@ Run as a JSON-RPC service:
 ```bash
 docker run -d --name aria2-next \
   -p 6800:6800 \
+  -e PUID="$(id -u)" \
+  -e PGID="$(id -g)" \
   -v "$PWD/downloads:/downloads" \
   -v "$PWD/config:/config" \
   -v "$PWD/state:/var/lib/aria2-next" \
@@ -136,7 +141,14 @@ docker run -d --name aria2-next \
   ghcr.io/aninsomniacy/aria2-next:latest
 ```
 
-The container runs as a non-root user. On first start it creates `/config/aria2.conf` from the bundled default configuration. That default enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
+Run the maintained Compose definition with the host account IDs:
+
+```bash
+PUID="$(id -u)" PGID="$(id -g)" \
+  docker compose -f packaging/docker/compose.yml up -d
+```
+
+The container requires `PUID` and `PGID`. The entrypoint assigns writable mounts to those IDs, creates the configuration and session files when absent, and drops privileges before launching aria2-next. The default configuration enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
 
 Release binaries verify HTTPS certificates by default. Windows releases use WinTLS and the Windows trust store. Linux, macOS, and Android builds use OpenSSL 3 with system trust loading so certificate discovery follows the host runtime. Explicit CA files remain available through `--ca-certificate`.
 

@@ -5,6 +5,9 @@ services:
     restart: unless-stopped
     ports:
       - "6800:6800"
+    environment:
+      PUID: "${PUID:?Set PUID to the host user ID}"
+      PGID: "${PGID:?Set PGID to the host group ID}"
     volumes:
       - ./downloads:/downloads
       - ./config:/config
@@ -14,6 +17,10 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
