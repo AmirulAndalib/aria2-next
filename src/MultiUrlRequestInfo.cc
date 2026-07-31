@@ -269,7 +269,7 @@ int MultiUrlRequestInfo::prepare()
       }
     }
     if (!clTlsContext->configurePeerVerification(verification, caFile)) {
-      throw DL_ABORT_EX(MSG_WARN_NO_CA_CERT);
+      throw DL_ABORT_EX(MSG_TRUSTED_CA_CONFIGURATION_FAILED);
     }
     SocketCore::setClientTLSContext(clTlsContext);
 #endif

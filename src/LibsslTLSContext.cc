@@ -35,6 +35,7 @@
 #include "LibsslTLSContext.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <sstream>
 
 #include <openssl/err.h>
@@ -87,6 +88,54 @@ struct x509_sk_deleter {
   }
 };
 typedef std::unique_ptr<STACK_OF(X509), x509_sk_deleter> x509_sk_t;
+
+#ifdef __ANDROID__
+const char* getEnvironmentValue(const char* name)
+{
+  const auto value = getenv(name);
+  return value && *value ? value : nullptr;
+}
+
+bool loadAndroidTrustedCACertificates(SSL_CTX* sslCtx)
+{
+  const auto caFile = getEnvironmentValue(X509_get_default_cert_file_env());
+  const auto caDirectory =
+      getEnvironmentValue(X509_get_default_cert_dir_env());
+
+  ERR_clear_error();
+  if (caFile || caDirectory) {
+    if (SSL_CTX_load_verify_locations(sslCtx, caFile, caDirectory) == 1) {
+      return true;
+    }
+
+    A2_LOG_ERROR(aria2::fmt("Failed to load Android CA certificates from the "
+                            "OpenSSL environment. Cause: %s",
+                            ERR_error_string(ERR_get_error(), nullptr)));
+    return false;
+  }
+
+  const auto prefix = getEnvironmentValue("PREFIX");
+  if (!prefix) {
+    A2_LOG_ERROR("Failed to locate the Android CA bundle: PREFIX is not set.");
+    return false;
+  }
+
+  auto termuxCAFile = std::string(prefix);
+  if (termuxCAFile.back() != '/') {
+    termuxCAFile += '/';
+  }
+  termuxCAFile += "etc/tls/cert.pem";
+
+  if (SSL_CTX_load_verify_file(sslCtx, termuxCAFile.c_str()) != 1) {
+    A2_LOG_ERROR(aria2::fmt(MSG_LOADING_TRUSTED_CA_CERT_FAILED,
+                            termuxCAFile.c_str(),
+                            ERR_error_string(ERR_get_error(), nullptr)));
+    return false;
+  }
+
+  return true;
+}
+#endif // __ANDROID__
 } // namespace
 
 namespace aria2 {
@@ -277,17 +326,23 @@ bool OpenSSLTLSContext::configurePeerVerification(
 
   if (verification == TLSVerification::CustomCA) {
     if (caFile.empty() ||
-        SSL_CTX_load_verify_locations(sslCtx_, caFile.c_str(), nullptr) != 1) {
+        SSL_CTX_load_verify_file(sslCtx_, caFile.c_str()) != 1) {
       A2_LOG_ERROR(fmt(MSG_LOADING_TRUSTED_CA_CERT_FAILED, caFile.c_str(),
                        ERR_error_string(ERR_get_error(), nullptr)));
       return false;
     }
   }
+#ifdef __ANDROID__
+  else if (!loadAndroidTrustedCACertificates(sslCtx_)) {
+    return false;
+  }
+#else  // !__ANDROID__
   else if (SSL_CTX_set_default_verify_paths(sslCtx_) != 1) {
     A2_LOG_DEBUG(fmt(MSG_LOADING_SYSTEM_TRUSTED_CA_CERTS_FAILED,
                     ERR_error_string(ERR_get_error(), nullptr)));
     return false;
   }
+#endif // !__ANDROID__
 
   SSL_CTX_set_verify(sslCtx_, SSL_VERIFY_PEER, nullptr);
   return true;

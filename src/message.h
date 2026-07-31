@@ -183,9 +183,9 @@
 #define MSG_NO_CERT_FOUND _("No certificate found.")
 #define MSG_HOSTNAME_NOT_MATCH _("Hostname not match.")
 #define MSG_NO_FILES_TO_DOWNLOAD _("No files to download.")
-#define MSG_WARN_NO_CA_CERT                                             \
-  _("You may encounter the certificate verification error with HTTPS server." \
-    " See --ca-certificate and --check-certificate option.")
+#define MSG_TRUSTED_CA_CONFIGURATION_FAILED                              \
+  _("Failed to configure trusted CA certificates. See the preceding error and" \
+    " --ca-certificate.")
 #define MSG_WARN_UNKNOWN_TLS_CONNECTION \
   _("Aria2 Next had to connect to the other side using an unknown TLS protocol. " \
     "The integrity and confidentiality of the connection might be " \

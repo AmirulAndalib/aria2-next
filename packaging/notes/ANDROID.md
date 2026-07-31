@@ -12,4 +12,4 @@ chmod 755 ./aria2-next
 ./aria2-next https://example.com/file.iso
 ```
 
-Android certificate and DNS paths differ across shells and devices. Pass `--ca-certificate`, `--async-dns`, or `--async-dns-server` explicitly when the shell environment does not expose usable defaults.
+The binary honors `SSL_CERT_FILE` and `SSL_CERT_DIR`, then loads the Termux CA bundle from `$PREFIX/etc/tls/cert.pem`. Use `--ca-certificate` for an explicit CA bundle. Configure `--async-dns` or `--async-dns-server` when the shell does not expose usable DNS defaults.

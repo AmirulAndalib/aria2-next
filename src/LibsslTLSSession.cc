@@ -297,7 +297,14 @@ std::string OpenSSLTLSSession::getLastErrorString()
       }
     }
     case SSL_ERROR_SSL:
-      return "protocol error";
+      if (const auto verifyResult = SSL_get_verify_result(ssl_);
+          verifyResult != X509_V_OK) {
+        return X509_verify_cert_error_string(verifyResult);
+      }
+      if (const auto err = ERR_get_error()) {
+        return ERR_error_string(err, nullptr);
+      }
+      return "TLS protocol error";
     default:
       return "unknown error";
     }
