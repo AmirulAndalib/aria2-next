@@ -732,6 +732,8 @@ set(ARIA2_SOURCES_ENABLE_BITTORRENT
   src/BtPostDownloadHandler.h
   src/BtRegistry.cc
   src/BtRegistry.h
+  src/BtPeerListener.cc
+  src/BtPeerListener.h
   src/BtRejectMessage.cc
   src/BtRejectMessage.h
   src/BtRequestFactory.h

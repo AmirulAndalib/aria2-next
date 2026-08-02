@@ -73,6 +73,7 @@ public:
   void testGetAnnounceUrl();
   void testGetAnnounceUrl_withQuery();
   void testGetAnnounceUrl_externalIP();
+  void testEndpointRefreshDuringAnnounce();
   void testNoMoreAnnounce();
   void testIsAllAnnounceFailed();
   void testURLOrderInStoppedEvent();
@@ -86,6 +87,7 @@ public:
 A2_TEST(DefaultBtAnnounceTest, testGetAnnounceUrl)
 A2_TEST(DefaultBtAnnounceTest, testGetAnnounceUrl_withQuery)
 A2_TEST(DefaultBtAnnounceTest, testGetAnnounceUrl_externalIP)
+A2_TEST(DefaultBtAnnounceTest, testEndpointRefreshDuringAnnounce)
 A2_TEST(DefaultBtAnnounceTest, testNoMoreAnnounce)
 A2_TEST(DefaultBtAnnounceTest, testIsAllAnnounceFailed)
 A2_TEST(DefaultBtAnnounceTest, testURLOrderInStoppedEvent)
@@ -150,7 +152,7 @@ void DefaultBtAnnounceTest::testNoMoreAnnounce()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
 
   REQUIRE_EQ(
       std::string("http://localhost/"
@@ -246,7 +248,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
   std::shared_ptr<UDPTrackerRequest> req;
 
   REQUIRE_EQ(
@@ -257,7 +259,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl()
                   "numwant=50&no_peer_id=1&port=6989&event=started&"
                   "supportcrypto=1"),
       btAnnounce.getAnnounceUrl());
-  req = btAnnounce.createUDPTrackerRequest("localhost", 80, 6989);
+  req = btAnnounce.createUDPTrackerRequest("localhost", 80);
   REQUIRE_EQ(std::string("localhost"), req->remoteAddr);
   REQUIRE_EQ((uint16_t)80, req->remotePort);
   REQUIRE_EQ((int)UDPT_ACT_ANNOUNCE, req->action);
@@ -282,7 +284,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl()
                   "downloaded=1310720&left=1572864&compact=1&key=fastdltl&"
                   "numwant=50&no_peer_id=1&port=6989&supportcrypto=1"),
       btAnnounce.getAnnounceUrl());
-  req = btAnnounce.createUDPTrackerRequest("localhost", 80, 6989);
+  req = btAnnounce.createUDPTrackerRequest("localhost", 80);
   REQUIRE_EQ((int)UDPT_ACT_ANNOUNCE, req->action);
   REQUIRE_EQ((int)UDPT_EVT_NONE, req->event);
 
@@ -298,7 +300,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl()
                   "numwant=50&no_peer_id=1&port=6989&event=completed&"
                   "supportcrypto=1"),
       btAnnounce.getAnnounceUrl());
-  req = btAnnounce.createUDPTrackerRequest("localhost", 80, 6989);
+  req = btAnnounce.createUDPTrackerRequest("localhost", 80);
   REQUIRE_EQ((int)UDPT_ACT_ANNOUNCE, req->action);
   REQUIRE_EQ((int)UDPT_EVT_COMPLETED, req->event);
 
@@ -314,7 +316,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl()
                   "numwant=0&no_peer_id=1&port=6989&event=stopped&"
                   "supportcrypto=1"),
       btAnnounce.getAnnounceUrl());
-  req = btAnnounce.createUDPTrackerRequest("localhost", 80, 6989);
+  req = btAnnounce.createUDPTrackerRequest("localhost", 80);
   REQUIRE_EQ((int)UDPT_ACT_ANNOUNCE, req->action);
   REQUIRE_EQ((int)UDPT_EVT_STOPPED, req->event);
 }
@@ -330,7 +332,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl_withQuery()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
 
   REQUIRE_EQ(
       std::string(
@@ -355,7 +357,7 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl_externalIP()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("192.168.1.1", 6989);
 
   REQUIRE_EQ(
       std::string(
@@ -368,11 +370,37 @@ void DefaultBtAnnounceTest::testGetAnnounceUrl_externalIP()
       btAnnounce.getAnnounceUrl());
 
   std::shared_ptr<UDPTrackerRequest> req;
-  req = btAnnounce.createUDPTrackerRequest("localhost", 80, 6989);
+  req = btAnnounce.createUDPTrackerRequest("localhost", 80);
   char host[NI_MAXHOST];
   int rv = inetNtop(AF_INET, &req->ip, host, sizeof(host));
   REQUIRE_EQ(0, rv);
   REQUIRE_EQ(std::string("192.168.1.1"), std::string(host));
+}
+
+void DefaultBtAnnounceTest::testEndpointRefreshDuringAnnounce()
+{
+  auto announceList = List::g();
+  announceList->append(createAnnounceTier("http://localhost/announce"));
+  setAnnounceList(dctx_, announceList.get());
+
+  DefaultBtAnnounce btAnnounce(dctx_.get(), option_);
+  btAnnounce.setPieceStorage(pieceStorage_);
+  btAnnounce.setPeerStorage(peerStorage_);
+  btAnnounce.setBtRuntime(btRuntime_);
+  btAnnounce.setRandomizer(randomizer_.get());
+  btAnnounce.setEndpoint("", 6989);
+
+  REQUIRE(btAnnounce.isAnnounceReady());
+  REQUIRE(btAnnounce.getAnnounceUrl().find("port=6989") != std::string::npos);
+  btAnnounce.announceStart();
+  btAnnounce.setEndpoint("203.0.113.1", 62000);
+  btAnnounce.announceSuccess();
+  btAnnounce.resetAnnounce();
+
+  REQUIRE(btAnnounce.isAnnounceReady());
+  const auto uri = btAnnounce.getAnnounceUrl();
+  REQUIRE(uri.find("port=62000") != std::string::npos);
+  REQUIRE(uri.find("ip=203.0.113.1") != std::string::npos);
 }
 
 void DefaultBtAnnounceTest::testIsAllAnnounceFailed()
@@ -387,7 +415,7 @@ void DefaultBtAnnounceTest::testIsAllAnnounceFailed()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
 
   REQUIRE_EQ(
       std::string("http://localhost/"
@@ -434,7 +462,7 @@ void DefaultBtAnnounceTest::testURLOrderInStoppedEvent()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
 
   REQUIRE_EQ(
       std::string("http://localhost1/"
@@ -486,7 +514,7 @@ void DefaultBtAnnounceTest::testURLOrderInCompletedEvent()
   btAnnounce.setPeerStorage(peerStorage_);
   btAnnounce.setBtRuntime(btRuntime_);
   btAnnounce.setRandomizer(randomizer_.get());
-  btAnnounce.setTcpPort(6989);
+  btAnnounce.setEndpoint("", 6989);
 
   REQUIRE_EQ(
       std::string("http://localhost1/"

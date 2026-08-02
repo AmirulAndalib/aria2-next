@@ -148,6 +148,7 @@ set(ARIA2_TEST_SOURCES_ENABLE_BITTORRENT
   tests/BtPieceMessageTest.cc
   tests/BtPortMessageTest.cc
   tests/BtPeerBlocklistTest.cc
+  tests/BtPeerListenerTest.cc
   tests/BtRejectMessageTest.cc
   tests/BtRequestMessageTest.cc
   tests/BtSuggestPieceMessageTest.cc

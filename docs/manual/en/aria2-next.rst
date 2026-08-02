@@ -750,12 +750,18 @@ BitTorrent Specific Options
 
 .. option:: --bt-external-ip=<IPADDRESS>
 
-  Specify the external IP address to use in BitTorrent download and DHT.
-  It may be sent to BitTorrent tracker. For DHT, this option should be
-  set to report that local node is downloading a particular torrent.
-  This is critical to use DHT in a private network. Although this
-  function is named ``external``, it can accept any kind of IP
-  addresses.
+  Specify the session-wide external IP address announced to BitTorrent
+  trackers and DHT. The value must be a numeric IPv4 or IPv6 address. This
+  option can be changed through :func:`aria2.changeGlobalOption`.
+
+.. option:: --bt-external-port=<PORT>
+
+  Specify the session-wide external TCP port announced to BitTorrent trackers,
+  DHT, and peers that support the extension protocol. ``0`` announces the
+  active :option:`--listen-port`. A nonzero value overrides only the announced
+  port; it does not rebind the local listener or affect Local Peer Discovery.
+  This option can be changed through :func:`aria2.changeGlobalOption`.
+  Default: ``0``
 
 .. option:: --bt-force-encryption [true|false]
 
@@ -939,6 +945,11 @@ BitTorrent Specific Options
   ``6881-6999``. ``,`` and ``-`` can be used together.
   Default: ``6881-6999``
 
+  This option can be changed through :func:`aria2.changeGlobalOption`. An
+  active BitTorrent listener is replaced without closing established peer
+  connections. If none of the requested ports can be bound, the RPC request
+  fails and the existing listener remains active.
+
   .. note::
 
     Make sure that the specified ports are open for incoming UDP traffic.
@@ -996,6 +1007,9 @@ BitTorrent Specific Options
   .. note::
 
     Make sure that the specified ports are open for incoming TCP traffic.
+    aria2 does not create firewall or router port mappings. Use
+    :option:`--bt-external-port` when the externally reachable port differs
+    from the local listener.
 
 .. option:: --max-overall-upload-limit=<SPEED>
 
@@ -2196,7 +2210,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`bt-enable-hook-after-hash-check <--bt-enable-hook-after-hash-check>`
   * :option:`bt-enable-lpd <--bt-enable-lpd>`
   * :option:`bt-exclude-tracker <--bt-exclude-tracker>`
-  * :option:`bt-external-ip <--bt-external-ip>`
   * :option:`bt-force-encryption <--bt-force-encryption>`
   * :option:`bt-hash-check-seed <--bt-hash-check-seed>`
   * :option:`bt-load-saved-metadata <--bt-load-saved-metadata>`
@@ -3298,6 +3311,24 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
       'seeder': 'false,
       'uploadSpeed': '6890'}]
 
+.. function:: aria2.getBtEndpoint([secret])
+
+  This method returns the active session-wide BitTorrent endpoint. Values are
+  strings.
+
+  ``listenPort``
+    The local TCP port currently accepting incoming BitTorrent connections.
+    ``0`` means that no BitTorrent listener is active.
+
+  ``announcePort``
+    The effective TCP port announced to trackers, DHT, and supported peers.
+    This is :option:`--bt-external-port` when it is nonzero, otherwise
+    ``listenPort``.
+
+  ``externalIp``
+    The numeric external IP address configured by
+    :option:`--bt-external-ip`, or an empty string when no override is active.
+
 .. function:: aria2.setBtPeerBlocklist([secret], rules)
 
   Atomically replaces the active BitTorrent peer blocklist. *rules* is an
@@ -3620,6 +3651,8 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   This method changes global options dynamically.  *options* is a struct.
   The following options are available:
 
+  * :option:`bt-external-ip <--bt-external-ip>`
+  * :option:`bt-external-port <--bt-external-port>`
   * :option:`bt-max-open-files <--bt-max-open-files>`
   * :option:`bt-peer-blocklist <--bt-peer-blocklist>`
   * :option:`download-result <--download-result>`
@@ -3628,6 +3661,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`log-level <--log-level>`
   * :option:`log-max-files <--log-max-files>`
   * :option:`log-max-size <--log-max-size>`
+  * :option:`listen-port <--listen-port>`
   * :option:`max-concurrent-downloads <-j>`
   * :option:`max-download-result <--max-download-result>`
   * :option:`max-overall-download-limit <--max-overall-download-limit>`

@@ -41,6 +41,7 @@
 #include "SocketCore.h"
 #include "util.h"
 #include "fmt.h"
+#include "BtRegistry.h"
 
 namespace aria2 {
 
@@ -58,6 +59,7 @@ bool LpdDispatchMessageCommand::execute()
   if (btRuntime_->isHalt()) {
     return true;
   }
+  dispatcher_->setPort(e_->getBtRegistry()->getListenPort());
   if (dispatcher_->isAnnounceReady()) {
     try {
       A2_LOG_DEBUG(fmt("Dispatching LPD message for infohash=%s",

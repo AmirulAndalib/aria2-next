@@ -75,6 +75,8 @@
 #  include "bittorrent_helper.h"
 #  include "BtRegistry.h"
 #  include "BtPeerBlocklist.h"
+#  include "BtPeerListener.h"
+#  include "SocketCore.h"
 #  include "PeerStorage.h"
 #  include "Peer.h"
 #  include "BtRuntime.h"
@@ -1377,6 +1379,17 @@ SetBtPeerBlocklistRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   result->put("removedPeers", Integer::g(removedPeers));
   return result;
 }
+
+std::unique_ptr<ValueBase>
+GetBtEndpointRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto& registry = e->getBtRegistry();
+  auto result = Dict::g();
+  result->put("listenPort", util::uitos(registry->getListenPort()));
+  result->put("announcePort", util::uitos(registry->getAnnouncePort()));
+  result->put("externalIp", registry->getExternalIp());
+  return result;
+}
 #endif // ENABLE_BITTORRENT
 
 std::unique_ptr<ValueBase> TellStatusRpcMethod::process(const RpcRequest& req,
@@ -2034,6 +2047,35 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
 void changeGlobalOption(const Option& option, DownloadEngine* e)
 {
 #ifdef ENABLE_BITTORRENT
+  auto& registry = e->getBtRegistry();
+  const auto endpointChanged = option.defined(PREF_BT_EXTERNAL_IP) ||
+                               option.defined(PREF_BT_EXTERNAL_PORT);
+  const auto externalIp = option.defined(PREF_BT_EXTERNAL_IP)
+                              ? option.get(PREF_BT_EXTERNAL_IP)
+                              : e->getOption()->get(PREF_BT_EXTERNAL_IP);
+  const auto externalPort = option.defined(PREF_BT_EXTERNAL_PORT)
+                                ? option.getAsInt(PREF_BT_EXTERNAL_PORT)
+                                : e->getOption()->getAsInt(
+                                      PREF_BT_EXTERNAL_PORT);
+  if (endpointChanged && !externalIp.empty()) {
+    unsigned char address[16];
+    if (net::getBinAddr(address, externalIp) == 0) {
+      throw DL_ABORT_EX("BitTorrent external IP address is invalid.");
+    }
+  }
+  if (option.defined(PREF_LISTEN_PORT) &&
+      registry->getPeerListener()->active()) {
+    const auto previousPort = registry->getListenPort();
+    if (!registry->getPeerListener()->rebind(
+            option.get(PREF_LISTEN_PORT),
+            !e->getOption()->getAsBool(PREF_DISABLE_IPV6))) {
+      throw DL_ABORT_EX("Failed to bind the requested BitTorrent TCP port.");
+    }
+    registry->onListenPortChanged(previousPort);
+  }
+  if (endpointChanged) {
+    registry->setExternalEndpoint(externalIp, externalPort);
+  }
   if (option.defined(PREF_BT_PEER_BLOCKLIST)) {
     const auto previousRevision =
         e->getBtRegistry()->getPeerBlocklist()->revision();

@@ -80,6 +80,8 @@ public:
   // Reset timer_ to the current time.
   void resetAnnounceTimer();
 
+  void setPort(uint16_t port);
+
   const std::string& getInfoHash() const { return infoHash_; }
 
   uint16_t getPort() const { return port_; }

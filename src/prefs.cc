@@ -584,6 +584,8 @@ PrefPtr PREF_BT_MAX_PEERS = makePref("bt-max-peers");
 PrefPtr PREF_BT_PEER_BLOCKLIST = makePref("bt-peer-blocklist");
 // values: a string  = makePref(IP address)
 PrefPtr PREF_BT_EXTERNAL_IP = makePref("bt-external-ip");
+// values: 1*digit
+PrefPtr PREF_BT_EXTERNAL_PORT = makePref("bt-external-port");
 // values: 1*digit '=' a string that your file system recognizes as a file name.
 PrefPtr PREF_INDEX_OUT = makePref("index-out");
 // values: 1*digit

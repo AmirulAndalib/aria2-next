@@ -44,12 +44,15 @@
 #include "LpdMessageReceiver.h"
 #include "UDPTrackerClient.h"
 #include "BtPeerBlocklist.h"
+#include "BtPeerListener.h"
 #include "NullHandle.h"
 
 namespace aria2 {
 
 BtRegistry::BtRegistry()
-    : tcpPort_{0}, udpPort_{0}, peerBlocklist_{std::make_shared<BtPeerBlocklist>()}
+    : peerListener_{std::make_shared<BtPeerListener>()},
+      udpPort_{0},
+      peerBlocklist_{std::make_shared<BtPeerBlocklist>()}
 {
 }
 
@@ -79,6 +82,9 @@ BtRegistry::getDownloadContext(const std::string& infoHash) const
 
 void BtRegistry::put(a2_gid_t gid, std::unique_ptr<BtObject> obj)
 {
+  if (obj->btAnnounce) {
+    obj->btAnnounce->setEndpoint(externalIp_, getAnnouncePort());
+  }
   pool_[gid] = std::move(obj);
 }
 
@@ -107,6 +113,44 @@ size_t BtRegistry::removeBlockedPeers()
 }
 
 void BtRegistry::removeAll() { pool_.clear(); }
+
+uint16_t BtRegistry::getListenPort() const { return peerListener_->port(); }
+
+uint16_t BtRegistry::getAnnouncePort() const
+{
+  return externalPort_ == 0 ? getListenPort() : externalPort_;
+}
+
+void BtRegistry::onListenPortChanged(uint16_t previousPort)
+{
+  if (previousPort == getListenPort()) {
+    return;
+  }
+  if (externalPort_ != 0) {
+    return;
+  }
+  ++announceRevision_;
+  for (auto& entry : pool_) {
+    if (entry.second->btAnnounce) {
+      entry.second->btAnnounce->setEndpoint(externalIp_, getAnnouncePort());
+    }
+  }
+}
+
+void BtRegistry::setExternalEndpoint(std::string ip, uint16_t port)
+{
+  if (externalIp_ == ip && externalPort_ == port) {
+    return;
+  }
+  externalIp_ = std::move(ip);
+  externalPort_ = port;
+  ++announceRevision_;
+  for (auto& entry : pool_) {
+    if (entry.second->btAnnounce) {
+      entry.second->btAnnounce->setEndpoint(externalIp_, getAnnouncePort());
+    }
+  }
+}
 
 void BtRegistry::setLpdMessageReceiver(
     const std::shared_ptr<LpdMessageReceiver>& receiver)

@@ -102,6 +102,17 @@ void LpdMessageDispatcher::resetAnnounceTimer()
   timer_ = global::wallclock();
 }
 
+void LpdMessageDispatcher::setPort(uint16_t port)
+{
+  if (port_ == port) {
+    return;
+  }
+  port_ = port;
+  request_ = bittorrent::createLpdRequest(multicastAddress_, multicastPort_,
+                                          infoHash_, port_);
+  timer_ = Timer::zero();
+}
+
 namespace bittorrent {
 
 std::string createLpdRequest(const std::string& multicastAddress,

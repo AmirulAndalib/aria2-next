@@ -34,25 +34,21 @@
 /* copyright --> */
 #include "BtSetup.h"
 
-#include <cstring>
-
 #include "RequestGroup.h"
 #include "DownloadEngine.h"
 #include "Option.h"
 #include "BtRegistry.h"
 #include "PeerListenCommand.h"
+#include "BtPeerListener.h"
 #include "TrackerWatcherCommand.h"
 #include "SeedCheckCommand.h"
 #include "PeerChokeCommand.h"
 #include "ActivePeerConnectionCommand.h"
-#include "PeerListenCommand.h"
 #include "UnionSeedCriteria.h"
 #include "TimeSeedCriteria.h"
 #include "ShareRatioSeedCriteria.h"
 #include "prefs.h"
 #include "Log.h"
-#include "util.h"
-#include "SegList.h"
 #include "DHTGetPeersCommand.h"
 #include "DHTPeerAnnounceStorage.h"
 #include "DHTSetup.h"
@@ -180,40 +176,28 @@ void BtSetup::setup(std::vector<std::unique_ptr<Command>>& commands,
       commands.push_back(std::move(c));
     }
   }
-  if (btReg->getTcpPort() == 0) {
-    static int families[] = {AF_INET, AF_INET6};
-    size_t familiesLength =
-        e->getOption()->getAsBool(PREF_DISABLE_IPV6) ? 1 : 2;
-    for (size_t i = 0; i < familiesLength; ++i) {
-      auto command =
-          make_unique<PeerListenCommand>(e->newCUID(), e, families[i]);
-      bool ret;
-      uint16_t port;
-      if (btReg->getTcpPort()) {
-        SegList<int> sgl;
-        int usedPort = btReg->getTcpPort();
-        sgl.add(usedPort, usedPort + 1);
-        ret = command->bindPort(port, sgl);
-      }
-      else {
-        auto sgl =
-            util::parseIntSegments(e->getOption()->get(PREF_LISTEN_PORT));
-        sgl.normalize();
-        ret = command->bindPort(port, sgl);
-      }
-      if (ret) {
-        btReg->setTcpPort(port);
-        // Add command to DownloadEngine directly.
-        e->addCommand(std::move(command));
-      }
-    }
-    if (btReg->getTcpPort() == 0) {
-      throw DL_ABORT_EX(_("Errors occurred while binding port.\n"));
+  const auto& externalIp = e->getOption()->get(PREF_BT_EXTERNAL_IP);
+  if (!externalIp.empty()) {
+    unsigned char address[16];
+    if (net::getBinAddr(address, externalIp) == 0) {
+      throw DL_ABORT_EX(_("BitTorrent external IP address is invalid."));
     }
   }
-  btAnnounce->setTcpPort(btReg->getTcpPort());
+  btReg->setExternalEndpoint(
+      externalIp, e->getOption()->getAsInt(PREF_BT_EXTERNAL_PORT));
+  if (!btReg->getPeerListener()->active()) {
+    const auto previousPort = btReg->getListenPort();
+    if (!btReg->getPeerListener()->rebind(
+            e->getOption()->get(PREF_LISTEN_PORT),
+            !e->getOption()->getAsBool(PREF_DISABLE_IPV6))) {
+      throw DL_ABORT_EX(_("Errors occurred while binding port.\n"));
+    }
+    btReg->onListenPortChanged(previousPort);
+    e->addCommand(make_unique<PeerListenCommand>(
+        e->newCUID(), e, btReg->getPeerListener()));
+  }
 
-  if (option->getAsBool(PREF_BT_ENABLE_LPD) && btReg->getTcpPort() &&
+  if (option->getAsBool(PREF_BT_ENABLE_LPD) && btReg->getListenPort() &&
       (metadataGetMode || !torrentAttrs->privateTorrent)) {
     if (!btReg->getLpdMessageReceiver()) {
       A2_LOG_DEBUG("Initializing LpdMessageReceiver.");
@@ -259,7 +243,7 @@ void BtSetup::setup(std::vector<std::unique_ptr<Command>>& commands,
       A2_LOG_DEBUG("Initializing LpdMessageDispatcher.");
       auto dispatcher = std::make_shared<LpdMessageDispatcher>(
           std::string(&infoHash[0], &infoHash[INFO_HASH_LENGTH]),
-          btReg->getTcpPort(), LPD_MULTICAST_ADDR, LPD_MULTICAST_PORT);
+          btReg->getListenPort(), LPD_MULTICAST_ADDR, LPD_MULTICAST_PORT);
       if (dispatcher->init(btReg->getLpdMessageReceiver()->getLocalAddress(),
                            /*ttl*/ 1, /*loop*/ 1)) {
         A2_LOG_DEBUG("LpdMessageDispatcher initialized.");

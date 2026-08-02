@@ -84,9 +84,7 @@ void DHTGetPeersMessage::addLocalPeer(std::vector<std::shared_ptr<Peer>>& peers)
     return;
   }
 
-  auto group = dctx->getOwnerRequestGroup();
-  auto& option = group->getOption();
-  auto& externalIP = option->get(PREF_BT_EXTERNAL_IP);
+  const auto& externalIP = btRegistry_->getExternalIp();
 
   if (externalIP.empty()) {
     return;
@@ -97,7 +95,7 @@ void DHTGetPeersMessage::addLocalPeer(std::vector<std::shared_ptr<Peer>>& peers)
     return;
   }
 
-  auto tcpPort = btRegistry_->getTcpPort();
+  auto tcpPort = btRegistry_->getAnnouncePort();
   if (std::find_if(std::begin(peers), std::end(peers),
                    [&externalIP, tcpPort](const std::shared_ptr<Peer>& peer) {
                      return peer->getIPAddress() == externalIP &&

@@ -104,7 +104,7 @@ DefaultBtInteractive::DefaultBtInteractive(
       numReceivedMessage_(0),
       maxOutstandingRequest_(DEFAULT_MAX_OUTSTANDING_REQUEST),
       requestGroupMan_(nullptr),
-      tcpPort_(0)
+      advertisedPort_(0)
 {
 }
 
@@ -200,7 +200,7 @@ void DefaultBtInteractive::addHandshakeExtendedMessageToQueue()
 {
   auto m = make_unique<HandshakeExtensionMessage>();
   m->setClientVersion(bittorrent::getStaticPeerAgent());
-  m->setTCPPort(tcpPort_);
+  m->setTCPPort(advertisedPort_);
   m->setExtensions(extensionMessageRegistry_->getExtensions());
   auto attrs = bittorrent::getTorrentAttrs(downloadContext_);
   if (!attrs->metadata.empty()) {
@@ -227,6 +227,17 @@ void DefaultBtInteractive::addBitfieldMessageToQueue()
     if (pieceStorage_->getCompletedLength() > 0) {
       dispatcher_->addMessageToQueue(messageFactory_->createBitfieldMessage());
     }
+  }
+}
+
+void DefaultBtInteractive::updateAdvertisedPort(uint16_t port)
+{
+  if (advertisedPort_ == port) {
+    return;
+  }
+  advertisedPort_ = port;
+  if (peer_->isExtendedMessagingEnabled()) {
+    addHandshakeExtendedMessageToQueue();
   }
 }
 

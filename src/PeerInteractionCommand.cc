@@ -92,7 +92,8 @@ PeerInteractionCommand::PeerInteractionCommand(
       btRuntime_{btRuntime},
       pieceStorage_{pieceStorage},
       peerStorage_{peerStorage},
-      sequence_{sequence}
+      sequence_{sequence},
+      announceRevision_{e->getBtRegistry()->getAnnounceRevision()}
 {
   // TODO move following bunch of processing to separate method, like init()
   if (sequence_ == INITIATOR_SEND_HANDSHAKE) {
@@ -272,7 +273,7 @@ PeerInteractionCommand::PeerInteractionCommand(
         std::move(utMetadataRequestTracker));
   }
 
-  btInteractive->setTcpPort(e->getBtRegistry()->getTcpPort());
+  btInteractive->updateAdvertisedPort(e->getBtRegistry()->getAnnouncePort());
   if (metadataGetMode) {
     btInteractive->enableMetadataGetMode();
   }
@@ -296,6 +297,13 @@ PeerInteractionCommand::~PeerInteractionCommand()
 
 bool PeerInteractionCommand::executeInternal()
 {
+  const auto announceRevision =
+      getDownloadEngine()->getBtRegistry()->getAnnounceRevision();
+  if (sequence_ == WIRED && announceRevision_ != announceRevision) {
+    announceRevision_ = announceRevision;
+    btInteractive_->updateAdvertisedPort(
+        getDownloadEngine()->getBtRegistry()->getAnnouncePort());
+  }
   setNoCheck(false);
   bool done = false;
   while (!done) {

@@ -516,6 +516,8 @@ extern PrefPtr PREF_BT_MAX_PEERS;
 extern PrefPtr PREF_BT_PEER_BLOCKLIST;
 // values: a string (IP address)
 extern PrefPtr PREF_BT_EXTERNAL_IP;
+// values: 1*digit
+extern PrefPtr PREF_BT_EXTERNAL_PORT;
 // values: 1*digit '=' a string that your file system recognizes as a file name.
 extern PrefPtr PREF_INDEX_OUT;
 // values: 1*digit

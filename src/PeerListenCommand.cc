@@ -35,7 +35,6 @@
 #include "PeerListenCommand.h"
 
 #include <utility>
-#include <algorithm>
 
 #include "DownloadEngine.h"
 #include "Peer.h"
@@ -45,90 +44,58 @@
 #include "ReceiverMSEHandshakeCommand.h"
 #include "Log.h"
 #include "SocketCore.h"
-#include "SimpleRandomizer.h"
-#include "util.h"
 #include "fmt.h"
 #include "BtRegistry.h"
 #include "BtPeerBlocklist.h"
+#include "BtPeerListener.h"
 
 namespace aria2 {
 
-PeerListenCommand::PeerListenCommand(cuid_t cuid, DownloadEngine* e, int family)
-    : Command(cuid), e_(e), family_(family)
+PeerListenCommand::PeerListenCommand(
+    cuid_t cuid, DownloadEngine* e, std::shared_ptr<BtPeerListener> listener)
+    : Command(cuid), e_(e), listener_(std::move(listener))
 {
 }
 
 PeerListenCommand::~PeerListenCommand() = default;
 
-bool PeerListenCommand::bindPort(uint16_t& port, SegList<int>& sgl)
-{
-  socket_ = std::make_shared<SocketCore>();
-  std::vector<uint16_t> ports;
-  while (sgl.hasNext()) {
-    ports.push_back(sgl.next());
-  }
-  std::shuffle(ports.begin(), ports.end(), *SimpleRandomizer::getInstance());
-  const int ipv = (family_ == AF_INET) ? 4 : 6;
-  for (std::vector<uint16_t>::const_iterator i = ports.begin(),
-                                             eoi = ports.end();
-       i != eoi; ++i) {
-    port = *i;
-    try {
-      socket_->bind(nullptr, port, family_);
-      socket_->beginListen();
-      A2_LOG_INFO(
-          fmt(_("IPv%d BitTorrent: listening on TCP port %u"), ipv, port));
-      return true;
-    }
-    catch (RecoverableException& ex) {
-      A2_LOG_ERROR_EX(
-          fmt("IPv%d BitTorrent: failed to bind TCP port %u", ipv, port), ex);
-      socket_->closeConnection();
-    }
-  }
-  return false;
-}
-
-uint16_t PeerListenCommand::getPort() const
-{
-  if (!socket_) {
-    return 0;
-  }
-
-  return socket_->getAddrInfo().port;
-}
-
 bool PeerListenCommand::execute()
 {
   if (e_->isHaltRequested() || e_->getRequestGroupMan()->downloadFinished()) {
+    const auto previousPort = listener_->port();
+    listener_->close();
+    e_->getBtRegistry()->onListenPortChanged(previousPort);
     return true;
   }
-  for (int i = 0; i < 3 && socket_->isReadable(0); ++i) {
-    std::shared_ptr<SocketCore> peerSocket;
-    try {
-      peerSocket = socket_->acceptConnection();
-      peerSocket->applyIpDscp();
-      auto endpoint = peerSocket->getPeerInfo();
+  for (const auto& listener : listener_->entries()) {
+    for (int i = 0; i < 3 && listener.socket->isReadable(0); ++i) {
+      std::shared_ptr<SocketCore> peerSocket;
+      try {
+        peerSocket = listener.socket->acceptConnection();
+        peerSocket->applyIpDscp();
+        auto endpoint = peerSocket->getPeerInfo();
 
-      if (e_->getBtRegistry()->getPeerBlocklist()->contains(endpoint.addr)) {
-        A2_LOG_DEBUG(fmt("Rejected blocked BitTorrent peer %s:%u.",
-                         endpoint.addr.c_str(), endpoint.port));
-        peerSocket->closeConnection();
-        continue;
+        if (e_->getBtRegistry()->getPeerBlocklist()->contains(endpoint.addr)) {
+          A2_LOG_DEBUG(fmt("Rejected blocked BitTorrent peer %s:%u.",
+                           endpoint.addr.c_str(), endpoint.port));
+          peerSocket->closeConnection();
+          continue;
+        }
+
+        auto peer = std::make_shared<Peer>(
+            endpoint.addr, endpoint.port, Peer::ConnectionDirection::INCOMING);
+        cuid_t cuid = e_->newCUID();
+        e_->addCommand(make_unique<ReceiverMSEHandshakeCommand>(
+            cuid, peer, e_, peerSocket));
+        A2_LOG_TRACE(fmt("Accepted the connection from %s:%u.",
+                         peer->getIPAddress().c_str(), peer->getRemotePort()));
+        A2_LOG_TRACE(fmt("Added CUID#%" PRId64
+                         " to receive BitTorrent/MSE handshake.",
+                         cuid));
       }
-
-      auto peer = std::make_shared<Peer>(
-          endpoint.addr, endpoint.port, Peer::ConnectionDirection::INCOMING);
-      cuid_t cuid = e_->newCUID();
-      e_->addCommand(
-          make_unique<ReceiverMSEHandshakeCommand>(cuid, peer, e_, peerSocket));
-      A2_LOG_TRACE(fmt("Accepted the connection from %s:%u.",
-                       peer->getIPAddress().c_str(), peer->getRemotePort()));
-      A2_LOG_TRACE(fmt(
-          "Added CUID#%" PRId64 " to receive BitTorrent/MSE handshake.", cuid));
-    }
-    catch (RecoverableException& ex) {
-      A2_LOG_TRACE_EX(fmt(MSG_ACCEPT_FAILURE, getCuid()), ex);
+      catch (RecoverableException& ex) {
+        A2_LOG_TRACE_EX(fmt(MSG_ACCEPT_FAILURE, getCuid()), ex);
+      }
     }
   }
   e_->addCommand(std::unique_ptr<Command>(this));

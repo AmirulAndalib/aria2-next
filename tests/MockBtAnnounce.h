@@ -22,8 +22,8 @@ public:
   virtual std::string getAnnounceUrl() override { return announceUrl; }
 
   virtual std::shared_ptr<UDPTrackerRequest>
-  createUDPTrackerRequest(const std::string& remoteAddr, uint16_t remotePort,
-                          uint16_t localPort) override
+  createUDPTrackerRequest(const std::string& remoteAddr,
+                          uint16_t remotePort) override
   {
     return nullptr;
   }
@@ -59,7 +59,10 @@ public:
   {
   }
 
-  virtual void setTcpPort(uint16_t port) override {}
+  virtual void setEndpoint(const std::string& externalIp,
+                           uint16_t announcePort) override
+  {
+  }
 
   void setPeerId(const std::string& peerId) { this->peerId = peerId; }
 };

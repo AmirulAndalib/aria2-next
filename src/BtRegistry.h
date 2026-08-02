@@ -39,6 +39,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 
 #include "RequestGroup.h"
 
@@ -53,6 +54,7 @@ class DownloadContext;
 class LpdMessageReceiver;
 class UDPTrackerClient;
 class BtPeerBlocklist;
+class BtPeerListener;
 
 struct BtObject {
   std::shared_ptr<DownloadContext> downloadContext;
@@ -75,7 +77,10 @@ struct BtObject {
 class BtRegistry {
 private:
   std::map<a2_gid_t, std::unique_ptr<BtObject>> pool_;
-  uint16_t tcpPort_;
+  std::shared_ptr<BtPeerListener> peerListener_;
+  std::string externalIp_;
+  uint16_t externalPort_ = 0;
+  uint64_t announceRevision_ = 0;
   // This is UDP port for DHT and UDP tracker. But currently UDP
   // tracker is not supported in IPv6.
   uint16_t udpPort_;
@@ -111,8 +116,24 @@ public:
 
   size_t removeBlockedPeers();
 
-  void setTcpPort(uint16_t port) { tcpPort_ = port; }
-  uint16_t getTcpPort() const { return tcpPort_; }
+  const std::shared_ptr<BtPeerListener>& getPeerListener() const
+  {
+    return peerListener_;
+  }
+
+  uint16_t getListenPort() const;
+
+  uint16_t getAnnouncePort() const;
+
+  const std::string& getExternalIp() const { return externalIp_; }
+
+  uint16_t getExternalPort() const { return externalPort_; }
+
+  uint64_t getAnnounceRevision() const { return announceRevision_; }
+
+  void onListenPortChanged(uint16_t previousPort);
+
+  void setExternalEndpoint(std::string ip, uint16_t port);
 
   void setUdpPort(uint16_t port) { udpPort_ = port; }
   uint16_t getUdpPort() const { return udpPort_; }

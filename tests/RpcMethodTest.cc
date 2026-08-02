@@ -103,6 +103,7 @@ public:
 #ifdef ENABLE_BITTORRENT
   void testGatherStoppedDownload_bt();
   void testGetPeers();
+  void testGetBtEndpoint();
   void testSetBtPeerBlocklist();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
@@ -163,6 +164,7 @@ A2_TEST(RpcMethodTest, testGatherProgressEd2kStatus)
 #ifdef ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherStoppedDownload_bt)
 A2_TEST(RpcMethodTest, testGetPeers)
+A2_TEST(RpcMethodTest, testGetBtEndpoint)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
@@ -1453,6 +1455,37 @@ void RpcMethodTest::testGetPeers()
   REQUIRE_EQ(std::string("true"), getString(entry, "incoming"));
   REQUIRE_EQ(std::string("49152"), getString(entry, "port"));
   REQUIRE_EQ(std::string("6881"), getString(entry, "listenPort"));
+}
+
+void RpcMethodTest::testGetBtEndpoint()
+{
+  ChangeGlobalOptionRpcMethod changeMethod;
+  auto changeRequest =
+      createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  auto options = Dict::g();
+  options->put(PREF_BT_EXTERNAL_IP->k, "203.0.113.7");
+  options->put(PREF_BT_EXTERNAL_PORT->k, "62000");
+  changeRequest.params->append(std::move(options));
+  auto response = changeMethod.execute(std::move(changeRequest), e_.get());
+  REQUIRE_EQ(0, response.code);
+
+  GetBtEndpointRpcMethod getMethod;
+  response = getMethod.execute(
+      createReq(GetBtEndpointRpcMethod::getMethodName()), e_.get());
+  REQUIRE_EQ(0, response.code);
+  auto endpoint = downcast<Dict>(response.param);
+  REQUIRE_EQ(std::string("0"), getString(endpoint, "listenPort"));
+  REQUIRE_EQ(std::string("62000"), getString(endpoint, "announcePort"));
+  REQUIRE_EQ(std::string("203.0.113.7"), getString(endpoint, "externalIp"));
+
+  changeRequest = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  options = Dict::g();
+  options->put(PREF_BT_EXTERNAL_IP->k, "invalid");
+  changeRequest.params->append(std::move(options));
+  response = changeMethod.execute(std::move(changeRequest), e_.get());
+  REQUIRE_EQ(1, response.code);
+  REQUIRE_EQ(std::string("203.0.113.7"),
+             e_->getBtRegistry()->getExternalIp());
 }
 
 void RpcMethodTest::testSetBtPeerBlocklist()

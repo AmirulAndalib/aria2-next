@@ -72,6 +72,10 @@ private:
 
   Timer lastGetPeerTime_;
 
+  uint64_t announceRevision_;
+
+  bool endpointRefreshPending_;
+
 public:
   DHTGetPeersCommand(cuid_t cuid, RequestGroup* requestGroup,
                      DownloadEngine* e);

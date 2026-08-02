@@ -112,7 +112,6 @@ void DHTGetPeersMessageTest::testDoReceivedAction()
   dctx->setAttribute(CTX_ATTR_BT, torrentAttrs);
 
   auto option = std::make_shared<Option>();
-  option->put(PREF_BT_EXTERNAL_IP, "192.168.0.1");
 
   auto gid = GroupId::create();
   RequestGroup group(gid, option);
@@ -122,7 +121,7 @@ void DHTGetPeersMessageTest::testDoReceivedAction()
   btReg.put(
       gid->getNumericId(),
       make_unique<BtObject>(dctx, nullptr, nullptr, nullptr, nullptr, nullptr));
-  btReg.setTcpPort(6890);
+  btReg.setExternalEndpoint("192.168.0.1", 6890);
 
   DHTGetPeersMessage msg(localNode_, remoteNode_, infoHash, transactionID);
   msg.setRoutingTable(&routingTable);

@@ -74,7 +74,9 @@ DHTGetPeersCommand::DHTGetPeersCommand(cuid_t cuid, RequestGroup* requestGroup,
       taskQueue_{nullptr},
       taskFactory_{nullptr},
       numRetry_{0},
-      lastGetPeerTime_{Timer::zero()}
+      lastGetPeerTime_{Timer::zero()},
+      announceRevision_{e->getBtRegistry()->getAnnounceRevision()},
+      endpointRefreshPending_{false}
 {
   requestGroup_->increaseNumCommand();
 }
@@ -89,8 +91,13 @@ bool DHTGetPeersCommand::execute()
   if (btRuntime_->isHalt()) {
     return true;
   }
+  const auto announceRevision = e_->getBtRegistry()->getAnnounceRevision();
+  if (announceRevision_ != announceRevision) {
+    announceRevision_ = announceRevision;
+    endpointRefreshPending_ = true;
+  }
   auto elapsed = lastGetPeerTime_.difference(global::wallclock());
-  if (!task_ && (elapsed >= GET_PEER_INTERVAL ||
+  if (!task_ && (endpointRefreshPending_ || elapsed >= GET_PEER_INTERVAL ||
                  (((btRuntime_->lessThanMinPeers() &&
                     ((numRetry_ && elapsed >= GET_PEER_INTERVAL_RETRY) ||
                      elapsed >= GET_PEER_INTERVAL_LOW)) ||
@@ -101,13 +108,16 @@ bool DHTGetPeersCommand::execute()
             bittorrent::getInfoHashString(requestGroup_->getDownloadContext())
                 .c_str()));
     task_ = taskFactory_->createPeerLookupTask(
-        requestGroup_->getDownloadContext(), e_->getBtRegistry()->getTcpPort(),
-        peerStorage_);
+        requestGroup_->getDownloadContext(),
+        e_->getBtRegistry()->getAnnouncePort(), peerStorage_);
     taskQueue_->addPeriodicTask2(task_);
+    endpointRefreshPending_ = false;
   }
   else if (task_ && task_->finished()) {
     A2_LOG_TRACE("task finished detected");
-    lastGetPeerTime_ = global::wallclock();
+    if (!endpointRefreshPending_) {
+      lastGetPeerTime_ = global::wallclock();
+    }
     if (numRetry_ < MAX_RETRIES &&
         (btRuntime_->getMaxPeers() == 0 ||
          btRuntime_->getMaxPeers() >

@@ -1604,9 +1604,14 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         new DefaultOptionHandler(PREF_BT_EXTERNAL_IP, TEXT_BT_EXTERNAL_IP,
                                  NO_DEFAULT_VALUE, "a numeric IP address"));
     op->addTag(TAG_BITTORRENT);
-    op->setInitialOption(true);
     op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_EXTERNAL_PORT, TEXT_BT_EXTERNAL_PORT, "0", 0, UINT16_MAX));
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
     handlers.push_back(op);
   }
   {
@@ -1924,6 +1929,7 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         PREF_LISTEN_PORT, TEXT_LISTEN_PORT, "6881-6999", 1024, UINT16_MAX));
     op->addTag(TAG_BASIC);
     op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
     handlers.push_back(op);
   }
   {

@@ -68,7 +68,9 @@ DefaultBtAnnounce::DefaultBtAnnounce(DownloadContext* downloadContext,
       announceList_(bittorrent::getTorrentAttrs(downloadContext)->announceList),
       option_(option),
       randomizer_(SimpleRandomizer::getInstance().get()),
-      tcpPort_(0)
+      announcePort_(0),
+      endpointInitialized_(false),
+      endpointRefreshPending_(false)
 {
 }
 
@@ -77,9 +79,10 @@ DefaultBtAnnounce::~DefaultBtAnnounce() = default;
 bool DefaultBtAnnounce::isDefaultAnnounceReady()
 {
   return (trackers_ == 0 &&
-          prevAnnounceTimer_.difference(global::wallclock()) >=
-              (userDefinedInterval_.count() == 0 ? minInterval_
-                                                 : userDefinedInterval_) &&
+          (endpointRefreshPending_ ||
+           prevAnnounceTimer_.difference(global::wallclock()) >=
+               (userDefinedInterval_.count() == 0 ? minInterval_
+                                                  : userDefinedInterval_)) &&
           !announceList_.allTiersFailed());
 }
 
@@ -179,8 +182,8 @@ std::string DefaultBtAnnounce::getAnnounceUrl()
               bittorrent::getStaticPeerId() + PEER_ID_LENGTH - keyLen, keyLen)
               .c_str(),
           numWant);
-  if (tcpPort_) {
-    uri += fmt("&port=%u", tcpPort_);
+  if (announcePort_) {
+    uri += fmt("&port=%u", announcePort_);
   }
   const char* event = announceList_.getEventString();
   if (event[0]) {
@@ -198,15 +201,15 @@ std::string DefaultBtAnnounce::getAnnounceUrl()
   else {
     uri += "&supportcrypto=1";
   }
-  if (!option_->blank(PREF_BT_EXTERNAL_IP)) {
+  if (!externalIp_.empty()) {
     uri += "&ip=";
-    uri += option_->get(PREF_BT_EXTERNAL_IP);
+    uri += externalIp_;
   }
   return uri;
 }
 
 std::shared_ptr<UDPTrackerRequest> DefaultBtAnnounce::createUDPTrackerRequest(
-    const std::string& remoteAddr, uint16_t remotePort, uint16_t localPort)
+    const std::string& remoteAddr, uint16_t remotePort)
 {
   if (!adjustAnnounceList()) {
     return nullptr;
@@ -238,9 +241,9 @@ std::shared_ptr<UDPTrackerRequest> DefaultBtAnnounce::createUDPTrackerRequest(
   default:
     req->event = 0;
   }
-  if (!option_->blank(PREF_BT_EXTERNAL_IP)) {
+  if (!externalIp_.empty()) {
     unsigned char dest[16];
-    if (net::getBinAddr(dest, option_->get(PREF_BT_EXTERNAL_IP)) == 4) {
+    if (net::getBinAddr(dest, externalIp_) == 4) {
       memcpy(&req->ip, dest, 4);
     }
     else {
@@ -256,12 +259,16 @@ std::shared_ptr<UDPTrackerRequest> DefaultBtAnnounce::createUDPTrackerRequest(
     numWant = 0;
   }
   req->numWant = numWant;
-  req->port = localPort;
+  req->port = announcePort_;
   req->extensions = 0;
   return req;
 }
 
-void DefaultBtAnnounce::announceStart() { ++trackers_; }
+void DefaultBtAnnounce::announceStart()
+{
+  ++trackers_;
+  endpointRefreshPending_ = false;
+}
 
 void DefaultBtAnnounce::announceSuccess()
 {
@@ -415,6 +422,23 @@ void DefaultBtAnnounce::setPeerStorage(
 void DefaultBtAnnounce::overrideMinInterval(std::chrono::seconds interval)
 {
   minInterval_ = std::move(interval);
+}
+
+void DefaultBtAnnounce::setEndpoint(const std::string& externalIp,
+                                    uint16_t announcePort)
+{
+  if (!endpointInitialized_) {
+    externalIp_ = externalIp;
+    announcePort_ = announcePort;
+    endpointInitialized_ = true;
+    return;
+  }
+  if (externalIp_ == externalIp && announcePort_ == announcePort) {
+    return;
+  }
+  externalIp_ = externalIp;
+  announcePort_ = announcePort;
+  endpointRefreshPending_ = true;
 }
 
 } // namespace aria2

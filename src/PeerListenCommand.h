@@ -39,34 +39,25 @@
 
 #include <memory>
 
-#include "SegList.h"
-
 namespace aria2 {
 
 class DownloadEngine;
 class SocketCore;
+class BtPeerListener;
 
 class PeerListenCommand : public Command {
 private:
   DownloadEngine* e_;
-  int family_;
-  std::shared_ptr<SocketCore> socket_;
+  std::shared_ptr<BtPeerListener> listener_;
 
 public:
-  PeerListenCommand(cuid_t cuid, DownloadEngine* e, int family);
+  PeerListenCommand(cuid_t cuid, DownloadEngine* e,
+                    std::shared_ptr<BtPeerListener> listener);
 
   virtual ~PeerListenCommand();
 
   virtual bool execute() override;
 
-  /**
-   * Binds port. If successful, the bound port number is assigned to port and
-   * returns true, otherwise port is undefined and returns false.
-   */
-  bool bindPort(uint16_t& port, SegList<int>& seq);
-
-  // Returns bound port
-  uint16_t getPort() const;
 };
 
 } // namespace aria2

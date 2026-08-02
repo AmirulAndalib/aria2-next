@@ -57,6 +57,7 @@ std::vector<std::string> rpcMethodNames = {
 #ifdef ENABLE_BITTORRENT
     "aria2.addTorrent",
     "aria2.getPeers",
+    "aria2.getBtEndpoint",
     "aria2.setBtPeerBlocklist",
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_METALINK
@@ -137,6 +138,10 @@ std::unique_ptr<RpcMethod> createMethod(const std::string& methodName)
 
   if (methodName == GetPeersRpcMethod::getMethodName()) {
     return make_unique<GetPeersRpcMethod>();
+  }
+
+  if (methodName == GetBtEndpointRpcMethod::getMethodName()) {
+    return make_unique<GetBtEndpointRpcMethod>();
   }
 
   if (methodName == SetBtPeerBlocklistRpcMethod::getMethodName()) {

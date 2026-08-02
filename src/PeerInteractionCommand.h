@@ -68,6 +68,8 @@ private:
   Seq sequence_;
   std::unique_ptr<BtInteractive> btInteractive_;
 
+  uint64_t announceRevision_;
+
   const std::shared_ptr<Option>& getOption() const;
 
 protected:

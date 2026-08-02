@@ -65,7 +65,10 @@ private:
   std::shared_ptr<BtRuntime> btRuntime_;
   std::shared_ptr<PieceStorage> pieceStorage_;
   std::shared_ptr<PeerStorage> peerStorage_;
-  uint16_t tcpPort_;
+  std::string externalIp_;
+  uint16_t announcePort_;
+  bool endpointInitialized_;
+  bool endpointRefreshPending_;
 
   bool adjustAnnounceList();
 
@@ -103,8 +106,8 @@ public:
   virtual std::string getAnnounceUrl() override;
 
   virtual std::shared_ptr<UDPTrackerRequest>
-  createUDPTrackerRequest(const std::string& remoteAddr, uint16_t remotePort,
-                          uint16_t localPort) override;
+  createUDPTrackerRequest(const std::string& remoteAddr,
+                          uint16_t remotePort) override;
 
   virtual void announceStart() override;
 
@@ -130,7 +133,8 @@ public:
   virtual void
   overrideMinInterval(std::chrono::seconds interval) override;
 
-  virtual void setTcpPort(uint16_t port) override { tcpPort_ = port; }
+  virtual void setEndpoint(const std::string& externalIp,
+                           uint16_t announcePort) override;
 
   void setRandomizer(Randomizer* randomizer);
 
