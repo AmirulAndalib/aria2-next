@@ -162,11 +162,11 @@ The audit separates confirmed fixes, already-fixed reports, documented behavior,
 
 `CMakeLists.txt` is the project version source of truth. Release tags use `v{PROJECT_VERSION}`.
 
-The release workflow runs when a matching GitHub Release is published. It validates the tag against `CMakeLists.txt`, builds all maintained platform binaries, generates SHA-256 checksums, and uploads the release executables to the published release. Source code is provided by the GitHub release tag source archives.
+The release workflow runs when a matching GitHub Release is published. It validates the tag against `CMakeLists.txt`, builds all maintained platform binaries, generates SHA-256 checksums, uploads the release executables, and then dispatches Docker publishing for the same release tag. Source code is provided by the GitHub release tag source archives.
 
 Tag pushes alone do not publish release builds. `workflow_dispatch` remains available for release-path validation of the current workflow commit and archives the final binaries and checksum file to the workflow run artifact named `aria2-next-<version>-release-assets`. Published GitHub Releases must use a `v{PROJECT_VERSION}` tag that matches `CMakeLists.txt`.
 
-Container images are published separately by the manual Docker Publish workflow. It assembles the Linux multi-architecture image from the latest GitHub Release binaries and publishes `ghcr.io/aninsomniacy/aria2-next:latest` plus the matching `v{PROJECT_VERSION}` tag.
+Official container images are published automatically after the release assets upload succeeds. The Docker Publish workflow remains manually dispatchable for an independent rebuild and uses the latest GitHub Release when no tag is supplied. It assembles the Linux multi-architecture image from release binaries and publishes `ghcr.io/aninsomniacy/aria2-next:latest` plus the matching `v{PROJECT_VERSION}` tag.
 
 ## Dependency Baseline
 

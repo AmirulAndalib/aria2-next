@@ -1721,16 +1721,8 @@ char toLowerChar(char c)
 
 bool isNumericHost(const std::string& name)
 {
-  struct addrinfo hints;
-  struct addrinfo* res;
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_flags = AI_NUMERICHOST;
-  if (getaddrinfo(name.c_str(), nullptr, &hints, &res)) {
-    return false;
-  }
-  freeaddrinfo(res);
-  return true;
+  std::array<unsigned char, 16> address;
+  return net::getBinAddr(address.data(), name) != 0;
 }
 
 #if _WIN32

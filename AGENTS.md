@@ -72,7 +72,7 @@ Do not add automated dependency PR systems, scheduled dependency update workflow
 
 ## Release Process
 
-The release workflow is `.github/workflows/release.yml`. It runs on `release: published` and on manual `workflow_dispatch` validation. Tag pushes do not publish release builds directly.
+The release workflow is `.github/workflows/release.yml`. It runs on `release: published` and on manual `workflow_dispatch` validation. Tag pushes do not publish release builds directly. A successful release-triggered asset upload dispatches `.github/workflows/docker-publish.yml` for the same tag; manual release validation does not publish Docker images.
 
 Maintained release artifacts are standalone executable assets named `aria2-next-<version>-linux-x86_64`, `aria2-next-<version>-linux-aarch64`, `aria2-next-<version>-macos-arm64`, `aria2-next-<version>-macos-x86_64`, `aria2-next-<version>-windows-x86_64.exe`, `aria2-next-<version>-windows-arm64.exe`, `aria2-next-<version>-android-arm64`, and `aria2-next-<version>-checksums.sha256`.
 

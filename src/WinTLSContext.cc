@@ -189,10 +189,12 @@ void WinTLSContext::setVerifyPeer(bool verify)
     return;
   }
 
-  // Verify other side's cert chain.
+  // Verify the complete peer chain without making revocation service
+  // availability a prerequisite for a valid TLS connection.
   credentials_.dwFlags |= SCH_CRED_AUTO_CRED_VALIDATION |
                           SCH_CRED_REVOCATION_CHECK_CHAIN |
-                          SCH_CRED_IGNORE_NO_REVOCATION_CHECK;
+                          SCH_CRED_IGNORE_NO_REVOCATION_CHECK |
+                          SCH_CRED_IGNORE_REVOCATION_OFFLINE;
 }
 
 CredHandle* WinTLSContext::getCredHandle()

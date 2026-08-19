@@ -4,7 +4,7 @@ This package contains the aria2-next `aria2-next.exe` binary for Windows. It kee
 
 The official release binary statically links its non-system dependencies.
 
-Official Windows releases use WinTLS for HTTPS verification, trust the Windows certificate store, and use WinCNG for libssh2 cryptography. No bundled `cacert.pem` or OpenSSL runtime is required for ordinary HTTPS downloads.
+Official Windows releases use WinTLS for HTTPS verification, trust the Windows certificate store, and use WinCNG for libssh2 cryptography. WinTLS rejects certificates confirmed as revoked while allowing connections when a revocation service is unavailable; all other certificate checks remain active. No bundled `cacert.pem` or OpenSSL runtime is required for ordinary HTTPS downloads.
 
 Maintained dependency and Windows ARM64 llvm-mingw versions are recorded in `packaging/dependencies.env` in the source tree. Windows x86_64 builds use the MinGW-w64 POSIX thread model required by the C++ logging runtime.
 

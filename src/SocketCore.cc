@@ -1506,29 +1506,29 @@ namespace net {
 
 size_t getBinAddr(void* dest, const std::string& ip)
 {
-  size_t len = 0;
-  addrinfo* res;
-  if (callGetaddrinfo(&res, ip.c_str(), nullptr, AF_UNSPEC, 0, AI_NUMERICHOST,
-                      0) != 0) {
-    return len;
+  addrinfo hints{};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_flags = AI_NUMERICHOST;
+
+  addrinfo* res = nullptr;
+  if (getaddrinfo(ip.c_str(), nullptr, &hints, &res) != 0) {
+    return 0;
   }
   std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> resDeleter(res,
                                                                 freeaddrinfo);
   for (addrinfo* rp = res; rp; rp = rp->ai_next) {
-    sockaddr_union su;
-    memcpy(&su, rp->ai_addr, rp->ai_addrlen);
-    if (rp->ai_family == AF_INET) {
-      len = sizeof(in_addr);
-      memcpy(dest, &(su.in.sin_addr), len);
-      break;
+    if (rp->ai_family == AF_INET && rp->ai_addrlen >= sizeof(sockaddr_in)) {
+      const auto* address = reinterpret_cast<const sockaddr_in*>(rp->ai_addr);
+      memcpy(dest, &address->sin_addr, sizeof(address->sin_addr));
+      return sizeof(address->sin_addr);
     }
-    else if (rp->ai_family == AF_INET6) {
-      len = sizeof(in6_addr);
-      memcpy(dest, &(su.in6.sin6_addr), len);
-      break;
+    if (rp->ai_family == AF_INET6 && rp->ai_addrlen >= sizeof(sockaddr_in6)) {
+      const auto* address = reinterpret_cast<const sockaddr_in6*>(rp->ai_addr);
+      memcpy(dest, &address->sin6_addr, sizeof(address->sin6_addr));
+      return sizeof(address->sin6_addr);
     }
   }
-  return len;
+  return 0;
 }
 
 namespace {

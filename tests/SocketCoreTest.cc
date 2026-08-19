@@ -151,6 +151,11 @@ void SocketCoreTest::testInetPton()
 
 void SocketCoreTest::testGetBinAddr()
 {
+  struct DefaultAIFlagsReset {
+    ~DefaultAIFlagsReset() { setDefaultAIFlags(0); }
+  } reset;
+  setDefaultAIFlags(AI_ADDRCONFIG);
+
   unsigned char dest[16];
   unsigned char ans1[] = {192, 168, 0, 1};
   REQUIRE_EQ((size_t)4, net::getBinAddr(dest, "192.168.0.1"));
@@ -161,6 +166,12 @@ void SocketCoreTest::testGetBinAddr()
                           0x00u, 0x02u, 0x00u, 0x01u};
   REQUIRE_EQ((size_t)16, net::getBinAddr(dest, "2001:db8::2:1"));
   REQUIRE(std::equal(&dest[0], &dest[16], &ans2[0]));
+
+  unsigned char ans3[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+                          0x00u, 0x00u, 0x00u, 0x00u, 0xffu, 0xffu,
+                          0xc0u, 0x00u, 0x02u, 0x01u};
+  REQUIRE_EQ((size_t)16, net::getBinAddr(dest, "::ffff:192.0.2.1"));
+  REQUIRE(std::equal(&dest[0], &dest[16], &ans3[0]));
 
   REQUIRE_EQ((size_t)0, net::getBinAddr(dest, "localhost"));
 }

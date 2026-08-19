@@ -404,12 +404,10 @@ int inetPton(int af, const char* src, void* dst);
 
 namespace net {
 
-// Stores binary representation of IP address ip which is represented
-// in text.  ip must be numeric IPv4 or IPv6 address. dest must be
-// allocated by caller before the call. For IPv4 address, dest must be
-// at least 4. For IPv6 address, dest must be at least 16. Returns the
-// number of bytes written in dest, that is 4 for IPv4 and 16 for
-// IPv6. Return 0 if error occurred.
+// Stores the binary representation of a numeric IPv4 or IPv6 address.
+// Parsing is independent of locally configured network interfaces. dest must
+// provide at least 4 bytes for IPv4 or 16 bytes for IPv6. Returns the number
+// of bytes written, or 0 if ip is not a numeric address.
 size_t getBinAddr(void* dest, const std::string& ip);
 
 // Checks public IP address are configured for each family: IPv4 and

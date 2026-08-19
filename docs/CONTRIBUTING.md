@@ -102,7 +102,7 @@ Disclose AI usage in the PR template. Use the exact model name when known.
 
 `CMakeLists.txt` is the project version source of truth. Use `scripts/bump-version.sh` to change it. Use `scripts/release.sh` for releases. GitHub Release notes are reviewed separately before publishing.
 
-Release assets are standalone executables plus checksums. Docker images are published by the separate manual Docker workflow from the latest GitHub Release Linux binaries.
+Release assets are standalone executables plus checksums. A successful official release asset upload dispatches the Docker workflow for the same tag. The Docker workflow also remains available for independent manual publishing from GitHub Release Linux binaries.
 
 ## License
 

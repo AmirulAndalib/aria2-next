@@ -430,6 +430,12 @@ HTTP Specific Options
 .. option:: --check-certificate [true|false]
 
   Verify the peer using trusted certificate authorities.
+
+  On Windows, WinTLS checks the complete certificate chain for revocation. A
+  certificate confirmed as revoked is rejected. An unavailable revocation
+  service does not disable trust, hostname, validity, or other certificate
+  checks and does not prevent the connection.
+
   Default: ``true``
 
 .. option:: --http-accept-gzip [true|false]

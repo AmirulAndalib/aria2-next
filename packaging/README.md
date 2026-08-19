@@ -20,7 +20,7 @@ Official release builds use `packaging/scripts/release-size-profile` to apply si
 
 GitHub Release assets are bare executable binaries named `aria2-next-<version>-<platform>-<architecture>`, plus a SHA-256 checksum file. Source code and license material are provided by the GitHub release tag source archives.
 
-Container images are published by the manual Docker workflow to GitHub Container Registry as `ghcr.io/aninsomniacy/aria2-next:v<version>` and `ghcr.io/aninsomniacy/aria2-next:latest`. The image is assembled from the latest GitHub Release Linux x86_64 and Linux ARM64 binaries instead of rebuilding aria2-next inside Docker. `PUID` and `PGID` are mandatory. The entrypoint assigns persistent mounts to those IDs and seeds the configuration and session state. Non-root IDs are recommended; UID or GID `0` remains available with an explicit startup warning.
+Container images are published automatically after official release assets are uploaded and remain independently publishable through the manual Docker workflow. GitHub Container Registry receives `ghcr.io/aninsomniacy/aria2-next:v<version>` and `ghcr.io/aninsomniacy/aria2-next:latest`. The image is assembled from the selected GitHub Release Linux x86_64 and Linux ARM64 binaries instead of rebuilding aria2-next inside Docker. `PUID` and `PGID` are mandatory. The entrypoint assigns persistent mounts to those IDs and seeds the configuration and session state. Non-root IDs are recommended; UID or GID `0` remains available with an explicit startup warning.
 
 `packaging/scripts/check-runtime-deps` and `packaging/scripts/size-audit` remain available for manual release inspection.
 

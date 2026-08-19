@@ -38,19 +38,22 @@ void BtPeerBlocklistTest::testLoadBtnRules()
       "203.0.113.25\n"
       "198.51.100.0/24\n"
       "2001:db8::1234\n"
-      "2001:db8:abcd::/48\n");
+      "2001:250:3c08:4500::/56\n"
+      "::ffff:192.0.2.45\n");
   BtPeerBlocklist blocklist;
 
   blocklist.load(input, "memory");
 
-  REQUIRE_EQ((size_t)4, blocklist.count());
+  REQUIRE_EQ((size_t)5, blocklist.count());
   REQUIRE(blocklist.contains("203.0.113.25"));
   REQUIRE(!blocklist.contains("203.0.113.26"));
   REQUIRE(blocklist.contains("198.51.100.255"));
   REQUIRE(!blocklist.contains("198.51.101.0"));
   REQUIRE(blocklist.contains("2001:db8::1234"));
-  REQUIRE(blocklist.contains("2001:db8:abcd:ffff::1"));
-  REQUIRE(!blocklist.contains("2001:db8:abce::1"));
+  REQUIRE(blocklist.contains("2001:250:3c08:45ff::1"));
+  REQUIRE(!blocklist.contains("2001:250:3c08:4600::1"));
+  REQUIRE(blocklist.contains("192.0.2.45"));
+  REQUIRE(blocklist.contains("::ffff:192.0.2.45"));
 }
 
 void BtPeerBlocklistTest::testIdempotentReplacement()
