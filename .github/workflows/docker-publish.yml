@@ -129,7 +129,7 @@ jobs:
           retention-days: 1
 
   merge:
-    name: Publish Multi-Architecture Manifest
+    name: Publish Manifest
     needs:
       - resolve
       - build
