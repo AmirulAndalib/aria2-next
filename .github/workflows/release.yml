@@ -1147,7 +1147,7 @@ jobs:
   # Publish or archive release assets
   # ---------------------------------------------------------------------------
   upload-release-assets:
-    name: Publish or Archive Release Assets
+    name: Publish or Archive
     needs:
       - resolve-release
       - build-linux-x64
