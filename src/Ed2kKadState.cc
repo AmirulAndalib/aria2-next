@@ -74,11 +74,11 @@ int distanceCompare(const std::string& lhs, const std::string& rhs,
   validateId(lhs);
   validateId(rhs);
   validateId(target);
-  for (size_t i = 0; i < HASH_LENGTH; ++i) {
-    const auto ld = static_cast<unsigned char>(lhs[i]) ^
-                    static_cast<unsigned char>(target[i]);
-    const auto rd = static_cast<unsigned char>(rhs[i]) ^
-                    static_cast<unsigned char>(target[i]);
+  for (size_t i = 0; i < HASH_LENGTH; i += 4) {
+    const auto ld = readUInt32(lhs.data() + i) ^
+                    readUInt32(target.data() + i);
+    const auto rd = readUInt32(rhs.data() + i) ^
+                    readUInt32(target.data() + i);
     if (ld < rd) {
       return -1;
     }
@@ -263,7 +263,7 @@ bool KadRoutingTable::needBootstrap(int64_t now)
   if (liveSize() != 0 || replacementSize() >= bucketSize_) {
     return false;
   }
-  if (lastBootstrap_ == 0 || now - lastBootstrap_ >= 30) {
+  if (lastBootstrap_ == 0 || now - lastBootstrap_ >= 2) {
     lastBootstrap_ = now;
     return true;
   }
@@ -295,11 +295,12 @@ bool KadRoutingTable::needRefresh(std::string& targetId, int64_t now)
   lastRefresh_ = now;
   auto index = static_cast<size_t>(oldest - buckets_.begin());
   targetId = selfId_;
-  auto byteIndex = index / 8;
-  auto bitIndex = index % 8;
-  targetId[byteIndex] =
-      static_cast<char>(static_cast<unsigned char>(targetId[byteIndex]) ^
-                        (0x80u >> bitIndex));
+  const auto chunkIndex = index / 32;
+  const auto bitIndex = index % 32;
+  const auto offset = chunkIndex * 4;
+  const auto value = readUInt32(targetId.data() + offset) ^
+                     (0x80000000u >> bitIndex);
+  targetId.replace(offset, 4, packUInt32(value));
   return true;
 }
 
@@ -443,15 +444,16 @@ size_t KadRoutingTable::usefulSize() const
 size_t KadRoutingTable::bucketIndex(const std::string& id) const
 {
   validateId(id);
-  for (size_t i = 0; i < HASH_LENGTH; ++i) {
-    const auto x = static_cast<unsigned char>(selfId_[i]) ^
-                   static_cast<unsigned char>(id[i]);
+  for (size_t chunk = 0; chunk < HASH_LENGTH / 4; ++chunk) {
+    const auto offset = chunk * 4;
+    const auto x = readUInt32(selfId_.data() + offset) ^
+                   readUInt32(id.data() + offset);
     if (x == 0) {
       continue;
     }
-    for (size_t bit = 0; bit < 8; ++bit) {
-      if (x & (0x80u >> bit)) {
-        return i * 8 + bit;
+    for (size_t bit = 0; bit < 32; ++bit) {
+      if (x & (0x80000000u >> bit)) {
+        return chunk * 32 + bit;
       }
     }
   }
@@ -519,6 +521,34 @@ std::vector<KadTraversalAction> KadTraversal::onFailure(
     }
   }
   return nextActions();
+}
+
+void KadTraversal::onSearchResponse(const KadContact& contact)
+{
+  finishSearch(contact, false);
+}
+
+void KadTraversal::onSearchFailure(const KadContact& contact)
+{
+  finishSearch(contact, true);
+}
+
+void KadTraversal::finishSearch(const KadContact& contact, bool failed)
+{
+  for (auto& observer : observers_) {
+    if (!sameContact(observer.contact, contact) &&
+        !sameEndpoint(observer.contact, contact)) {
+      continue;
+    }
+    observer.failed = failed;
+    break;
+  }
+  if (searchInFlight_ > 0) {
+    --searchInFlight_;
+  }
+  if (searchStarted_ && searchInFlight_ == 0) {
+    done_ = true;
+  }
 }
 
 void KadTraversal::addContact(const KadContact& contact)
@@ -622,11 +652,12 @@ void KadTraversal::startSearch(std::vector<KadTraversalAction>& actions,
     action.type = KadTraversalActionType::SEARCH;
     action.contact = observer.contact;
     actions.push_back(action);
+    ++searchInFlight_;
     if (actions.size() >= targetNodes_) {
       break;
     }
   }
-  if (actions.empty()) {
+  if (actions.empty() && searchInFlight_ == 0) {
     done_ = true;
   }
 }

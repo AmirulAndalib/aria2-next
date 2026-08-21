@@ -35,6 +35,7 @@ private:
   PieceStorage* pieceStorage_;
   SegmentMan* segmentMan_;
   cuid_t cuid_;
+  size_t corruptPieceIndex_ = static_cast<size_t>(-1);
 
   std::string readPiece(size_t index) const;
   bool verifyPiece(size_t index) const;
@@ -50,6 +51,11 @@ public:
   std::shared_ptr<Segment> writePartData(int64_t begin,
                                          const std::string& data);
   bool completeVerifiedSegment(const std::shared_ptr<Segment>& segment);
+  bool hasCorruptPiece() const
+  {
+    return corruptPieceIndex_ != static_cast<size_t>(-1);
+  }
+  size_t corruptPieceIndex() const { return corruptPieceIndex_; }
 };
 
 } // namespace ed2k

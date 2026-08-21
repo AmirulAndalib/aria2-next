@@ -41,6 +41,9 @@ struct KadHello {
   uint16_t tcpPort = 0;
   uint8_t version = 0;
   std::vector<Tag> tags;
+  bool requestsAck = false;
+  bool tcpFirewalled = false;
+  bool udpFirewalled = false;
 };
 
 struct KadBootstrapResponse {
@@ -118,8 +121,12 @@ std::string kadIdToObfuscationKeyBytes(const std::string& id);
 KadContact readKadContact(const std::string& data, size_t& offset);
 std::string packKadContact(const KadContact& contact);
 std::string createKadHelloPayload(const std::string& id, uint16_t tcpPort,
-                                  uint8_t version);
+                                  uint8_t version, bool requestAck = false,
+                                  bool tcpFirewalled = false,
+                                  bool udpFirewalled = false);
 bool parseKadHelloPayload(KadHello& hello, const std::string& payload);
+std::string createKadHelloAckPayload(const std::string& id);
+bool parseKadHelloAckPayload(std::string& id, const std::string& payload);
 std::string createKadBootstrapResponsePayload(
     const std::string& id, uint16_t tcpPort, uint8_t version,
     const std::vector<KadContact>& contacts);

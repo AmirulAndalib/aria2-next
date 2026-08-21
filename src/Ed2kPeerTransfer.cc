@@ -31,6 +31,59 @@ namespace aria2 {
 
 namespace ed2k {
 
+namespace {
+
+int64_t addReceivedRange(std::vector<PartRange>& ranges, int64_t begin,
+                         int64_t end)
+{
+  int64_t newBytes = end - begin;
+  for (const auto& range : ranges) {
+    const auto overlapBegin = std::max(begin, range.begin);
+    const auto overlapEnd = std::min(end, range.end);
+    if (overlapEnd > overlapBegin) {
+      newBytes -= overlapEnd - overlapBegin;
+    }
+  }
+
+  PartRange merged{begin, end};
+  for (auto i = ranges.begin(); i != ranges.end();) {
+    if (i->end < merged.begin || merged.end < i->begin) {
+      ++i;
+      continue;
+    }
+    merged.begin = std::min(merged.begin, i->begin);
+    merged.end = std::max(merged.end, i->end);
+    i = ranges.erase(i);
+  }
+  ranges.push_back(merged);
+  std::sort(ranges.begin(), ranges.end(),
+            [](const PartRange& lhs, const PartRange& rhs) {
+              return lhs.begin < rhs.begin;
+            });
+  return std::max<int64_t>(0, newBytes);
+}
+
+bool receivedRangeCovers(const std::vector<PartRange>& ranges, int64_t begin,
+                         int64_t end)
+{
+  return std::any_of(ranges.begin(), ranges.end(),
+                     [&](const PartRange& range) {
+                       return range.begin <= begin && end <= range.end;
+                     });
+}
+
+void eraseReceivedRange(std::vector<PartRange>& ranges, int64_t begin,
+                        int64_t end)
+{
+  ranges.erase(std::remove_if(ranges.begin(), ranges.end(),
+                              [&](const PartRange& range) {
+                                return begin <= range.begin && range.end <= end;
+                              }),
+               ranges.end());
+}
+
+} // namespace
+
 PeerTransfer::PeerTransfer(DownloadContext* dctx, PieceStorage* pieceStorage,
                            SegmentMan* segmentMan, cuid_t cuid)
     : dctx_(dctx),
@@ -107,6 +160,7 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
     throw DL_RETRY_EX("Unexpected ED2K part range.");
   }
   auto piece = segment->getPiece();
+  auto attrs = getEd2kAttrs(dctx_);
   const auto blockLength = piece->getBlockLength();
   const auto firstBlock =
       static_cast<size_t>((begin - pieceBegin) / blockLength);
@@ -115,14 +169,17 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
 
   pieceStorage_->getDiskAdaptor()->writeData(
       reinterpret_cast<const unsigned char*>(data.data()), data.size(), begin);
-  dctx_->updateDownload(data.size());
+  dctx_->updateDownload(
+      static_cast<size_t>(addReceivedRange(attrs->receivedPartRanges, begin,
+                                           end)));
   for (auto block = firstBlock; block <= lastBlock; ++block) {
     const auto blockBegin =
         pieceBegin + static_cast<int64_t>(block) * blockLength;
     const auto blockEnd =
         std::min(blockBegin + static_cast<int64_t>(piece->getBlockLength(block)),
                  pieceEnd);
-    if (!piece->hasBlock(block) && end >= blockEnd) {
+    if (!piece->hasBlock(block) &&
+        receivedRangeCovers(attrs->receivedPartRanges, blockBegin, blockEnd)) {
       piece->completeBlock(block);
     }
   }
@@ -130,8 +187,10 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
     return nullptr;
   }
   if (!verifyPiece(index)) {
+    corruptPieceIndex_ = index;
     const auto pieceData = readPiece(index);
     segment->clear(pieceStorage_->getWrDiskCache());
+    eraseReceivedRange(attrs->receivedPartRanges, pieceBegin, pieceEnd);
     if (!pieceData.empty()) {
       applyAichRecovery(piece, pieceData);
     }
@@ -188,7 +247,15 @@ bool PeerTransfer::completeVerifiedSegment(const std::shared_ptr<Segment>& segme
   if (!segment) {
     return false;
   }
-  return segmentMan_->completeSegment(cuid_, segment);
+  if (!segmentMan_->completeSegment(cuid_, segment)) {
+    return false;
+  }
+  const auto begin = static_cast<int64_t>(segment->getIndex()) *
+                     dctx_->getPieceLength();
+  const auto end = std::min(begin + static_cast<int64_t>(segment->getLength()),
+                            dctx_->getTotalLength());
+  eraseReceivedRange(getEd2kAttrs(dctx_)->receivedPartRanges, begin, end);
+  return true;
 }
 
 std::string PeerTransfer::readPiece(size_t index) const

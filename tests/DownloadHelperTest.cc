@@ -65,21 +65,17 @@ public:
   void testCreateRequestGroupForUri_Thunder();
   void testCreateRequestGroupForUri_BadThunder();
   void testCreateRequestGroupForUri_ED2K();
-  void testCreateRequestGroupForUri_ED2KClientHash();
 #ifndef __MINGW32__
   void testCreateRequestGroupForUri_ED2KDefaultKadBootstrap();
   void testCreateRequestGroupForUri_ED2KDefaultMacKadBootstrap();
 #endif // !__MINGW32__
-  void testCreateEd2kSearchRequestGroupClientHash();
   void testCreateRequestGroupForUri_ED2KNodesDat();
   void testCreateRequestGroupForUri_ED2KServerMetMetadata();
-  void testCreateRequestGroupForUri_ED2KKadRoutingState();
-  void testCreateRequestGroupForUri_ED2KServerState();
-  void testCreateRequestGroupForUri_ED2KMultipleServerStates();
   void testCreateRequestGroupForUri_ED2KDefaultServers();
   void testEd2kPeerDeduplication();
   void testEd2kKadSourcePeerMergePreservesUdpMetadata();
-  void testEd2kServerSourceMergeSkipsUnsupportedSources();
+  void testEd2kServerSourceMergeAcceptsRequiredEncryption();
+  void testEd2kAichHashRequiresQuorum();
   void testEd2kSourceExchangeMergePolicy();
   void testEd2kSourcePolicyRanksSources();
   void testEd2kSourcePolicyClassifiesLifecycle();
@@ -93,6 +89,8 @@ public:
   void testEd2kPeerUdpReaskStateTransitions();
   void testEd2kPeerUdpReaskReplyMatchesUdpPort();
   void testEd2kPeerUdpReaskDueSelection();
+  void testEd2kPeerUdpReaskTimeoutFallsBackToTcp();
+  void testEd2kKadFirewallCheckAckRequiresExpectedHost();
   void testEd2kKadCommandQueuesDuePeerReask();
   void testEd2kKadCommandQueuesKadCallback();
   void testEd2kKadCommandQueuesDirectCallback();
@@ -102,8 +100,7 @@ public:
   void testEd2kSourcePolicyAppliesActiveCap();
   void testEd2kServerSourceCadencePolicy();
   void testEd2kServerSearchCadencePolicy();
-  void testEd2kPiecePolicyUsesPeerAvailability();
-  void testEd2kPiecePolicyReclaimsIdlePeerSegment();
+  void testEd2kServerSchedulerFillsVacantConnectionSlot();
   void testEd2kPeerTransferRemovesCompletedRequestedRanges();
   void testEd2kPeerTransferExpiresStalledRequests();
   void testEd2kPeerTransferReclaimsStalledEndgameRange();
@@ -137,21 +134,17 @@ A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_Thunder)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_BadThunder)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2K)
-A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KClientHash)
 #ifndef __MINGW32__
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KDefaultKadBootstrap)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KDefaultMacKadBootstrap)
 #endif // !__MINGW32__
-A2_TEST(DownloadHelperTest, testCreateEd2kSearchRequestGroupClientHash)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KNodesDat)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KServerMetMetadata)
-A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KKadRoutingState)
-A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KServerState)
-A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KMultipleServerStates)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_ED2KDefaultServers)
 A2_TEST(DownloadHelperTest, testEd2kPeerDeduplication)
 A2_TEST(DownloadHelperTest, testEd2kKadSourcePeerMergePreservesUdpMetadata)
-A2_TEST(DownloadHelperTest, testEd2kServerSourceMergeSkipsUnsupportedSources)
+A2_TEST(DownloadHelperTest, testEd2kServerSourceMergeAcceptsRequiredEncryption)
+A2_TEST(DownloadHelperTest, testEd2kAichHashRequiresQuorum)
 A2_TEST(DownloadHelperTest, testEd2kSourceExchangeMergePolicy)
 A2_TEST(DownloadHelperTest, testEd2kSourcePolicyRanksSources)
 A2_TEST(DownloadHelperTest, testEd2kSourcePolicyClassifiesLifecycle)
@@ -165,6 +158,8 @@ A2_TEST(DownloadHelperTest, testEd2kSourcePolicyExpiresDeadSources)
 A2_TEST(DownloadHelperTest, testEd2kPeerUdpReaskStateTransitions)
 A2_TEST(DownloadHelperTest, testEd2kPeerUdpReaskReplyMatchesUdpPort)
 A2_TEST(DownloadHelperTest, testEd2kPeerUdpReaskDueSelection)
+A2_TEST(DownloadHelperTest, testEd2kPeerUdpReaskTimeoutFallsBackToTcp)
+A2_TEST(DownloadHelperTest, testEd2kKadFirewallCheckAckRequiresExpectedHost)
 A2_TEST(DownloadHelperTest, testEd2kKadCommandQueuesDuePeerReask)
 A2_TEST(DownloadHelperTest, testEd2kKadCommandQueuesKadCallback)
 A2_TEST(DownloadHelperTest, testEd2kKadCommandQueuesDirectCallback)
@@ -174,8 +169,8 @@ A2_TEST(DownloadHelperTest, testEd2kKadCommandAckForUploadingPeerReask)
 A2_TEST(DownloadHelperTest, testEd2kSourcePolicyAppliesActiveCap)
 A2_TEST(DownloadHelperTest, testEd2kServerSourceCadencePolicy)
 A2_TEST(DownloadHelperTest, testEd2kServerSearchCadencePolicy)
-A2_TEST(DownloadHelperTest, testEd2kPiecePolicyUsesPeerAvailability)
-A2_TEST(DownloadHelperTest, testEd2kPiecePolicyReclaimsIdlePeerSegment)
+A2_TEST(DownloadHelperTest,
+        testEd2kServerSchedulerFillsVacantConnectionSlot)
 A2_TEST(DownloadHelperTest, testEd2kPeerTransferRemovesCompletedRequestedRanges)
 A2_TEST(DownloadHelperTest, testEd2kPeerTransferExpiresStalledRequests)
 A2_TEST(DownloadHelperTest, testEd2kPeerTransferReclaimsStalledEndgameRange)
@@ -350,23 +345,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_ED2K()
                        result[0]->getNumConcurrentCommand());
 }
 
-void DownloadHelperTest::testCreateRequestGroupForUri_ED2KClientHash()
-{
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20next.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|/"};
-  option_->put(PREF_ED2K_CLIENT_HASH,
-               "0102030405060708090a0b0c0d0e0f10");
-
-  std::vector<std::shared_ptr<RequestGroup>> result;
-  createRequestGroupForUri(result, option_, uris);
-
-  REQUIRE_EQ((size_t)1, result.size());
-  auto attrs = getEd2kAttrs(result[0]->getDownloadContext());
-  REQUIRE_EQ(std::string("01020304050e0708090a0b0c0d0e6f10"),
-                       util::toHex(attrs->clientHash));
-}
-
 #ifndef __MINGW32__
 
 void DownloadHelperTest::testCreateRequestGroupForUri_ED2KDefaultKadBootstrap()
@@ -505,23 +483,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_ED2KDefaultMacKadBootstrap
 
 #endif // !__MINGW32__
 
-void DownloadHelperTest::testCreateEd2kSearchRequestGroupClientHash()
-{
-  option_->put(PREF_ED2K_CLIENT_HASH,
-               "0102030405060708090a0b0c0d0e0f10");
-  option_->put(PREF_ED2K_SERVER, "203.0.113.10:4661");
-  ed2k::SearchQuery query;
-  query.keyword = "test";
-
-  auto group = createEd2kSearchRequestGroup(query, option_);
-  auto attrs = getEd2kAttrs(group->getDownloadContext());
-
-  REQUIRE(attrs->searchActive);
-  REQUIRE_EQ(std::string("01020304050e0708090a0b0c0d0e6f10"),
-                       util::toHex(attrs->clientHash));
-  REQUIRE(attrs->link.hash.empty());
-}
-
 void DownloadHelperTest::testCreateRequestGroupForUri_ED2KNodesDat()
 {
   std::string nodeIdHex("23a8ceff57a7a32d562d649ed7893796");
@@ -617,142 +578,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_ED2KServerMetMetadata()
                        attrs->serverStates[0].tcpObfuscationPort);
 }
 
-void DownloadHelperTest::testCreateRequestGroupForUri_ED2KKadRoutingState()
-{
-  std::string selfHex("0123456789abcdef0123456789abcdef");
-  auto self = util::fromHex(selfHex.begin(), selfHex.end());
-  ed2k::KadRoutingTable table(self);
-  ed2k::KadRoutingSnapshot snapshot;
-  ed2k::KadContact contact;
-  std::string nodeIdHex("23a8ceff57a7a32d562d649ed7893796");
-  contact.id = util::fromHex(nodeIdHex.begin(), nodeIdHex.end());
-  contact.host = "203.0.113.8";
-  contact.udpPort = 4672;
-  contact.tcpPort = 4662;
-  contact.version = 8;
-  table.nodeSeen(contact, 100);
-  ed2k::Endpoint router;
-  router.host = "203.0.113.9";
-  router.port = 4672;
-  table.addRouterNode(router);
-  snapshot = table.snapshot();
-  snapshot.lastFirewalledCheck = 500;
-  snapshot.lastSourcePublish = 600;
-  snapshot.firewalled = false;
-  snapshot.observedAddresses.push_back("203.0.113.55");
-
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20next.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|/"};
-  option_->put(PREF_DIR, A2_TEST_OUT_DIR "/ed2k-command-state");
-  File(A2_TEST_OUT_DIR "/ed2k-command-state").mkdirs();
-  option_->put(PREF_ED2K_KAD_ROUTING_STATE,
-               util::toHex(ed2k::createKadRoutingStatePayload(snapshot)));
-
-  std::vector<std::shared_ptr<RequestGroup>> result;
-
-  createRequestGroupForUri(result, option_, uris);
-
-  auto attrs = getEd2kAttrs(result[0]->getDownloadContext());
-  REQUIRE(attrs->kadRoutingTable);
-  REQUIRE_EQ((size_t)1, attrs->kadRoutingTable->liveSize());
-  REQUIRE_EQ((size_t)1,
-                       attrs->kadRoutingTable->getRouterNodes().size());
-  REQUIRE_EQ(ed2k::ed2kHashToKadId(attrs->clientHash),
-                       attrs->kadRoutingTable->snapshot().selfId);
-  auto closest = attrs->kadRoutingTable->findClosest(self, 1, false);
-  REQUIRE_EQ((size_t)1, closest.size());
-  REQUIRE_EQ(std::string("203.0.113.8"), closest[0].host);
-  REQUIRE_EQ((int64_t)500, attrs->lastKadFirewalledCheck);
-  REQUIRE_EQ((int64_t)600, attrs->lastKadSourcePublish);
-  REQUIRE(!attrs->kadFirewalled);
-  REQUIRE_EQ((size_t)1, attrs->kadObservedAddresses.size());
-  REQUIRE_EQ(std::string("203.0.113.55"),
-                       attrs->kadObservedAddresses[0]);
-}
-
-void DownloadHelperTest::testCreateRequestGroupForUri_ED2KServerState()
-{
-  ed2k::ServerState state;
-  state.endpoint.host = "203.0.113.10";
-  state.endpoint.port = 4661;
-  state.name = "Peer Server";
-  state.description = "Primary ED2K server";
-  state.connected = true;
-  state.handshakeCompleted = true;
-  state.clientId = 0x04030201;
-  state.highId = true;
-  state.ipAddress = "1.2.3.4";
-  state.tcpFlags = 0x55aa;
-  state.users = 1234;
-  state.files = 5678;
-  state.failCount = 2;
-  state.lastFailureTime = 100;
-  state.nextRetryTime = 160;
-  state.lastMessage = "hello";
-
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20next.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|/"};
-  option_->put(PREF_DIR, "/tmp");
-  option_->put(PREF_ED2K_SERVER_STATE,
-               util::toHex(ed2k::createServerStatePayload(state)));
-
-  std::vector<std::shared_ptr<RequestGroup>> result;
-  createRequestGroupForUri(result, option_, uris);
-
-  auto attrs = getEd2kAttrs(result[0]->getDownloadContext());
-  REQUIRE_EQ((size_t)1, attrs->serverStates.size());
-  REQUIRE_EQ((size_t)1, attrs->servers.size());
-  REQUIRE_EQ(std::string("203.0.113.10"), attrs->servers[0].host);
-  REQUIRE_EQ((uint16_t)4661, attrs->servers[0].port);
-  const auto& restored = attrs->serverStates[0];
-  REQUIRE_EQ(std::string("203.0.113.10"), restored.endpoint.host);
-  REQUIRE_EQ((uint16_t)4661, restored.endpoint.port);
-  REQUIRE_EQ(std::string("Peer Server"), restored.name);
-  REQUIRE_EQ(std::string("Primary ED2K server"),
-                       restored.description);
-  REQUIRE(restored.handshakeCompleted);
-  REQUIRE_EQ((uint32_t)0x04030201, restored.clientId);
-  REQUIRE_EQ((uint32_t)0x55aa, restored.tcpFlags);
-  REQUIRE_EQ((uint32_t)1234, restored.users);
-  REQUIRE_EQ((uint32_t)5678, restored.files);
-  REQUIRE_EQ(std::string("hello"), restored.lastMessage);
-}
-
-void DownloadHelperTest::testCreateRequestGroupForUri_ED2KMultipleServerStates()
-{
-  ed2k::ServerState first;
-  first.endpoint.host = "203.0.113.10";
-  first.endpoint.port = 4661;
-  first.users = 1234;
-
-  ed2k::ServerState second;
-  second.endpoint.host = "203.0.113.11";
-  second.endpoint.port = 4662;
-  second.users = 5678;
-
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20next.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|/"};
-  option_->put(PREF_DIR, "/tmp");
-  option_->put(PREF_ED2K_SERVER_STATE,
-               util::toHex(ed2k::createServerStatePayload(first)) + "\n" +
-                   util::toHex(ed2k::createServerStatePayload(second)) + "\n");
-
-  std::vector<std::shared_ptr<RequestGroup>> result;
-  createRequestGroupForUri(result, option_, uris);
-
-  auto attrs = getEd2kAttrs(result[0]->getDownloadContext());
-  REQUIRE_EQ((size_t)2, attrs->serverStates.size());
-  REQUIRE_EQ(std::string("203.0.113.10"),
-                       attrs->serverStates[0].endpoint.host);
-  REQUIRE_EQ((uint32_t)1234, attrs->serverStates[0].users);
-  REQUIRE_EQ(std::string("203.0.113.11"),
-                       attrs->serverStates[1].endpoint.host);
-  REQUIRE_EQ((uint32_t)5678, attrs->serverStates[1].users);
-}
-
 void DownloadHelperTest::testCreateRequestGroupForUri_ED2KDefaultServers()
 {
   std::vector<std::string> uris{
@@ -805,6 +630,30 @@ void DownloadHelperTest::testEd2kPeerDeduplication()
   REQUIRE_EQ((uint32_t)1, state->failCount);
   REQUIRE_EQ((int64_t)100, state->lastFailureTime);
   REQUIRE_EQ((int64_t)130, state->nextRetryTime);
+
+  Ed2kAttribute identities;
+  identities.clientHash = std::string(ed2k::HASH_LENGTH, '\x11');
+  ed2k::Endpoint identified;
+  identified.host = "203.0.113.20";
+  identified.port = 4662;
+  identified.userHash = std::string(ed2k::HASH_LENGTH, '\x22');
+  REQUIRE(addEd2kPeer(&identities, identified, ed2k::PEER_SOURCE_SERVER));
+  identified.host = "203.0.113.21";
+  identified.port = 4663;
+  REQUIRE(!addEd2kPeer(&identities, identified, ed2k::PEER_SOURCE_KAD));
+  REQUIRE_EQ((size_t)1, identities.peerStates.size());
+  REQUIRE_EQ(std::string("203.0.113.21"),
+             identities.peerStates.front().endpoint.host);
+  REQUIRE((identities.peerStates.front().sourceFlags &
+           ed2k::PEER_SOURCE_SERVER) != 0);
+  REQUIRE((identities.peerStates.front().sourceFlags & ed2k::PEER_SOURCE_KAD) !=
+          0);
+
+  identified.userHash = identities.clientHash;
+  REQUIRE(!addEd2kPeer(&identities, identified));
+  identified.userHash.clear();
+  identified.host = "127.0.0.1";
+  REQUIRE(!addEd2kPeer(&identities, identified));
 }
 
 void DownloadHelperTest::testEd2kKadSourcePeerMergePreservesUdpMetadata()
@@ -835,13 +684,14 @@ void DownloadHelperTest::testEd2kKadSourcePeerMergePreservesUdpMetadata()
   REQUIRE_EQ((uint16_t)4682, state->udpPort);
 
   source.endpoint.host = "203.0.113.45";
+  source.endpoint.userHash = std::string(ed2k::HASH_LENGTH, '\x45');
   source.sourceType = 3;
   source.buddyIp = ed2k::ipv4ToEndpointValue("203.0.113.99");
   source.buddyPort = 4672;
   source.buddyHash = std::string(ed2k::HASH_LENGTH, '\x55');
-  REQUIRE(!addEd2kKadSourcePeer(&attrs, source,
-                                       ed2k::PEER_SOURCE_KAD));
-  REQUIRE_EQ((size_t)1, attrs.peers.size());
+  REQUIRE(addEd2kKadSourcePeer(&attrs, source,
+                                      ed2k::PEER_SOURCE_KAD));
+  REQUIRE_EQ((size_t)2, attrs.peers.size());
   auto callbackState = getEd2kPeerState(&attrs, source.endpoint);
   REQUIRE(callbackState);
   REQUIRE(callbackState->lowId);
@@ -856,6 +706,9 @@ void DownloadHelperTest::testEd2kKadSourcePeerMergePreservesUdpMetadata()
       callbackState->callbackBuddyId);
 
   source.endpoint.host = "203.0.113.46";
+  source.endpoint.userHash = std::string(ed2k::HASH_LENGTH, '\x46');
+  source.endpoint.cryptOptions =
+      ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_DIRECT_CALLBACK;
   source.sourceType = 6;
   source.udpPort = 4692;
   source.buddyIp = 0;
@@ -863,7 +716,14 @@ void DownloadHelperTest::testEd2kKadSourcePeerMergePreservesUdpMetadata()
   source.buddyHash.clear();
   source.buddyId.clear();
   REQUIRE(!addEd2kKadSourcePeer(&attrs, source,
-                                       ed2k::PEER_SOURCE_KAD));
+                                ed2k::PEER_SOURCE_KAD));
+  attrs.serverStates.push_back(ed2k::ServerState());
+  attrs.serverStates.back().connected = true;
+  attrs.serverStates.back().handshakeCompleted = true;
+  attrs.serverStates.back().highId = true;
+  REQUIRE(addEd2kKadSourcePeer(&attrs, source,
+                                      ed2k::PEER_SOURCE_KAD));
+  REQUIRE_EQ((size_t)3, attrs.peers.size());
   auto directCallbackState = getEd2kPeerState(&attrs, source.endpoint);
   REQUIRE(directCallbackState);
   REQUIRE(directCallbackState->lowId);
@@ -876,7 +736,7 @@ void DownloadHelperTest::testEd2kKadSourcePeerMergePreservesUdpMetadata()
                        directCallbackState->callbackKind);
 }
 
-void DownloadHelperTest::testEd2kServerSourceMergeSkipsUnsupportedSources()
+void DownloadHelperTest::testEd2kServerSourceMergeAcceptsRequiredEncryption()
 {
   Ed2kAttribute attrs;
   ed2k::FoundSource direct;
@@ -893,11 +753,11 @@ void DownloadHelperTest::testEd2kServerSourceMergeSkipsUnsupportedSources()
   cryptRequired.endpoint.cryptOptions = ed2k::SOURCE_CRYPT_REQUIRE;
 
   REQUIRE_EQ(
-      (size_t)1,
+      (size_t)2,
       mergeEd2kServerSources(
           &attrs, std::vector<ed2k::FoundSource>{direct, lowId, cryptRequired},
           ed2k::PEER_SOURCE_SERVER));
-  REQUIRE_EQ((size_t)1, attrs.peers.size());
+  REQUIRE_EQ((size_t)2, attrs.peers.size());
   REQUIRE_EQ(direct.endpoint.host, attrs.peers[0].host);
   auto state = getEd2kPeerState(&attrs, direct.endpoint);
   REQUIRE(state);
@@ -908,8 +768,8 @@ void DownloadHelperTest::testEd2kServerSourceMergeSkipsUnsupportedSources()
   REQUIRE(state->callbackImpossible);
   REQUIRE(!state->callbackRequested);
   REQUIRE((state->sourceFlags & ed2k::PEER_SOURCE_SERVER) != 0);
-  REQUIRE_EQ((size_t)1, attrs.peers.size());
-  REQUIRE_EQ((size_t)2, attrs.peerStates.size());
+  REQUIRE_EQ((size_t)2, attrs.peers.size());
+  REQUIRE_EQ((size_t)3, attrs.peerStates.size());
   REQUIRE(!ed2k::selectConnectPeer(attrs.peerStates, 0)->lowId);
 
   Ed2kAttribute callbackAttrs;
@@ -924,6 +784,26 @@ void DownloadHelperTest::testEd2kServerSourceMergeSkipsUnsupportedSources()
   REQUIRE(markEd2kCallbackFailed(&callbackAttrs, lowId.clientId));
   REQUIRE(!state->callbackRequested);
   REQUIRE(state->callbackImpossible);
+}
+
+void DownloadHelperTest::testEd2kAichHashRequiresQuorum()
+{
+  Ed2kAttribute attrs;
+  const auto root = std::string(ed2k::AICH_HASH_LENGTH, '\x42');
+  for (size_t i = 0; i < 9; ++i) {
+    REQUIRE(!recordEd2kAichHashVote(
+        &attrs, root, "203.0.113." + util::uitos(i + 1)));
+  }
+  REQUIRE(!attrs.aichRootTrusted);
+  REQUIRE(recordEd2kAichHashVote(&attrs, root, "203.0.113.10"));
+  REQUIRE(attrs.aichRootTrusted);
+  REQUIRE_EQ(root, attrs.aichRootHash);
+  REQUIRE(recordEd2kAichHashVote(&attrs, root, "203.0.113.10"));
+
+  Ed2kAttribute linked;
+  linked.link.aichHash = root;
+  REQUIRE(recordEd2kAichHashVote(&linked, root, "203.0.113.1"));
+  REQUIRE(linked.aichRootTrusted);
 }
 
 void DownloadHelperTest::testEd2kSourceExchangeMergePolicy()
@@ -999,7 +879,7 @@ void DownloadHelperTest::testEd2kSourcePolicyRanksSources()
   selected = ed2k::selectConnectPeer(attrs.peerStates, 40);
 
   REQUIRE(selected);
-  REQUIRE(selected->endpoint.host != cryptRequired.host);
+  REQUIRE_EQ(cryptRequired.host, selected->endpoint.host);
 }
 
 void DownloadHelperTest::testEd2kSourcePolicyClassifiesLifecycle()
@@ -1079,14 +959,16 @@ void DownloadHelperTest::testEd2kLowIdCallbackStateTransitions()
                        state->lowIdCallbackState);
 
   Ed2kAttribute directAttrs;
+  directAttrs.kadFirewalled = false;
   ed2k::KadSourceEndpoint direct;
   direct.endpoint.host = "203.0.113.44";
   direct.endpoint.port = 4662;
   direct.endpoint.userHash = std::string(ed2k::HASH_LENGTH, '\x44');
+  direct.endpoint.cryptOptions = ed2k::SOURCE_CRYPT_DIRECT_CALLBACK;
   direct.udpPort = 4672;
   direct.sourceType = 6;
-  REQUIRE(!addEd2kKadSourcePeer(&directAttrs, direct,
-                                       ed2k::PEER_SOURCE_KAD));
+  REQUIRE(addEd2kKadSourcePeer(&directAttrs, direct,
+                                      ed2k::PEER_SOURCE_KAD));
   auto directState = getEd2kPeerState(&directAttrs, direct.endpoint);
   REQUIRE(directState);
   ed2k::Endpoint directPeer = direct.endpoint;
@@ -1306,6 +1188,47 @@ void DownloadHelperTest::testEd2kPeerUdpReaskStateTransitions()
   REQUIRE_EQ((int64_t)230, state->nextRetryTime);
 }
 
+void DownloadHelperTest::testEd2kPeerUdpReaskTimeoutFallsBackToTcp()
+{
+  Ed2kAttribute attrs;
+  ed2k::Endpoint peer;
+  peer.host = "203.0.113.10";
+  peer.port = 4662;
+  addEd2kPeer(&attrs, peer, ed2k::PEER_SOURCE_SERVER);
+  markEd2kPeerQueued(&attrs, peer, 7, std::vector<bool>{true});
+  auto state = getEd2kPeerState(&attrs, peer);
+  state->udpPort = 4672;
+  state->udpVersion = 4;
+  REQUIRE(markEd2kPeerUdpReaskSent(&attrs, peer, 100));
+
+  REQUIRE_EQ((size_t)0, expireEd2kPeerUdpReasks(&attrs, 129, 30));
+  REQUIRE(state->udpReaskPending);
+  REQUIRE_EQ((size_t)1, expireEd2kPeerUdpReasks(&attrs, 130, 30));
+  REQUIRE(!state->udpReaskPending);
+  REQUIRE(!state->queued);
+  REQUIRE_EQ(state, ed2k::selectConnectPeer(attrs.peerStates, 130));
+
+  markEd2kPeerQueued(&attrs, peer, 4, std::vector<bool>{true});
+  state->udpPort = 0;
+  state->udpVersion = 0;
+  state->nextUdpReaskTime = 200;
+  REQUIRE_EQ((size_t)0, promoteEd2kTcpReasks(&attrs, 199));
+  REQUIRE_EQ((size_t)1, promoteEd2kTcpReasks(&attrs, 200));
+  REQUIRE(!state->queued);
+}
+
+void DownloadHelperTest::testEd2kKadFirewallCheckAckRequiresExpectedHost()
+{
+  Ed2kAttribute attrs;
+  attrs.kadFirewallCheckHosts = {"203.0.113.10", "203.0.113.11"};
+
+  REQUIRE(!consumeEd2kKadFirewallCheckHost(&attrs, "203.0.113.12"));
+  REQUIRE_EQ((size_t)2, attrs.kadFirewallCheckHosts.size());
+  REQUIRE(consumeEd2kKadFirewallCheckHost(&attrs, "203.0.113.11"));
+  REQUIRE(attrs.kadFirewallCheckHosts.empty());
+  REQUIRE(!consumeEd2kKadFirewallCheckHost(&attrs, "203.0.113.11"));
+}
+
 void DownloadHelperTest::testEd2kPeerUdpReaskReplyMatchesUdpPort()
 {
   Ed2kAttribute attrs;
@@ -1499,11 +1422,13 @@ void DownloadHelperTest::testEd2kKadCommandQueuesDirectCallback()
   createRequestGroupForUri(result, option_, uris);
   auto group = result[0];
   auto attrs = getEd2kAttrs(group->getDownloadContext());
+  attrs->kadFirewalled = false;
   ed2k::KadSourceEndpoint source;
   source.endpoint.host = "203.0.113.44";
   source.endpoint.port = 4662;
   source.endpoint.userHash = std::string(ed2k::HASH_LENGTH, '\x44');
-  source.endpoint.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT;
+  source.endpoint.cryptOptions =
+      ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_DIRECT_CALLBACK;
   source.udpPort = 4672;
   source.sourceType = 6;
   addEd2kKadSourcePeer(attrs, source, ed2k::PEER_SOURCE_KAD);
@@ -1555,11 +1480,13 @@ void DownloadHelperTest::testEd2kKadCommandUsesRuntimeTcpPortForDirectCallback()
   createRequestGroupForUri(result, option_, uris);
   auto group = result[0];
   auto attrs = getEd2kAttrs(group->getDownloadContext());
+  attrs->kadFirewalled = false;
   ed2k::KadSourceEndpoint source;
   source.endpoint.host = "203.0.113.44";
   source.endpoint.port = 4662;
   source.endpoint.userHash = std::string(ed2k::HASH_LENGTH, '\x44');
-  source.endpoint.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT;
+  source.endpoint.cryptOptions =
+      ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_DIRECT_CALLBACK;
   source.udpPort = 4672;
   source.sourceType = 6;
   addEd2kKadSourcePeer(attrs, source, ed2k::PEER_SOURCE_KAD);
@@ -1710,6 +1637,7 @@ void DownloadHelperTest::testEd2kServerSourceCadencePolicy()
   ed2k::ServerState fresh;
   fresh.endpoint.host = "203.0.113.10";
   fresh.endpoint.port = 4661;
+  fresh.connected = true;
   fresh.handshakeCompleted = true;
   fresh.nextSourceRequestTime = 1000;
   fresh.lastSourceResponseTime = 930;
@@ -1719,7 +1647,8 @@ void DownloadHelperTest::testEd2kServerSourceCadencePolicy()
   ed2k::ServerState unknownLargeServer;
   unknownLargeServer.endpoint.host = "203.0.113.9";
   unknownLargeServer.endpoint.port = 4661;
-  REQUIRE(ed2k::serverTcpSourceRequestDue(
+  REQUIRE(ed2k::serverConnectionDue(unknownLargeServer, 950));
+  REQUIRE(!ed2k::serverTcpSourceRequestDue(
       unknownLargeServer,
       static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1, 950));
 
@@ -1735,6 +1664,8 @@ void DownloadHelperTest::testEd2kServerSourceCadencePolicy()
 
   ed2k::ServerState udp = attrs.serverStates[0];
   udp.endpoint.port = 4665;
+  udp.connected = false;
+  udp.handshakeCompleted = false;
   udp.udpFlags = ed2k::SRV_UDPFLG_EXT_GETSOURCES;
   REQUIRE(ed2k::serverUdpSourceRequestDue(udp, attrs.link.size, 1000));
 
@@ -1743,7 +1674,7 @@ void DownloadHelperTest::testEd2kServerSourceCadencePolicy()
 
   udp.lastUdpSourceRequestTime = 0;
   udp.udpFlags = 0;
-  REQUIRE(!ed2k::serverUdpSourceRequestDue(udp, attrs.link.size, 1000));
+  REQUIRE(ed2k::serverUdpSourceRequestDue(udp, attrs.link.size, 1000));
 
   udp.udpFlags = ed2k::SRV_UDPFLG_EXT_GETSOURCES2;
   attrs.link.size =
@@ -1789,54 +1720,35 @@ void DownloadHelperTest::testEd2kServerSearchCadencePolicy()
   REQUIRE_EQ((size_t)1, commands.size());
 }
 
-void DownloadHelperTest::testEd2kPiecePolicyUsesPeerAvailability()
+void DownloadHelperTest::testEd2kServerSchedulerFillsVacantConnectionSlot()
 {
-  auto dctx = std::make_shared<DownloadContext>(
-      ed2k::PIECE_LENGTH, static_cast<int64_t>(ed2k::PIECE_LENGTH) * 3,
-      "aria2-next-ed2k.bin");
   auto attrs = std::make_shared<Ed2kAttribute>();
-  dctx->setAttribute(CTX_ATTR_ED2K, attrs);
-  auto pieceStorage = std::make_shared<DefaultPieceStorage>(dctx, option_.get());
-  auto segmentMan = std::make_shared<SegmentMan>(dctx, pieceStorage);
+  for (uint16_t port = 4661; port <= 4663; ++port) {
+    ed2k::Endpoint server;
+    server.host = "203.0.113." + util::uitos(port - 4650);
+    server.port = port;
+    attrs->servers.push_back(server);
+    attrs->serverStates.push_back(ed2k::ServerState());
+    attrs->serverStates.back().endpoint = server;
+  }
+  attrs->serverStates.front().connecting = true;
 
-  std::vector<bool> peerAvailability;
-  peerAvailability.push_back(false);
-  peerAvailability.push_back(true);
-  peerAvailability.push_back(false);
-
-  auto selected = ed2k::selectRequestSegments(segmentMan.get(), 1,
-                                              peerAvailability, 3);
-
-  REQUIRE_EQ((size_t)1, selected.size());
-  REQUIRE_EQ((size_t)1, selected[0]->getIndex());
-  std::vector<std::shared_ptr<Segment>> inFlight;
-  segmentMan->getInFlightSegment(inFlight, 1);
-  REQUIRE_EQ((size_t)1, inFlight.size());
-  REQUIRE_EQ((size_t)1, inFlight[0]->getIndex());
-}
-
-void DownloadHelperTest::testEd2kPiecePolicyReclaimsIdlePeerSegment()
-{
+  auto option = std::make_shared<Option>(*option_);
   auto dctx = std::make_shared<DownloadContext>(
-      ed2k::PIECE_LENGTH, static_cast<int64_t>(ed2k::PIECE_LENGTH) * 2,
-      "aria2-next-ed2k.bin");
-  auto attrs = std::make_shared<Ed2kAttribute>();
+      ed2k::PIECE_LENGTH, 0, "/tmp/aria2-next-ed2k-server-slots-test");
   dctx->setAttribute(CTX_ATTR_ED2K, attrs);
-  auto pieceStorage = std::make_shared<DefaultPieceStorage>(dctx, option_.get());
-  auto segmentMan = std::make_shared<SegmentMan>(dctx, pieceStorage);
-  REQUIRE(segmentMan->getSegmentWithIndex(1, 0));
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
+  group->setDownloadContext(dctx);
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  engine.addEd2kServerConnection();
 
-  std::vector<bool> peerAvailability;
-  peerAvailability.push_back(true);
-  peerAvailability.push_back(false);
-  auto selected = ed2k::selectRequestSegments(segmentMan.get(), 2,
-                                              peerAvailability, 1);
+  std::vector<std::unique_ptr<Command>> commands;
+  schedulePendingEd2kServers(commands, group.get(), &engine);
 
-  REQUIRE_EQ((size_t)1, selected.size());
-  REQUIRE_EQ((size_t)0, selected[0]->getIndex());
-  std::vector<std::shared_ptr<Segment>> oldOwner;
-  segmentMan->getInFlightSegment(oldOwner, 1);
-  REQUIRE(oldOwner.empty());
+  REQUIRE_EQ((size_t)1, commands.size());
+  REQUIRE_EQ((size_t)2, engine.getEd2kServerConnectionCount());
+  engine.removeEd2kServerConnection();
 }
 
 void DownloadHelperTest::testEd2kPeerTransferRemovesCompletedRequestedRanges()
@@ -2221,7 +2133,6 @@ void DownloadHelperTest::testEd2kSchedulingKeepsInlineSourceLabel()
   REQUIRE_EQ((size_t)1, attrs->peerStates.size());
   auto state = getEd2kPeerState(attrs, attrs->link.sources[0]);
   REQUIRE(state);
-  REQUIRE((state->sourceFlags & ed2k::PEER_SOURCE_RESUME) == 0);
   REQUIRE((state->sourceFlags & ed2k::PEER_SOURCE_INLINE) != 0);
 }
 
@@ -2367,7 +2278,7 @@ void DownloadHelperTest::testEd2kServerStateUpdate()
   REQUIRE(state->connected);
   REQUIRE_EQ((int64_t)90, state->nextSourceRequestTime);
   markEd2kServerSourceRequestFinished(&attrs, server);
-  REQUIRE(!state->connected);
+  REQUIRE(state->connected);
   REQUIRE(!state->connecting);
 
   updateEd2kServerFailure(&attrs, server, 100, 30);

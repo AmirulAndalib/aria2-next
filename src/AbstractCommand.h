@@ -96,6 +96,9 @@ private:
 
   bool shouldProcess() const;
 
+protected:
+  void changeRequestGroup(RequestGroup* requestGroup);
+
 public:
   RequestGroup* getRequestGroup() const { return requestGroup_; }
 

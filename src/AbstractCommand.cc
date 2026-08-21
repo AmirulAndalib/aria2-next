@@ -129,6 +129,32 @@ AbstractCommand::~AbstractCommand()
   }
 }
 
+void AbstractCommand::changeRequestGroup(RequestGroup* requestGroup)
+{
+  if (!requestGroup || requestGroup == requestGroup_) {
+    return;
+  }
+  requestGroup_->decreaseNumCommand();
+  if (incNumStreamCommand_) {
+    requestGroup_->decreaseStreamCommand();
+  }
+  if (incNumConnection_) {
+    requestGroup_->decreaseStreamConnection();
+  }
+
+  requestGroup_ = requestGroup;
+  fileEntry_ = requestGroup_->getDownloadContext()->getFirstFileEntry();
+  timeout_ = requestGroup_->getTimeout();
+
+  if (incNumConnection_) {
+    requestGroup_->increaseStreamConnection();
+  }
+  if (incNumStreamCommand_) {
+    requestGroup_->increaseStreamCommand();
+  }
+  requestGroup_->increaseNumCommand();
+}
+
 void AbstractCommand::useFasterRequest(
     const std::shared_ptr<Request>& fasterRequest)
 {

@@ -16,10 +16,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "Segment.h"
-#include "SegmentMan.h"
 #include "ed2k_constants.h"
-#include "ed2k_hash.h"
 #include "ed2k_link.h"
 
 namespace aria2 {
@@ -40,7 +37,7 @@ int sourcePriority(uint32_t sourceFlags)
   if ((sourceFlags & PEER_SOURCE_INCOMING) != 0) {
     priority |= 1 << 3;
   }
-  if ((sourceFlags & PEER_SOURCE_RESUME) != 0) {
+  if ((sourceFlags & PEER_SOURCE_PERSISTED) != 0) {
     priority |= 1 << 2;
   }
   if ((sourceFlags & PEER_SOURCE_EXCHANGE) != 0) {
@@ -60,9 +57,6 @@ bool retryReady(const PeerState& peer, int64_t now)
 
 bool canConnect(const PeerState& peer, int64_t now)
 {
-  if ((peer.endpoint.cryptOptions & SOURCE_CRYPT_REQUIRE) != 0) {
-    return false;
-  }
   if (peer.lowId) {
     return false;
   }
@@ -119,8 +113,7 @@ bool supportsTcpFileSize(const ServerState& server, int64_t fileSize)
 bool supportsUdpFileSize(const ServerState& server, int64_t fileSize)
 {
   if (fileSize <= static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
-    return (server.udpFlags & (SRV_UDPFLG_EXT_GETSOURCES |
-                               SRV_UDPFLG_EXT_GETSOURCES2)) != 0;
+    return true;
   }
   return (server.udpFlags & SRV_UDPFLG_EXT_GETSOURCES2) != 0 &&
          (server.udpFlags & SRV_UDPFLG_LARGEFILES) != 0;
@@ -272,11 +265,8 @@ PeerState* selectConnectPeer(std::vector<PeerState>& peers, int64_t now,
 bool serverTcpSourceRequestDue(const ServerState& server, int64_t fileSize,
                                int64_t now)
 {
-  if (server.connecting || server.connected || !retryDue(server, now)) {
+  if (!server.connected || !server.handshakeCompleted) {
     return false;
-  }
-  if (!server.handshakeCompleted) {
-    return true;
   }
   if (!supportsTcpFileSize(server, fileSize)) {
     return false;
@@ -284,14 +274,14 @@ bool serverTcpSourceRequestDue(const ServerState& server, int64_t fileSize,
   if (sourceResponseFresh(server, now)) {
     return false;
   }
-  return server.nextSourceRequestTime != 0 &&
+  return server.nextSourceRequestTime == 0 ||
          server.nextSourceRequestTime <= now;
 }
 
 bool serverUdpSourceRequestDue(const ServerState& server, int64_t fileSize,
                                int64_t now)
 {
-  if (!server.handshakeCompleted || !retryDue(server, now) ||
+  if (server.connected || !retryDue(server, now) ||
       sourceResponseFresh(server, now) ||
       !supportsUdpFileSize(server, fileSize)) {
     return false;
@@ -301,56 +291,9 @@ bool serverUdpSourceRequestDue(const ServerState& server, int64_t fileSize,
              SERVER_UDP_SOURCE_REASK_INTERVAL;
 }
 
-std::vector<std::shared_ptr<Segment>>
-selectRequestSegments(SegmentMan* segmentMan, cuid_t cuid,
-                      const std::vector<bool>& peerAvailability,
-                      size_t maxSegments)
+bool serverConnectionDue(const ServerState& server, int64_t now)
 {
-  std::vector<std::shared_ptr<Segment>> segments;
-  if (!segmentMan || maxSegments == 0) {
-    return segments;
-  }
-
-  std::vector<std::shared_ptr<Segment>> inFlight;
-  segmentMan->getInFlightSegment(inFlight, cuid);
-  for (const auto& segment : inFlight) {
-    if (segments.size() >= maxSegments) {
-      return segments;
-    }
-    if (!segment || segment->complete()) {
-      continue;
-    }
-    const auto index = segment->getIndex();
-    if (!peerAvailability.empty() &&
-        (index >= peerAvailability.size() || !peerAvailability[index])) {
-      continue;
-    }
-    segments.push_back(segment);
-  }
-
-  for (size_t index = 0;
-       segments.size() < maxSegments && index < peerAvailability.size();
-       ++index) {
-    if (!peerAvailability[index]) {
-      continue;
-    }
-    auto segment = segmentMan->getSegmentWithIndex(cuid, index);
-    if (!segment) {
-      segment = segmentMan->getCleanSegmentIfOwnerIsIdle(cuid, index);
-    }
-    if (segment) {
-      segments.push_back(segment);
-    }
-  }
-
-  while (segments.size() < maxSegments && peerAvailability.empty()) {
-    auto segment = segmentMan->getSegment(cuid, BLOCK_LENGTH);
-    if (!segment) {
-      break;
-    }
-    segments.push_back(segment);
-  }
-  return segments;
+  return !server.connecting && !server.connected && retryDue(server, now);
 }
 
 } // namespace ed2k

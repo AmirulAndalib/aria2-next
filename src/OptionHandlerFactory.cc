@@ -240,36 +240,13 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(new CumulativeOptionHandler(
-        PREF_ED2K_SERVER_STATE, NO_DESCRIPTION, NO_DEFAULT_VALUE, "\n"));
+    OptionHandler* op(new LocalFilePathOptionHandler(
+        PREF_ED2K_STATE_FILE, TEXT_ED2K_STATE_FILE,
+        "${HOME}/.aria2/ed2k.state", false, 0, false));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_ED2K);
     op->setInitialOption(true);
-    op->setCumulative(true);
-    op->setChangeOptionForReserved(true);
-    op->hide();
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new CumulativeOptionHandler(
-        PREF_ED2K_PEER_CREDIT_STATE, NO_DESCRIPTION, NO_DEFAULT_VALUE, "\n"));
-    op->setInitialOption(true);
-    op->setCumulative(true);
-    op->hide();
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new DefaultOptionHandler(
-        PREF_ED2K_CLIENT_HASH, NO_DESCRIPTION, NO_DEFAULT_VALUE));
-    op->setInitialOption(true);
-    op->setChangeOptionForReserved(true);
-    op->hide();
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new DefaultOptionHandler(
-        PREF_ED2K_KAD_ROUTING_STATE, NO_DESCRIPTION, NO_DEFAULT_VALUE));
-    op->setInitialOption(true);
-    op->setChangeOptionForReserved(true);
-    op->hide();
+    op->setChangeGlobalOption(true);
     handlers.push_back(op);
   }
   {

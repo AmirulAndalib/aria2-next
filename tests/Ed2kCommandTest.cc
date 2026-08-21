@@ -28,6 +28,7 @@
 #include "SelectEventPoll.h"
 #include "SocketCore.h"
 #include "ed2k_constants.h"
+#include "ed2k_crypto.h"
 #include "ed2k_hash.h"
 #include "ed2k_kad.h"
 #include "ed2k_kad_search.h"
@@ -44,12 +45,13 @@ namespace aria2 {
 namespace {
 constexpr int MAX_ENGINE_TICKS = 200;
 constexpr uint8_t ED2K_OBFUSCATION_MAGIC_REQUESTER = 34;
+constexpr uint8_t ED2K_OBFUSCATION_MAGIC_SERVER = 203;
 constexpr uint32_t ED2K_OBFUSCATION_SYNC = 0x835e6fc4;
 
 std::shared_ptr<Option> createOption()
 {
   auto option = std::make_shared<Option>();
-  option->put(PREF_CONNECT_TIMEOUT, "1");
+  option->put(PREF_CONNECT_TIMEOUT, "5");
   option->put(PREF_RETRY_WAIT, "1");
   option->put(PREF_ED2K_LISTEN_PORT, "0");
   option->put(PREF_ED2K_UPLOAD_SLOTS, "3");
@@ -259,23 +261,13 @@ ReceivedDatagram readKadDatagramWithOpcode(SocketCore& socket,
   return ReceivedDatagram();
 }
 
-std::string packUInt32BE(uint32_t value)
-{
-  std::string out(4, '\0');
-  out[0] = static_cast<char>(value >> 24);
-  out[1] = static_cast<char>(value >> 16);
-  out[2] = static_cast<char>(value >> 8);
-  out[3] = static_cast<char>(value);
-  return out;
-}
-
 std::string createAMuleTcpObfuscationKey(const std::string& userHash,
                                          uint8_t magicValue,
                                          uint32_t randomKeyPart)
 {
   std::string keyData = userHash;
   keyData.push_back(static_cast<char>(magicValue));
-  keyData += packUInt32BE(randomKeyPart);
+  keyData += ed2k::packUInt32(randomKeyPart);
   std::array<unsigned char, 16> digest;
   auto md5 = MessageDigest::create("md5");
   message_digest::digest(digest.data(), digest.size(), md5.get(),
@@ -306,12 +298,16 @@ class Ed2kCommandTest {
 
 public:
   void testServerSourceDiscoveryFlow();
+  void testServerObfuscationCompletesEncryptedLogin();
+  void testServerObfuscationFailureFallsBackToPlainPort();
   void testPeerHandshakeQueuesFileRequestAndQueueRank();
   void testPeerHandshakeQueuesMultipacketRequest();
   void testPeerHandshakeFallbackQueuesFileStatusImmediately();
   void testPeerHandlesBuddyCallback();
   void testIncomingPeerMultipacketRequestGetsAnswer();
   void testCryptPeerStartsWithObfuscatedHandshake();
+  void testTcpObfuscationKeyMatchesAMuleVector();
+  void testIncomingCryptPeerCompletesEncryptedHello();
   void testCryptPeerHandshakeMatchesAMuleKeys();
   void testCryptSupportOnlyPeerUsesPlainHandshake();
   void testLargePeerPartRequestUsesEmuleProtocol();
@@ -331,12 +327,16 @@ public:
 };
 
 A2_TEST(Ed2kCommandTest, testServerSourceDiscoveryFlow)
+A2_TEST(Ed2kCommandTest, testServerObfuscationCompletesEncryptedLogin)
+A2_TEST(Ed2kCommandTest, testServerObfuscationFailureFallsBackToPlainPort)
 A2_TEST(Ed2kCommandTest, testPeerHandshakeQueuesFileRequestAndQueueRank)
 A2_TEST(Ed2kCommandTest, testPeerHandshakeQueuesMultipacketRequest)
 A2_TEST(Ed2kCommandTest, testPeerHandshakeFallbackQueuesFileStatusImmediately)
 A2_TEST(Ed2kCommandTest, testPeerHandlesBuddyCallback)
 A2_TEST(Ed2kCommandTest, testIncomingPeerMultipacketRequestGetsAnswer)
 A2_TEST(Ed2kCommandTest, testCryptPeerStartsWithObfuscatedHandshake)
+A2_TEST(Ed2kCommandTest, testTcpObfuscationKeyMatchesAMuleVector)
+A2_TEST(Ed2kCommandTest, testIncomingCryptPeerCompletesEncryptedHello)
 A2_TEST(Ed2kCommandTest, testCryptPeerHandshakeMatchesAMuleKeys)
 A2_TEST(Ed2kCommandTest, testCryptSupportOnlyPeerUsesPlainHandshake)
 A2_TEST(Ed2kCommandTest, testLargePeerPartRequestUsesEmuleProtocol)
@@ -431,7 +431,174 @@ void Ed2kCommandTest::testServerSourceDiscoveryFlow()
   REQUIRE(state);
   REQUIRE(state->handshakeCompleted);
   REQUIRE(!state->connecting);
-  REQUIRE(!state->connected);
+  REQUIRE(state->connected);
+  engine.requestHalt();
+}
+
+void Ed2kCommandTest::testServerObfuscationCompletesEncryptedLogin()
+{
+  auto option = createOption();
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  auto dctx = createEd2kContext();
+  auto group = createRequestGroup(option, dctx);
+  engine.setRequestGroupMan(
+      make_unique<RequestGroupMan>(
+          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
+          option.get()));
+  engine.getRequestGroupMan()->addRequestGroup(group);
+  group->setRequestGroupMan(engine.getRequestGroupMan().get());
+
+  SocketCore listenSocket;
+  listenSocket.bind(0);
+  listenSocket.beginListen();
+  listenSocket.setBlockingMode();
+  const auto listenAddr = listenSocket.getAddrInfo();
+
+  ed2k::Endpoint endpoint;
+  endpoint.host = "127.0.0.1";
+  endpoint.port = 4661;
+  auto attrs = getEd2kAttrs(dctx);
+  attrs->servers.push_back(endpoint);
+  ed2k::ServerState state;
+  state.endpoint = endpoint;
+  state.tcpObfuscationPort = listenAddr.port;
+  state.tcpFlags = ed2k::SRV_TCPFLG_TCPOBFUSCATION;
+  attrs->serverStates.push_back(state);
+
+  engine.addCommand(make_unique<Ed2kCommand>(engine.newCUID(), group.get(),
+                                             &engine, endpoint, true, false));
+  runEngineTicks(engine, 1);
+  auto serverSocket = acceptPeer(listenSocket, engine);
+  runEngineTicks(engine, 1);
+
+  std::array<char, 98> request;
+  readFromSocket(serverSocket, engine, request.data(), request.size());
+  const auto marker = static_cast<uint8_t>(request[0]);
+  REQUIRE(marker != ed2k::PROTO_EDONKEY);
+  REQUIRE(marker != ed2k::PROTO_PACKED);
+  REQUIRE(marker != ed2k::PROTO_EMULE);
+  MSEDHPublicKey clientPublic{};
+  std::copy_n(reinterpret_cast<const unsigned char*>(request.data() + 1),
+              clientPublic.size(), clientPublic.begin());
+  const auto paddingLength = static_cast<uint8_t>(request[97]);
+  if (paddingLength != 0) {
+    std::string padding(paddingLength, '\0');
+    readFromSocket(serverSocket, engine, &padding[0], padding.size());
+  }
+
+  MSEDHPrivateKey serverPrivate{};
+  std::fill(serverPrivate.end() - 16, serverPrivate.end(), '\x33');
+  DHKeyExchange serverDh(serverPrivate, ed2k::SERVER_DH_PRIME_HEX);
+  const auto secret = serverDh.computeSecret(clientPublic);
+  const std::string sharedSecret(
+      reinterpret_cast<const char*>(secret.data()), secret.size());
+  ARC4Encryptor encryptor;
+  const auto responseKey = ed2k::createServerTcpObfuscationKey(
+      sharedSecret, ED2K_OBFUSCATION_MAGIC_SERVER);
+  encryptor.init(reinterpret_cast<const unsigned char*>(responseKey.data()),
+                 responseKey.size());
+  discardTcpObfuscationPrefix(encryptor);
+  ARC4Encryptor decryptor;
+  const auto requestKey = ed2k::createServerTcpObfuscationKey(
+      sharedSecret, ED2K_OBFUSCATION_MAGIC_REQUESTER);
+  decryptor.init(reinterpret_cast<const unsigned char*>(requestKey.data()),
+                 requestKey.size());
+  discardTcpObfuscationPrefix(decryptor);
+
+  std::string negotiation = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
+  negotiation.append(3, '\0');
+  encryptor.encrypt(
+      negotiation.size(),
+      reinterpret_cast<unsigned char*>(&negotiation[0]),
+      reinterpret_cast<const unsigned char*>(negotiation.data()));
+  const auto& serverPublic = serverDh.getPublicKey();
+  std::string response(reinterpret_cast<const char*>(serverPublic.data()),
+                       serverPublic.size());
+  response += negotiation;
+  serverSocket->writeData(response);
+  runEngineTicks(engine, 3);
+
+  std::array<char, 6> clientResponse;
+  readFromSocket(serverSocket, engine, clientResponse.data(),
+                 clientResponse.size());
+  decryptor.encrypt(
+      clientResponse.size(),
+      reinterpret_cast<unsigned char*>(clientResponse.data()),
+      reinterpret_cast<const unsigned char*>(clientResponse.data()));
+  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC,
+             ed2k::readUInt32(clientResponse.data()));
+  REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(clientResponse[4]));
+  REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(clientResponse[5]));
+
+  std::array<char, 6> header;
+  readFromSocket(serverSocket, engine, header.data(), header.size());
+  decryptor.encrypt(header.size(),
+                    reinterpret_cast<unsigned char*>(header.data()),
+                    reinterpret_cast<const unsigned char*>(header.data()));
+  ed2k::PacketHeader packetHeader;
+  REQUIRE(ed2k::readPacketHeader(packetHeader, header.data(), header.size()));
+  REQUIRE_EQ(ed2k::OP_LOGINREQUEST, packetHeader.opcode);
+  std::string body(packetHeader.payloadSize(), '\0');
+  readFromSocket(serverSocket, engine, &body[0], body.size());
+  decryptor.encrypt(body.size(), reinterpret_cast<unsigned char*>(&body[0]),
+                    reinterpret_cast<const unsigned char*>(body.data()));
+  REQUIRE(body.size() >= ed2k::HASH_LENGTH);
+  REQUIRE_EQ(attrs->clientHash, body.substr(0, ed2k::HASH_LENGTH));
+  engine.requestHalt();
+}
+
+void Ed2kCommandTest::testServerObfuscationFailureFallsBackToPlainPort()
+{
+  auto option = createOption();
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  auto dctx = createEd2kContext();
+  auto group = createRequestGroup(option, dctx);
+  engine.setRequestGroupMan(
+      make_unique<RequestGroupMan>(
+          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
+          option.get()));
+  engine.getRequestGroupMan()->addRequestGroup(group);
+  group->setRequestGroupMan(engine.getRequestGroupMan().get());
+
+  SocketCore plainListener;
+  plainListener.bind(0);
+  plainListener.beginListen();
+  plainListener.setBlockingMode();
+  SocketCore obfuscatedListener;
+  obfuscatedListener.bind(0);
+  obfuscatedListener.beginListen();
+  obfuscatedListener.setBlockingMode();
+
+  ed2k::Endpoint endpoint;
+  endpoint.host = "127.0.0.1";
+  endpoint.port = plainListener.getAddrInfo().port;
+  auto attrs = getEd2kAttrs(dctx);
+  attrs->servers.push_back(endpoint);
+  ed2k::ServerState serverState;
+  serverState.endpoint = endpoint;
+  serverState.tcpObfuscationPort = obfuscatedListener.getAddrInfo().port;
+  serverState.tcpFlags = ed2k::SRV_TCPFLG_TCPOBFUSCATION;
+  attrs->serverStates.push_back(serverState);
+
+  engine.addCommand(make_unique<Ed2kCommand>(engine.newCUID(), group.get(),
+                                             &engine, endpoint, true, false));
+  runEngineTicks(engine, 1);
+  auto failedSocket = acceptPeer(obfuscatedListener, engine);
+  failedSocket->closeConnection();
+  runEngineTicks(engine, 2);
+  auto state = getEd2kServerState(attrs, endpoint);
+  REQUIRE(state);
+  REQUIRE(state->tcpObfuscationFailed);
+
+  engine.addCommand(make_unique<Ed2kCommand>(engine.newCUID(), group.get(),
+                                             &engine, endpoint, true, false));
+  runEngineTicks(engine, 1);
+  auto plainSocket = acceptPeer(plainListener, engine);
+  runEngineTicks(engine, 1);
+  const auto login = readPacket(plainSocket, engine);
+  REQUIRE_EQ(ed2k::OP_LOGINREQUEST, packetHeaderOf(login).opcode);
   engine.requestHalt();
 }
 
@@ -873,6 +1040,117 @@ void Ed2kCommandTest::testCryptPeerStartsWithObfuscatedHandshake()
   REQUIRE(marker != ed2k::PROTO_PACKED);
   REQUIRE(marker != ed2k::PROTO_EMULE);
 
+  engine.requestHalt();
+}
+
+void Ed2kCommandTest::testTcpObfuscationKeyMatchesAMuleVector()
+{
+  const auto key = ed2k::createTcpObfuscationKey(
+      std::string(ed2k::HASH_LENGTH, '\x22'),
+      ED2K_OBFUSCATION_MAGIC_REQUESTER, 0x01020304);
+  REQUIRE_EQ(std::string("b13280f234ea469301bfc1c073a4cae7"),
+             util::toHex(key));
+}
+
+void Ed2kCommandTest::testIncomingCryptPeerCompletesEncryptedHello()
+{
+  auto option = createOption();
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  auto dctx = createEd2kContext();
+  auto group = createRequestGroup(option, dctx);
+  engine.setRequestGroupMan(
+      make_unique<RequestGroupMan>(
+          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
+          option.get()));
+  engine.getRequestGroupMan()->addRequestGroup(group);
+  group->setRequestGroupMan(engine.getRequestGroupMan().get());
+
+  SocketCore listenSocket;
+  listenSocket.bind(0);
+  listenSocket.beginListen();
+  listenSocket.setBlockingMode();
+  auto localAddr = listenSocket.getAddrInfo();
+
+  SocketCore client;
+  client.establishConnection("127.0.0.1", localAddr.port);
+  client.setNonBlockingMode();
+  for (int i = 0; i < MAX_ENGINE_TICKS && !client.isWritable(0); ++i) {
+    engine.run(true);
+  }
+  auto serverSocket = acceptPeer(listenSocket, engine);
+  ed2k::Endpoint endpoint;
+  endpoint.host = "127.0.0.1";
+  endpoint.port = localAddr.port;
+  engine.addCommand(make_unique<Ed2kCommand>(engine.newCUID(), group.get(),
+                                             &engine, endpoint, serverSocket));
+  auto clientRef = std::shared_ptr<SocketCore>(&client, [](SocketCore*) {});
+
+  const uint32_t randomKeyPart = 0x01020304;
+  const auto localHash = getEd2kAttrs(dctx)->clientHash;
+  ARC4Encryptor encryptor;
+  auto requestKey = createAMuleTcpObfuscationKey(
+      localHash, ED2K_OBFUSCATION_MAGIC_REQUESTER, randomKeyPart);
+  encryptor.init(reinterpret_cast<const unsigned char*>(requestKey.data()),
+                 requestKey.size());
+  discardTcpObfuscationPrefix(encryptor);
+  ARC4Encryptor decryptor;
+  auto responseKey = createAMuleTcpObfuscationKey(
+      localHash, ED2K_OBFUSCATION_MAGIC_SERVER, randomKeyPart);
+  decryptor.init(reinterpret_cast<const unsigned char*>(responseKey.data()),
+                 responseKey.size());
+  discardTcpObfuscationPrefix(decryptor);
+
+  std::string negotiation = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
+  negotiation.append(3, '\0');
+  encryptor.encrypt(
+      negotiation.size(),
+      reinterpret_cast<unsigned char*>(&negotiation[0]),
+      reinterpret_cast<const unsigned char*>(negotiation.data()));
+  std::string request(1, '\x01');
+  request += ed2k::packUInt32(randomKeyPart);
+  request += negotiation;
+  client.writeData(request);
+  runEngineTicks(engine, 2);
+
+  std::array<char, 6> response;
+  readFromSocket(clientRef, engine, response.data(), response.size());
+  decryptor.encrypt(response.size(),
+                    reinterpret_cast<unsigned char*>(response.data()),
+                    reinterpret_cast<const unsigned char*>(response.data()));
+  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC,
+             ed2k::readUInt32(response.data()));
+  REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(response[4]));
+  REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(response[5]));
+
+  auto remoteInfo = ed2k::createLocalEmulePeerInfo();
+  auto hello = ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_HELLO,
+      ed2k::createPeerHelloPayload(
+          std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
+          localAddr.port, ed2k::Endpoint(), "encrypted-peer", remoteInfo,
+          true));
+  encryptor.encrypt(hello.size(),
+                    reinterpret_cast<unsigned char*>(&hello[0]),
+                    reinterpret_cast<const unsigned char*>(hello.data()));
+  client.writeData(hello);
+  runEngineTicks(engine, 2);
+
+  std::array<char, 6> header;
+  readFromSocket(clientRef, engine, header.data(), header.size());
+  decryptor.encrypt(header.size(),
+                    reinterpret_cast<unsigned char*>(header.data()),
+                    reinterpret_cast<const unsigned char*>(header.data()));
+  ed2k::PacketHeader packetHeader;
+  REQUIRE(ed2k::readPacketHeader(packetHeader, header.data(), header.size()));
+  REQUIRE_EQ(ed2k::OP_HELLOANSWER, packetHeader.opcode);
+  std::string body(packetHeader.payloadSize(), '\0');
+  readFromSocket(clientRef, engine, &body[0], body.size());
+  decryptor.encrypt(body.size(), reinterpret_cast<unsigned char*>(&body[0]),
+                    reinterpret_cast<const unsigned char*>(body.data()));
+  ed2k::EmulePeerInfo parsed;
+  REQUIRE(ed2k::parsePeerHelloPayload(parsed, body, false));
+  REQUIRE_EQ(localHash, parsed.userHash);
   engine.requestHalt();
 }
 
@@ -1469,6 +1747,7 @@ void Ed2kCommandTest::testEd2kListenerKeepsMultipleTasks()
 void Ed2kCommandTest::testPendingConnectDrainsAfterHalt()
 {
   auto option = createOption();
+  option->put(PREF_CONNECT_TIMEOUT, "60");
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
@@ -1487,7 +1766,7 @@ void Ed2kCommandTest::testPendingConnectDrainsAfterHalt()
                                              &engine, endpoint, true, false));
 
   runEngineTicks(engine, 2);
-  REQUIRE_EQ((int32_t)1, group->getNumCommand());
+  REQUIRE_EQ((int32_t)2, group->getNumCommand());
 
   group->setHaltRequested(true, RequestGroup::USER_REQUEST);
   engine.setRefreshInterval(std::chrono::milliseconds(0));

@@ -48,6 +48,7 @@
 #include "Log.h"
 #include "DownloadEngine.h"
 #include "Ed2kUploadQueue.h"
+#include "Ed2kSession.h"
 #include "message.h"
 #include "a2functional.h"
 #include "DownloadResult.h"
@@ -127,13 +128,11 @@ RequestGroupMan::RequestGroupMan(
           this, option->getAsInt(PREF_BT_MAX_OPEN_FILES))),
       ed2kUploadQueue_(make_unique<ed2k::UploadQueue>(
           option->getAsInt(PREF_ED2K_UPLOAD_SLOTS))),
+      ed2kSession_(make_unique<ed2k::Ed2kSession>(
+          ed2kUploadQueue_.get(), option->get(PREF_ED2K_STATE_FILE))),
       numStoppedTotal_(0)
 {
   setupOptimizeConcurrentDownloads();
-  const auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       global::wallclock().getTime().time_since_epoch())
-                       .count();
-  ed2kUploadQueue_->credits().loadOptionState(option_);
   appendReservedGroup(reservedGroups_, requestGroups.begin(),
                       requestGroups.end());
 }
@@ -491,6 +490,7 @@ public:
 
 void RequestGroupMan::removeStoppedGroup(DownloadEngine* e)
 {
+  ed2kSession_->unregisterStoppedDownloads();
   size_t numPrev = requestGroups_.size();
   requestGroups_.remove_if(ProcessStoppedRequestGroup(e, reservedGroups_));
   size_t numRemoved = numPrev - requestGroups_.size();

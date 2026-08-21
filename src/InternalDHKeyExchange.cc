@@ -33,11 +33,6 @@ constexpr size_t WORD_BITS = 32;
 constexpr size_t WORD_COUNT = MSE_DH_PUBLIC_KEY_LENGTH * 8 / WORD_BITS;
 constexpr size_t PRIVATE_KEY_BITS = MSE_DH_PRIVATE_KEY_LENGTH * 8;
 
-constexpr char MSE_PRIME_HEX[] =
-    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B"
-    "139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485"
-    "B576625E7EC6F44C42E9A63A36210000000000090563";
-
 class UInt768 {
 public:
   UInt768() = default;
@@ -193,10 +188,9 @@ private:
   std::array<uint32_t, WORD_COUNT> words_{};
 };
 
-const UInt768& msePrime()
+UInt768 parsePrime(const char* primeHex)
 {
-  static const UInt768 prime = UInt768::fromHex(MSE_PRIME_HEX);
-  return prime;
+  return UInt768::fromHex(primeHex);
 }
 
 UInt768 privateNumber(const MSEDHPrivateKey& privateKey)
@@ -208,27 +202,38 @@ UInt768 privateNumber(const MSEDHPrivateKey& privateKey)
   return number;
 }
 
-MSEDHPublicKey makePublicKey(const MSEDHPrivateKey& privateKey)
+MSEDHPublicKey makePublicKey(const MSEDHPrivateKey& privateKey,
+                            const char* primeHex)
 {
+  const auto prime = parsePrime(primeHex);
   return UInt768::modExp(UInt768(2), privateNumber(privateKey),
-                         PRIVATE_KEY_BITS, msePrime())
+                         PRIVATE_KEY_BITS, prime)
       .toBigEndian();
 }
 
 } // namespace
 
 InternalDHKeyExchange::InternalDHKeyExchange()
+    : primeHex_(MSE_DH_PRIME_HEX)
 {
   do {
     util::generateRandomData(privateKey_.data(), privateKey_.size());
   } while (std::all_of(privateKey_.begin(), privateKey_.end(),
                        [](unsigned char byte) { return byte == 0; }));
-  publicKey_ = makePublicKey(privateKey_);
+  publicKey_ = makePublicKey(privateKey_, primeHex_.c_str());
 }
 
 InternalDHKeyExchange::InternalDHKeyExchange(
     const MSEDHPrivateKey& privateKey)
-    : privateKey_(privateKey), publicKey_(makePublicKey(privateKey))
+    : InternalDHKeyExchange(privateKey, MSE_DH_PRIME_HEX)
+{
+}
+
+InternalDHKeyExchange::InternalDHKeyExchange(
+    const MSEDHPrivateKey& privateKey, const char* primeHex)
+    : privateKey_(privateKey),
+      publicKey_(makePublicKey(privateKey, primeHex)),
+      primeHex_(primeHex)
 {
 }
 
@@ -237,13 +242,14 @@ MSEDHPublicKey InternalDHKeyExchange::computeSecret(
 {
   const auto peer =
       UInt768::fromBigEndian(peerPublicKey.data(), peerPublicKey.size());
-  const auto upperBound = msePrime().subtractOne();
+  const auto prime = parsePrime(primeHex_.c_str());
+  const auto upperBound = prime.subtractOne();
   if (peer.compare(UInt768(1)) <= 0 || peer.compare(upperBound) >= 0) {
     throw DL_ABORT_EX("Invalid MSE DH peer public key");
   }
 
   return UInt768::modExp(peer, privateNumber(privateKey_), PRIVATE_KEY_BITS,
-                         msePrime())
+                         prime)
       .toBigEndian();
 }
 

@@ -35,6 +35,11 @@ class SegmentMan;
 
 class DownloadContext;
 
+struct Ed2kAichHashVote {
+  std::string rootHash;
+  std::vector<std::string> voters;
+};
+
 struct Ed2kAttribute : public ContextAttribute {
   ed2k::Link link;
   std::vector<ed2k::Endpoint> servers;
@@ -42,9 +47,12 @@ struct Ed2kAttribute : public ContextAttribute {
   std::vector<ed2k::Endpoint> peers;
   std::vector<ed2k::PeerState> peerStates;
   std::vector<ed2k::PartRange> requestedPartRanges;
+  std::vector<ed2k::PartRange> receivedPartRanges;
   std::string clientHash;
   std::vector<std::string> pieceHashes;
   std::string aichRootHash;
+  bool aichRootTrusted = false;
+  std::vector<Ed2kAichHashVote> aichHashVotes;
   std::vector<ed2k::AichRecoverySet> aichRecoverySets;
   ed2k::SearchQuery searchQuery;
   std::vector<ed2k::SearchResultEntry> searchResults;
@@ -59,6 +67,7 @@ struct Ed2kAttribute : public ContextAttribute {
   uint32_t kadSourceSearchCount = 0;
   uint32_t kadUdpVerifyKey = 0;
   std::vector<std::string> kadObservedAddresses;
+  std::vector<std::string> kadFirewallCheckHosts;
   bool kadFirewalled = true;
   size_t nextServerIndex = 0;
   bool searchActive = false;
@@ -70,6 +79,8 @@ Ed2kAttribute* getEd2kAttrs(const std::shared_ptr<DownloadContext>& dctx);
 bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
 bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                  uint32_t sourceFlag);
+bool recordEd2kAichHashVote(Ed2kAttribute* attrs, const std::string& rootHash,
+                            const std::string& voter);
 bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
                           const ed2k::KadSourceEndpoint& source,
                           uint32_t sourceFlag);
@@ -85,7 +96,6 @@ ed2k::PeerState* getEd2kPeerState(Ed2kAttribute* attrs,
                                   const ed2k::Endpoint& peer);
 std::string normalizeEd2kClientHash(std::string clientHash);
 std::string createEd2kClientHash();
-std::string getOrCreateEd2kClientHash(Option* option);
 uint32_t createEd2kKadUdpVerifyKey();
 bool markEd2kPeerQueued(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                         uint16_t rank,
@@ -153,7 +163,7 @@ bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs,
                                    int64_t baseRetrySeconds);
 bool markEd2kPeerAccepted(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
 bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs,
-                            const ed2k::Endpoint& peer);
+                            const ed2k::Endpoint& peer, int64_t now);
 bool markEd2kPeerCancelled(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
 bool markEd2kPeerFailure(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                          int64_t now, int64_t baseRetrySeconds);
@@ -212,6 +222,11 @@ void restoreEd2kKadOperationalState(Ed2kAttribute* attrs,
                                     const ed2k::KadRoutingSnapshot& snapshot);
 bool shouldStartEd2kKadSourceSearch(const Ed2kAttribute* attrs, int64_t now);
 void markEd2kKadSourceSearchStarted(Ed2kAttribute* attrs, int64_t now);
+size_t expireEd2kPeerUdpReasks(Ed2kAttribute* attrs, int64_t now,
+                               int64_t timeoutSeconds);
+size_t promoteEd2kTcpReasks(Ed2kAttribute* attrs, int64_t now);
+bool consumeEd2kKadFirewallCheckHost(Ed2kAttribute* attrs,
+                                     const std::string& host);
 ed2k::PeerState* selectDueEd2kUdpReaskPeer(Ed2kAttribute* attrs,
                                            int64_t now);
 

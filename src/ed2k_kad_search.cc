@@ -238,7 +238,7 @@ bool extractKadSourceEndpoint(KadSourceEndpoint& source,
   }
   source.endpoint.host = ipv4FromEndpoint(reverseUInt32Bytes(ip));
   source.endpoint.port = port;
-  source.endpoint.userHash = entry.id;
+  source.endpoint.userHash = kadIdToEd2kHash(entry.id);
   source.endpoint.cryptOptions = cryptOptions;
   source.udpPort = udpPort;
   source.sourceType = static_cast<uint8_t>(sourceType);
@@ -276,7 +276,9 @@ extractKadSourceEndpointDetails(const KadSearchResult& result)
 std::string createKadPublishSourceRequestPayload(const std::string& fileId,
                                                  const Endpoint& source,
                                                  const std::string& sourceId,
-                                                 uint64_t size)
+                                                 uint64_t size,
+                                                 uint16_t udpPort,
+                                                 uint16_t cryptOptions)
 {
   validateHashLength(fileId);
   validateHashLength(sourceId);
@@ -301,6 +303,22 @@ std::string createKadPublishSourceRequestPayload(const std::string& fileId,
   sourcePort.valueType = TagValueType::UINT;
   sourcePort.intValue = source.port;
   entry.tags.push_back(sourcePort);
+
+  if (udpPort != 0) {
+    Tag sourceUdpPort;
+    sourceUdpPort.id = 0xfc;
+    sourceUdpPort.valueType = TagValueType::UINT;
+    sourceUdpPort.intValue = udpPort;
+    entry.tags.push_back(sourceUdpPort);
+  }
+
+  if (cryptOptions != 0) {
+    Tag encryption;
+    encryption.id = 0xf3;
+    encryption.valueType = TagValueType::UINT;
+    encryption.intValue = cryptOptions;
+    entry.tags.push_back(encryption);
+  }
 
   if (size != 0) {
     Tag fileSize;

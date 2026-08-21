@@ -33,7 +33,9 @@ struct UploadPeer {
   std::string fileHash;
   uint16_t rank = 0;
   bool uploading = false;
+  bool connected = false;
   int64_t waitStartTime = 0;
+  int64_t lastRequestTime = 0;
   int64_t uploadStartTime = 0;
   uint64_t sessionUploaded = 0;
 };
@@ -55,7 +57,7 @@ public:
   void addDownloaded(const std::string& userHash, uint64_t bytes);
   double scoreRatio(const std::string& userHash);
   const std::vector<PeerCreditState>& list() const { return credits_; }
-  size_t loadOptionState(const Option* option);
+  void restore(const std::vector<PeerCreditState>& credits);
 };
 
 class UploadQueue {
@@ -79,8 +81,10 @@ public:
   bool isUploading(const Endpoint& endpoint) const;
   uint16_t queueRank(const Endpoint& endpoint) const;
   bool remove(const Endpoint& endpoint);
+  void disconnect(const Endpoint& endpoint);
   void noteUploaded(const Endpoint& endpoint, uint64_t bytes);
   void noteDownloaded(const std::string& userHash, uint64_t bytes);
+  size_t maintain(int64_t now, RequestGroupMan* rgman);
   size_t uploadingCount() const;
   size_t waitingCount() const;
   const std::vector<UploadPeer>& peers() const { return peers_; }

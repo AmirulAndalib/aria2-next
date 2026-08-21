@@ -15,6 +15,7 @@ class Ed2kKadStateTest {
 public:
   void testRoutingPromotesReplacementOnFailure();
   void testRoutingFindClosestAndSnapshot();
+  void testRoutingDistanceUsesKadWireWordOrder();
   void testRoutingRouterContactKeepsKadMetadata();
   void testRoutingFindsKnownContactByEndpoint();
   void testRoutingFindClosestExcludesRequester();
@@ -28,6 +29,7 @@ public:
 
 A2_TEST(Ed2kKadStateTest, testRoutingPromotesReplacementOnFailure)
 A2_TEST(Ed2kKadStateTest, testRoutingFindClosestAndSnapshot)
+A2_TEST(Ed2kKadStateTest, testRoutingDistanceUsesKadWireWordOrder)
 A2_TEST(Ed2kKadStateTest, testRoutingRouterContactKeepsKadMetadata)
 A2_TEST(Ed2kKadStateTest, testRoutingFindsKnownContactByEndpoint)
 A2_TEST(Ed2kKadStateTest, testRoutingFindClosestExcludesRequester)
@@ -116,6 +118,23 @@ void Ed2kKadStateTest::testRoutingFindClosestAndSnapshot()
   restored.restore(table.snapshot());
   REQUIRE_EQ((size_t)3, restored.liveSize());
   REQUIRE_EQ((size_t)1, restored.getRouterNodes().size());
+}
+
+void Ed2kKadStateTest::testRoutingDistanceUsesKadWireWordOrder()
+{
+  auto self = hashFromHex("00000000000000000000000000000000");
+  KadRoutingTable table(self, 10);
+  auto closer = contactFromHex("01000000000000000000000000000000",
+                               "203.0.113.1", 4672);
+  auto farther = contactFromHex("00010000000000000000000000000000",
+                                "203.0.113.2", 4672);
+  table.nodeSeen(farther, 10);
+  table.nodeSeen(closer, 11);
+
+  auto contacts = table.findClosest(self, 2, false);
+  REQUIRE_EQ((size_t)2, contacts.size());
+  REQUIRE_EQ(closer.id, contacts[0].id);
+  REQUIRE_EQ(farther.id, contacts[1].id);
 }
 
 void Ed2kKadStateTest::testRoutingRouterContactKeepsKadMetadata()
@@ -210,8 +229,8 @@ void Ed2kKadStateTest::testRoutingBootstrapAndRefresh()
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
   REQUIRE(table.needBootstrap(100));
-  REQUIRE(!table.needBootstrap(120));
-  REQUIRE(table.needBootstrap(131));
+  REQUIRE(!table.needBootstrap(101));
+  REQUIRE(table.needBootstrap(102));
 
   std::string target;
   REQUIRE(table.needRefresh(target, 200));
@@ -282,6 +301,11 @@ void Ed2kKadStateTest::testTraversalContinuesBeforeSearch()
                                  (actions[0].contact.id == closer.id &&
                                   actions[1].contact.id == seed.id);
   REQUIRE(pairedEitherOrder);
+  REQUIRE(!traversal.done());
+  traversal.onSearchResponse(actions[0].contact);
+  REQUIRE(!traversal.done());
+  traversal.onSearchResponse(actions[1].contact);
+  REQUIRE(traversal.done());
 }
 
 void Ed2kKadStateTest::testExpiredTransactionCarriesContactForFailure()

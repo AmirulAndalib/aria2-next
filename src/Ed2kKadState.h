@@ -139,6 +139,8 @@ public:
   std::vector<KadTraversalAction> onResponse(
       const KadContact& contact, const std::vector<KadContact>& closer);
   std::vector<KadTraversalAction> onFailure(const KadContact& contact);
+  void onSearchResponse(const KadContact& contact);
+  void onSearchFailure(const KadContact& contact);
   bool done() const { return done_; }
   KadTraversalKind kind() const { return kind_; }
   const std::string& targetId() const { return targetId_; }
@@ -159,11 +161,13 @@ private:
   size_t branchFactor_ = 3;
   size_t targetNodes_ = 8;
   size_t inFlight_ = 0;
+  size_t searchInFlight_ = 0;
   bool searchStarted_ = false;
   bool done_ = true;
   std::vector<Observer> observers_;
 
   void addContact(const KadContact& contact);
+  void finishSearch(const KadContact& contact, bool failed);
   std::vector<KadTraversalAction> nextActions();
   void startSearch(std::vector<KadTraversalAction>& actions,
                    bool onlyAlive = false);

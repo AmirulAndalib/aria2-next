@@ -15,7 +15,6 @@
 
 #include "common.h"
 
-#include <memory>
 #include <vector>
 
 #include "Command.h"
@@ -23,9 +22,6 @@
 #include "ed2k_server.h"
 
 namespace aria2 {
-
-class Segment;
-class SegmentMan;
 
 namespace ed2k {
 
@@ -79,10 +75,7 @@ bool serverTcpSourceRequestDue(const ServerState& server, int64_t fileSize,
                                int64_t now);
 bool serverUdpSourceRequestDue(const ServerState& server, int64_t fileSize,
                                int64_t now);
-std::vector<std::shared_ptr<Segment>>
-selectRequestSegments(SegmentMan* segmentMan, cuid_t cuid,
-                      const std::vector<bool>& peerAvailability,
-                      size_t maxSegments);
+bool serverConnectionDue(const ServerState& server, int64_t now);
 
 } // namespace ed2k
 

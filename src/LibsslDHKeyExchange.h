@@ -60,6 +60,9 @@ public:
 
   explicit LibsslDHKeyExchange(const MSEDHPrivateKey& privateKey);
 
+  LibsslDHKeyExchange(const MSEDHPrivateKey& privateKey,
+                      const char* primeHex);
+
   ~LibsslDHKeyExchange();
 
   LibsslDHKeyExchange(const LibsslDHKeyExchange&) = delete;
@@ -70,7 +73,7 @@ public:
   MSEDHPublicKey computeSecret(const MSEDHPublicKey& peerPublicKey) const;
 
 private:
-  void initialize(const MSEDHPrivateKey* privateKey);
+  void initialize(const MSEDHPrivateKey* privateKey, const char* primeHex);
   MSEDHPublicKey exportNumber(const BIGNUM* number) const;
   void clear() noexcept;
 };

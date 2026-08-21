@@ -43,11 +43,6 @@
 namespace aria2 {
 
 namespace {
-constexpr char MSE_PRIME_HEX[] =
-    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B"
-    "139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485"
-    "B576625E7EC6F44C42E9A63A36210000000000090563";
-
 void handleError(const std::string& funName)
 {
   throw DL_ABORT_EX(
@@ -64,7 +59,7 @@ LibsslDHKeyExchange::LibsslDHKeyExchange()
       publicKey_(nullptr)
 {
   try {
-    initialize(nullptr);
+    initialize(nullptr, MSE_DH_PRIME_HEX);
   }
   catch (...) {
     clear();
@@ -81,7 +76,24 @@ LibsslDHKeyExchange::LibsslDHKeyExchange(
       publicKey_(nullptr)
 {
   try {
-    initialize(&privateKey);
+    initialize(&privateKey, MSE_DH_PRIME_HEX);
+  }
+  catch (...) {
+    clear();
+    throw;
+  }
+}
+
+LibsslDHKeyExchange::LibsslDHKeyExchange(
+    const MSEDHPrivateKey& privateKey, const char* primeHex)
+    : bnCtx_(nullptr),
+      prime_(nullptr),
+      generator_(nullptr),
+      privateKey_(nullptr),
+      publicKey_(nullptr)
+{
+  try {
+    initialize(&privateKey, primeHex);
   }
   catch (...) {
     clear();
@@ -108,14 +120,15 @@ void LibsslDHKeyExchange::clear() noexcept
   publicKey_ = nullptr;
 }
 
-void LibsslDHKeyExchange::initialize(const MSEDHPrivateKey* privateKey)
+void LibsslDHKeyExchange::initialize(const MSEDHPrivateKey* privateKey,
+                                     const char* primeHex)
 {
   bnCtx_ = BN_CTX_new();
   if (!bnCtx_) {
     handleError("BN_CTX_new");
   }
 
-  if (BN_hex2bn(&prime_, MSE_PRIME_HEX) == 0) {
+  if (BN_hex2bn(&prime_, primeHex) == 0) {
     handleError("BN_hex2bn");
   }
   generator_ = BN_new();

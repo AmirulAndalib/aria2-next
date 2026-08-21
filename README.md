@@ -22,7 +22,7 @@ Aria2 Next is an actively maintained aria2-compatible engine for everyone, and i
 
 ## Native ED2K/eMule Support
 
-Aria2 Next includes native ED2K/eMule support reimplemented inside aria2's existing engine architecture from authoritative eMule, aMule, MLDonkey, Wireshark, and protocol documentation references. ED2K works through normal aria2-style CLI, session, and JSON-RPC flows, including source discovery, peer transfer, search, task-level sharing, upload cooperation, queue maintenance, and Motrix Next integration surfaces. The reference-alignment and download-hardening work is tracked in [`docs/maintenance/ed2k-refactor/`](docs/maintenance/ed2k-refactor/) and [`docs/maintenance/ed2k-download-hardening/`](docs/maintenance/ed2k-download-hardening/), with obsolete legacy structures removed or replaced by aria2-next-native mechanisms.
+Aria2 Next includes native ED2K/eMule support aligned with aMule's network behavior. ED2K works through the normal aria2 CLI, session, and JSON-RPC flows, including server and Kad discovery, peer transfer, search, sharing, upload queues, protocol obfuscation, persistent runtime identity, and restart source seeds. The maintained architecture and verification scope are documented in [`docs/maintenance/ed2k-runtime.md`](docs/maintenance/ed2k-runtime.md).
 
 ## Compatibility
 

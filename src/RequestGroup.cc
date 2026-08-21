@@ -65,6 +65,7 @@
 #include "Ed2kAttribute.h"
 #include "Ed2kCommand.h"
 #include "Ed2kListenCommand.h"
+#include "Ed2kSession.h"
 #include "Ed2kKadCommand.h"
 #include "ed2k_hash.h"
 #include "SeedCheckCommand.h"
@@ -404,9 +405,12 @@ void RequestGroup::createInitialCommand(
     }
     attrs->pieceHashes = attrs->link.pieceHashes;
     attrs->aichRootHash = attrs->link.aichHash;
+    attrs->aichRootTrusted = !attrs->aichRootHash.empty();
     for (const auto& source : attrs->link.sources) {
       addEd2kPeer(attrs, source, ed2k::PEER_SOURCE_INLINE);
     }
+    auto ed2kSession = e->getRequestGroupMan()->getEd2kSession();
+    ed2kSession->registerDownload(this);
     schedulePendingEd2kServers(this, e);
     for (const auto& peer : attrs->peers) {
       commands.push_back(
@@ -424,7 +428,9 @@ void RequestGroup::createInitialCommand(
         e->addCommand(std::move(listenCommand));
       }
     }
-    commands.push_back(make_unique<Ed2kKadCommand>(e->newCUID(), this, e));
+    if (!e->isEd2kUdpActive()) {
+      commands.push_back(make_unique<Ed2kKadCommand>(e->newCUID(), this, e));
+    }
     if (auto seedCriteria =
             createEd2kSeedCriteria(option_, downloadContext_, pieceStorage_)) {
       auto seedCheck = make_unique<SeedCheckCommand>(

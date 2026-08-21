@@ -26,6 +26,7 @@ namespace ed2k {
 constexpr uint16_t SOURCE_CRYPT_SUPPORT = 0x01;
 constexpr uint16_t SOURCE_CRYPT_REQUEST = 0x02;
 constexpr uint16_t SOURCE_CRYPT_REQUIRE = 0x04;
+constexpr uint16_t SOURCE_CRYPT_DIRECT_CALLBACK = 0x08;
 constexpr uint16_t SOURCE_CRYPT_HAS_USER_HASH = 0x80;
 
 enum class LinkType {

@@ -38,17 +38,23 @@
 
 #include "MSEDHKeyExchange.h"
 
+#include <string>
+
 namespace aria2 {
 
 class InternalDHKeyExchange {
 private:
   MSEDHPrivateKey privateKey_;
   MSEDHPublicKey publicKey_;
+  std::string primeHex_;
 
 public:
   InternalDHKeyExchange();
 
   explicit InternalDHKeyExchange(const MSEDHPrivateKey& privateKey);
+
+  InternalDHKeyExchange(const MSEDHPrivateKey& privateKey,
+                        const char* primeHex);
 
   const MSEDHPublicKey& getPublicKey() const { return publicKey_; }
 

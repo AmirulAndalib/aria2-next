@@ -304,13 +304,20 @@ std::string packKadContact(const KadContact& contact)
 }
 
 std::string createKadHelloPayload(const std::string& id, uint16_t tcpPort,
-                                  uint8_t version)
+                                  uint8_t version, bool requestAck,
+                                  bool tcpFirewalled, bool udpFirewalled)
 {
   validateHashLength(id);
   std::string payload = id;
   payload += packUInt16(tcpPort);
   payload.push_back(static_cast<char>(version));
-  payload.push_back('\0');
+  const auto options = static_cast<uint8_t>((requestAck ? 0x04 : 0) |
+                                            (tcpFirewalled ? 0x02 : 0) |
+                                            (udpFirewalled ? 0x01 : 0));
+  payload.push_back(options == 0 ? '\0' : '\1');
+  if (options != 0) {
+    payload += createUInt32Tag(0xf2, options);
+  }
   return payload;
 }
 
@@ -333,7 +340,31 @@ bool parseKadHelloPayload(KadHello& hello, const std::string& payload)
   if (!parseTagList(hello.tags, tagPayload)) {
     return false;
   }
-  offset = payload.size();
+  for (const auto& tag : hello.tags) {
+    if (tag.id != 0xf2 || tag.valueType != TagValueType::UINT) {
+      continue;
+    }
+    const auto options = static_cast<uint8_t>(tag.intValue);
+    hello.requestsAck = (options & 0x04) != 0;
+    hello.tcpFirewalled = (options & 0x02) != 0;
+    hello.udpFirewalled = (options & 0x01) != 0;
+  }
+  return true;
+}
+
+std::string createKadHelloAckPayload(const std::string& id)
+{
+  validateHashLength(id);
+  return id + std::string(1, '\0');
+}
+
+bool parseKadHelloAckPayload(std::string& id, const std::string& payload)
+{
+  if (payload.size() < HASH_LENGTH + 1 ||
+      static_cast<uint8_t>(payload[HASH_LENGTH]) != 0) {
+    return false;
+  }
+  id.assign(payload.data(), HASH_LENGTH);
   return true;
 }
 

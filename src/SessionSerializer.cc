@@ -165,22 +165,6 @@ bool writeUri(IOFile& fp, const std::string& uri)
          fp.write("\t", 1) == 1;
 }
 
-bool writeEd2kPeerCredits(IOFile& fp, const ed2k::UploadQueue* queue)
-{
-  if (!queue) {
-    return true;
-  }
-  for (const auto& credit : queue->credits().list()) {
-    const auto state =
-        util::toHex(ed2k::createPeerCreditStatePayload(credit));
-    if (!state.empty() &&
-        !writeOptionLine(fp, PREF_ED2K_PEER_CREDIT_STATE, state)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void addUniqueEd2kSource(std::vector<ed2k::Endpoint>& sources,
                          const ed2k::Endpoint& source)
 {
@@ -271,27 +255,6 @@ bool writeDownloadResult(IOFile& fp, std::set<a2_gid_t>& metainfoCache,
       if (pauseRequested &&
           !writeOptionLine(fp, PREF_PAUSE, A2_V_TRUE)) {
         return false;
-      }
-      if (!attrs->clientHash.empty() &&
-          !writeOptionLine(fp, PREF_ED2K_CLIENT_HASH,
-                           util::toHex(attrs->clientHash))) {
-        return false;
-      }
-      if (attrs->kadRoutingTable) {
-        const auto state = util::toHex(ed2k::createKadRoutingStatePayload(
-            createEd2kKadSnapshot(attrs)));
-        if (!state.empty() &&
-            !writeOptionLine(fp, PREF_ED2K_KAD_ROUTING_STATE, state)) {
-          return false;
-        }
-      }
-      for (const auto& serverState : attrs->serverStates) {
-        const auto state =
-            util::toHex(ed2k::createServerStatePayload(serverState));
-        if (!state.empty() &&
-            !writeOptionLine(fp, PREF_ED2K_SERVER_STATE, state)) {
-          return false;
-        }
       }
       return writeOption(fp, dr->option);
     }
@@ -399,10 +362,6 @@ bool isActiveEd2kSharingGroup(const std::shared_ptr<RequestGroup>& rg)
 bool SessionSerializer::save(IOFile& fp) const
 {
   std::set<a2_gid_t> metainfoCache;
-
-  if (!writeEd2kPeerCredits(fp, rgman_->getEd2kUploadQueue())) {
-    return false;
-  }
 
   const auto& unfinishedResults = rgman_->getUnfinishedDownloadResult();
   if (!saveDownloadResult(fp, metainfoCache, std::begin(unfinishedResults),

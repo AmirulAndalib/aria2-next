@@ -541,6 +541,8 @@
   _(" --ed2k-udp-listen-port=PORT Set UDP port number for ED2K Kad and peer reask packets.")
 #define TEXT_ED2K_UPLOAD_SLOTS                                          \
   _(" --ed2k-upload-slots=NUM     Set maximum active ED2K upload slots.")
+#define TEXT_ED2K_STATE_FILE                                            \
+  _(" --ed2k-state-file=FILE      Store ED2K identity, Kad, server, and credit state in FILE.")
 #define TEXT_AUTO_SAVE_INTERVAL                                         \
   _(" --auto-save-interval=SEC     Save a control file(*.aria2) every SEC seconds.\n" \
     "                              If 0 is given, a control file is not saved during\n" \

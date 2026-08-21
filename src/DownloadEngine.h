@@ -172,6 +172,8 @@ private:
   std::unique_ptr<util::security::HMACResult> tokenExpected_;
   uint16_t ed2kTcpPort_ = 0;
   bool ed2kTcpListenActive_ = false;
+  bool ed2kUdpActive_ = false;
+  size_t ed2kServerConnectionCount_ = 0;
 
 public:
   DownloadEngine(std::unique_ptr<EventPoll> eventPoll);
@@ -242,6 +244,24 @@ public:
   bool isEd2kTcpListenActive() const { return ed2kTcpListenActive_; }
 
   void setEd2kTcpListenActive(bool active) { ed2kTcpListenActive_ = active; }
+
+  bool isEd2kUdpActive() const { return ed2kUdpActive_; }
+
+  void setEd2kUdpActive(bool active) { ed2kUdpActive_ = active; }
+
+  size_t getEd2kServerConnectionCount() const
+  {
+    return ed2kServerConnectionCount_;
+  }
+
+  void addEd2kServerConnection() { ++ed2kServerConnectionCount_; }
+
+  void removeEd2kServerConnection()
+  {
+    if (ed2kServerConnectionCount_ != 0) {
+      --ed2kServerConnectionCount_;
+    }
+  }
 
   void setStatCalc(std::unique_ptr<StatCalc> statCalc);
 

@@ -29,6 +29,10 @@ class DownloadEngine;
 class RequestGroup;
 class SocketCore;
 
+namespace ed2k {
+struct ServerState;
+}
+
 class Ed2kKadCommand : public Command {
 public:
   Ed2kKadCommand(cuid_t cuid, RequestGroup* requestGroup, DownloadEngine* e);
@@ -59,10 +63,8 @@ private:
   std::shared_ptr<SocketCore> socket_;
   std::deque<std::pair<ed2k::Endpoint, std::string>> outbox_;
   bool initialized_;
-  bool sourceSearchSent_;
-  bool keywordSearchSent_;
   int64_t lastServerStatusPoll_;
-  int64_t lastServerSourcePoll_;
+  size_t bootstrapCursor_;
 
   void init();
   void queueBootstrap();
@@ -88,8 +90,16 @@ private:
   bool tryDecodeKadObfuscatedDatagram(ed2k::KadObfuscatedDatagram& parsed,
                                       const ed2k::Endpoint& endpoint,
                                       const std::string& raw);
-  void queueEd2kUdpPacket(const ed2k::Endpoint& endpoint, uint8_t opcode,
-                          const std::string& payload);
+  bool tryDecodeServerObfuscatedDatagram(std::string& datagram,
+                                         const ed2k::Endpoint& endpoint,
+                                         const std::string& raw) const;
+  bool tryDecodePeerObfuscatedDatagram(std::string& datagram,
+                                       const ed2k::Endpoint& endpoint,
+                                       const std::string& raw) const;
+  bool findServerByUdpEndpoint(ed2k::Endpoint& server,
+                               const ed2k::Endpoint& endpoint) const;
+  void queueServerUdpPacket(const ed2k::ServerState& server, uint8_t opcode,
+                            const std::string& payload);
   void queueEmuleUdpPacket(const ed2k::Endpoint& endpoint, uint8_t opcode,
                            const std::string& payload);
   void sendQueuedPackets();
@@ -101,6 +111,9 @@ private:
                     uint8_t opcode, const std::string& payload);
   void handleEd2kUdpPacket(const ed2k::Endpoint& endpoint, uint8_t opcode,
                            const std::string& payload);
+  RequestGroup* findKadTargetGroup(const std::string& targetId) const;
+  RequestGroup* findPeerGroup(const ed2k::Endpoint& endpoint,
+                              const std::string& userHash = std::string()) const;
   int64_t nowSeconds() const;
 };
 

@@ -28,7 +28,7 @@ constexpr uint8_t SOURCE_EXCHANGE2_VERSION = 4;
 constexpr uint32_t PEER_SOURCE_INCOMING = 1u << 0;
 constexpr uint32_t PEER_SOURCE_SERVER = 1u << 1;
 constexpr uint32_t PEER_SOURCE_KAD = 1u << 2;
-constexpr uint32_t PEER_SOURCE_RESUME = 1u << 3;
+constexpr uint32_t PEER_SOURCE_PERSISTED = 1u << 3;
 constexpr uint32_t PEER_SOURCE_EXCHANGE = 1u << 4;
 constexpr uint32_t PEER_SOURCE_INLINE = 1u << 5;
 
@@ -70,6 +70,10 @@ struct EmuleMiscOptions2 {
   bool supportsLargeFiles = false;
   bool supportsExtendedMultipacket = false;
   bool supportsSourceExchange2 = false;
+  bool supportsCryptLayer = false;
+  bool requestsCryptLayer = false;
+  bool requiresCryptLayer = false;
+  bool supportsDirectCallback = false;
 };
 
 struct EmulePeerInfo {
@@ -83,6 +87,7 @@ struct EmulePeerInfo {
 
 struct UdpReask {
   std::string fileHash;
+  std::vector<bool> partStatus;
   uint16_t completeSources = 0;
   bool hasCompleteSources = false;
 };
@@ -148,6 +153,7 @@ struct PeerState {
   bool dead = false;
   bool accepted = false;
   bool outOfParts = false;
+  int64_t nextPartStatusRecheckTime = 0;
   bool cancelled = false;
   bool noFile = false;
   uint32_t failCount = 0;
@@ -221,6 +227,9 @@ bool parsePeerHelloUserHash(std::string& userHash,
                             bool helloPacket);
 std::string createUdpReaskFilePingPayload(const std::string& fileHash,
                                           uint16_t completeSources = 0);
+std::string createUdpReaskFilePingPayload(
+    const std::string& fileHash, const std::vector<bool>& partStatus,
+    uint16_t completeSources);
 bool parseUdpReaskFilePingPayload(UdpReask& reask,
                                   const std::string& payload);
 std::string createUdpReaskAckPayload(uint16_t rank);

@@ -26,6 +26,10 @@ constexpr char SHARED_SECRET_HEX[] =
     "994aac6c359990cf4f678a1742b587eb1a5248ec7fcc0d0bcfcb12d2461bc1fe25417b708"
     "69697d9ca884832f1c5f2a2fd3318c22a5a6ba170d36aac91405457c1e8137b1534a77686"
     "5ed353f12422ff6afc58435f8bd443f61dd051a37bcdeb";
+constexpr char CUSTOM_PRIME_HEX[] =
+    "F2BF52C55F587ADD5371A936E886EB3C6217A33EC34CB40DC73A41A643AFFCE7"
+    "21FC286366535BDBCE259F2286DA4A91B207CBAA5255D4F61CCEAED45AD5E074"
+    "7DF7781828105F340F762387F88B289142FB42688F05150F548B5F436AF70DF3";
 
 MSEDHPrivateKey privateKey(const char* hex)
 {
@@ -56,6 +60,7 @@ public:
   void tearDown() {}
   void testKnownAnswer();
   void testSelectedBackendHandshake();
+  void testCustomPrimeHandshake();
 #ifdef HAVE_OPENSSL
   void testInternalToOpenSSL();
   void testOpenSSLToInternal();
@@ -78,6 +83,22 @@ void DHKeyExchangeTest::testSelectedBackendHandshake()
   DHKeyExchange left(privateKey(PRIVATE_A_HEX));
   DHKeyExchange right(privateKey(PRIVATE_B_HEX));
   requireSharedSecret(left, right);
+}
+
+A2_TEST(DHKeyExchangeTest, testCustomPrimeHandshake)
+
+void DHKeyExchangeTest::testCustomPrimeHandshake()
+{
+  InternalDHKeyExchange left(privateKey(PRIVATE_A_HEX), CUSTOM_PRIME_HEX);
+  InternalDHKeyExchange right(privateKey(PRIVATE_B_HEX), CUSTOM_PRIME_HEX);
+  const auto leftSecret = left.computeSecret(right.getPublicKey());
+  const auto rightSecret = right.computeSecret(left.getPublicKey());
+  REQUIRE_EQ(leftSecret, rightSecret);
+#ifdef HAVE_OPENSSL
+  LibsslDHKeyExchange openssl(privateKey(PRIVATE_B_HEX), CUSTOM_PRIME_HEX);
+  REQUIRE_EQ(left.computeSecret(openssl.getPublicKey()),
+             openssl.computeSecret(left.getPublicKey()));
+#endif
 }
 
 #ifdef HAVE_OPENSSL

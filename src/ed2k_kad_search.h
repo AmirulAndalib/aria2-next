@@ -82,7 +82,9 @@ extractKadSourceEndpointDetails(const KadSearchResult& result);
 std::string createKadPublishSourceRequestPayload(const std::string& fileId,
                                                  const Endpoint& source,
                                                  const std::string& sourceId,
-                                                 uint64_t size = 0);
+                                                 uint64_t size = 0,
+                                                 uint16_t udpPort = 0,
+                                                 uint16_t cryptOptions = 0);
 bool parseKadPublishSourceRequestPayload(KadPublishSourceRequest& request,
                                          const std::string& payload);
 

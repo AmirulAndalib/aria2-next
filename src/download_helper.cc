@@ -274,37 +274,6 @@ void addDefaultEd2kServersIfNeeded(std::vector<ed2k::Endpoint>& endpoints,
   addEndpointList(endpoints, DEFAULT_ED2K_SERVER_LIST);
 }
 
-void addEd2kServerStateEndpoints(std::vector<ed2k::Endpoint>& endpoints,
-                                 const std::vector<ed2k::ServerState>& states)
-{
-  for (const auto& state : states) {
-    addUniqueEndpoint(endpoints, state.endpoint);
-  }
-}
-
-std::vector<ed2k::ServerState>
-createEd2kServerStates(const std::shared_ptr<Option>& option)
-{
-  std::vector<ed2k::ServerState> states;
-  if (option->blank(PREF_ED2K_SERVER_STATE)) {
-    return states;
-  }
-  std::istringstream in(option->get(PREF_ED2K_SERVER_STATE));
-  for (std::string payload; std::getline(in, payload);) {
-    if (payload.empty()) {
-      continue;
-    }
-    ed2k::ServerState state;
-    if (payload.size() % 2 != 0 || !util::isHexDigit(payload) ||
-        !ed2k::parseServerStatePayload(
-            state, util::fromHex(payload.begin(), payload.end()))) {
-      throw DL_ABORT_EX("Cannot parse ED2K server state.");
-    }
-    states.push_back(state);
-  }
-  return states;
-}
-
 std::string defaultEd2kNodeListPath()
 {
   return util::replace(DEFAULT_ED2K_NODE_LIST_PATH, "${HOME}",
@@ -342,25 +311,8 @@ createEd2kKadRoutingTableFromNodesDat(const std::string& path,
 
 std::shared_ptr<ed2k::KadRoutingTable> createEd2kKadRoutingTable(
     const std::shared_ptr<Option>& option, const std::string& selfId,
-    ed2k::KadRoutingSnapshot* restoredSnapshot = nullptr,
     bool createEmpty = false)
 {
-  if (!option->blank(PREF_ED2K_KAD_ROUTING_STATE)) {
-    ed2k::KadRoutingSnapshot snapshot;
-    const auto state = option->get(PREF_ED2K_KAD_ROUTING_STATE);
-    if (state.size() % 2 != 0 || !util::isHexDigit(state) ||
-        !ed2k::parseKadRoutingStatePayload(
-            snapshot, util::fromHex(state.begin(), state.end()))) {
-      throw DL_ABORT_EX("Cannot parse ED2K Kad routing state.");
-    }
-    auto table = std::make_shared<ed2k::KadRoutingTable>(
-        ed2k::ed2kHashToKadId(selfId));
-    table->restore(snapshot);
-    if (restoredSnapshot) {
-      *restoredSnapshot = snapshot;
-    }
-    return table;
-  }
   if (!option->blank(PREF_ED2K_NODE_LIST)) {
     return createEd2kKadRoutingTableFromNodesDat(
         option->get(PREF_ED2K_NODE_LIST), selfId, true);
@@ -407,17 +359,11 @@ createEd2kRequestGroup(const std::string& ed2kUri,
       option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER));
   auto attrs = std::make_shared<Ed2kAttribute>();
   attrs->link = std::move(link);
-  attrs->clientHash = getOrCreateEd2kClientHash(option.get());
-  attrs->serverStates = createEd2kServerStates(option);
+  attrs->clientHash = createEd2kClientHash();
   addOptionEd2kServers(attrs->servers, attrs->serverStates, option);
-  addEd2kServerStateEndpoints(attrs->servers, attrs->serverStates);
   addDefaultEd2kServersIfNeeded(attrs->servers, attrs->link, option);
-  ed2k::KadRoutingSnapshot kadSnapshot;
   attrs->kadRoutingTable =
-      createEd2kKadRoutingTable(option, attrs->clientHash, &kadSnapshot, true);
-  if (attrs->kadRoutingTable) {
-    restoreEd2kKadOperationalState(attrs.get(), kadSnapshot);
-  }
+      createEd2kKadRoutingTable(option, attrs->clientHash, true);
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
   dctx->setAcceptMetalink(false);
   rg->setDownloadContext(dctx);
@@ -489,19 +435,12 @@ createEd2kSearchRequestGroup(const ed2k::SearchQuery& query,
   attrs->link.type = ed2k::LinkType::FILE;
   attrs->link.name = query.keyword;
   attrs->link.size = 0;
-  attrs->clientHash = getOrCreateEd2kClientHash(option.get());
-  attrs->serverStates = createEd2kServerStates(option);
+  attrs->clientHash = createEd2kClientHash();
   addOptionEd2kServers(attrs->servers, attrs->serverStates, option);
-  addEd2kServerStateEndpoints(attrs->servers, attrs->serverStates);
   addDefaultEd2kServersIfNeeded(attrs->servers, attrs->link, option);
-  if (!option->blank(PREF_ED2K_NODE_LIST) ||
-      !option->blank(PREF_ED2K_KAD_ROUTING_STATE)) {
-    ed2k::KadRoutingSnapshot kadSnapshot;
-    attrs->kadRoutingTable = createEd2kKadRoutingTable(
-        option, attrs->clientHash, &kadSnapshot);
-    if (attrs->kadRoutingTable) {
-      restoreEd2kKadOperationalState(attrs.get(), kadSnapshot);
-    }
+  if (!option->blank(PREF_ED2K_NODE_LIST)) {
+    attrs->kadRoutingTable =
+        createEd2kKadRoutingTable(option, attrs->clientHash);
   }
   if (attrs->servers.empty()) {
     if (!attrs->kadRoutingTable ||
@@ -1080,8 +1019,6 @@ void removeOneshotOption(const std::shared_ptr<Option>& option)
 {
   option->remove(PREF_PAUSE);
   option->remove(PREF_GID);
-  option->remove(PREF_ED2K_SERVER_STATE);
-  option->remove(PREF_ED2K_KAD_ROUTING_STATE);
 }
 
 } // namespace aria2

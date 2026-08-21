@@ -83,7 +83,11 @@ uint32_t emuleMiscOptions2Value(const EmuleMiscOptions2& options)
   return (options.kadVersion & 0x0fu) |
          (static_cast<uint32_t>(options.supportsLargeFiles) << 4) |
          (static_cast<uint32_t>(options.supportsExtendedMultipacket) << 5) |
-         (static_cast<uint32_t>(options.supportsSourceExchange2) << 10);
+         (static_cast<uint32_t>(options.supportsCryptLayer) << 7) |
+         (static_cast<uint32_t>(options.requestsCryptLayer) << 8) |
+         (static_cast<uint32_t>(options.requiresCryptLayer) << 9) |
+         (static_cast<uint32_t>(options.supportsSourceExchange2) << 10) |
+         (static_cast<uint32_t>(options.supportsDirectCallback) << 12);
 }
 
 EmuleMiscOptions2 parseEmuleMiscOptions2(uint32_t value)
@@ -92,7 +96,13 @@ EmuleMiscOptions2 parseEmuleMiscOptions2(uint32_t value)
   options.kadVersion = value & 0x0f;
   options.supportsLargeFiles = (value >> 4) & 0x01;
   options.supportsExtendedMultipacket = (value >> 5) & 0x01;
+  options.supportsCryptLayer = (value >> 7) & 0x01;
+  options.requestsCryptLayer =
+      options.supportsCryptLayer && ((value >> 8) & 0x01);
+  options.requiresCryptLayer =
+      options.requestsCryptLayer && ((value >> 9) & 0x01);
   options.supportsSourceExchange2 = (value >> 10) & 0x01;
+  options.supportsDirectCallback = (value >> 12) & 0x01;
   return options;
 }
 
@@ -634,6 +644,8 @@ EmulePeerInfo createLocalEmulePeerInfo()
   info.miscOptions2.supportsLargeFiles = true;
   info.miscOptions2.supportsExtendedMultipacket = true;
   info.miscOptions2.supportsSourceExchange2 = true;
+  info.miscOptions2.supportsCryptLayer = true;
+  info.miscOptions2.requestsCryptLayer = true;
   return info;
 }
 
@@ -737,18 +749,43 @@ std::string createUdpReaskFilePingPayload(const std::string& fileHash,
   return fileHash + packUInt16(completeSources);
 }
 
+std::string createUdpReaskFilePingPayload(
+    const std::string& fileHash, const std::vector<bool>& partStatus,
+    uint16_t completeSources)
+{
+  validateHashLength(fileHash);
+  std::string payload = fileHash;
+  appendPartStatus(payload, partStatus);
+  payload += packUInt16(completeSources);
+  return payload;
+}
+
 bool parseUdpReaskFilePingPayload(UdpReask& reask,
                                   const std::string& payload)
 {
-  if (payload.size() != HASH_LENGTH && payload.size() != HASH_LENGTH + 2) {
+  if (payload.size() < HASH_LENGTH) {
     return false;
   }
   size_t offset = 0;
   UdpReask parsed;
   parsed.fileHash = readBytes(payload, offset, HASH_LENGTH);
-  if (offset < payload.size()) {
+  if (payload.size() == HASH_LENGTH + 2) {
     parsed.completeSources = readUInt16(readBytes(payload, offset, 2).data());
     parsed.hasCompleteSources = true;
+  }
+  else if (offset < payload.size()) {
+    if (!parsePartStatusPayload(parsed.partStatus, payload, offset) ||
+        payload.size() - offset > 2) {
+      return false;
+    }
+    if (payload.size() - offset == 2) {
+      parsed.completeSources =
+          readUInt16(readBytes(payload, offset, 2).data());
+      parsed.hasCompleteSources = true;
+    }
+  }
+  if (offset != payload.size()) {
+    return false;
   }
   reask = std::move(parsed);
   return true;

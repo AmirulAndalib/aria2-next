@@ -16,12 +16,8 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
-#include <sstream>
-
-#include "Option.h"
 #include "RequestGroupMan.h"
 #include "ed2k_hash.h"
-#include "prefs.h"
 #include "util.h"
 
 namespace aria2 {
@@ -106,30 +102,20 @@ double PeerCreditStore::scoreRatio(const std::string& userHash)
   return std::max(1.0, std::min(10.0, result));
 }
 
-size_t PeerCreditStore::loadOptionState(const Option* option)
+void PeerCreditStore::restore(const std::vector<PeerCreditState>& credits)
 {
-  if (!option || option->blank(PREF_ED2K_PEER_CREDIT_STATE)) {
-    return 0;
-  }
-  size_t count = 0;
-  std::istringstream in(option->get(PREF_ED2K_PEER_CREDIT_STATE));
-  std::string line;
-  while (std::getline(in, line)) {
-    if (line.empty()) {
+  credits_.clear();
+  for (const auto& credit : credits) {
+    const auto duplicate =
+        std::find_if(credits_.begin(), credits_.end(),
+                     [&](const PeerCreditState& state) {
+                       return state.userHash == credit.userHash;
+                     }) != credits_.end();
+    if (credit.userHash.size() != HASH_LENGTH || duplicate) {
       continue;
     }
-    PeerCreditState state;
-    if (!parsePeerCreditStatePayload(state,
-                                     util::fromHex(line.begin(), line.end()))) {
-      continue;
-    }
-    auto credit = getOrCreate(state.userHash);
-    if (credit) {
-      *credit = state;
-      ++count;
-    }
+    credits_.push_back(credit);
   }
-  return count;
 }
 
 UploadQueue::UploadQueue(size_t maxSlots)
@@ -186,6 +172,8 @@ bool UploadQueue::requestUpload(const Endpoint& endpoint,
     created.userHash = userHash;
     created.fileHash = fileHash;
     created.waitStartTime = now;
+    created.lastRequestTime = now;
+    created.connected = true;
     peers_.push_back(created);
     peer = &peers_.back();
   }
@@ -194,6 +182,8 @@ bool UploadQueue::requestUpload(const Endpoint& endpoint,
       peer->userHash = userHash;
     }
     peer->fileHash = fileHash;
+    peer->lastRequestTime = now;
+    peer->connected = true;
   }
 
   if (peer->uploading) {
@@ -244,6 +234,21 @@ bool UploadQueue::remove(const Endpoint& endpoint)
   return true;
 }
 
+void UploadQueue::disconnect(const Endpoint& endpoint)
+{
+  auto peer = findPeer(endpoint);
+  if (!peer) {
+    return;
+  }
+  peer->connected = false;
+  if (!peer->uploading) {
+    return;
+  }
+  peer->uploading = false;
+  peer->uploadStartTime = 0;
+  sortWaiting();
+}
+
 void UploadQueue::noteUploaded(const Endpoint& endpoint, uint64_t bytes)
 {
   auto peer = findPeer(endpoint);
@@ -257,6 +262,49 @@ void UploadQueue::noteUploaded(const Endpoint& endpoint, uint64_t bytes)
 void UploadQueue::noteDownloaded(const std::string& userHash, uint64_t bytes)
 {
   credits_.addDownloaded(userHash, bytes);
+}
+
+size_t UploadQueue::maintain(int64_t now, RequestGroupMan* rgman)
+{
+  constexpr int64_t WAIT_TIMEOUT = 3600;
+  constexpr int64_t SLOT_TIMEOUT = 3600;
+  constexpr uint64_t SLOT_BYTE_LIMIT = 10 * 1024 * 1024;
+  size_t changed = 0;
+  for (auto& peer : peers_) {
+    if (!peer.uploading ||
+        ((peer.uploadStartTime == 0 || now - peer.uploadStartTime < SLOT_TIMEOUT) &&
+         peer.sessionUploaded <= SLOT_BYTE_LIMIT)) {
+      continue;
+    }
+    peer.uploading = false;
+    peer.uploadStartTime = 0;
+    peer.waitStartTime = now;
+    peer.sessionUploaded = 0;
+    ++changed;
+  }
+  const auto oldSize = peers_.size();
+  peers_.erase(
+      std::remove_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return !peer.uploading && !peer.connected && peer.lastRequestTime != 0 &&
+               now - peer.lastRequestTime >= WAIT_TIMEOUT;
+      }),
+      peers_.end());
+  changed += oldSize - peers_.size();
+  sortWaiting();
+  for (auto& peer : peers_) {
+    if (!canOpenSlot(rgman)) {
+      break;
+    }
+    if (peer.uploading || !peer.connected) {
+      continue;
+    }
+    peer.uploading = true;
+    peer.rank = 0;
+    peer.uploadStartTime = now;
+    ++changed;
+  }
+  sortWaiting();
+  return changed;
 }
 
 size_t UploadQueue::uploadingCount() const

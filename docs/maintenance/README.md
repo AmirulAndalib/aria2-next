@@ -16,16 +16,7 @@ maintenance task owns its own subdirectory.
 | `ed2k/checkpoints.csv` | Historical checkpoint matrix for the first ED2K/eMule draft |
 | `ed2k/reference-parity.csv` | Historical parity ledger for the first ED2K/eMule draft |
 | `ed2k/progress.md` | Historical chronological ED2K/eMule draft log |
-| `ed2k-refactor/overview.md` | Active tracker entry point for the ED2K/eMule reference-alignment refactor |
-| `ed2k-refactor/checkpoint-index.csv` | Active checkpoint index for the ED2K/eMule refactor |
-| `ed2k-refactor/reference-ledger.csv` | Active authoritative reference alignment and pruning ledger |
-| `ed2k-refactor/checkpoints/` | Active domain-specific ED2K/eMule checkpoint matrices |
-| `ed2k-refactor/progress.md` | Active chronological ED2K/eMule refactor progress log |
-| `ed2k-download-hardening/overview.md` | Active tracker entry point for ED2K/eMule download reliability hardening |
-| `ed2k-download-hardening/roadmap.csv` | Active checkpoint index for ED2K download hardening |
-| `ed2k-download-hardening/capability-ledger.csv` | Active aMule-runtime capability and pruning ledger |
-| `ed2k-download-hardening/checkpoints/` | Active narrow ED2K download hardening checkpoint matrices |
-| `ed2k-download-hardening/progress.md` | Active chronological ED2K download hardening progress log |
+| `ed2k-runtime.md` | Current ED2K runtime architecture and verification record |
 
 Maintenance records should be durable and compact. Temporary API payloads,
 scratch research files, generated reports, local caches, and conversation logs

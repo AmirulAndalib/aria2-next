@@ -152,6 +152,8 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kListenCommand.h
   src/Ed2kPeerTransfer.cc
   src/Ed2kPeerTransfer.h
+  src/Ed2kSession.cc
+  src/Ed2kSession.h
   src/Ed2kShareIndex.cc
   src/Ed2kShareIndex.h
   src/Ed2kSharedFile.cc
@@ -169,6 +171,8 @@ set(ARIA2_SOURCES_BASE
   src/ed2k_compression.cc
   src/ed2k_compression.h
   src/ed2k_constants.h
+  src/ed2k_crypto.cc
+  src/ed2k_crypto.h
   src/ed2k_endpoint.cc
   src/ed2k_endpoint.h
   src/ed2k_hash.cc

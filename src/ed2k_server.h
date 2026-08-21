@@ -54,6 +54,7 @@ struct ServerState {
   bool connecting = false;
   bool connected = false;
   bool handshakeCompleted = false;
+  bool tcpObfuscationFailed = false;
   uint32_t clientId = 0;
   bool highId = false;
   std::string ipAddress;

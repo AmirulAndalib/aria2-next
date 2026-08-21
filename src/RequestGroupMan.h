@@ -62,6 +62,7 @@ class UriListParser;
 class WrDiskCache;
 class OpenedFileCounter;
 namespace ed2k {
+class Ed2kSession;
 class UploadQueue;
 } // namespace ed2k
 
@@ -127,6 +128,7 @@ private:
   std::shared_ptr<OpenedFileCounter> openedFileCounter_;
 
   std::unique_ptr<ed2k::UploadQueue> ed2kUploadQueue_;
+  std::unique_ptr<ed2k::Ed2kSession> ed2kSession_;
 
   // The number of stopped downloads so far in total, including
   // evicted DownloadResults.
@@ -276,6 +278,8 @@ public:
   {
     return ed2kUploadQueue_.get();
   }
+
+  ed2k::Ed2kSession* getEd2kSession() const { return ed2kSession_.get(); }
 
   const std::vector<std::shared_ptr<DownloadResult>>&
   getUnfinishedDownloadResult() const

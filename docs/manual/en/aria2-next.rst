@@ -670,7 +670,7 @@ ED2K Specific Options
   Use ED2K servers to discover file sources for ED2K file links.
   Multiple servers can be separated with commas. If an ED2K file link or search
   has no configured server, server list, inline source, Kad node list, or saved
-  Kad routing state, aria2-next uses built-in ED2K bootstrap servers.
+  ED2K runtime state, aria2-next uses built-in ED2K bootstrap servers.
 
 .. option:: --ed2k-server-list=<FILE>
 
@@ -693,6 +693,13 @@ ED2K Specific Options
 .. option:: --ed2k-upload-slots=<NUM>
 
   Set the maximum number of active ED2K upload slots. Default: ``3``
+
+.. option:: --ed2k-state-file=<FILE>
+
+  Store the process-wide ED2K client identity, Kad routing table, server
+  metadata, useful source seeds for incomplete files, and peer credits in
+  *FILE*. Default:
+  ``${HOME}/.aria2/ed2k.state``
 
 P2P Sharing Options
 ~~~~~~~~~~~~~~~~~~~
@@ -2246,6 +2253,7 @@ of URIs. These optional lines must start with white space(s).
   * :option:`ed2k-udp-listen-port <--ed2k-udp-listen-port>`
   * :option:`ed2k-server <--ed2k-server>`
   * :option:`ed2k-server-list <--ed2k-server-list>`
+  * :option:`ed2k-state-file <--ed2k-state-file>`
   * :option:`ed2k-upload-slots <--ed2k-upload-slots>`
   * :option:`enable-http-keep-alive <--enable-http-keep-alive>`
   * :option:`enable-http-pipelining <--enable-http-pipelining>`

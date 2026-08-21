@@ -13,10 +13,12 @@ class Ed2kUploadQueueTest {
 public:
   void testRejectsDuplicateUserHash();
   void testCreditsSortWaitingPeers();
+  void testMaintenanceExpiresWaitersAndRotatesSlots();
 };
 
 A2_TEST(Ed2kUploadQueueTest, testRejectsDuplicateUserHash)
 A2_TEST(Ed2kUploadQueueTest, testCreditsSortWaitingPeers)
+A2_TEST(Ed2kUploadQueueTest, testMaintenanceExpiresWaitersAndRotatesSlots)
 
 void Ed2kUploadQueueTest::testRejectsDuplicateUserHash()
 {
@@ -73,6 +75,30 @@ void Ed2kUploadQueueTest::testCreditsSortWaitingPeers()
 
   REQUIRE_EQ((uint16_t)2, queue.queueRank(older));
   REQUIRE_EQ((uint16_t)1, queue.queueRank(credited));
+}
+
+void Ed2kUploadQueueTest::testMaintenanceExpiresWaitersAndRotatesSlots()
+{
+  UploadQueue queue(1);
+  Endpoint active{"203.0.113.10", 4662};
+  Endpoint waiting{"203.0.113.11", 4662};
+  const std::string fileHash(HASH_LENGTH, '\x66');
+
+  REQUIRE(queue.requestUpload(active, std::string(HASH_LENGTH, '\x40'),
+                              fileHash, 2000, nullptr));
+  REQUIRE(!queue.requestUpload(waiting, std::string(HASH_LENGTH, '\x41'),
+                               fileHash, 1000, nullptr));
+  queue.disconnect(waiting);
+  REQUIRE_EQ((size_t)1, queue.maintain(4600, nullptr));
+  REQUIRE_EQ((size_t)1, queue.peers().size());
+
+  Endpoint replacement{"203.0.113.12", 4662};
+  REQUIRE(!queue.requestUpload(replacement, std::string(HASH_LENGTH, '\x42'),
+                               fileHash, 4602, nullptr));
+  queue.noteUploaded(active, 10 * 1024 * 1024 + 1);
+  REQUIRE_EQ((size_t)2, queue.maintain(4603, nullptr));
+  REQUIRE(!queue.isUploading(active));
+  REQUIRE(queue.isUploading(replacement));
 }
 
 } // namespace ed2k

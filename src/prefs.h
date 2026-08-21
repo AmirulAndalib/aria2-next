@@ -330,14 +330,8 @@ extern PrefPtr PREF_ED2K_LISTEN_PORT;
 extern PrefPtr PREF_ED2K_UDP_LISTEN_PORT;
 // value: 1*digit
 extern PrefPtr PREF_ED2K_UPLOAD_SLOTS;
-// value: hex-encoded ED2K server state
-extern PrefPtr PREF_ED2K_SERVER_STATE;
-// value: hex-encoded ED2K peer credit state
-extern PrefPtr PREF_ED2K_PEER_CREDIT_STATE;
-// value: hex-encoded ED2K client hash
-extern PrefPtr PREF_ED2K_CLIENT_HASH;
-// value: hex-encoded ED2K Kad routing state
-extern PrefPtr PREF_ED2K_KAD_ROUTING_STATE;
+// value: path to persistent ED2K runtime state
+extern PrefPtr PREF_ED2K_STATE_FILE;
 // value: string
 extern PrefPtr PREF_GID;
 // values: 1*digit

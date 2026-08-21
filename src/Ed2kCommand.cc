@@ -29,12 +29,11 @@
 #include "Ed2kPeerTransfer.h"
 #include "Ed2kShareIndex.h"
 #include "Ed2kSharedResponder.h"
+#include "Ed2kSession.h"
 #include "Ed2kUploadQueue.h"
 #include "FileEntry.h"
 #include "Log.h"
-#include "MessageDigest.h"
 #include "message.h"
-#include "message_digest_helper.h"
 #include "Option.h"
 #include "PeerStat.h"
 #include "Piece.h"
@@ -48,6 +47,7 @@
 #include "ed2k_aich.h"
 #include "ed2k_compression.h"
 #include "ed2k_constants.h"
+#include "ed2k_crypto.h"
 #include "ed2k_hash.h"
 #include "ed2k_peer.h"
 #include "ed2k_policy.h"
@@ -200,24 +200,6 @@ void storeAichRecoverySet(Ed2kAttribute* attrs,
   }
 }
 
-std::string ed2kObfuscationKey(const std::string& userHash,
-                               uint8_t magicValue,
-                               uint32_t randomKeyPart)
-{
-  std::string keyData = userHash;
-  keyData.push_back(static_cast<char>(magicValue));
-  keyData.push_back(static_cast<char>(randomKeyPart >> 24));
-  keyData.push_back(static_cast<char>(randomKeyPart >> 16));
-  keyData.push_back(static_cast<char>(randomKeyPart >> 8));
-  keyData.push_back(static_cast<char>(randomKeyPart));
-  std::array<unsigned char, 16> digest;
-  auto md5 = MessageDigest::create("md5");
-  message_digest::digest(digest.data(), digest.size(), md5.get(),
-                         keyData.data(), keyData.size());
-  return std::string(reinterpret_cast<const char*>(digest.data()),
-                     digest.size());
-}
-
 void discardArc4Prefix(ARC4Encryptor& rc4)
 {
   std::array<unsigned char, 1_k> garbage;
@@ -227,13 +209,14 @@ void discardArc4Prefix(ARC4Encryptor& rc4)
 bool isEd2kProtocolMarker(uint8_t value)
 {
   return value == ed2k::PROTO_EDONKEY || value == ed2k::PROTO_PACKED ||
-         value == ed2k::PROTO_EMULE;
+         value == ed2k::PROTO_EMULE || value == ed2k::KAD_PROTOCOL;
 }
 } // namespace
 
 Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
                          DownloadEngine* e, ed2k::Endpoint endpoint,
-                         bool serverMode, bool countAsDownloadCommand)
+                         bool serverMode, bool countAsDownloadCommand,
+                         bool firewallCheck)
     : AbstractCommand(cuid, makeEd2kRequest(endpoint, serverMode),
                       requestGroup->getDownloadContext()->getFirstFileEntry(),
                       requestGroup, e, nullptr, nullptr, true,
@@ -250,30 +233,43 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       peerAccepted_(false),
       sourceExchangeRequested_(false),
       aichFileHashRequested_(false),
-      incoming_(false),
-      serverRequestSent_(false),
-      closeAfterOutbox_(false),
-      tailReclaimTimer_(Timer::zero()),
       use64BitOffsets_(requestGroup->getDownloadContext()->getTotalLength() >
                        std::numeric_limits<uint32_t>::max()),
+      incoming_(false),
+      firewallCheck_(firewallCheck),
+      closeAfterOutbox_(false),
+      tailReclaimTimer_(Timer::zero()),
       localPeerInfo_(ed2k::createLocalEmulePeerInfo()),
       obfuscationWriteOffset_(0),
       obfuscationMagicRead_(0),
       obfuscationMethodRead_(0),
+      incomingObfuscationMethodRead_(0),
+      incomingObfuscationMarker_(0),
       obfuscationPaddingRead_(0),
-      obfuscationEnabled_(false)
+      obfuscationEnabled_(false),
+      serverObfuscation_(false)
 {
+  if (mode_ == Mode::SERVER) {
+    e->addEd2kServerConnection();
+    auto rgman = e->getRequestGroupMan().get();
+    if (rgman) {
+      rgman->getEd2kSession()->registerDownload(requestGroup);
+    }
+  }
   localPeerInfo_.udpPort = localEd2kUdpPort(e);
   localPeerInfo_.miscOptions.udpVersion = localPeerInfo_.udpPort == 0 ? 0 : 4;
-  setTimeout(std::chrono::seconds(getOption()->getAsInt(PREF_CONNECT_TIMEOUT)));
-  if (getSegmentMan()) {
-    auto peerStat = getRequest()->initPeerStat();
-    peerStat->downloadStart();
-    getSegmentMan()->registerPeerStat(peerStat);
+  const auto configuredTimeout = getOption()->getAsInt(PREF_CONNECT_TIMEOUT);
+  setTimeout(std::chrono::seconds(
+      mode_ == Mode::SERVER ? std::min<int64_t>(configuredTimeout, 25)
+                            : configuredTimeout));
+  if (!firewallCheck_ && getSegmentMan()) {
+    peerStat_ = getRequest()->initPeerStat();
+    peerStat_->downloadStart();
+    getSegmentMan()->registerPeerStat(peerStat_);
   }
   disableReadCheckSocket();
   disableWriteCheckSocket();
-  if (mode_ == Mode::PEER) {
+  if (mode_ == Mode::PEER && !firewallCheck_) {
     markEd2kPeerConnecting(getEd2kAttrs(getDownloadContext()), endpoint_);
   }
 }
@@ -286,7 +282,7 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
                       requestGroup, e, socket, nullptr, true, true),
       mode_(Mode::PEER),
       endpoint_(std::move(endpoint)),
-      state_(State::READ_HEADER),
+      state_(State::INCOMING_READ_MARKER),
       connectedPort_(endpoint_.port),
       headerRead_(0),
       bodyRead_(0),
@@ -296,52 +292,125 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       peerAccepted_(false),
       sourceExchangeRequested_(false),
       aichFileHashRequested_(false),
-      serverRequestSent_(false),
-      closeAfterOutbox_(false),
-      tailReclaimTimer_(Timer::zero()),
       use64BitOffsets_(requestGroup->getDownloadContext()->getTotalLength() >
                        std::numeric_limits<uint32_t>::max()),
       incoming_(true),
+      firewallCheck_(false),
+      closeAfterOutbox_(false),
+      tailReclaimTimer_(Timer::zero()),
       localPeerInfo_(ed2k::createLocalEmulePeerInfo()),
       obfuscationWriteOffset_(0),
       obfuscationMagicRead_(0),
       obfuscationMethodRead_(0),
+      incomingObfuscationMethodRead_(0),
+      incomingObfuscationMarker_(0),
       obfuscationPaddingRead_(0),
-      obfuscationEnabled_(false)
+      obfuscationEnabled_(false),
+      serverObfuscation_(false)
 {
   localPeerInfo_.udpPort = localEd2kUdpPort(e);
   localPeerInfo_.miscOptions.udpVersion = localPeerInfo_.udpPort == 0 ? 0 : 4;
   setTimeout(std::chrono::seconds(getOption()->getAsInt(PREF_CONNECT_TIMEOUT)));
   if (getSegmentMan()) {
-    auto peerStat = getRequest()->initPeerStat();
-    peerStat->downloadStart();
-    getSegmentMan()->registerPeerStat(peerStat);
+    peerStat_ = getRequest()->initPeerStat();
+    peerStat_->downloadStart();
+    getSegmentMan()->registerPeerStat(peerStat_);
   }
   markEd2kPeerConnecting(getEd2kAttrs(getDownloadContext()), endpoint_);
 }
 
 Ed2kCommand::~Ed2kCommand()
 {
+  if (mode_ == Mode::SERVER && getDownloadEngine()) {
+    getDownloadEngine()->removeEd2kServerConnection();
+    auto rgman = getDownloadEngine()->getRequestGroupMan().get();
+    if (rgman) {
+      auto session = rgman->getEd2kSession();
+      for (auto group : session->downloads()) {
+        auto state =
+            getEd2kServerState(getEd2kAttrs(group->getDownloadContext()),
+                               endpoint_);
+        if (state) {
+          state->connected = false;
+          state->connecting = false;
+          state->handshakeCompleted = false;
+        }
+      }
+    }
+  }
   resetCompressedPartInflaters();
-  if (mode_ == Mode::PEER && getDownloadContext()) {
+  if (mode_ == Mode::PEER && !firewallCheck_ && getDownloadContext()) {
     markEd2kPeerDisconnected(getEd2kAttrs(getDownloadContext()), endpoint_);
   }
-  if (mode_ == Mode::PEER && getDownloadEngine() &&
+  if (mode_ == Mode::PEER && !firewallCheck_ && getDownloadEngine() &&
       getDownloadEngine()->getRequestGroupMan() &&
       getDownloadEngine()->getRequestGroupMan()->getEd2kUploadQueue()) {
-    getDownloadEngine()->getRequestGroupMan()->getEd2kUploadQueue()->remove(
+    getDownloadEngine()->getRequestGroupMan()->getEd2kUploadQueue()->disconnect(
         endpoint_);
   }
 }
 
-bool Ed2kCommand::isExpectedServerEof() const
+bool Ed2kCommand::queueDueServerRequest()
 {
-  if (mode_ != Mode::SERVER || !serverRequestSent_) {
+  if (mode_ != Mode::SERVER || state_ != State::READ_HEADER ||
+      !outbox_.empty()) {
     return false;
   }
-  auto state = getEd2kServerState(getEd2kAttrs(getDownloadContext()),
-                                  endpoint_);
-  return state && state->handshakeCompleted;
+  auto attrs = getEd2kAttrs(getDownloadContext());
+  auto state = getEd2kServerState(attrs, endpoint_);
+  if (!state || !state->connected || attrs->searchActive ||
+      !ed2k::serverTcpSourceRequestDue(*state, attrs->link.size,
+                                       nowSeconds())) {
+    return false;
+  }
+  if (!queueAllServerSourceRequests()) {
+    markEd2kServerTcpSourceRequestSent(attrs, endpoint_, nowSeconds());
+    return false;
+  }
+  state_ = State::WRITE;
+  return true;
+}
+
+bool Ed2kCommand::protocolDeadlineActive() const
+{
+  if (getTimeout().count() <= 0) {
+    return false;
+  }
+  if (mode_ == Mode::SERVER) {
+    const auto state = getEd2kServerState(
+        getEd2kAttrs(getDownloadContext()), endpoint_);
+    return !state || !state->handshakeCompleted;
+  }
+  return !peerAccepted_;
+}
+
+void Ed2kCommand::noteProtocolActivity()
+{
+  protocolActivity_ = global::wallclock();
+}
+
+bool Ed2kCommand::downloadRateLimited() const
+{
+  if (mode_ != Mode::PEER || state_ != State::READ_BODY ||
+      (currentHeader_.opcode != ed2k::OP_SENDINGPART &&
+       currentHeader_.opcode != ed2k::OP_SENDINGPART_I64 &&
+       currentHeader_.opcode != ed2k::OP_COMPRESSEDPART &&
+       currentHeader_.opcode != ed2k::OP_COMPRESSEDPART_I64)) {
+    return false;
+  }
+  const auto rgman = getDownloadEngine()->getRequestGroupMan().get();
+  return (rgman && rgman->doesOverallDownloadSpeedExceed()) ||
+         getRequestGroup()->doesDownloadSpeedExceed();
+}
+
+bool Ed2kCommand::uploadRateLimited() const
+{
+  if (outboxTransferData_.empty() || !outboxTransferData_.front()) {
+    return false;
+  }
+  const auto rgman = getDownloadEngine()->getRequestGroupMan().get();
+  return (rgman && rgman->doesOverallUploadSpeedExceed()) ||
+         getRequestGroup()->doesUploadSpeedExceed();
 }
 
 bool Ed2kCommand::shouldObfuscatePeerConnection() const
@@ -351,7 +420,8 @@ bool Ed2kCommand::shouldObfuscatePeerConnection() const
     return false;
   }
   const bool peerSupports =
-      (endpoint_.cryptOptions & ed2k::SOURCE_CRYPT_SUPPORT) != 0;
+      (endpoint_.cryptOptions &
+       (ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_REQUIRE)) != 0;
   const bool peerWants =
       (endpoint_.cryptOptions &
        (ed2k::SOURCE_CRYPT_REQUEST | ed2k::SOURCE_CRYPT_REQUIRE)) != 0;
@@ -364,12 +434,10 @@ void Ed2kCommand::initPeerObfuscation()
   util::generateRandomData(reinterpret_cast<unsigned char*>(&randomKeyPart),
                            sizeof(randomKeyPart));
 
-  auto sendKey = ed2kObfuscationKey(endpoint_.userHash,
-                                    ED2K_OBFUSCATION_MAGIC_REQUESTER,
-                                    randomKeyPart);
-  auto receiveKey = ed2kObfuscationKey(endpoint_.userHash,
-                                       ED2K_OBFUSCATION_MAGIC_SERVER,
-                                       randomKeyPart);
+  auto sendKey = ed2k::createTcpObfuscationKey(
+      endpoint_.userHash, ED2K_OBFUSCATION_MAGIC_REQUESTER, randomKeyPart);
+  auto receiveKey = ed2k::createTcpObfuscationKey(
+      endpoint_.userHash, ED2K_OBFUSCATION_MAGIC_SERVER, randomKeyPart);
 
   obfuscationEncryptor_ = make_unique<ARC4Encryptor>();
   obfuscationEncryptor_->init(
@@ -519,6 +587,406 @@ bool Ed2kCommand::readObfuscationPadding()
   return true;
 }
 
+bool Ed2kCommand::readIncomingObfuscationMarker()
+{
+  size_t len = 1;
+  getSocket()->readData(&incomingObfuscationMarker_, len);
+  if (len == 0) {
+    if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+      throw DL_RETRY_EX("ED2K incoming handshake closed.");
+    }
+    setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+    setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+    addCommandSelf();
+    return false;
+  }
+  if (isEd2kProtocolMarker(
+          static_cast<uint8_t>(incomingObfuscationMarker_))) {
+    headerBuf_[0] = incomingObfuscationMarker_;
+    headerRead_ = 1;
+    state_ = State::READ_HEADER;
+    return true;
+  }
+  obfuscationMagicRead_ = 0;
+  state_ = State::INCOMING_READ_RANDOM;
+  return true;
+}
+
+bool Ed2kCommand::readIncomingObfuscationRandom()
+{
+  while (obfuscationMagicRead_ < obfuscationMagicBuf_.size()) {
+    size_t len = obfuscationMagicBuf_.size() - obfuscationMagicRead_;
+    getSocket()->readData(obfuscationMagicBuf_.data() + obfuscationMagicRead_,
+                          len);
+    if (len == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K incoming obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    obfuscationMagicRead_ += len;
+  }
+
+  const auto randomKeyPart = ed2k::readUInt32(obfuscationMagicBuf_.data());
+  const auto userHash = getEd2kAttrs(getDownloadContext())->clientHash;
+  auto receiveKey = ed2k::createTcpObfuscationKey(
+      userHash, ED2K_OBFUSCATION_MAGIC_REQUESTER, randomKeyPart);
+  auto sendKey = ed2k::createTcpObfuscationKey(
+      userHash, ED2K_OBFUSCATION_MAGIC_SERVER, randomKeyPart);
+  obfuscationDecryptor_ = make_unique<ARC4Encryptor>();
+  obfuscationDecryptor_->init(
+      reinterpret_cast<const unsigned char*>(receiveKey.data()),
+      receiveKey.size());
+  discardArc4Prefix(*obfuscationDecryptor_);
+  obfuscationEncryptor_ = make_unique<ARC4Encryptor>();
+  obfuscationEncryptor_->init(
+      reinterpret_cast<const unsigned char*>(sendKey.data()), sendKey.size());
+  discardArc4Prefix(*obfuscationEncryptor_);
+
+  obfuscationMagicRead_ = 0;
+  state_ = State::INCOMING_READ_MAGIC;
+  return true;
+}
+
+bool Ed2kCommand::readIncomingObfuscationMagic()
+{
+  while (obfuscationMagicRead_ < obfuscationMagicBuf_.size()) {
+    size_t len = obfuscationMagicBuf_.size() - obfuscationMagicRead_;
+    getSocket()->readData(obfuscationMagicBuf_.data() + obfuscationMagicRead_,
+                          len);
+    if (len == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K incoming obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(obfuscationMagicBuf_.data() + obfuscationMagicRead_, len);
+    obfuscationMagicRead_ += len;
+  }
+  if (ed2k::readUInt32(obfuscationMagicBuf_.data()) !=
+      ED2K_OBFUSCATION_SYNC) {
+    throw DL_RETRY_EX("Bad incoming ED2K obfuscation magic.");
+  }
+  incomingObfuscationMethodRead_ = 0;
+  state_ = State::INCOMING_READ_METHOD;
+  return true;
+}
+
+bool Ed2kCommand::readIncomingObfuscationMethod()
+{
+  while (incomingObfuscationMethodRead_ <
+         incomingObfuscationMethodBuf_.size()) {
+    size_t len = incomingObfuscationMethodBuf_.size() -
+                 incomingObfuscationMethodRead_;
+    getSocket()->readData(
+        incomingObfuscationMethodBuf_.data() + incomingObfuscationMethodRead_,
+        len);
+    if (len == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K incoming obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(incomingObfuscationMethodBuf_.data() +
+                    incomingObfuscationMethodRead_,
+                len);
+    incomingObfuscationMethodRead_ += len;
+  }
+  obfuscationPaddingBuf_.assign(
+      static_cast<uint8_t>(incomingObfuscationMethodBuf_[2]), '\0');
+  obfuscationPaddingRead_ = 0;
+  state_ = State::INCOMING_READ_PADDING;
+  return true;
+}
+
+bool Ed2kCommand::readIncomingObfuscationPadding()
+{
+  while (obfuscationPaddingRead_ < obfuscationPaddingBuf_.size()) {
+    size_t len = obfuscationPaddingBuf_.size() - obfuscationPaddingRead_;
+    getSocket()->readData(&obfuscationPaddingBuf_[obfuscationPaddingRead_],
+                          len);
+    if (len == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K incoming obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(&obfuscationPaddingBuf_[obfuscationPaddingRead_], len);
+    obfuscationPaddingRead_ += len;
+  }
+
+  obfuscationWriteBuf_ = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
+  obfuscationWriteBuf_.push_back(
+      static_cast<char>(ED2K_OBFUSCATION_METHOD));
+  obfuscationWriteBuf_.push_back('\0');
+  obfuscationEncryptor_->encrypt(
+      obfuscationWriteBuf_.size(),
+      reinterpret_cast<unsigned char*>(&obfuscationWriteBuf_[0]),
+      reinterpret_cast<const unsigned char*>(obfuscationWriteBuf_.data()));
+  obfuscationWriteOffset_ = 0;
+  state_ = State::INCOMING_WRITE_RESPONSE;
+  return true;
+}
+
+bool Ed2kCommand::flushIncomingObfuscationResponse()
+{
+  while (obfuscationWriteOffset_ < obfuscationWriteBuf_.size()) {
+    auto written = getSocket()->writeData(
+        obfuscationWriteBuf_.data() + obfuscationWriteOffset_,
+        obfuscationWriteBuf_.size() - obfuscationWriteOffset_);
+    if (written == 0) {
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      addCommandSelf();
+      return false;
+    }
+    obfuscationWriteOffset_ += static_cast<size_t>(written);
+  }
+  disableWriteCheckSocket();
+  setReadCheckSocket(getSocket());
+  obfuscationEnabled_ = true;
+  A2_LOG_TRACE(fmt("CUID#%" PRId64
+                   " - Incoming ED2K peer obfuscation completed with %s:%u.",
+                   getCuid(), endpoint_.host.c_str(), endpoint_.port));
+  state_ = State::READ_HEADER;
+  return true;
+}
+
+bool Ed2kCommand::shouldObfuscateServerConnection() const
+{
+  if (mode_ != Mode::SERVER || incoming_) {
+    return false;
+  }
+  const auto state = getEd2kServerState(
+      getEd2kAttrs(getDownloadContext()), endpoint_);
+  return state && state->tcpObfuscationPort != 0 &&
+         !state->tcpObfuscationFailed;
+}
+
+void Ed2kCommand::initServerObfuscation()
+{
+  MSEDHPrivateKey privateKey{};
+  util::generateRandomData(privateKey.data() + 4, privateKey.size() - 4);
+  if (std::all_of(privateKey.begin(), privateKey.end(),
+                  [](unsigned char value) { return value == 0; })) {
+    privateKey.back() = 1;
+  }
+  serverDh_ =
+      make_unique<DHKeyExchange>(privateKey, ed2k::SERVER_DH_PRIME_HEX);
+
+  std::array<unsigned char, 17> randomBytes;
+  util::generateRandomData(randomBytes.data(), randomBytes.size());
+  uint8_t marker = 1;
+  for (auto value : randomBytes) {
+    if (!isEd2kProtocolMarker(value)) {
+      marker = value;
+      break;
+    }
+  }
+  const auto paddingLength = static_cast<uint8_t>(randomBytes[0] % 16);
+  obfuscationWriteBuf_.assign(1, static_cast<char>(marker));
+  const auto& publicKey = serverDh_->getPublicKey();
+  obfuscationWriteBuf_.append(
+      reinterpret_cast<const char*>(publicKey.data()), publicKey.size());
+  obfuscationWriteBuf_.push_back(static_cast<char>(paddingLength));
+  obfuscationWriteBuf_.append(
+      reinterpret_cast<const char*>(randomBytes.data() + 1), paddingLength);
+  obfuscationWriteOffset_ = 0;
+  serverDhPeerKeyRead_ = 0;
+  A2_LOG_TRACE(fmt("CUID#%" PRId64
+                   " - Starting obfuscated ED2K server handshake with %s:%u.",
+                   getCuid(), endpoint_.host.c_str(), connectedPort_));
+}
+
+bool Ed2kCommand::flushServerObfuscationRequest()
+{
+  while (obfuscationWriteOffset_ < obfuscationWriteBuf_.size()) {
+    const auto written = getSocket()->writeData(
+        obfuscationWriteBuf_.data() + obfuscationWriteOffset_,
+        obfuscationWriteBuf_.size() - obfuscationWriteOffset_);
+    if (written == 0) {
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      addCommandSelf();
+      return false;
+    }
+    obfuscationWriteOffset_ += static_cast<size_t>(written);
+  }
+  disableWriteCheckSocket();
+  setReadCheckSocket(getSocket());
+  state_ = State::SERVER_OBFUSCATION_READ_KEY;
+  return true;
+}
+
+bool Ed2kCommand::readServerObfuscationKey()
+{
+  while (serverDhPeerKeyRead_ < serverDhPeerKey_.size()) {
+    size_t length = serverDhPeerKey_.size() - serverDhPeerKeyRead_;
+    getSocket()->readData(
+        reinterpret_cast<char*>(serverDhPeerKey_.data()) +
+            serverDhPeerKeyRead_,
+        length);
+    if (length == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K server obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    serverDhPeerKeyRead_ += length;
+  }
+
+  const auto secret = serverDh_->computeSecret(serverDhPeerKey_);
+  serverDh_.reset();
+  const std::string sharedSecret(
+      reinterpret_cast<const char*>(secret.data()), secret.size());
+  const auto sendKey = ed2k::createServerTcpObfuscationKey(
+      sharedSecret, ED2K_OBFUSCATION_MAGIC_REQUESTER);
+  const auto receiveKey = ed2k::createServerTcpObfuscationKey(
+      sharedSecret, ED2K_OBFUSCATION_MAGIC_SERVER);
+  obfuscationEncryptor_ = make_unique<ARC4Encryptor>();
+  obfuscationEncryptor_->init(
+      reinterpret_cast<const unsigned char*>(sendKey.data()), sendKey.size());
+  discardArc4Prefix(*obfuscationEncryptor_);
+  obfuscationDecryptor_ = make_unique<ARC4Encryptor>();
+  obfuscationDecryptor_->init(
+      reinterpret_cast<const unsigned char*>(receiveKey.data()),
+      receiveKey.size());
+  discardArc4Prefix(*obfuscationDecryptor_);
+  obfuscationMagicRead_ = 0;
+  state_ = State::SERVER_OBFUSCATION_READ_MAGIC;
+  return true;
+}
+
+bool Ed2kCommand::readServerObfuscationMagic()
+{
+  while (obfuscationMagicRead_ < obfuscationMagicBuf_.size()) {
+    size_t length = obfuscationMagicBuf_.size() - obfuscationMagicRead_;
+    getSocket()->readData(obfuscationMagicBuf_.data() + obfuscationMagicRead_,
+                          length);
+    if (length == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K server obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(obfuscationMagicBuf_.data() + obfuscationMagicRead_, length);
+    obfuscationMagicRead_ += length;
+  }
+  if (ed2k::readUInt32(obfuscationMagicBuf_.data()) !=
+      ED2K_OBFUSCATION_SYNC) {
+    throw DL_RETRY_EX("Bad ED2K server obfuscation magic.");
+  }
+  incomingObfuscationMethodRead_ = 0;
+  state_ = State::SERVER_OBFUSCATION_READ_METHOD;
+  return true;
+}
+
+bool Ed2kCommand::readServerObfuscationMethod()
+{
+  while (incomingObfuscationMethodRead_ <
+         incomingObfuscationMethodBuf_.size()) {
+    size_t length = incomingObfuscationMethodBuf_.size() -
+                    incomingObfuscationMethodRead_;
+    getSocket()->readData(
+        incomingObfuscationMethodBuf_.data() + incomingObfuscationMethodRead_,
+        length);
+    if (length == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K server obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(incomingObfuscationMethodBuf_.data() +
+                    incomingObfuscationMethodRead_,
+                length);
+    incomingObfuscationMethodRead_ += length;
+  }
+  if (static_cast<uint8_t>(incomingObfuscationMethodBuf_[1]) !=
+      ED2K_OBFUSCATION_METHOD) {
+    throw DL_RETRY_EX("Unsupported ED2K server obfuscation method.");
+  }
+  obfuscationPaddingBuf_.assign(
+      static_cast<uint8_t>(incomingObfuscationMethodBuf_[2]), '\0');
+  obfuscationPaddingRead_ = 0;
+  state_ = State::SERVER_OBFUSCATION_READ_PADDING;
+  return true;
+}
+
+bool Ed2kCommand::readServerObfuscationPadding()
+{
+  while (obfuscationPaddingRead_ < obfuscationPaddingBuf_.size()) {
+    size_t length = obfuscationPaddingBuf_.size() - obfuscationPaddingRead_;
+    getSocket()->readData(&obfuscationPaddingBuf_[obfuscationPaddingRead_],
+                          length);
+    if (length == 0) {
+      if (!getSocket()->wantRead() && !getSocket()->wantWrite()) {
+        throw DL_RETRY_EX("ED2K server obfuscation handshake closed.");
+      }
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      addCommandSelf();
+      return false;
+    }
+    decryptData(&obfuscationPaddingBuf_[obfuscationPaddingRead_], length);
+    obfuscationPaddingRead_ += length;
+  }
+
+  obfuscationWriteBuf_ = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
+  obfuscationWriteBuf_.push_back(
+      static_cast<char>(ED2K_OBFUSCATION_METHOD));
+  obfuscationWriteBuf_.push_back('\0');
+  obfuscationEncryptor_->encrypt(
+      obfuscationWriteBuf_.size(),
+      reinterpret_cast<unsigned char*>(&obfuscationWriteBuf_[0]),
+      reinterpret_cast<const unsigned char*>(obfuscationWriteBuf_.data()));
+  obfuscationWriteOffset_ = 0;
+  state_ = State::SERVER_OBFUSCATION_WRITE_RESPONSE;
+  return true;
+}
+
+bool Ed2kCommand::flushServerObfuscationResponse()
+{
+  while (obfuscationWriteOffset_ < obfuscationWriteBuf_.size()) {
+    const auto written = getSocket()->writeData(
+        obfuscationWriteBuf_.data() + obfuscationWriteOffset_,
+        obfuscationWriteBuf_.size() - obfuscationWriteOffset_);
+    if (written == 0) {
+      setWriteCheckSocketIf(getSocket(), getSocket()->wantWrite());
+      setReadCheckSocketIf(getSocket(), getSocket()->wantRead());
+      addCommandSelf();
+      return false;
+    }
+    obfuscationWriteOffset_ += static_cast<size_t>(written);
+  }
+  obfuscationEnabled_ = true;
+  A2_LOG_TRACE(fmt("CUID#%" PRId64
+                   " - ED2K server obfuscation completed with %s:%u.",
+                   getCuid(), endpoint_.host.c_str(), connectedPort_));
+  state_ = State::WRITE;
+  return true;
+}
+
 void Ed2kCommand::encryptPacket(std::string& data)
 {
   if (!obfuscationEnabled_ || !obfuscationEncryptor_ || data.empty()) {
@@ -590,6 +1058,35 @@ bool Ed2kCommand::execute()
          !incoming_ && outbox_.empty())) {
       return true;
     }
+    if (mode_ == Mode::SERVER) {
+      const auto attrs = getEd2kAttrs(getDownloadContext());
+      const auto otherConnected = std::find_if(
+          attrs->serverStates.begin(), attrs->serverStates.end(),
+          [&](const ed2k::ServerState& server) {
+            return server.handshakeCompleted &&
+                   (server.endpoint.host != endpoint_.host ||
+                    server.endpoint.port != endpoint_.port);
+          });
+      if (otherConnected != attrs->serverStates.end()) {
+        return true;
+      }
+    }
+    const auto bufferedInput =
+        getSocket() && getSocket()->getRecvBufferedLength() != 0;
+    const auto socketReadable = getSocket() && getSocket()->isReadable(0);
+    if (protocolDeadlineActive() &&
+        protocolActivity_.difference(global::wallclock()) >= getTimeout() &&
+        !readEventEnabled() && !writeEventEnabled() && !errorEventEnabled() &&
+        !hupEventEnabled() && !bufferedInput && !socketReadable) {
+      throw DL_RETRY_EX("ED2K protocol handshake timed out.");
+    }
+    if (downloadRateLimited()) {
+      addCommandSelf();
+      disableReadCheckSocket();
+      disableWriteCheckSocket();
+      return false;
+    }
+    queueDueServerRequest();
     return executeInternal();
   }
   catch (DlAbortEx& err) {
@@ -604,15 +1101,18 @@ bool Ed2kCommand::execute()
     const auto retryWait =
         std::max<int64_t>(1, getOption()->getAsInt(PREF_RETRY_WAIT));
     if (mode_ == Mode::SERVER) {
-      if (isExpectedServerEof()) {
-        disableReadCheckSocket();
-        disableWriteCheckSocket();
-        return true;
+      auto session =
+          getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+      for (auto group : session->downloads()) {
+        auto attrs = getEd2kAttrs(group->getDownloadContext());
+        auto state = getEd2kServerState(attrs, endpoint_);
+        if (serverObfuscation_ && state) {
+          state->tcpObfuscationFailed = true;
+        }
+        updateEd2kServerFailure(attrs, endpoint_, now, retryWait);
       }
-      updateEd2kServerFailure(getEd2kAttrs(getDownloadContext()), endpoint_,
-                              now, retryWait);
     }
-    else {
+    else if (!firewallCheck_) {
       markEd2kPeerFailure(getEd2kAttrs(getDownloadContext()), endpoint_, now,
                           retryWait);
       scheduleEd2kPeerCheck(getRequestGroup(), getDownloadEngine());
@@ -639,6 +1139,10 @@ void Ed2kCommand::queuePacket(uint8_t protocol, uint8_t opcode,
                    static_cast<unsigned long>(payload.size())));
   outbox_.push_back(ed2k::createPacket(protocol, opcode, payload));
   outboxEncrypted_.push_back(false);
+  outboxTransferData_.push_back(
+      opcode == ed2k::OP_SENDINGPART || opcode == ed2k::OP_SENDINGPART_I64 ||
+      opcode == ed2k::OP_COMPRESSEDPART ||
+      opcode == ed2k::OP_COMPRESSEDPART_I64);
 }
 
 void Ed2kCommand::queueServerLogin()
@@ -675,9 +1179,10 @@ void Ed2kCommand::queueServerOfferFiles()
   queuePacket(ed2k::PROTO_EDONKEY, ed2k::OP_OFFERFILES, payload);
 }
 
-bool Ed2kCommand::queueGetSources()
+bool Ed2kCommand::queueGetSources(RequestGroup* group)
 {
-  const auto attrs = getEd2kAttrs(getDownloadContext());
+  group = group ? group : getRequestGroup();
+  const auto attrs = getEd2kAttrs(group->getDownloadContext());
   const auto state = getEd2kServerState(attrs, endpoint_);
   if (attrs->link.size > std::numeric_limits<uint32_t>::max() &&
       state && (state->tcpFlags & ed2k::SRV_TCPFLG_LARGEFILES) == 0) {
@@ -695,8 +1200,41 @@ bool Ed2kCommand::queueGetSources()
                                  : ed2k::OP_GETSOURCES,
               ed2k::createGetSourcesPayload(attrs->link.hash,
                                             attrs->link.size));
-  serverRequestSent_ = true;
   return true;
+}
+
+bool Ed2kCommand::queueAllServerSourceRequests()
+{
+  bool queued = false;
+  auto rgman = getDownloadEngine()->getRequestGroupMan().get();
+  if (!rgman) {
+    return queueGetSources();
+  }
+  auto session = rgman->getEd2kSession();
+  auto primaryState =
+      getEd2kServerState(getEd2kAttrs(getDownloadContext()), endpoint_);
+  for (auto group : session->downloads()) {
+    auto attrs = getEd2kAttrs(group->getDownloadContext());
+    if (!attrs || attrs->searchActive || group->downloadFinished()) {
+      continue;
+    }
+    auto state = getEd2kServerState(attrs, endpoint_);
+    if (primaryState && state != primaryState) {
+      state->connected = primaryState->connected;
+      state->connecting = primaryState->connecting;
+      state->handshakeCompleted = primaryState->handshakeCompleted;
+      state->clientId = primaryState->clientId;
+      state->highId = primaryState->highId;
+      state->ipAddress = primaryState->ipAddress;
+      state->tcpFlags = primaryState->tcpFlags;
+      state->tcpObfuscationPort = primaryState->tcpObfuscationPort;
+    }
+    if (queueGetSources(group)) {
+      queued = true;
+    }
+    markEd2kServerTcpSourceRequestSent(attrs, endpoint_, nowSeconds());
+  }
+  return queued;
 }
 
 void Ed2kCommand::queueSearchRequest()
@@ -710,14 +1248,13 @@ void Ed2kCommand::queueSearchRequest()
                   attrs->searchQuery,
                   attrs->link.size >
                       static_cast<int64_t>(std::numeric_limits<uint32_t>::max())));
-  serverRequestSent_ = true;
 }
 
-void Ed2kCommand::queueCallbackRequest(uint32_t clientId)
+void Ed2kCommand::queueCallbackRequest(RequestGroup* group, uint32_t clientId)
 {
-  pendingCallbackClientIds_.push_back(clientId);
+  pendingCallbacks_.push_back({group, clientId});
   constexpr int64_t CALLBACK_TIMEOUT = 45;
-  markEd2kCallbackRequestSent(getEd2kAttrs(getDownloadContext()), clientId,
+  markEd2kCallbackRequestSent(getEd2kAttrs(group->getDownloadContext()), clientId,
                               nowSeconds(), CALLBACK_TIMEOUT);
   queuePacket(ed2k::PROTO_EDONKEY, ed2k::OP_CALLBACKREQUEST,
               ed2k::createCallbackRequestPayload(clientId));
@@ -870,7 +1407,7 @@ void Ed2kCommand::queueAichRecoveryRequest(size_t pieceIndex)
 {
   auto attrs = getEd2kAttrs(getDownloadContext());
   if (remotePeerInfo_.miscOptions.aichVersion == 0 ||
-      attrs->aichRootHash.empty() ||
+      attrs->aichRootHash.empty() || !attrs->aichRootTrusted ||
       pieceIndex > std::numeric_limits<uint16_t>::max()) {
     return;
   }
@@ -956,10 +1493,13 @@ void Ed2kCommand::queuePeerPartRequest()
   }
   const auto maxNewRanges = 3 - outstanding.size();
 
-  for (size_t index = 0;
-       ranges.size() < maxNewRanges &&
-       index < getDownloadContext()->getNumPieces();
-       ++index) {
+  struct PieceCandidate {
+    size_t index;
+    size_t frequency;
+    size_t completedBlocks;
+  };
+  std::vector<PieceCandidate> candidates;
+  for (size_t index = 0; index < getDownloadContext()->getNumPieces(); ++index) {
     if (getPieceStorage()->hasPiece(index)) {
       continue;
     }
@@ -967,6 +1507,38 @@ void Ed2kCommand::queuePeerPartRequest()
         (index >= state->partStatus.size() || !state->partStatus[index])) {
       continue;
     }
+
+    size_t frequency = 0;
+    for (const auto& peer : attrs->peerStates) {
+      if (index < peer.partStatus.size() && peer.partStatus[index]) {
+        ++frequency;
+      }
+    }
+    auto localPiece = getPieceStorage()->getPiece(index);
+    size_t completedBlocks = 0;
+    if (localPiece) {
+      for (size_t block = 0; block < localPiece->countBlock(); ++block) {
+        completedBlocks += localPiece->hasBlock(block) ? 1 : 0;
+      }
+    }
+    candidates.push_back({index, frequency, completedBlocks});
+  }
+  std::sort(candidates.begin(), candidates.end(),
+            [](const PieceCandidate& lhs, const PieceCandidate& rhs) {
+              if (lhs.frequency != rhs.frequency) {
+                return lhs.frequency < rhs.frequency;
+              }
+              if (lhs.completedBlocks != rhs.completedBlocks) {
+                return lhs.completedBlocks > rhs.completedBlocks;
+              }
+              return lhs.index < rhs.index;
+            });
+
+  for (const auto& candidate : candidates) {
+    if (ranges.size() >= maxNewRanges) {
+      break;
+    }
+    const auto index = candidate.index;
 
     const int64_t pieceBegin =
         static_cast<int64_t>(index) * getDownloadContext()->getPieceLength();
@@ -1236,13 +1808,82 @@ void updatePeerUdpMetadata(Ed2kAttribute* attrs, const ed2k::Endpoint& endpoint,
   if (info.miscOptions.udpVersion != 0) {
     state->udpVersion = info.miscOptions.udpVersion;
   }
+  state->endpoint.cryptOptions = 0;
+  if (info.miscOptions2.supportsCryptLayer) {
+    state->endpoint.cryptOptions |= ed2k::SOURCE_CRYPT_SUPPORT;
+  }
+  if (info.miscOptions2.requestsCryptLayer) {
+    state->endpoint.cryptOptions |= ed2k::SOURCE_CRYPT_REQUEST;
+  }
+  if (info.miscOptions2.requiresCryptLayer) {
+    state->endpoint.cryptOptions |= ed2k::SOURCE_CRYPT_REQUIRE;
+  }
 }
 } // namespace
 
+void Ed2kCommand::routeIncomingFileRequest()
+{
+  if (!incoming_ || body_.size() < ed2k::HASH_LENGTH) {
+    return;
+  }
+  switch (currentHeader_.opcode) {
+  case ed2k::OP_REQUESTFILENAME:
+  case ed2k::OP_SETREQFILEID:
+  case ed2k::OP_HASHSETREQUEST:
+  case ed2k::OP_STARTUPLOADREQ:
+  case ed2k::OP_REQUESTPARTS:
+  case ed2k::OP_REQUESTPARTS_I64:
+  case ed2k::OP_AICHFILEHASHREQ:
+  case ed2k::OP_MULTIPACKET:
+  case ed2k::OP_MULTIPACKET_EXT:
+    break;
+  default:
+    return;
+  }
+
+  const auto fileHash = body_.substr(0, ed2k::HASH_LENGTH);
+  auto currentAttrs = getEd2kAttrs(getDownloadContext());
+  if (currentAttrs && currentAttrs->link.hash == fileHash) {
+    return;
+  }
+  auto session =
+      getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+  auto target = std::find_if(
+      session->downloads().begin(), session->downloads().end(),
+      [&](RequestGroup* group) {
+        auto attrs = getEd2kAttrs(group->getDownloadContext());
+        return attrs && !group->isHaltRequested() && attrs->link.hash == fileHash;
+      });
+  if (target == session->downloads().end()) {
+    return;
+  }
+
+  if (currentAttrs) {
+    markEd2kPeerDisconnected(currentAttrs, endpoint_);
+  }
+  changeRequestGroup(*target);
+  use64BitOffsets_ = getDownloadContext()->getTotalLength() >
+                     std::numeric_limits<uint32_t>::max();
+  auto attrs = getEd2kAttrs(getDownloadContext());
+  addEd2kPeer(attrs, endpoint_, ed2k::PEER_SOURCE_INCOMING);
+  markEd2kPeerConnecting(attrs, endpoint_);
+  A2_LOG_TRACE(fmt("CUID#%" PRId64
+                   " - Routed incoming ED2K peer %s:%u to file %s.",
+                   getCuid(), endpoint_.host.c_str(), endpoint_.port,
+                   util::toHex(fileHash).c_str()));
+}
+
 void Ed2kCommand::startResolve()
 {
+  uint16_t port = endpoint_.port;
+  if (shouldObfuscateServerConnection()) {
+    const auto state = getEd2kServerState(
+        getEd2kAttrs(getDownloadContext()), endpoint_);
+    port = state->tcpObfuscationPort;
+    serverObfuscation_ = true;
+  }
   auto ipaddr = resolveHostname(resolvedAddresses_, endpoint_.host,
-                                endpoint_.port);
+                                port);
   if (ipaddr.empty()) {
     state_ = State::RESOLVING;
     addCommandSelf();
@@ -1250,7 +1891,7 @@ void Ed2kCommand::startResolve()
   }
   connectedHostname_ = endpoint_.host;
   connectedAddr_ = ipaddr;
-  connectedPort_ = endpoint_.port;
+  connectedPort_ = port;
   startConnect();
 }
 
@@ -1269,6 +1910,12 @@ void Ed2kCommand::startConnect()
 bool Ed2kCommand::flushOutbox()
 {
   while (!outbox_.empty()) {
+    if (uploadRateLimited()) {
+      addCommandSelf();
+      disableReadCheckSocket();
+      disableWriteCheckSocket();
+      return false;
+    }
     auto& data = outbox_.front();
     auto& encrypted = outboxEncrypted_.front();
     if (!encrypted) {
@@ -1282,6 +1929,7 @@ bool Ed2kCommand::flushOutbox()
       addCommandSelf();
       return false;
     }
+    noteProtocolActivity();
     data.erase(0, static_cast<size_t>(written));
     if (!data.empty()) {
       setWriteCheckSocket(getSocket());
@@ -1290,6 +1938,7 @@ bool Ed2kCommand::flushOutbox()
     }
     outbox_.pop_front();
     outboxEncrypted_.pop_front();
+    outboxTransferData_.pop_front();
   }
   disableWriteCheckSocket();
   if (closeAfterOutbox_) {
@@ -1316,6 +1965,7 @@ bool Ed2kCommand::readHeader()
       return false;
     }
     decryptData(headerBuf_.data() + headerRead_, len);
+    noteProtocolActivity();
     headerRead_ += len;
   }
   if (!ed2k::readPacketHeader(currentHeader_, headerBuf_.data(),
@@ -1324,7 +1974,8 @@ bool Ed2kCommand::readHeader()
   }
   if (currentHeader_.protocol != ed2k::PROTO_EDONKEY &&
       currentHeader_.protocol != ed2k::PROTO_PACKED &&
-      currentHeader_.protocol != ed2k::PROTO_EMULE) {
+      currentHeader_.protocol != ed2k::PROTO_EMULE &&
+      currentHeader_.protocol != ed2k::KAD_PROTOCOL) {
     throw DL_RETRY_EX(
         fmt("Unsupported ED2K packet protocol 0x%02x.",
             currentHeader_.protocol));
@@ -1360,6 +2011,7 @@ bool Ed2kCommand::readBody()
       return false;
     }
     decryptData(&body_[bodyRead_], len);
+    noteProtocolActivity();
     bodyRead_ += len;
   }
   if (currentHeader_.protocol == ed2k::PROTO_PACKED) {
@@ -1406,19 +2058,41 @@ void Ed2kCommand::schedulePendingPeers()
 
 void Ed2kCommand::handlePartData(int64_t begin, const std::string& data)
 {
+  const auto end = begin + static_cast<int64_t>(data.size());
+  const auto attrs = getEd2kAttrs(getDownloadContext());
+  const auto peerState = getEd2kPeerState(attrs, endpoint_);
+  const auto requested = peerState && std::any_of(
+      peerState->requestedParts.begin(), peerState->requestedParts.end(),
+      [begin, end](const ed2k::PartRange& range) {
+        return range.begin <= begin && end <= range.end;
+      });
+  if (!requested) {
+    throw DL_RETRY_EX("Unrequested ED2K part data.");
+  }
   ed2k::PeerTransfer transfer(getDownloadContext().get(), getPieceStorage().get(),
                               getSegmentMan().get(), getCuid());
-  auto completedSegment = transfer.writePartData(begin, data);
-  removeEd2kPeerCompletedRequestedRange(getEd2kAttrs(getDownloadContext()),
-                                        endpoint_, begin,
-                                        begin + static_cast<int64_t>(data.size()),
+  if (peerStat_) {
+    peerStat_->updateDownload(data.size());
+  }
+  std::shared_ptr<Segment> completedSegment;
+  try {
+    completedSegment = transfer.writePartData(begin, data);
+  }
+  catch (DlRetryEx&) {
+    if (!transfer.hasCorruptPiece()) {
+      throw;
+    }
+    removeEd2kPeerCompletedRequestedRange(attrs, endpoint_, begin, end,
+                                          nowSeconds());
+    queueAichRecoveryRequest(transfer.corruptPieceIndex());
+    return;
+  }
+  removeEd2kPeerCompletedRequestedRange(attrs, endpoint_, begin, end,
                                         nowSeconds());
   if (!completedSegment) {
     return;
   }
-  if (transfer.completeVerifiedSegment(completedSegment)) {
-    clearEd2kPeerRequestedParts(getEd2kAttrs(getDownloadContext()), endpoint_);
-  }
+  transfer.completeVerifiedSegment(completedSegment);
   if (getRequestGroup()->downloadFinished()) {
     getRequestGroup()->enableSeedOnly();
   }
@@ -1432,7 +2106,12 @@ void Ed2kCommand::handleServerPacket()
     if (!ed2k::parseServerIdChangePayload(idChange, body_)) {
       throw DL_RETRY_EX("Bad ED2K server ID change.");
     }
-    updateEd2kServerIdChange(attrs, endpoint_, idChange);
+    auto session =
+        getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+    for (auto group : session->downloads()) {
+      updateEd2kServerIdChange(getEd2kAttrs(group->getDownloadContext()),
+                               endpoint_, idChange);
+    }
     A2_LOG_DEBUG(fmt("CUID#%" PRId64
                     " - ED2K server %s:%u assigned %s ID 0x%08x.",
                     getCuid(), endpoint_.host.c_str(), endpoint_.port,
@@ -1447,29 +2126,40 @@ void Ed2kCommand::handleServerPacket()
                       " - ED2K server %s:%u requesting sources for %s.",
                       getCuid(), endpoint_.host.c_str(), endpoint_.port,
                       util::toHex(attrs->link.hash).c_str()));
-      if (!queueGetSources()) {
-        markEd2kServerTcpSourceRequestSent(attrs, endpoint_, nowSeconds());
+      if (!queueAllServerSourceRequests()) {
         markEd2kServerSourceRequestFinished(attrs, endpoint_);
-        state_ = State::DONE;
+        state_ = State::READ_HEADER;
         return;
       }
-      markEd2kServerTcpSourceRequestSent(attrs, endpoint_, nowSeconds());
     }
     state_ = State::WRITE;
     return;
   }
   if (currentHeader_.opcode == ed2k::OP_FOUNDSOURCES ||
       currentHeader_.opcode == ed2k::OP_FOUNDSOURCES_OBFU) {
+    auto session =
+        getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+    RequestGroup* sourceGroup = nullptr;
     std::vector<ed2k::FoundSource> sources;
-    if (!ed2k::parseFoundSourcesPayload(
-            sources, body_, attrs->link.hash,
-            currentHeader_.opcode == ed2k::OP_FOUNDSOURCES_OBFU)) {
+    for (auto group : session->downloads()) {
+      auto candidateAttrs = getEd2kAttrs(group->getDownloadContext());
+      if (candidateAttrs && ed2k::parseFoundSourcesPayload(
+                                sources, body_, candidateAttrs->link.hash,
+                                currentHeader_.opcode ==
+                                    ed2k::OP_FOUNDSOURCES_OBFU)) {
+        sourceGroup = group;
+        attrs = candidateAttrs;
+        break;
+      }
+      sources.clear();
+    }
+    if (!sourceGroup) {
       A2_LOG_DEBUG(fmt("CUID#%" PRId64
                       " - ED2K server %s:%u returned unusable sources.",
                       getCuid(), endpoint_.host.c_str(), endpoint_.port));
       updateEd2kServerSourceResponse(attrs, endpoint_, 0, nowSeconds());
       markEd2kServerSourceRequestFinished(attrs, endpoint_);
-      state_ = State::DONE;
+      state_ = State::READ_HEADER;
       return;
     }
     auto serverState = getEd2kServerState(attrs, endpoint_);
@@ -1479,7 +2169,7 @@ void Ed2kCommand::handleServerPacket()
       if (source.lowId) {
         if (canRequestCallback) {
           addEd2kFoundSource(attrs, source, ed2k::PEER_SOURCE_SERVER, true);
-          queueCallbackRequest(source.clientId);
+          queueCallbackRequest(sourceGroup, source.clientId);
         }
         else {
           addEd2kFoundSource(attrs, source, ed2k::PEER_SOURCE_SERVER, false);
@@ -1493,9 +2183,9 @@ void Ed2kCommand::handleServerPacket()
                     static_cast<unsigned long>(sources.size())));
     updateEd2kServerSourceResponse(attrs, endpoint_, sources.size(),
                                    nowSeconds());
-    schedulePendingPeers();
+    schedulePendingEd2kPeers(sourceGroup, getDownloadEngine());
     markEd2kServerSourceRequestFinished(attrs, endpoint_);
-    state_ = outbox_.empty() ? State::DONE : State::WRITE;
+    state_ = outbox_.empty() ? State::READ_HEADER : State::WRITE;
     return;
   }
   if (currentHeader_.opcode == ed2k::OP_CALLBACKREQUESTED) {
@@ -1503,26 +2193,33 @@ void Ed2kCommand::handleServerPacket()
     if (!ed2k::parseCallbackRequestIncomingPayload(peer, body_)) {
       throw DL_RETRY_EX("Bad ED2K callback request.");
     }
-    if ((peer.cryptOptions & ed2k::SOURCE_CRYPT_REQUIRE) == 0) {
-      addEd2kPeer(attrs, peer, ed2k::PEER_SOURCE_SERVER);
-      if (!pendingCallbackClientIds_.empty()) {
-        markEd2kCallbackAccepted(attrs, pendingCallbackClientIds_.front(),
-                                 peer, nowSeconds());
-        pendingCallbackClientIds_.pop_front();
-      }
+    RequestGroup* callbackGroup = getRequestGroup();
+    if (!pendingCallbacks_.empty()) {
+      callbackGroup = pendingCallbacks_.front().group;
+      attrs = getEd2kAttrs(callbackGroup->getDownloadContext());
     }
-    schedulePendingPeers();
-    state_ = State::DONE;
+    addEd2kPeer(attrs, peer, ed2k::PEER_SOURCE_SERVER);
+    if (!pendingCallbacks_.empty()) {
+      markEd2kCallbackAccepted(attrs, pendingCallbacks_.front().clientId, peer,
+                               nowSeconds());
+      pendingCallbacks_.pop_front();
+    }
+    schedulePendingEd2kPeers(callbackGroup, getDownloadEngine());
+    state_ = State::READ_HEADER;
     return;
   }
   if (currentHeader_.opcode == ed2k::OP_CALLBACK_FAIL) {
     if (body_.size() >= 4) {
       const auto clientId = ed2k::readUInt32(body_.data());
-      markEd2kCallbackFailed(attrs, clientId);
-      auto i = std::find(pendingCallbackClientIds_.begin(),
-                         pendingCallbackClientIds_.end(), clientId);
-      if (i != pendingCallbackClientIds_.end()) {
-        pendingCallbackClientIds_.erase(i);
+      auto i = std::find_if(
+          pendingCallbacks_.begin(), pendingCallbacks_.end(),
+          [&](const PendingCallback& callback) {
+            return callback.clientId == clientId;
+          });
+      if (i != pendingCallbacks_.end()) {
+        markEd2kCallbackFailed(
+            getEd2kAttrs(i->group->getDownloadContext()), clientId);
+        pendingCallbacks_.erase(i);
       }
     }
     A2_LOG_DEBUG(fmt("CUID#%" PRId64
@@ -1544,12 +2241,12 @@ void Ed2kCommand::handleServerPacket()
       A2_LOG_DEBUG(fmt("CUID#%" PRId64
                       " - ED2K server %s:%u returned an unusable search result.",
                       getCuid(), endpoint_.host.c_str(), endpoint_.port));
-      state_ = State::DONE;
+      state_ = State::READ_HEADER;
       return;
     }
     addEd2kSearchResults(getEd2kAttrs(getDownloadContext()), result.entries,
                          result.moreResults);
-    state_ = State::DONE;
+    state_ = State::READ_HEADER;
   }
   if (currentHeader_.opcode == ed2k::OP_SERVERSTATUS) {
     ed2k::ServerStatus status;
@@ -1599,6 +2296,7 @@ void Ed2kCommand::handleServerPacket()
 
 void Ed2kCommand::handlePeerPacket()
 {
+  routeIncomingFileRequest();
   auto attrs = getEd2kAttrs(getDownloadContext());
   if (currentHeader_.protocol == ed2k::PROTO_EMULE &&
       currentHeader_.opcode != ed2k::OP_COMPRESSEDPART &&
@@ -1692,9 +2390,7 @@ void Ed2kCommand::handlePeerPacket()
                                                 attrs->link.hash)) {
         throw DL_RETRY_EX("Bad ED2K AICH file hash answer.");
       }
-      if (attrs->aichRootHash.empty()) {
-        attrs->aichRootHash = answer.rootHash;
-      }
+      recordEd2kAichHashVote(attrs, answer.rootHash, endpoint_.host);
       break;
     }
     case ed2k::OP_MULTIPACKETANSWER: {
@@ -1710,8 +2406,8 @@ void Ed2kCommand::handlePeerPacket()
         updateEd2kPeerPartStatus(attrs, endpoint_, answer.partStatus);
         peerFileStatusReceived_ = true;
       }
-      if (answer.hasAichRootHash && attrs->aichRootHash.empty()) {
-        attrs->aichRootHash = answer.aichRootHash;
+      if (answer.hasAichRootHash) {
+        recordEd2kAichHashVote(attrs, answer.aichRootHash, endpoint_.host);
       }
       if (answer.hasFileStatus) {
         queuePeerPostFileStatusRequests();
@@ -1739,6 +2435,9 @@ void Ed2kCommand::handlePeerPacket()
         throw DL_RETRY_EX("Bad ED2K AICH answer.");
       }
       if (!answer.failed) {
+        if (!attrs->aichRootTrusted) {
+          throw DL_RETRY_EX("Untrusted ED2K AICH recovery root.");
+        }
         if (answer.rootHash != attrs->aichRootHash) {
           throw DL_RETRY_EX("Bad ED2K AICH recovery root.");
         }
@@ -1794,23 +2493,64 @@ void Ed2kCommand::handlePeerPacket()
     return;
   }
   switch (currentHeader_.opcode) {
+  case ed2k::OP_KAD_FWTCPCHECK_ACK: {
+    auto session =
+        getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+    bool expected = false;
+    for (auto group : session->downloads()) {
+      auto groupAttrs = getEd2kAttrs(group->getDownloadContext());
+      if (groupAttrs && consumeEd2kKadFirewallCheckHost(groupAttrs,
+                                                        endpoint_.host)) {
+        expected = true;
+      }
+    }
+    if (!expected) {
+      throw DL_RETRY_EX("Unsolicited ED2K Kad firewall-check acknowledgement.");
+    }
+    for (auto group : session->downloads()) {
+      auto groupAttrs = getEd2kAttrs(group->getDownloadContext());
+      if (groupAttrs) {
+        groupAttrs->kadFirewalled = false;
+      }
+    }
+    state_ = State::DONE;
+    break;
+  }
   case ed2k::OP_HELLO:
     if (!updatePeerEndpointFromHello(true)) {
       break;
     }
-    ed2k::parsePeerHelloPayload(remotePeerInfo_, body_, true);
+    if (!ed2k::parsePeerHelloPayload(remotePeerInfo_, body_, true)) {
+      throw DL_RETRY_EX("Bad ED2K peer hello.");
+    }
     updatePeerUdpMetadata(attrs, endpoint_, remotePeerInfo_);
     queuePeerHelloAnswer();
-    queuePeerFileRequest();
+    if (firewallCheck_) {
+      queuePacket(ed2k::KAD_PROTOCOL, ed2k::OP_KAD_FWTCPCHECK_ACK,
+                  std::string());
+      closeAfterOutbox_ = true;
+    }
+    else {
+      queuePeerFileRequest();
+    }
     state_ = State::WRITE;
     break;
   case ed2k::OP_HELLOANSWER:
     if (!updatePeerEndpointFromHello(false)) {
       break;
     }
-    ed2k::parsePeerHelloPayload(remotePeerInfo_, body_, false);
+    if (!ed2k::parsePeerHelloPayload(remotePeerInfo_, body_, false)) {
+      throw DL_RETRY_EX("Bad ED2K peer hello answer.");
+    }
     updatePeerUdpMetadata(attrs, endpoint_, remotePeerInfo_);
-    queuePeerFileRequest();
+    if (firewallCheck_) {
+      queuePacket(ed2k::KAD_PROTOCOL, ed2k::OP_KAD_FWTCPCHECK_ACK,
+                  std::string());
+      closeAfterOutbox_ = true;
+    }
+    else {
+      queuePeerFileRequest();
+    }
     state_ = State::WRITE;
     break;
   case ed2k::OP_REQFILENAMEANSWER:
@@ -1901,7 +2641,7 @@ void Ed2kCommand::handlePeerPacket()
     state_ = State::WRITE;
     break;
   case ed2k::OP_OUTOFPARTREQS:
-    markEd2kPeerOutOfParts(attrs, endpoint_);
+    markEd2kPeerOutOfParts(attrs, endpoint_, nowSeconds());
     schedulePendingPeers();
     state_ = State::DONE;
     break;
@@ -2088,16 +2828,51 @@ bool Ed2kCommand::executeInternal()
                                          connectedAddr_, connectedPort_)) {
         return true;
       }
+      noteProtocolActivity();
       if (mode_ == Mode::SERVER) {
         updateEd2kServerConnected(getEd2kAttrs(getDownloadContext()),
                                   endpoint_);
       }
-      if (shouldObfuscatePeerConnection()) {
+      if (serverObfuscation_) {
+        initServerObfuscation();
+        state_ = State::SERVER_OBFUSCATION_WRITE;
+      }
+      else if (shouldObfuscatePeerConnection()) {
         initPeerObfuscation();
         state_ = State::OBFUSCATION_WRITE;
       }
       else {
         state_ = State::WRITE;
+      }
+      break;
+    case State::INCOMING_READ_MARKER:
+      if (!readIncomingObfuscationMarker()) {
+        return false;
+      }
+      break;
+    case State::INCOMING_READ_RANDOM:
+      if (!readIncomingObfuscationRandom()) {
+        return false;
+      }
+      break;
+    case State::INCOMING_READ_MAGIC:
+      if (!readIncomingObfuscationMagic()) {
+        return false;
+      }
+      break;
+    case State::INCOMING_READ_METHOD:
+      if (!readIncomingObfuscationMethod()) {
+        return false;
+      }
+      break;
+    case State::INCOMING_READ_PADDING:
+      if (!readIncomingObfuscationPadding()) {
+        return false;
+      }
+      break;
+    case State::INCOMING_WRITE_RESPONSE:
+      if (!flushIncomingObfuscationResponse()) {
+        return false;
       }
       break;
     case State::OBFUSCATION_WRITE:
@@ -2117,6 +2892,36 @@ bool Ed2kCommand::executeInternal()
       break;
     case State::OBFUSCATION_READ_PADDING:
       if (!readObfuscationPadding()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_WRITE:
+      if (!flushServerObfuscationRequest()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_READ_KEY:
+      if (!readServerObfuscationKey()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_READ_MAGIC:
+      if (!readServerObfuscationMagic()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_READ_METHOD:
+      if (!readServerObfuscationMethod()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_READ_PADDING:
+      if (!readServerObfuscationPadding()) {
+        return false;
+      }
+      break;
+    case State::SERVER_OBFUSCATION_WRITE_RESPONSE:
+      if (!flushServerObfuscationResponse()) {
         return false;
       }
       break;
@@ -2159,7 +2964,14 @@ bool Ed2kCommand::executeInternal()
     if (state_ != State::DONE && state_ != State::OBFUSCATION_WRITE &&
         state_ != State::OBFUSCATION_READ_MAGIC &&
         state_ != State::OBFUSCATION_READ_METHOD &&
-        state_ != State::OBFUSCATION_READ_PADDING && !outbox_.empty()) {
+        state_ != State::OBFUSCATION_READ_PADDING &&
+        state_ != State::SERVER_OBFUSCATION_WRITE &&
+        state_ != State::SERVER_OBFUSCATION_READ_KEY &&
+        state_ != State::SERVER_OBFUSCATION_READ_MAGIC &&
+        state_ != State::SERVER_OBFUSCATION_READ_METHOD &&
+        state_ != State::SERVER_OBFUSCATION_READ_PADDING &&
+        state_ != State::SERVER_OBFUSCATION_WRITE_RESPONSE &&
+        !outbox_.empty()) {
       state_ = State::WRITE;
     }
   }
@@ -2167,6 +2979,10 @@ bool Ed2kCommand::executeInternal()
 
 bool Ed2kCommand::noCheck() const
 {
+  if (protocolDeadlineActive() &&
+      protocolActivity_.difference(global::wallclock()) >= getTimeout()) {
+    return true;
+  }
   if (mode_ != Mode::PEER || incoming_ || !peerAccepted_ ||
       (state_ != State::READ_HEADER && state_ != State::READ_BODY)) {
     return false;

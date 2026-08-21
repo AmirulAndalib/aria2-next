@@ -28,12 +28,9 @@ downloaded from HTTP(S)/FTP/SFTP is uploaded to the BitTorrent
 swarm. Using Metalink's chunk checksums, aria2 automatically validates
 chunks of data while downloading a file like BitTorrent.
 
-Aria2 Next includes native ED2K/eMule support reimplemented inside aria2's
-existing engine architecture from authoritative eMule, aMule, MLDonkey,
-Wireshark, and protocol documentation references. The reference-alignment work
-is tracked in ``docs/maintenance/ed2k-refactor/``. Core ED2K/eMule behavior has
-been ported where it fits aria2-next, while obsolete legacy structures were
-removed or replaced with existing compatible integration surfaces.
+Aria2 Next includes native ED2K/eMule support aligned with aMule's network
+behavior. The maintained runtime, persistence, discovery, transfer, and
+verification design is documented in ``docs/maintenance/ed2k-runtime.md``.
 
 The maintained fork is located at https://github.com/AnInsomniacy/aria2-next.
 It preserves aria2 command-line, configuration, session, JSON-RPC, and

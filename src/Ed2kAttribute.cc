@@ -92,23 +92,6 @@ std::string createEd2kClientHash()
   return normalizeEd2kClientHash(std::move(clientHash));
 }
 
-std::string getOrCreateEd2kClientHash(Option* option)
-{
-  if (!option->blank(PREF_ED2K_CLIENT_HASH)) {
-    const auto value = option->get(PREF_ED2K_CLIENT_HASH);
-    if (value.size() != ed2k::HASH_LENGTH * 2 || !util::isHexDigit(value)) {
-      throw DL_ABORT_EX("Cannot parse ED2K client hash.");
-    }
-    const auto clientHash =
-        normalizeEd2kClientHash(util::fromHex(value.begin(), value.end()));
-    option->put(PREF_ED2K_CLIENT_HASH, util::toHex(clientHash));
-    return clientHash;
-  }
-  const auto clientHash = createEd2kClientHash();
-  option->put(PREF_ED2K_CLIENT_HASH, util::toHex(clientHash));
-  return clientHash;
-}
-
 uint32_t createEd2kKadUdpVerifyKey()
 {
   uint32_t key = 0;
@@ -138,6 +121,39 @@ bool addUniqueEndpoint(std::vector<ed2k::Endpoint>& endpoints,
 bool sameEndpoint(const ed2k::Endpoint& lhs, const ed2k::Endpoint& rhs)
 {
   return lhs.host == rhs.host && lhs.port == rhs.port;
+}
+
+bool invalidPeerEndpoint(const Ed2kAttribute* attrs,
+                         const ed2k::Endpoint& peer)
+{
+  if (!attrs || peer.host.empty() || peer.port == 0 ||
+      (!peer.userHash.empty() && peer.userHash.size() != ed2k::HASH_LENGTH) ||
+      (!attrs->clientHash.empty() && peer.userHash == attrs->clientHash)) {
+    return true;
+  }
+  if (!util::isNumericHost(peer.host)) {
+    return false;
+  }
+  return peer.host == "0.0.0.0" || peer.host == "255.255.255.255" ||
+         peer.host == "::" || peer.host == "::1" ||
+         peer.host.compare(0, 4, "127.") == 0;
+}
+
+bool canReceiveEd2kDirectCallback(const Ed2kAttribute* attrs,
+                                  const ed2k::Endpoint& peer)
+{
+  if (!attrs ||
+      (peer.cryptOptions & ed2k::SOURCE_CRYPT_DIRECT_CALLBACK) == 0) {
+    return false;
+  }
+  if (!attrs->kadFirewalled) {
+    return true;
+  }
+  return std::any_of(attrs->serverStates.begin(), attrs->serverStates.end(),
+                     [](const ed2k::ServerState& state) {
+                       return state.connected && state.handshakeCompleted &&
+                              state.highId;
+                     });
 }
 
 ed2k::PeerState* findEd2kPeerStateByEndpointOrUdp(Ed2kAttribute* attrs,
@@ -199,7 +215,34 @@ bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
 bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                  uint32_t sourceFlag)
 {
-  if (!attrs || !addUniqueEndpoint(attrs->peers, peer)) {
+  if (invalidPeerEndpoint(attrs, peer)) {
+    return false;
+  }
+  if (!peer.userHash.empty()) {
+    auto identity = std::find_if(
+        attrs->peerStates.begin(), attrs->peerStates.end(),
+        [&](const ed2k::PeerState& state) {
+          return state.endpoint.userHash == peer.userHash;
+        });
+    if (identity != attrs->peerStates.end()) {
+      identity->sourceFlags |= sourceFlag;
+      identity->endpoint.cryptOptions |= peer.cryptOptions;
+      if (!identity->connecting && !identity->accepted &&
+          !sameEndpoint(identity->endpoint, peer)) {
+        auto endpoint = std::find_if(
+            attrs->peers.begin(), attrs->peers.end(),
+            [&](const ed2k::Endpoint& item) {
+              return sameEndpoint(item, identity->endpoint);
+            });
+        if (endpoint != attrs->peers.end()) {
+          *endpoint = peer;
+        }
+        identity->endpoint = peer;
+      }
+      return false;
+    }
+  }
+  if (!addUniqueEndpoint(attrs->peers, peer)) {
     auto state = getEd2kPeerState(attrs, peer);
     if (state) {
       if (!peer.userHash.empty() && state->endpoint.userHash.empty()) {
@@ -219,11 +262,61 @@ bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
   return true;
 }
 
+bool recordEd2kAichHashVote(Ed2kAttribute* attrs, const std::string& rootHash,
+                            const std::string& voter)
+{
+  if (!attrs || rootHash.size() != ed2k::AICH_HASH_LENGTH || voter.empty()) {
+    return false;
+  }
+  if (!attrs->link.aichHash.empty()) {
+    if (rootHash != attrs->link.aichHash) {
+      return false;
+    }
+    attrs->aichRootHash = rootHash;
+    attrs->aichRootTrusted = true;
+    return true;
+  }
+  for (const auto& vote : attrs->aichHashVotes) {
+    if (std::find(vote.voters.begin(), vote.voters.end(), voter) !=
+        vote.voters.end()) {
+      return attrs->aichRootTrusted && attrs->aichRootHash == rootHash;
+    }
+  }
+  auto vote = std::find_if(
+      attrs->aichHashVotes.begin(), attrs->aichHashVotes.end(),
+      [&](const Ed2kAichHashVote& item) { return item.rootHash == rootHash; });
+  if (vote == attrs->aichHashVotes.end()) {
+    Ed2kAichHashVote item;
+    item.rootHash = rootHash;
+    item.voters.push_back(voter);
+    attrs->aichHashVotes.push_back(std::move(item));
+  }
+  else {
+    vote->voters.push_back(voter);
+  }
+
+  size_t total = 0;
+  const Ed2kAichHashVote* best = nullptr;
+  for (const auto& item : attrs->aichHashVotes) {
+    total += item.voters.size();
+    if (!best || item.voters.size() > best->voters.size()) {
+      best = &item;
+    }
+  }
+  if (!best) {
+    return false;
+  }
+  attrs->aichRootHash = best->rootHash;
+  attrs->aichRootTrusted =
+      best->voters.size() >= 10 && best->voters.size() * 100 / total >= 92;
+  return attrs->aichRootTrusted && attrs->aichRootHash == rootHash;
+}
+
 bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
                           const ed2k::KadSourceEndpoint& source,
                           uint32_t sourceFlag)
 {
-  if (!attrs || source.endpoint.host.empty() || source.endpoint.port == 0) {
+  if (invalidPeerEndpoint(attrs, source.endpoint)) {
     return false;
   }
   if (source.sourceType != 0 && source.sourceType != 1 &&
@@ -234,13 +327,13 @@ bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
   const bool buddyCallback =
       source.sourceType == 3 || source.sourceType == 5;
   const bool directCallback = source.sourceType == 6;
+  if (directCallback &&
+      !canReceiveEd2kDirectCallback(attrs, source.endpoint)) {
+    return false;
+  }
   const bool callbackOnly = buddyCallback || directCallback;
-  const uint32_t lowIdClientId = callbackOnly
-                                     ? ed2k::ipv4ToEndpointValue(
-                                           source.endpoint.host)
-                                     : 0;
-  const auto added =
-      callbackOnly ? false : addEd2kPeer(attrs, source.endpoint, sourceFlag);
+  const uint32_t lowIdClientId = callbackOnly ? 1 : 0;
+  const auto added = addEd2kPeer(attrs, source.endpoint, sourceFlag);
   auto state = getEd2kPeerState(attrs, source.endpoint);
   if (state) {
     state->sourceFlags |= sourceFlag;
@@ -278,7 +371,7 @@ bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
 bool addEd2kFoundSource(Ed2kAttribute* attrs, const ed2k::FoundSource& source,
                         uint32_t sourceFlag, bool callbackRequested)
 {
-  if (!attrs || source.endpoint.host.empty() || source.endpoint.port == 0) {
+  if (invalidPeerEndpoint(attrs, source.endpoint)) {
     return false;
   }
   if (!source.lowId) {
@@ -329,9 +422,6 @@ size_t mergeEd2kServerSources(Ed2kAttribute* attrs,
   for (const auto& source : sources) {
     if (source.lowId) {
       addEd2kFoundSource(attrs, source, sourceFlag, false);
-      continue;
-    }
-    if ((source.endpoint.cryptOptions & ed2k::SOURCE_CRYPT_REQUIRE) != 0) {
       continue;
     }
     if (addEd2kFoundSource(attrs, source, sourceFlag, false)) {
@@ -400,6 +490,7 @@ bool markEd2kPeerQueued(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
   state->cancelled = false;
   state->noFile = false;
   state->outOfParts = false;
+  state->nextPartStatusRecheckTime = 0;
   state->queueRank = rank;
   state->partStatus = partStatus;
   return true;
@@ -432,6 +523,8 @@ bool markEd2kPeerUdpReaskAck(Ed2kAttribute* attrs,
   state->noFile = false;
   state->cancelled = false;
   state->remoteQueueFull = false;
+  state->outOfParts = false;
+  state->nextPartStatusRecheckTime = 0;
   state->udpReaskPending = false;
   state->queueRank = rank;
   if (!partStatus.empty()) {
@@ -977,13 +1070,17 @@ bool markEd2kPeerAccepted(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
   return true;
 }
 
-bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
+bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                            int64_t now)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
     return false;
   }
   state->outOfParts = true;
+  state->nextPartStatusRecheckTime =
+      now + ed2k::PEER_UDP_REASK_INTERVAL;
+  state->nextUdpReaskTime = state->nextPartStatusRecheckTime;
   state->connecting = false;
   state->accepted = false;
   state->queued = true;
@@ -1046,6 +1143,12 @@ size_t expireEd2kDeadSources(Ed2kAttribute* attrs, int64_t now)
   }
   size_t expired = 0;
   for (auto& state : attrs->peerStates) {
+    if (state.outOfParts && state.nextPartStatusRecheckTime != 0 &&
+        state.nextPartStatusRecheckTime <= now) {
+      state.outOfParts = false;
+      state.nextPartStatusRecheckTime = 0;
+      ++expired;
+    }
     if (!state.dead || state.nextRetryTime == 0 ||
         state.nextRetryTime > now) {
       continue;
@@ -1061,6 +1164,63 @@ size_t expireEd2kDeadSources(Ed2kAttribute* attrs, int64_t now)
     ++expired;
   }
   return expired;
+}
+
+size_t expireEd2kPeerUdpReasks(Ed2kAttribute* attrs, int64_t now,
+                               int64_t timeoutSeconds)
+{
+  if (!attrs || timeoutSeconds <= 0) {
+    return 0;
+  }
+  size_t expired = 0;
+  for (auto& state : attrs->peerStates) {
+    if (!state.udpReaskPending || state.lastUdpReaskTime == 0 ||
+        now - state.lastUdpReaskTime < timeoutSeconds) {
+      continue;
+    }
+    state.udpReaskPending = false;
+    state.queued = false;
+    state.queueRank = 0;
+    state.nextUdpReaskTime = 0;
+    ++expired;
+  }
+  return expired;
+}
+
+size_t promoteEd2kTcpReasks(Ed2kAttribute* attrs, int64_t now)
+{
+  if (!attrs) {
+    return 0;
+  }
+  size_t promoted = 0;
+  for (auto& state : attrs->peerStates) {
+    if (!state.queued || state.connecting || state.accepted || state.dead ||
+        state.noFile || state.cancelled || state.outOfParts ||
+        state.udpReaskPending ||
+        (state.nextUdpReaskTime != 0 && state.nextUdpReaskTime > now) ||
+        (state.udpPort != 0 && state.udpVersion != 0)) {
+      continue;
+    }
+    state.queued = false;
+    state.queueRank = 0;
+    ++promoted;
+  }
+  return promoted;
+}
+
+bool consumeEd2kKadFirewallCheckHost(Ed2kAttribute* attrs,
+                                     const std::string& host)
+{
+  if (!attrs) {
+    return false;
+  }
+  auto itr = std::find(attrs->kadFirewallCheckHosts.begin(),
+                       attrs->kadFirewallCheckHosts.end(), host);
+  if (itr == attrs->kadFirewallCheckHosts.end()) {
+    return false;
+  }
+  attrs->kadFirewallCheckHosts.clear();
+  return true;
 }
 
 ed2k::PeerState* selectDueEd2kUdpReaskPeer(Ed2kAttribute* attrs, int64_t now)
@@ -1270,7 +1430,6 @@ void markEd2kServerSourceRequestFinished(Ed2kAttribute* attrs,
   if (!state) {
     return;
   }
-  state->connected = false;
   state->connecting = false;
 }
 
@@ -1376,6 +1535,18 @@ void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
   if (attrs->servers.empty()) {
     return;
   }
+  constexpr size_t MAX_SERVER_CONNECTION_ATTEMPTS = 2;
+  if (e->getEd2kServerConnectionCount() >= MAX_SERVER_CONNECTION_ATTEMPTS) {
+    return;
+  }
+  const auto connected = std::find_if(
+      attrs->serverStates.begin(), attrs->serverStates.end(),
+      [](const ed2k::ServerState& state) {
+        return state.connected;
+      });
+  if (connected != attrs->serverStates.end()) {
+    return;
+  }
   if (attrs->nextServerIndex >= attrs->servers.size()) {
     attrs->nextServerIndex = 0;
   }
@@ -1384,7 +1555,8 @@ void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
                        .count();
   const auto limit = attrs->servers.size();
   size_t scanned = 0;
-  while (scanned < limit) {
+  while (scanned < limit &&
+         e->getEd2kServerConnectionCount() < MAX_SERVER_CONNECTION_ATTEMPTS) {
     auto server = attrs->servers[attrs->nextServerIndex];
     attrs->nextServerIndex = (attrs->nextServerIndex + 1) %
                              attrs->servers.size();
@@ -1399,8 +1571,7 @@ void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
     if (state->connected) {
       continue;
     }
-    if (!attrs->searchActive &&
-        !ed2k::serverTcpSourceRequestDue(*state, attrs->link.size, now)) {
+    if (!ed2k::serverConnectionDue(*state, now)) {
       continue;
     }
     updateEd2kServerConnecting(attrs, server);
@@ -1417,6 +1588,8 @@ void schedulePendingEd2kPeers(RequestGroup* requestGroup, DownloadEngine* e)
                        .count();
   expireEd2kDeadSources(attrs, now);
   expireEd2kCallbackWaits(attrs, now);
+  expireEd2kPeerUdpReasks(attrs, now, 30);
+  promoteEd2kTcpReasks(attrs, now);
   while (requestGroup->getNumStreamCommand() <
          requestGroup->getNumConcurrentCommand()) {
     auto action = ed2k::selectPeerAction(attrs->peerStates, now);

@@ -1,5 +1,6 @@
 #include "ed2k_helper.h"
 #include "ed2k_endpoint.h"
+#include "ed2k_crypto.h"
 #include "Ed2kKadState.h"
 
 #include <algorithm>
@@ -54,6 +55,8 @@ public:
   void testKadDirectCallbackPayload();
   void testKadBuddyCallbackPayload();
   void testKadObfuscatedPacketRoundTrip();
+  void testServerUdpObfuscationRoundTrip();
+  void testPeerUdpObfuscationRoundTrip();
   void testKadSearchPublishAndFirewallPayloads();
   void testKadRoutingStatePayload();
   void testServerStatePayload();
@@ -99,6 +102,8 @@ A2_TEST(Ed2kHelperTest, testKadPacketPayloads)
 A2_TEST(Ed2kHelperTest, testKadDirectCallbackPayload)
 A2_TEST(Ed2kHelperTest, testKadBuddyCallbackPayload)
 A2_TEST(Ed2kHelperTest, testKadObfuscatedPacketRoundTrip)
+A2_TEST(Ed2kHelperTest, testServerUdpObfuscationRoundTrip)
+A2_TEST(Ed2kHelperTest, testPeerUdpObfuscationRoundTrip)
 A2_TEST(Ed2kHelperTest, testKadSearchPublishAndFirewallPayloads)
 A2_TEST(Ed2kHelperTest, testKadRoutingStatePayload)
 A2_TEST(Ed2kHelperTest, testServerStatePayload)
@@ -335,6 +340,10 @@ void Ed2kHelperTest::testProtocolPayloads()
   REQUIRE_EQ(std::string("010203040000"),
                        util::toHex(login.substr(16, 6)));
   REQUIRE_EQ((uint32_t)4, readUInt32(login.data() + 22));
+  std::vector<Tag> loginTags;
+  REQUIRE(parseTagList(loginTags, login.substr(22)));
+  REQUIRE_EQ((uint64_t)0x071d, loginTags[1].intValue);
+  REQUIRE_EQ((uint64_t)0x03060000, loginTags[3].intValue);
 
   auto source32 = createGetSourcesPayload(fileHash, 9728001);
   REQUIRE_EQ((size_t)20, source32.size());
@@ -864,7 +873,7 @@ void Ed2kHelperTest::testKadSourceEndpointPreservesUdpAndCryptMetadata()
                            std::end("0c7fab2a8d37bed47b551391d0d8241d") - 1);
   REQUIRE(extractKadSourceEndpoint(endpoint, entry));
   REQUIRE_EQ(
-      std::string("0c7fab2a8d37bed47b551391d0d8241d"),
+      std::string("2aab7f0cd4be378d9113557b1d24d8d0"),
       util::toHex(endpoint.userHash));
 
   KadSourceEndpoint source;
@@ -1514,6 +1523,14 @@ void Ed2kHelperTest::testKadPacketPayloads()
   REQUIRE_EQ(nodeId, parsedHello.id);
   REQUIRE_EQ((uint16_t)4662, parsedHello.tcpPort);
   REQUIRE_EQ((uint8_t)5, parsedHello.version);
+  auto verifiedHello = createKadHelloPayload(nodeId, 4662, 8, true, true, true);
+  REQUIRE(parseKadHelloPayload(parsedHello, verifiedHello));
+  REQUIRE(parsedHello.requestsAck);
+  REQUIRE(parsedHello.tcpFirewalled);
+  REQUIRE(parsedHello.udpFirewalled);
+  std::string ackId;
+  REQUIRE(parseKadHelloAckPayload(ackId, createKadHelloAckPayload(nodeId)));
+  REQUIRE_EQ(nodeId, ackId);
 
   auto bootstrap = createKadBootstrapResponsePayload(nodeId, 4662, 5,
                                                      std::vector<KadContact>{contact});
@@ -1656,6 +1673,50 @@ void Ed2kHelperTest::testKadObfuscatedPacketRoundTrip()
                        createKadUdpVerifyKey(0x61726961, "203.0.113.9"));
 }
 
+void Ed2kHelperTest::testServerUdpObfuscationRoundTrip()
+{
+  const auto datagram =
+      createDatagram(PROTO_EDONKEY, OP_GLOBGETSOURCES,
+                     std::string(HASH_LENGTH, '\x42'));
+  const auto encrypted =
+      encryptServerUdpDatagram(datagram, 0x11223344, 0x5566);
+
+  REQUIRE_EQ(datagram.size() + 8, encrypted.size());
+  REQUIRE_EQ(std::string("6655"), util::toHex(encrypted.substr(1, 2)));
+  REQUIRE(static_cast<uint8_t>(encrypted[0]) != PROTO_EDONKEY);
+
+  REQUIRE_EQ(
+      std::string("5566552d6483f8428ade01f79455b00981b4786e987a6d5b8c1c"),
+      util::toHex(encrypted));
+
+  const auto serverPacket = util::fromHex(
+      std::begin("5566551b41314224bc0defec3483de4035cbe3dca1a17586f719"),
+      std::end("5566551b41314224bc0defec3483de4035cbe3dca1a17586f719") -
+          1);
+  std::string decrypted;
+  REQUIRE(decryptServerUdpDatagram(decrypted, serverPacket, 0x11223344));
+  REQUIRE_EQ(datagram, decrypted);
+  REQUIRE(!decryptServerUdpDatagram(decrypted, serverPacket, 0x11223345));
+}
+
+void Ed2kHelperTest::testPeerUdpObfuscationRoundTrip()
+{
+  const auto datagram =
+      createDatagram(PROTO_EMULE, OP_REASKFILEPING,
+                     std::string(HASH_LENGTH, '\x42'));
+  const auto userHash = std::string(HASH_LENGTH, '\x42');
+  const auto encrypted = encryptPeerUdpDatagram(
+      datagram, userHash, 0x097100cb, 0x5566);
+
+  REQUIRE_EQ(
+      std::string("55665523045d002279fbce1cd9463eea0fa05b20856711e25773"),
+      util::toHex(encrypted));
+  std::string decrypted;
+  REQUIRE(decryptPeerUdpDatagram(decrypted, encrypted, userHash, 0x097100cb));
+  REQUIRE_EQ(datagram, decrypted);
+  REQUIRE(!decryptPeerUdpDatagram(decrypted, encrypted, userHash, 0x097100ca));
+}
+
 void Ed2kHelperTest::testKadSearchPublishAndFirewallPayloads()
 {
   std::string fileIdHex("0123456789abcdef0123456789abcdef");
@@ -1683,7 +1744,8 @@ void Ed2kHelperTest::testKadSearchPublishAndFirewallPayloads()
   REQUIRE(parseKadPublishSourceRequestPayload(parsedPublish, publish));
   REQUIRE_EQ(fileId, parsedPublish.fileId);
   auto largePublish = createKadPublishSourceRequestPayload(
-      fileId, source, sourceId, 0x100000001ULL);
+      fileId, source, sourceId, 0x100000001ULL, 4672,
+      SOURCE_CRYPT_SUPPORT | SOURCE_CRYPT_REQUEST);
   REQUIRE(parseKadPublishSourceRequestPayload(parsedPublish,
                                                      largePublish));
   auto sizeTag = std::find_if(parsedPublish.source.tags.begin(),
@@ -1710,6 +1772,11 @@ void Ed2kHelperTest::testKadSearchPublishAndFirewallPayloads()
   REQUIRE_EQ((size_t)1, endpoints.size());
   REQUIRE_EQ(std::string("203.0.113.9"), endpoints[0].host);
   REQUIRE_EQ((uint16_t)4662, endpoints[0].port);
+  auto detailed = extractKadSourceEndpointDetails(result);
+  REQUIRE_EQ((size_t)1, detailed.size());
+  REQUIRE_EQ((uint16_t)4672, detailed[0].udpPort);
+  REQUIRE_EQ((uint16_t)(SOURCE_CRYPT_SUPPORT | SOURCE_CRYPT_REQUEST),
+             detailed[0].endpoint.cryptOptions);
 
   KadPublishResult publishResult;
   REQUIRE(parseKadPublishResultPayload(

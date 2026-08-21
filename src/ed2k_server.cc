@@ -215,9 +215,9 @@ std::string createLoginRequestPayload(const std::string& clientHash,
   payload += packUInt16(listenPort);
   payload += packUInt32(4);
   payload += createUInt32Tag(0x11, 0x3c);
-  payload += createUInt32Tag(0x20, 0x011d);
+  payload += createUInt32Tag(0x20, 0x071d);
   payload += createStringTag(0x01, clientName);
-  payload += createUInt32Tag(0xfb, (1u << 24) | (1u << 17) | (1u << 7));
+  payload += createUInt32Tag(0xfb, (3u << 24) | (3u << 17));
   return payload;
 }
 

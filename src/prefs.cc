@@ -396,14 +396,8 @@ PrefPtr PREF_ED2K_LISTEN_PORT = makePref("ed2k-listen-port");
 PrefPtr PREF_ED2K_UDP_LISTEN_PORT = makePref("ed2k-udp-listen-port");
 // value: 1*digit
 PrefPtr PREF_ED2K_UPLOAD_SLOTS = makePref("ed2k-upload-slots");
-// value: hex-encoded ED2K server state
-PrefPtr PREF_ED2K_SERVER_STATE = makePref("ed2k-server-state");
-// value: hex-encoded ED2K peer credit state
-PrefPtr PREF_ED2K_PEER_CREDIT_STATE = makePref("ed2k-peer-credit-state");
-// value: hex-encoded ED2K client hash
-PrefPtr PREF_ED2K_CLIENT_HASH = makePref("ed2k-client-hash");
-// value: hex-encoded ED2K Kad routing state
-PrefPtr PREF_ED2K_KAD_ROUTING_STATE = makePref("ed2k-kad-routing-state");
+// value: path to persistent ED2K runtime state
+PrefPtr PREF_ED2K_STATE_FILE = makePref("ed2k-state-file");
 // value: string
 PrefPtr PREF_GID = makePref("gid");
 // values: 1*digit
