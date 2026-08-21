@@ -7,7 +7,7 @@
 
 #include "TestUtil.h"
 #include "Ed2kAttribute.h"
-#include "DefaultBtProgressInfoFile.h"
+#include "DefaultProgressInfoFile.h"
 #include "DiskAdaptor.h"
 #include "prefs.h"
 #include "DownloadContext.h"
@@ -308,7 +308,7 @@ void RequestGroupManTest::testUserRemoveDoesNotKeepControlFile()
 {
   const std::string path =
       A2_TEST_OUT_DIR "/request-group-man-user-remove.bin";
-  const std::string ctrlPath = path + DefaultBtProgressInfoFile::getSuffix();
+  const std::string ctrlPath = path + DefaultProgressInfoFile::getSuffix();
   File(path).remove();
   File(ctrlPath).remove();
   option_->put(PREF_FILE_ALLOCATION, V_NONE);
@@ -320,7 +320,7 @@ void RequestGroupManTest::testUserRemoveDoesNotKeepControlFile()
   group->setState(RequestGroup::STATE_ACTIVE);
   group->initPieceStorage();
   group->getPieceStorage()->getDiskAdaptor()->openFile();
-  group->setProgressInfoFile(std::make_shared<DefaultBtProgressInfoFile>(
+  group->setProgressInfoFile(std::make_shared<DefaultProgressInfoFile>(
       group->getDownloadContext(), group->getPieceStorage(), option_.get()));
   group->saveControlFile();
   REQUIRE(File(ctrlPath).isFile());

@@ -58,7 +58,7 @@ class Command;
 class DownloadCommand;
 class DownloadContext;
 class PieceStorage;
-class BtProgressInfoFile;
+class ProgressInfoFile;
 class Dependency;
 class PreDownloadHandler;
 class PostDownloadHandler;
@@ -71,8 +71,7 @@ class URISelector;
 class URIResult;
 class RequestGroupMan;
 #ifdef ENABLE_BITTORRENT
-class BtRuntime;
-class PeerStorage;
+class BtDownload;
 #endif // ENABLE_BITTORRENT
 
 class RequestGroup {
@@ -106,7 +105,7 @@ private:
 
   std::shared_ptr<PieceStorage> pieceStorage_;
 
-  std::shared_ptr<BtProgressInfoFile> progressInfoFile_;
+  std::shared_ptr<ProgressInfoFile> progressInfoFile_;
 
   std::shared_ptr<DiskWriterFactory> diskWriterFactory_;
 
@@ -119,9 +118,7 @@ private:
   RequestGroupMan* requestGroupMan_;
 
 #ifdef ENABLE_BITTORRENT
-  BtRuntime* btRuntime_;
-
-  PeerStorage* peerStorage_;
+  std::shared_ptr<BtDownload> btDownload_;
 #endif // ENABLE_BITTORRENT
 
   // If this download generates another downloads when completed(for
@@ -208,7 +205,7 @@ private:
   std::pair<error_code::Value, std::string> downloadResult() const;
 
   void removeDefunctControlFile(
-      const std::shared_ptr<BtProgressInfoFile>& progressInfoFile);
+      const std::shared_ptr<ProgressInfoFile>& progressInfoFile);
 
 public:
   RequestGroup(const std::shared_ptr<GroupId>& gid,
@@ -299,8 +296,20 @@ public:
 
   void setPieceStorage(const std::shared_ptr<PieceStorage>& pieceStorage);
 
+#ifdef ENABLE_BITTORRENT
+  const std::shared_ptr<BtDownload>& getBtDownload() const
+  {
+    return btDownload_;
+  }
+
+  void setBtDownload(std::shared_ptr<BtDownload> download)
+  {
+    btDownload_ = std::move(download);
+  }
+#endif // ENABLE_BITTORRENT
+
   void setProgressInfoFile(
-      const std::shared_ptr<BtProgressInfoFile>& progressInfoFile);
+      const std::shared_ptr<ProgressInfoFile>& progressInfoFile);
 
   void increaseStreamCommand();
 
@@ -400,12 +409,12 @@ public:
   bool downloadFinishedByFileLength();
 
   void loadAndOpenFile(
-      const std::shared_ptr<BtProgressInfoFile>& progressInfoFile,
+      const std::shared_ptr<ProgressInfoFile>& progressInfoFile,
       FileOpenMode fileOpenMode = DEFAULT_FILE_OPEN);
 
   void shouldCancelDownloadForSafety();
 
-  void adjustFilename(const std::shared_ptr<BtProgressInfoFile>& infoFile);
+  void adjustFilename(const std::shared_ptr<ProgressInfoFile>& infoFile);
 
   std::shared_ptr<DownloadResult> createDownloadResult() const;
 

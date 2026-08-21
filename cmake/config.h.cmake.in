@@ -260,6 +260,9 @@
 
 /* Define to the version of this package. */
 #cmakedefine PACKAGE_VERSION "@PACKAGE_VERSION@"
+#cmakedefine PACKAGE_VERSION_MAJOR @PACKAGE_VERSION_MAJOR@
+#cmakedefine PACKAGE_VERSION_MINOR @PACKAGE_VERSION_MINOR@
+#cmakedefine PACKAGE_VERSION_PATCH @PACKAGE_VERSION_PATCH@
 
 /* Use security.h in WIN32 mode */
 #cmakedefine SECURITY_WIN32 @SECURITY_WIN32@

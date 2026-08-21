@@ -8,9 +8,9 @@ Maintained by [@AnInsomniacy](https://github.com/AnInsomniacy). Issues and pull 
 
 - CMake 3.25 or newer
 - Ninja
-- A C99 and C++11 capable compiler
+- A C11 and C++17 capable compiler
 - No extra test dependency: the doctest framework is vendored in third_party/doctest
-- OpenSSL, zlib, SQLite, Expat or libxml2, c-ares, and libssh2 development packages when building the default feature set
+- libtorrent-rasterbar 2.1.1 or newer, Boost headers, OpenSSL, zlib, SQLite, Expat, c-ares, and libssh2 development packages when building the default feature set
 
 ### Getting Started
 
@@ -25,7 +25,7 @@ build/default/aria2-next --version
 
 ## Scope
 
-aria2-next is an aria2-compatible command-line engine and library. The repository owns the C and C++ engine, protocol implementations, CMake build, tests, release packaging, Docker image definition, and maintenance records.
+aria2-next is a command-line engine and library with a libtorrent-backed BitTorrent implementation. The repository owns the C and C++ engine, protocol integrations, CMake build, tests, release packaging, Docker image definition, and maintenance records.
 
 Motrix Next desktop UI issues belong in [motrix-next](https://github.com/AnInsomniacy/motrix-next). Browser download interception issues belong in [motrix-next-extension](https://github.com/AnInsomniacy/motrix-next-extension).
 

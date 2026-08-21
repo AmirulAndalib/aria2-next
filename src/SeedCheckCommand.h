@@ -44,7 +44,6 @@ namespace aria2 {
 class RequestGroup;
 class DownloadEngine;
 class SeedCriteria;
-class BtRuntime;
 class PieceStorage;
 
 class SeedCheckCommand : public Command {
@@ -52,7 +51,6 @@ private:
   RequestGroup* requestGroup_;
   DownloadEngine* e_;
   std::shared_ptr<PieceStorage> pieceStorage_;
-  std::shared_ptr<BtRuntime> btRuntime_;
   std::unique_ptr<SeedCriteria> seedCriteria_;
   bool checkStarted_;
 
@@ -63,8 +61,6 @@ public:
   virtual ~SeedCheckCommand();
 
   virtual bool execute() override;
-
-  void setBtRuntime(const std::shared_ptr<BtRuntime>& btRuntime);
 
   void setPieceStorage(const std::shared_ptr<PieceStorage>& pieceStorage);
 };

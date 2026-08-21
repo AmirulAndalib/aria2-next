@@ -42,7 +42,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "BtProgressInfoFile.h"
+#include "ProgressInfoFile.h"
 #include "RecoverableException.h"
 #include "RequestGroup.h"
 #include "Log.h"
@@ -87,9 +87,6 @@
 #include "OpenedFileCounter.h"
 #include "wallclock.h"
 #include "RpcMethodImpl.h"
-#ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
-#endif // ENABLE_BITTORRENT
 
 namespace aria2 {
 

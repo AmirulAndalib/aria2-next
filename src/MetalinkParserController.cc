@@ -49,7 +49,7 @@
 #include "ChunkChecksum.h"
 #include "MessageDigest.h"
 #ifdef ENABLE_BITTORRENT
-#  include "magnet.h"
+#  include "ProtocolDetector.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -548,7 +548,7 @@ void MetalinkParserController::setURLOfMetaurl(std::string url)
     return;
   }
 #ifdef ENABLE_BITTORRENT
-  if (magnet::parse(url)) {
+  if (ProtocolDetector().guessTorrentMagnet(url)) {
     tMetaurl_->url = std::move(url);
   }
   else

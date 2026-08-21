@@ -66,7 +66,7 @@ class Request;
 class EventPoll;
 class Command;
 #ifdef ENABLE_BITTORRENT
-class BtRegistry;
+class BtSession;
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_WEBSOCKET
 namespace rpc {
@@ -132,7 +132,7 @@ private:
   std::unique_ptr<CookieStorage> cookieStorage_;
 
 #ifdef ENABLE_BITTORRENT
-  std::unique_ptr<BtRegistry> btRegistry_;
+  std::unique_ptr<BtSession> btSession_;
 #endif // ENABLE_BITTORRENT
 
   CUIDCounter cuidCounter_;
@@ -207,10 +207,6 @@ public:
   void addCommand(std::vector<std::unique_ptr<Command>> commands);
 
   void addCommand(std::unique_ptr<Command> command);
-
-#ifdef ENABLE_BITTORRENT
-  size_t disconnectBlockedBtPeers();
-#endif // ENABLE_BITTORRENT
 
   const std::unique_ptr<RequestGroupMan>& getRequestGroupMan() const
   {
@@ -335,10 +331,12 @@ public:
   const std::unique_ptr<CookieStorage>& getCookieStorage() const;
 
 #ifdef ENABLE_BITTORRENT
-  const std::unique_ptr<BtRegistry>& getBtRegistry() const
+  const std::unique_ptr<BtSession>& getBtSession() const
   {
-    return btRegistry_;
+    return btSession_;
   }
+
+  void setBtSession(std::unique_ptr<BtSession> session);
 #endif // ENABLE_BITTORRENT
 
   cuid_t newCUID();

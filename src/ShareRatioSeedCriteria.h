@@ -42,14 +42,12 @@
 namespace aria2 {
 
 class DownloadContext;
-class BtRuntime;
 class PieceStorage;
 
 class ShareRatioSeedCriteria : public SeedCriteria {
 private:
   double ratio_;
   std::shared_ptr<DownloadContext> downloadContext_;
-  std::shared_ptr<BtRuntime> btRuntime_;
   std::shared_ptr<PieceStorage> pieceStorage_;
 
 public:
@@ -65,8 +63,6 @@ public:
   void setRatio(double ratio) { ratio_ = ratio; }
 
   double getRatio() const { return ratio_; }
-
-  void setBtRuntime(const std::shared_ptr<BtRuntime>& btRuntime);
 
   void setPieceStorage(const std::shared_ptr<PieceStorage>& pieceStorage);
 

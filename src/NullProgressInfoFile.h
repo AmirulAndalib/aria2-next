@@ -35,11 +35,11 @@
 #ifndef D_NULL_PROGRESS_INFO_FILE_H
 #define D_NULL_PROGRESS_INFO_FILE_H
 
-#include "BtProgressInfoFile.h"
+#include "ProgressInfoFile.h"
 
 namespace aria2 {
 
-class NullProgressInfoFile : public BtProgressInfoFile {
+class NullProgressInfoFile : public ProgressInfoFile {
 public:
   virtual ~NullProgressInfoFile() = default;
 

@@ -15,7 +15,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/SegmentTest.cc
   tests/GrowSegmentTest.cc
   tests/SingleFileAllocationIteratorTest.cc
-  tests/DefaultBtProgressInfoFileTest.cc
+  tests/DefaultProgressInfoFileTest.cc
   tests/RequestGroupTest.cc
   tests/UtilTest1.cc
   tests/UtilTest2.cc
@@ -135,105 +135,7 @@ set(ARIA2_TEST_SOURCES_HAVE_SQLITE3
 )
 
 set(ARIA2_TEST_SOURCES_ENABLE_BITTORRENT
-  tests/BtAllowedFastMessageTest.cc
-  tests/BtBitfieldMessageTest.cc
-  tests/BtCancelMessageTest.cc
-  tests/BtChokeMessageTest.cc
-  tests/BtHandshakeMessageTest.cc
-  tests/BtHaveAllMessageTest.cc
-  tests/BtHaveMessageTest.cc
-  tests/BtHaveNoneMessageTest.cc
-  tests/BtInterestedMessageTest.cc
-  tests/BtKeepAliveMessageTest.cc
-  tests/BtNotInterestedMessageTest.cc
-  tests/BtPieceMessageTest.cc
-  tests/BtPortMessageTest.cc
   tests/BtPeerBlocklistTest.cc
-  tests/BtPeerListenerTest.cc
-  tests/BtRejectMessageTest.cc
-  tests/BtRequestMessageTest.cc
-  tests/BtSuggestPieceMessageTest.cc
-  tests/BtUnchokeMessageTest.cc
-  tests/DefaultPieceStorageTest.cc
-  tests/DefaultBtAnnounceTest.cc
-  tests/DefaultBtMessageDispatcherTest.cc
-  tests/DefaultBtRequestFactoryTest.cc
-  tests/MockBtMessage.h
-  tests/MockBtMessageDispatcher.h
-  tests/MockBtMessageFactory.h
-  tests/AnnounceListTest.cc
-  tests/DefaultPeerStorageTest.cc
-  tests/MockPeerStorage.h
-  tests/ByteArrayDiskWriterTest.cc
-  tests/PeerTest.cc
-  tests/PeerSessionResourceTest.cc
-  tests/BtRegistryTest.cc
-  tests/BtDependencyTest.cc
-  tests/BtPostDownloadHandlerTest.cc
-  tests/BtExtendedMessageTest.cc
-  tests/HandshakeExtensionMessageTest.cc
-  tests/UTPexExtensionMessageTest.cc
-  tests/UTMetadataRequestExtensionMessageTest.cc
-  tests/UTMetadataDataExtensionMessageTest.cc
-  tests/UTMetadataRejectExtensionMessageTest.cc
-  tests/UTMetadataRequestTrackerTest.cc
-  tests/UTMetadataRequestFactoryTest.cc
-  tests/UTMetadataPostDownloadHandlerTest.cc
-  tests/MagnetTest.cc
-  tests/DefaultBtMessageFactoryTest.cc
-  tests/DefaultExtensionMessageFactoryTest.cc
-  tests/DHTNodeTest.cc
-  tests/DHTBucketTest.cc
-  tests/DHTRoutingTableTest.cc
-  tests/DHTMessageTrackerEntryTest.cc
-  tests/DHTMessageTrackerTest.cc
-  tests/DHTConnectionImplTest.cc
-  tests/DHTPingMessageTest.cc
-  tests/DHTPingReplyMessageTest.cc
-  tests/DHTFindNodeMessageTest.cc
-  tests/DHTFindNodeReplyMessageTest.cc
-  tests/DHTGetPeersMessageTest.cc
-  tests/DHTGetPeersReplyMessageTest.cc
-  tests/DHTAnnouncePeerMessageTest.cc
-  tests/DHTAnnouncePeerReplyMessageTest.cc
-  tests/DHTUnknownMessageTest.cc
-  tests/DHTMessageFactoryImplTest.cc
-  tests/DHTBucketTreeTest.cc
-  tests/DHTPeerAnnounceEntryTest.cc
-  tests/DHTPeerAnnounceStorageTest.cc
-  tests/DHTTokenTrackerTest.cc
-  tests/XORCloserTest.cc
-  tests/DHTIDCloserTest.cc
-  tests/DHTRoutingTableSerializerTest.cc
-  tests/DHTRoutingTableDeserializerTest.cc
-  tests/DHTTaskExecutorTest.cc
-  tests/DHKeyExchangeTest.cc
-  tests/ARC4Test.cc
-  tests/MSEHandshakeTest.cc
-  tests/MockBtAnnounce.h
-  tests/MockBtProgressInfoFile.h
-  tests/MockBtRequestFactory.h
-  tests/MockDHTMessage.h
-  tests/MockDHTMessageCallback.h
-  tests/MockDHTMessageDispatcher.h
-  tests/MockDHTMessageFactory.h
-  tests/MockDHTTask.h
-  tests/MockDHTTaskFactory.h
-  tests/MockDHTTaskQueue.h
-  tests/MockExtensionMessage.h
-  tests/MockExtensionMessageFactory.h
-  tests/MockPieceStorage.h
-  tests/BittorrentHelperTest.cc
-  tests/PriorityPieceSelectorTest.cc
-  tests/MockPieceSelector.h
-  tests/extension_message_test_helper.h
-  tests/LpdMessageDispatcherTest.cc
-  tests/LpdMessageReceiverTest.cc
-  tests/Bencode2Test.cc
-  tests/PeerConnectionTest.cc
-  tests/ValueBaseBencodeParserTest.cc
-  tests/ExtensionMessageRegistryTest.cc
-  tests/UDPTrackerClientTest.cc
 )
 
 set(ARIA2_TEST_SOURCES_ENABLE_METALINK

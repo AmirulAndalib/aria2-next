@@ -46,6 +46,9 @@
 #include "error_code.h"
 #include "RequestGroup.h"
 #include "ContextAttribute.h"
+#ifdef ENABLE_BITTORRENT
+#  include "BtSnapshot.h"
+#endif
 
 namespace aria2 {
 
@@ -88,6 +91,10 @@ struct DownloadResult {
   std::string bitfield;
 
   std::string infoHash;
+
+#ifdef ENABLE_BITTORRENT
+  BtSnapshot btSnapshot;
+#endif
 
   std::string dir;
 

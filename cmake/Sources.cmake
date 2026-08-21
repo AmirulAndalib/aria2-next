@@ -46,11 +46,9 @@ set(ARIA2_SOURCES_BASE
   src/bitfield.h
   src/BitfieldMan.cc
   src/BitfieldMan.h
-  src/BtProgressInfoFile.h
+  src/ProgressInfoFile.h
   src/BufferedFile.cc
   src/BufferedFile.h
-  src/BtRuntime.cc
-  src/BtRuntime.h
   src/ByteArrayDiskWriter.cc
   src/ByteArrayDiskWriter.h
   src/ByteArrayDiskWriterFactory.h
@@ -100,8 +98,8 @@ set(ARIA2_SOURCES_BASE
   src/CUIDCounter.h
   src/DefaultAuthResolver.cc
   src/DefaultAuthResolver.h
-  src/DefaultBtProgressInfoFile.cc
-  src/DefaultBtProgressInfoFile.h
+  src/DefaultProgressInfoFile.cc
+  src/DefaultProgressInfoFile.h
   src/DefaultDiskWriter.cc
   src/DefaultDiskWriter.h
   src/DefaultDiskWriterFactory.cc
@@ -166,6 +164,10 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kKadCommand.h
   src/Ed2kKadState.cc
   src/Ed2kKadState.h
+  src/DHKeyExchange.h
+  src/InternalDHKeyExchange.cc
+  src/InternalDHKeyExchange.h
+  src/MSEDHKeyExchange.h
   src/ed2k_aich.cc
   src/ed2k_aich.h
   src/ed2k_compression.cc
@@ -475,8 +477,6 @@ set(ARIA2_SOURCES_BASE
   src/TimerA2.cc
   src/TimerA2.h
   src/timespec.h
-  src/TorrentAttribute.cc
-  src/TorrentAttribute.h
   src/TransferStat.cc
   src/TransferStat.h
   src/UnionSeedCriteria.cc
@@ -659,319 +659,21 @@ set(ARIA2_SOURCES_ENABLE_ASYNC_DNS
 )
 
 set(ARIA2_SOURCES_ENABLE_BITTORRENT
-  src/AbstractBtMessage.cc
-  src/AbstractBtMessage.h
-  src/ActivePeerConnectionCommand.cc
-  src/ActivePeerConnectionCommand.h
-  src/AnnounceList.h
-  src/AnnounceList.cc
-  src/AnnounceTier.cc
-  src/AnnounceTier.h
-  src/bencode2.cc
-  src/bencode2.h
-  src/BencodeDiskWriter.h
-  src/BencodeDiskWriterFactory.h
-  src/BencodeParser.cc
-  src/BencodeParser.h
-  src/bittorrent_helper.cc
-  src/bittorrent_helper.h
-  src/BtAbortOutstandingRequestEvent.cc
-  src/BtAbortOutstandingRequestEvent.h
-  src/BtAllowedFastMessage.cc
-  src/BtAllowedFastMessage.h
-  src/BtAnnounce.cc
-  src/BtAnnounce.h
-  src/BtBitfieldMessage.cc
-  src/BtBitfieldMessage.h
-  src/BtBitfieldMessageValidator.cc
-  src/BtBitfieldMessageValidator.h
-  src/BtCancelMessage.cc
-  src/BtCancelMessage.h
-  src/BtCancelSendingPieceEvent.h
-  src/BtCheckIntegrityEntry.cc
-  src/BtCheckIntegrityEntry.h
-  src/BtChokeMessage.cc
-  src/BtChokeMessage.h
-  src/BtChokingEvent.h
-  src/BtConstants.h
-  src/BtDependency.cc
-  src/BtDependency.h
-  src/BtExtendedMessage.cc
-  src/BtExtendedMessage.h
-  src/BtFileAllocationEntry.cc
-  src/BtFileAllocationEntry.h
-  src/BtHandshakeMessage.cc
-  src/BtHandshakeMessage.h
-  src/BtHandshakeMessageValidator.cc
-  src/BtHandshakeMessageValidator.h
-  src/BtHaveAllMessage.cc
-  src/BtHaveAllMessage.h
-  src/BtHaveMessage.cc
-  src/BtHaveMessage.h
-  src/BtHaveNoneMessage.cc
-  src/BtHaveNoneMessage.h
-  src/BtInteractive.h
-  src/BtInterestedMessage.cc
-  src/BtInterestedMessage.h
-  src/BtKeepAliveMessage.cc
-  src/BtKeepAliveMessage.h
-  src/BtLeecherStateChoke.cc
-  src/BtLeecherStateChoke.h
-  src/BtMessage.h
-  src/BtMessageDispatcher.h
-  src/BtMessageFactory.h
-  src/BtMessageReceiver.h
-  src/BtMessageValidator.h
-  src/BtNotInterestedMessage.cc
-  src/BtNotInterestedMessage.h
-  src/BtPieceMessage.cc
-  src/BtPieceMessage.h
-  src/BtPieceMessageValidator.cc
-  src/BtPieceMessageValidator.h
-  src/BtPortMessage.cc
-  src/BtPortMessage.h
+  src/BtDownload.cc
+  src/BtDownload.h
+  src/BtDownloadImpl.h
+  src/BtDownloadCommand.cc
+  src/BtDownloadCommand.h
+  src/BtMetadata.cc
+  src/BtMetadata.h
   src/BtPeerBlocklist.cc
   src/BtPeerBlocklist.h
   src/BtPostDownloadHandler.cc
   src/BtPostDownloadHandler.h
-  src/BtRegistry.cc
-  src/BtRegistry.h
-  src/BtPeerListener.cc
-  src/BtPeerListener.h
-  src/BtRejectMessage.cc
-  src/BtRejectMessage.h
-  src/BtRequestFactory.h
-  src/BtRequestMessage.cc
-  src/BtRequestMessage.h
-  src/BtSeederStateChoke.cc
-  src/BtSeederStateChoke.h
-  src/BtSetup.cc
-  src/BtSetup.h
-  src/BtStopDownloadCommand.cc
-  src/BtStopDownloadCommand.h
-  src/BtSuggestPieceMessage.cc
-  src/BtSuggestPieceMessage.h
-  src/BtUnchokeMessage.cc
-  src/BtUnchokeMessage.h
-  src/DefaultBtAnnounce.cc
-  src/DefaultBtAnnounce.h
-  src/DefaultBtInteractive.cc
-  src/DefaultBtInteractive.h
-  src/DefaultBtMessageDispatcher.cc
-  src/DefaultBtMessageDispatcher.h
-  src/DefaultBtMessageFactory.cc
-  src/DefaultBtMessageFactory.h
-  src/DefaultBtMessageReceiver.cc
-  src/DefaultBtMessageReceiver.h
-  src/DefaultBtRequestFactory.cc
-  src/DefaultBtRequestFactory.h
-  src/DefaultExtensionMessageFactory.cc
-  src/DefaultExtensionMessageFactory.h
-  src/DefaultPeerStorage.cc
-  src/DefaultPeerStorage.h
-  src/DHKeyExchange.h
-  src/MSEDHKeyExchange.h
-  src/InternalDHKeyExchange.cc
-  src/InternalDHKeyExchange.h
-  src/DHTAbstractMessage.cc
-  src/DHTAbstractMessage.h
-  src/DHTAbstractNodeLookupTask.h
-  src/DHTAbstractTask.cc
-  src/DHTAbstractTask.h
-  src/DHTAnnouncePeerMessage.cc
-  src/DHTAnnouncePeerMessage.h
-  src/DHTAnnouncePeerReplyMessage.cc
-  src/DHTAnnouncePeerReplyMessage.h
-  src/DHTAutoSaveCommand.cc
-  src/DHTAutoSaveCommand.h
-  src/DHTBucket.cc
-  src/DHTBucket.h
-  src/DHTBucketRefreshCommand.cc
-  src/DHTBucketRefreshCommand.h
-  src/DHTBucketRefreshTask.cc
-  src/DHTBucketRefreshTask.h
-  src/DHTBucketTree.cc
-  src/DHTBucketTree.h
-  src/DHTConnection.h
-  src/DHTConnectionImpl.cc
-  src/DHTConnectionImpl.h
-  src/DHTConstants.h
-  src/DHTEntryPointNameResolveCommand.cc
-  src/DHTEntryPointNameResolveCommand.h
-  src/DHTFindNodeMessage.cc
-  src/DHTFindNodeMessage.h
-  src/DHTFindNodeReplyMessage.cc
-  src/DHTFindNodeReplyMessage.h
-  src/DHTGetPeersCommand.cc
-  src/DHTGetPeersCommand.h
-  src/DHTGetPeersMessage.cc
-  src/DHTGetPeersMessage.h
-  src/DHTGetPeersReplyMessage.cc
-  src/DHTGetPeersReplyMessage.h
-  src/DHTIDCloser.h
-  src/DHTInteractionCommand.cc
-  src/DHTInteractionCommand.h
-  src/DHTMessage.cc
-  src/DHTMessage.h
-  src/DHTMessageCallback.h
-  src/DHTMessageDispatcher.h
-  src/DHTMessageDispatcherImpl.cc
-  src/DHTMessageDispatcherImpl.h
-  src/DHTMessageEntry.cc
-  src/DHTMessageEntry.h
-  src/DHTMessageFactory.h
-  src/DHTMessageFactoryImpl.cc
-  src/DHTMessageFactoryImpl.h
-  src/DHTMessageReceiver.cc
-  src/DHTMessageReceiver.h
-  src/DHTMessageTracker.cc
-  src/DHTMessageTracker.h
-  src/DHTMessageTrackerEntry.cc
-  src/DHTMessageTrackerEntry.h
-  src/DHTNode.cc
-  src/DHTNode.h
-  src/DHTNodeLookupEntry.cc
-  src/DHTNodeLookupEntry.h
-  src/DHTNodeLookupTask.cc
-  src/DHTNodeLookupTask.h
-  src/DHTNodeLookupTaskCallback.cc
-  src/DHTNodeLookupTaskCallback.h
-  src/DHTPeerAnnounceCommand.cc
-  src/DHTPeerAnnounceCommand.h
-  src/DHTPeerAnnounceEntry.cc
-  src/DHTPeerAnnounceEntry.h
-  src/DHTPeerAnnounceStorage.cc
-  src/DHTPeerAnnounceStorage.h
-  src/DHTPeerLookupTask.cc
-  src/DHTPeerLookupTask.h
-  src/DHTPeerLookupTaskCallback.cc
-  src/DHTPeerLookupTaskCallback.h
-  src/DHTPingMessage.cc
-  src/DHTPingMessage.h
-  src/DHTPingReplyMessage.cc
-  src/DHTPingReplyMessage.h
-  src/DHTPingReplyMessageCallback.h
-  src/DHTPingTask.cc
-  src/DHTPingTask.h
-  src/DHTQueryMessage.cc
-  src/DHTQueryMessage.h
-  src/DHTRegistry.cc
-  src/DHTRegistry.h
-  src/DHTReplaceNodeTask.cc
-  src/DHTReplaceNodeTask.h
-  src/DHTResponseMessage.cc
-  src/DHTResponseMessage.h
-  src/DHTRoutingTable.cc
-  src/DHTRoutingTable.h
-  src/DHTRoutingTableDeserializer.cc
-  src/DHTRoutingTableDeserializer.h
-  src/DHTRoutingTableSerializer.cc
-  src/DHTRoutingTableSerializer.h
-  src/DHTSetup.cc
-  src/DHTSetup.h
-  src/DHTTask.h
-  src/DHTTaskExecutor.cc
-  src/DHTTaskExecutor.h
-  src/DHTTaskFactory.h
-  src/DHTTaskFactoryImpl.cc
-  src/DHTTaskFactoryImpl.h
-  src/DHTTaskQueue.h
-  src/DHTTaskQueueImpl.cc
-  src/DHTTaskQueueImpl.h
-  src/DHTTokenTracker.cc
-  src/DHTTokenTracker.h
-  src/DHTTokenUpdateCommand.cc
-  src/DHTTokenUpdateCommand.h
-  src/DHTUnknownMessage.cc
-  src/DHTUnknownMessage.h
-  src/ExtensionMessage.h
-  src/ExtensionMessageFactory.h
-  src/ExtensionMessageRegistry.cc
-  src/ExtensionMessageRegistry.h
-  src/HandshakeExtensionMessage.cc
-  src/HandshakeExtensionMessage.h
-  src/IndexBtMessage.cc
-  src/IndexBtMessage.h
-  src/IndexBtMessageValidator.cc
-  src/IndexBtMessageValidator.h
-  src/InitiatorMSEHandshakeCommand.cc
-  src/InitiatorMSEHandshakeCommand.h
-  src/LpdDispatchMessageCommand.cc
-  src/LpdDispatchMessageCommand.h
-  src/LpdMessage.cc
-  src/LpdMessage.h
-  src/LpdMessageDispatcher.cc
-  src/LpdMessageDispatcher.h
-  src/LpdMessageReceiver.cc
-  src/LpdMessageReceiver.h
-  src/LpdReceiveMessageCommand.cc
-  src/LpdReceiveMessageCommand.h
-  src/magnet.cc
-  src/magnet.h
-  src/MemoryBencodePreDownloadHandler.h
-  src/MSEHandshake.cc
-  src/MSEHandshake.h
-  src/NameResolveCommand.cc
-  src/NameResolveCommand.h
-  src/Peer.cc
-  src/Peer.h
-  src/PeerAbstractCommand.cc
-  src/PeerAbstractCommand.h
-  src/PeerAddrEntry.cc
-  src/PeerAddrEntry.h
-  src/PeerChokeCommand.cc
-  src/PeerChokeCommand.h
-  src/PeerConnection.cc
-  src/PeerConnection.h
-  src/PeerInitiateConnectionCommand.cc
-  src/PeerInitiateConnectionCommand.h
-  src/PeerInteractionCommand.cc
-  src/PeerInteractionCommand.h
-  src/PeerListenCommand.cc
-  src/PeerListenCommand.h
-  src/PeerReceiveHandshakeCommand.cc
-  src/PeerReceiveHandshakeCommand.h
-  src/PeerSessionResource.cc
-  src/PeerSessionResource.h
-  src/PeerStorage.h
-  src/PriorityPieceSelector.cc
-  src/PriorityPieceSelector.h
-  src/RangeBtMessage.cc
-  src/RangeBtMessage.h
-  src/RangeBtMessageValidator.cc
-  src/RangeBtMessageValidator.h
-  src/ReceiverMSEHandshakeCommand.cc
-  src/ReceiverMSEHandshakeCommand.h
-  src/RequestSlot.cc
-  src/RequestSlot.h
-  src/SimpleBtMessage.cc
-  src/SimpleBtMessage.h
-  src/TrackerWatcherCommand.cc
-  src/TrackerWatcherCommand.h
-  src/UDPTrackerClient.cc
-  src/UDPTrackerClient.h
-  src/UDPTrackerRequest.cc
-  src/UDPTrackerRequest.h
-  src/UTMetadataDataExtensionMessage.cc
-  src/UTMetadataDataExtensionMessage.h
-  src/UTMetadataExtensionMessage.cc
-  src/UTMetadataExtensionMessage.h
-  src/UTMetadataPostDownloadHandler.cc
-  src/UTMetadataPostDownloadHandler.h
-  src/UTMetadataRejectExtensionMessage.cc
-  src/UTMetadataRejectExtensionMessage.h
-  src/UTMetadataRequestExtensionMessage.cc
-  src/UTMetadataRequestExtensionMessage.h
-  src/UTMetadataRequestFactory.cc
-  src/UTMetadataRequestFactory.h
-  src/UTMetadataRequestTracker.cc
-  src/UTMetadataRequestTracker.h
-  src/UTPexExtensionMessage.cc
-  src/UTPexExtensionMessage.h
-  src/ValueBaseBencodeParser.h
-  src/XORCloser.h
-  src/ZeroBtMessage.cc
-  src/ZeroBtMessage.h
+  src/BtSession.cc
+  src/BtSession.h
+  src/BtSnapshot.cc
+  src/BtSnapshot.h
 )
 
 set(ARIA2_SOURCES_ARC4

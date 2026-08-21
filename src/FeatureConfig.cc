@@ -60,6 +60,9 @@
 #ifdef HAVE_LIBSSH2
 #  include <libssh2.h>
 #endif // HAVE_LIBSSH2
+#ifdef ENABLE_BITTORRENT
+#  include <libtorrent/version.hpp>
+#endif
 #include "util.h"
 
 namespace aria2 {
@@ -210,6 +213,10 @@ std::string usedLibs()
 #ifdef HAVE_LIBSSH2
   res += "libssh2/" LIBSSH2_VERSION " ";
 #endif // HAVE_LIBSSH2
+#ifdef ENABLE_BITTORRENT
+  res += fmt("libtorrent/%d.%d.%d ", LIBTORRENT_VERSION_MAJOR,
+             LIBTORRENT_VERSION_MINOR, LIBTORRENT_VERSION_TINY);
+#endif
 
   if (!res.empty()) {
     res.erase(res.length() - 1);

@@ -73,8 +73,7 @@
 #include "HttpListenCommand.h"
 #include "Log.h"
 #ifdef ENABLE_BITTORRENT
-#  include "BtRegistry.h"
-#  include "BtPeerBlocklist.h"
+#  include "BtSession.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -129,9 +128,9 @@ std::unique_ptr<DownloadEngine> DownloadEngineFactory::newDownloadEngine(
   auto e = make_unique<DownloadEngine>(createEventPoll(op));
   e->setOption(op);
 #ifdef ENABLE_BITTORRENT
+  e->setBtSession(make_unique<BtSession>(op));
   if (!op->blank(PREF_BT_PEER_BLOCKLIST)) {
-    e->getBtRegistry()->getPeerBlocklist()->load(
-        op->get(PREF_BT_PEER_BLOCKLIST));
+    e->getBtSession()->loadIpFilter(op->get(PREF_BT_PEER_BLOCKLIST));
   }
 #endif // ENABLE_BITTORRENT
   {

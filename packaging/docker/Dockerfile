@@ -5,7 +5,7 @@ ARG VERSION
 ARG REVISION
 
 LABEL org.opencontainers.image.title="Aria2 Next"
-LABEL org.opencontainers.image.description="Maintained aria2-compatible download engine."
+LABEL org.opencontainers.image.description="Maintained multi-protocol download engine with libtorrent-backed BitTorrent."
 LABEL org.opencontainers.image.source="https://github.com/AnInsomniacy/aria2-next"
 LABEL org.opencontainers.image.url="https://github.com/AnInsomniacy/aria2-next"
 LABEL org.opencontainers.image.version="${VERSION}"

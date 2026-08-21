@@ -55,7 +55,6 @@
 #include "UnknownOptionException.h"
 #include "error_code.h"
 #include "SimpleRandomizer.h"
-#include "bittorrent_helper.h"
 #include "BufferedFile.h"
 #include "console.h"
 #include "array_fun.h"

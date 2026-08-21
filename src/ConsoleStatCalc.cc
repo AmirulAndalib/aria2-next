@@ -69,9 +69,7 @@
 #include "Option.h"
 
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
-#  include "PeerStorage.h"
-#  include "BtRegistry.h"
+#  include "BtDownload.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -272,10 +270,8 @@ void printProgress(ColorizedStream& o, const std::shared_ptr<RequestGroup>& rg,
   printSizeProgress(o, rg, stat, sizeFormatter, !showBar);
   o << " CN:" << rg->getNumConnection();
 #ifdef ENABLE_BITTORRENT
-  auto btObj = e->getBtRegistry()->get(rg->getGID());
-  if (btObj) {
-    const PeerSet& peers = btObj->peerStorage->getUsedPeers();
-    o << " SD:" << countSeeder(peers.begin(), peers.end());
+  if (rg->getBtDownload()) {
+    o << " SD:" << rg->getBtDownload()->snapshot().numSeeds;
   }
 #endif // ENABLE_BITTORRENT
 

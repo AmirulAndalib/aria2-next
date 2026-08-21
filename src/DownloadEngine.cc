@@ -61,13 +61,12 @@
 #include "Command.h"
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityEntry.h"
-#include "BtProgressInfoFile.h"
+#include "ProgressInfoFile.h"
 #include "DownloadContext.h"
 #include "fmt.h"
 #include "wallclock.h"
 #ifdef ENABLE_BITTORRENT
-#  include "BtRegistry.h"
-#  include "PeerAbstractCommand.h"
+#  include "BtSession.h"
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_WEBSOCKET
 #  include "WebSocketSessionMan.h"
@@ -100,9 +99,6 @@ DownloadEngine::DownloadEngine(std::unique_ptr<EventPoll> eventPoll)
       refreshInterval_(DEFAULT_REFRESH_INTERVAL),
       lastRefresh_(Timer::zero()),
       cookieStorage_(make_unique<CookieStorage>()),
-#ifdef ENABLE_BITTORRENT
-      btRegistry_(make_unique<BtRegistry>()),
-#endif // ENABLE_BITTORRENT
       dnsCache_(make_unique<DNSCache>()),
       option_(nullptr)
 {
@@ -163,6 +159,11 @@ int DownloadEngine::run(bool oneshot)
     }
     noWait_ = false;
     global::wallclock().reset();
+#ifdef ENABLE_BITTORRENT
+    if (btSession_) {
+      btSession_->poll();
+    }
+#endif
     calculateStatistics();
     if (lastRefresh_.difference(global::wallclock()) + A2_DELTA_MILLIS >=
         refreshInterval_) {
@@ -628,28 +629,17 @@ void DownloadEngine::addCommand(std::unique_ptr<Command> command)
   commands_.push_back(std::move(command));
 }
 
-#ifdef ENABLE_BITTORRENT
-size_t DownloadEngine::disconnectBlockedBtPeers()
-{
-  size_t disconnected = 0;
-  for (auto i = commands_.begin(); i != commands_.end();) {
-    auto peerCommand = dynamic_cast<PeerAbstractCommand*>(i->get());
-    if (peerCommand && peerCommand->disconnectIfBlocked(false)) {
-      i = commands_.erase(i);
-      ++disconnected;
-    }
-    else {
-      ++i;
-    }
-  }
-  return disconnected;
-}
-#endif // ENABLE_BITTORRENT
-
 void DownloadEngine::setRequestGroupMan(std::unique_ptr<RequestGroupMan> rgman)
 {
   requestGroupMan_ = std::move(rgman);
 }
+
+#ifdef ENABLE_BITTORRENT
+void DownloadEngine::setBtSession(std::unique_ptr<BtSession> session)
+{
+  btSession_ = std::move(session);
+}
+#endif // ENABLE_BITTORRENT
 
 void DownloadEngine::setFileAllocationMan(
     std::unique_ptr<FileAllocationMan> faman)

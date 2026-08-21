@@ -45,7 +45,7 @@
 #include "BufferedFile.h"
 #include "ed2k_link.h"
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
+#  include "BtDownload.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -98,7 +98,7 @@ bool ProtocolDetector::guessTorrentMagnet(const std::string& uri) const
 {
 #ifdef ENABLE_BITTORRENT
   try {
-    bittorrent::parseMagnet(uri);
+    BtDownload::fromMagnet(uri);
     return true;
   }
   catch (RecoverableException& e) {

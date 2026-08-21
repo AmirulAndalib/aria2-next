@@ -25,3 +25,10 @@ The bundled fmt `format.h` uses its native `max_value<size_t>()` helper instead 
 `third_party/doctest` contains the single-header doctest 2.4.12 test framework used by the aria2-next unit test suite. Vendoring the header means the tests always build: a missing system test-framework package can never silently reduce `ctest` to a green no-op.
 
 The bundled copy keeps the single header and license material only. The test adapter lives in `tests/a2doctest.h`; each former CppUnit fixture registers its methods through the `A2_TEST` macro, which preserves per-test `setUp()`/`tearDown()` semantics.
+
+## Release-only source dependencies
+
+Boost and libtorrent-rasterbar are external build dependencies and are not
+vendored in this directory. Maintained release builds fetch their pinned source
+archives from `packaging/dependencies.env`, build libtorrent as a static
+library, and record the resolved libtorrent version in `aria2-next --version`.

@@ -43,7 +43,6 @@
 
 #include "RpcRequest.h"
 #include "ValueBase.h"
-#include "TorrentAttribute.h"
 #include "DlAbortEx.h"
 #include "fmt.h"
 #include "IndexedList.h"
@@ -605,7 +604,6 @@ void gatherProgressCommon(Dict* entryDict,
 
 #ifdef ENABLE_BITTORRENT
 // Helper function to store BitTorrent metadata from torrentAttrs.
-void gatherBitTorrentMetadata(Dict* btDict, TorrentAttribute* torrentAttrs);
 #endif // ENABLE_BITTORRENT
 
 } // namespace rpc

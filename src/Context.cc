@@ -71,7 +71,7 @@
 #include "UriListParser.h"
 #include "message_digest_helper.h"
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
+#  include "BtDownload.h"
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_METALINK
 #  include "metalink_helper.h"
@@ -89,8 +89,12 @@ void showTorrentFile(const std::string& uri)
 {
   auto op = std::make_shared<Option>();
   auto dctx = std::make_shared<DownloadContext>();
-  bittorrent::load(uri, dctx, op);
-  bittorrent::print(*global::cout(), dctx);
+  auto download = BtDownload::fromFile(uri, {});
+  download->populateDownloadContext(dctx, op.get());
+  util::toStream(std::begin(dctx->getFileEntries()),
+                 std::end(dctx->getFileEntries()), *global::cout());
+  global::cout()->write("\n");
+  global::cout()->flush();
 }
 } // namespace
 #endif // ENABLE_BITTORRENT
@@ -163,10 +167,6 @@ Context::Context(bool standalone, int argc, char** argv, const KeyVals& options)
       throw DL_ABORT_EX("Option processing failed");
     }
   }
-#ifdef ENABLE_BITTORRENT
-  bittorrent::generateStaticPeerId(op->get(PREF_PEER_ID_PREFIX));
-  bittorrent::generateStaticPeerAgent(op->get(PREF_PEER_AGENT));
-#endif // ENABLE_BITTORRENT
   logging::Settings logSettings;
   logSettings.file = op->get(PREF_LOG);
   logSettings.maxFileSize = op->getAsLLInt(PREF_LOG_MAX_SIZE);

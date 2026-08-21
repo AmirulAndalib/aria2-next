@@ -18,7 +18,9 @@ aria2 is remarkable open source software. For over a decade it has been one of t
 
 But upstream development has slowed dramatically in recent years. Dependencies grew stale, builds broke on modern platforms, and a backlog of bugs went unaddressed. We picked up the baton: migrated the codebase to a modern build framework, triaged and fixed a substantial number of upstream issues, and introduced ED2K protocol support for the first time. A full audit trail is preserved in [`docs/maintenance/upstream-issue-review/matrix.csv`](docs/maintenance/upstream-issue-review/matrix.csv).
 
-Aria2 Next is an actively maintained aria2-compatible engine for everyone, and it is also the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). Original interfaces, including options, configuration, sessions, JSON-RPC, and libaria2, remain intact so downstream projects get a seamless upgrade. The focus is straightforward: release reliability, current dependency baselines, and ongoing compatibility fixes. Same engine, renewed foundation.
+Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, FTP, SFTP, Metalink, ED2K, RPC, and libaria2 remain in the aria2 codebase. BitTorrent is implemented by libtorrent-rasterbar 2.1 instead of aria2's former peer-wire, tracker, DHT, encryption, and disk pipeline. Obsolete BitTorrent-only options were removed rather than emulated.
+
+Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID pauses with a complete file list before any payload is requested.
 
 ## Native ED2K/eMule Support
 
@@ -26,16 +28,16 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 
 ## Compatibility
 
-| Surface | Compatibility target |
+| Surface | Current contract |
 | --- | --- |
 | Executable | `aria2-next` |
-| CLI | aria2 option names and behavior |
-| Configuration | aria2 config file format |
-| Sessions | aria2 session and input file conventions |
-| RPC | aria2 JSON-RPC methods and response shapes |
+| CLI | Maintained aria2 options plus native ED2K and libtorrent-backed BitTorrent |
+| Configuration | aria2 key-value configuration format |
+| Sessions | aria2 input/session files and libtorrent resume data |
+| RPC | Maintained aria2 JSON-RPC methods plus BitTorrent endpoint and blocklist methods |
 | Library | public libaria2 headers under `src/includes/aria2/` |
 
-Motrix Next embeds this engine, but release artifacts are ordinary aria2-compatible binaries.
+Motrix Next embeds this engine, and release artifacts are standalone binaries.
 
 ## Quick Start
 
@@ -68,7 +70,7 @@ aria2-next --help=#ed2k
 
 | Area | Status |
 | --- | --- |
-| Engine | aria2-compatible `aria2-next` binary |
+| Engine | Multi-protocol `aria2-next` binary |
 | Primary consumer | Motrix Next sidecar engine |
 | External consumers | Existing aria2 scripts, frontends, RPC clients, and automation |
 | Build system | CMake 3.25+ with Ninja presets |
@@ -98,6 +100,8 @@ ctest --test-dir build/default --output-on-failure
 Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_STATIC_DEPENDENCIES`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, `ARIA2_RELEASE_LTO`, `ARIA2_WITH_WINTLS`, `ARIA2_WITH_OPENSSL`, `ARIA2_WITH_EXPAT`, `ARIA2_WITH_CARES`, `ARIA2_WITH_SQLITE3`, and `ARIA2_WITH_LIBSSH2`.
 
 Async DNS builds require c-ares 1.34.5 or newer.
+BitTorrent builds require libtorrent-rasterbar 2.1.1 or newer and its Boost
+headers. Maintained releases pin libtorrent-rasterbar 2.1.1 and Boost 1.91.0.
 
 ## Downloads
 

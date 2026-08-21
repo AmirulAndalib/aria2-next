@@ -39,7 +39,6 @@
 
 #include "DownloadContext.h"
 #include "Piece.h"
-#include "Peer.h"
 #include "Log.h"
 #include "prefs.h"
 #include "DirectDiskAdaptor.h"
@@ -69,9 +68,6 @@
 #include "RequestGroup.h"
 #include "SimpleRandomizer.h"
 #include "ContextAttribute.h"
-#ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
-#endif // ENABLE_BITTORRENT
 
 namespace aria2 {
 
@@ -85,9 +81,6 @@ DefaultPieceStorage::DefaultPieceStorage(
       endGame_(false),
       endGamePieceNum_(END_GAME_PIECE_NUM),
       option_(option),
-      // The DefaultBtInteractive has the default value of
-      // lastHaveIndex of 0, so we need to make nextHaveIndex_ more
-      // than that.
       nextHaveIndex_(1),
       pieceStatMan_(std::make_shared<PieceStatMan>(
           downloadContext->getNumPieces(), true)),
@@ -184,198 +177,6 @@ std::shared_ptr<Piece> DefaultPieceStorage::findUsedPiece(size_t index) const
   }
 }
 
-#ifdef ENABLE_BITTORRENT
-
-bool DefaultPieceStorage::hasMissingPiece(const std::shared_ptr<Peer>& peer)
-{
-  return bitfieldMan_->hasMissingPiece(peer->getBitfield(),
-                                       peer->getBitfieldLength());
-}
-
-void DefaultPieceStorage::getMissingPiece(
-    std::vector<std::shared_ptr<Piece>>& pieces, size_t minMissingBlocks,
-    const unsigned char* bitfield, size_t length, cuid_t cuid)
-{
-  const size_t mislen = bitfieldMan_->getBitfieldLength();
-  auto misbitfield = make_unique<unsigned char[]>(mislen);
-  size_t blocks = bitfieldMan_->countBlock();
-  size_t misBlock = 0;
-  if (isEndGame()) {
-    bool r = bitfieldMan_->getAllMissingIndexes(misbitfield.get(), mislen,
-                                                bitfield, length);
-    if (!r) {
-      return;
-    }
-    std::vector<size_t> indexes;
-    for (size_t i = 0; i < blocks; ++i) {
-      if (bitfield::test(misbitfield, blocks, i)) {
-        indexes.push_back(i);
-      }
-    }
-    std::shuffle(indexes.begin(), indexes.end(),
-                 *SimpleRandomizer::getInstance());
-    for (std::vector<size_t>::const_iterator i = indexes.begin(),
-                                             eoi = indexes.end();
-         i != eoi && misBlock < minMissingBlocks; ++i) {
-      std::shared_ptr<Piece> piece = checkOutPiece(*i, cuid);
-      if (piece->getUsedBySegment()) {
-        // We don't share piece downloaded via HTTP/FTP
-        piece->removeUser(cuid);
-      }
-      else {
-        pieces.push_back(piece);
-        misBlock += piece->countMissingBlock();
-      }
-    }
-  }
-  else {
-    bool r = bitfieldMan_->getAllMissingUnusedIndexes(misbitfield.get(), mislen,
-                                                      bitfield, length);
-    if (!r) {
-      return;
-    }
-    while (misBlock < minMissingBlocks) {
-      size_t index;
-      if (pieceSelector_->select(index, misbitfield.get(), blocks)) {
-        pieces.push_back(checkOutPiece(index, cuid));
-        bitfield::flipBit(misbitfield.get(), blocks, index);
-        misBlock += pieces.back()->countMissingBlock();
-      }
-      else {
-        break;
-      }
-    }
-  }
-}
-
-namespace {
-void unsetExcludedIndexes(BitfieldMan& bitfield,
-                          const std::vector<size_t>& excludedIndexes)
-{
-  using namespace std::placeholders;
-  std::for_each(excludedIndexes.begin(), excludedIndexes.end(),
-                std::bind(&BitfieldMan::unsetBit, &bitfield, _1));
-}
-} // namespace
-
-void DefaultPieceStorage::createFastIndexBitfield(
-    BitfieldMan& bitfield, const std::shared_ptr<Peer>& peer)
-{
-  const auto& is = peer->getPeerAllowedIndexSet();
-  for (const auto& i : is) {
-    if (!bitfieldMan_->isBitSet(i) && peer->hasPiece(i)) {
-      bitfield.setBit(i);
-    }
-  }
-}
-
-void DefaultPieceStorage::getMissingPiece(
-    std::vector<std::shared_ptr<Piece>>& pieces, size_t minMissingBlocks,
-    const std::shared_ptr<Peer>& peer, cuid_t cuid)
-{
-  getMissingPiece(pieces, minMissingBlocks, peer->getBitfield(),
-                  peer->getBitfieldLength(), cuid);
-}
-
-void DefaultPieceStorage::getMissingPiece(
-    std::vector<std::shared_ptr<Piece>>& pieces, size_t minMissingBlocks,
-    const std::shared_ptr<Peer>& peer,
-    const std::vector<size_t>& excludedIndexes, cuid_t cuid)
-{
-  BitfieldMan tempBitfield(bitfieldMan_->getBlockLength(),
-                           bitfieldMan_->getTotalLength());
-  tempBitfield.setBitfield(peer->getBitfield(), peer->getBitfieldLength());
-  unsetExcludedIndexes(tempBitfield, excludedIndexes);
-  getMissingPiece(pieces, minMissingBlocks, tempBitfield.getBitfield(),
-                  tempBitfield.getBitfieldLength(), cuid);
-}
-
-void DefaultPieceStorage::getMissingFastPiece(
-    std::vector<std::shared_ptr<Piece>>& pieces, size_t minMissingBlocks,
-    const std::shared_ptr<Peer>& peer, cuid_t cuid)
-{
-  if (peer->isFastExtensionEnabled() && peer->countPeerAllowedIndexSet() > 0) {
-    BitfieldMan tempBitfield(bitfieldMan_->getBlockLength(),
-                             bitfieldMan_->getTotalLength());
-    createFastIndexBitfield(tempBitfield, peer);
-    getMissingPiece(pieces, minMissingBlocks, tempBitfield.getBitfield(),
-                    tempBitfield.getBitfieldLength(), cuid);
-  }
-}
-
-void DefaultPieceStorage::getMissingFastPiece(
-    std::vector<std::shared_ptr<Piece>>& pieces, size_t minMissingBlocks,
-    const std::shared_ptr<Peer>& peer,
-    const std::vector<size_t>& excludedIndexes, cuid_t cuid)
-{
-  if (peer->isFastExtensionEnabled() && peer->countPeerAllowedIndexSet() > 0) {
-    BitfieldMan tempBitfield(bitfieldMan_->getBlockLength(),
-                             bitfieldMan_->getTotalLength());
-    createFastIndexBitfield(tempBitfield, peer);
-    unsetExcludedIndexes(tempBitfield, excludedIndexes);
-    getMissingPiece(pieces, minMissingBlocks, tempBitfield.getBitfield(),
-                    tempBitfield.getBitfieldLength(), cuid);
-  }
-}
-
-std::shared_ptr<Piece>
-DefaultPieceStorage::getMissingPiece(const std::shared_ptr<Peer>& peer,
-                                     cuid_t cuid)
-{
-  std::vector<std::shared_ptr<Piece>> pieces;
-  getMissingPiece(pieces, 1, peer, cuid);
-  if (pieces.empty()) {
-    return nullptr;
-  }
-  else {
-    return pieces.front();
-  }
-}
-
-std::shared_ptr<Piece>
-DefaultPieceStorage::getMissingPiece(const std::shared_ptr<Peer>& peer,
-                                     const std::vector<size_t>& excludedIndexes,
-                                     cuid_t cuid)
-{
-  std::vector<std::shared_ptr<Piece>> pieces;
-  getMissingPiece(pieces, 1, peer, excludedIndexes, cuid);
-  if (pieces.empty()) {
-    return nullptr;
-  }
-  else {
-    return pieces.front();
-  }
-}
-
-std::shared_ptr<Piece>
-DefaultPieceStorage::getMissingFastPiece(const std::shared_ptr<Peer>& peer,
-                                         cuid_t cuid)
-{
-  std::vector<std::shared_ptr<Piece>> pieces;
-  getMissingFastPiece(pieces, 1, peer, cuid);
-  if (pieces.empty()) {
-    return nullptr;
-  }
-  else {
-    return pieces.front();
-  }
-}
-
-std::shared_ptr<Piece> DefaultPieceStorage::getMissingFastPiece(
-    const std::shared_ptr<Peer>& peer,
-    const std::vector<size_t>& excludedIndexes, cuid_t cuid)
-{
-  std::vector<std::shared_ptr<Piece>> pieces;
-  getMissingFastPiece(pieces, 1, peer, excludedIndexes, cuid);
-  if (pieces.empty()) {
-    return nullptr;
-  }
-  else {
-    return pieces.front();
-  }
-}
-
-#endif // ENABLE_BITTORRENT
 
 bool DefaultPieceStorage::hasMissingUnusedPiece()
 {
@@ -482,31 +283,6 @@ void DefaultPieceStorage::completePiece(const std::shared_ptr<Piece>& piece)
     else {
       A2_LOG_DEBUG(MSG_DOWNLOAD_COMPLETED);
     }
-#ifdef ENABLE_BITTORRENT
-    if (downloadContext_->hasAttribute(CTX_ATTR_BT)) {
-      if (!bittorrent::getTorrentAttrs(downloadContext_)->metadata.empty()) {
-#  ifdef __MINGW32__
-        // On Windows, if aria2 opens files with GENERIC_WRITE access
-        // right, some programs cannot open them aria2 is seeding. To
-        // avoid this situation, re-open the files with read-only
-        // enabled.
-        A2_LOG_DEBUG("Closing files and re-open them with read-only mode"
-                    " enabled.");
-        diskAdaptor_->closeFile();
-        diskAdaptor_->enableReadOnly();
-        diskAdaptor_->openFile();
-#  endif // __MINGW32__
-        auto group = downloadContext_->getOwnerRequestGroup();
-
-        util::executeHookByOptName(group, option_,
-                                   PREF_ON_BT_DOWNLOAD_COMPLETE);
-        SingletonHolder<Notifier>::instance()->notifyDownloadEvent(
-            EVENT_ON_BT_DOWNLOAD_COMPLETE, group);
-
-        group->enableSeedOnly();
-      }
-    }
-#endif // ENABLE_BITTORRENT
     if (downloadContext_->hasAttribute(CTX_ATTR_ED2K)) {
       downloadContext_->getOwnerRequestGroup()->enableSeedOnly();
     }

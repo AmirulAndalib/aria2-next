@@ -47,10 +47,9 @@
 #include "DownloadContext.h"
 #include "download_helper.h"
 #include "fmt.h"
-#include "ValueBaseBencodeParser.h"
+#include "ByteArrayDiskWriter.h"
 #include "DiskWriter.h"
 #include "AbstractSingleDiskAdaptor.h"
-#include "BencodeDiskWriter.h"
 #include "RequestGroupMan.h"
 
 namespace aria2 {
@@ -67,41 +66,20 @@ void BtPostDownloadHandler::getNextRequestGroups(
 {
   A2_LOG_DEBUG(fmt("Generating RequestGroups for Torrent file %s",
                   requestGroup->getFirstFilePath().c_str()));
-  std::unique_ptr<ValueBase> torrent;
+  std::string torrentData;
   if (requestGroup->inMemoryDownload()) {
     auto& dw = static_cast<AbstractSingleDiskAdaptor*>(
                    requestGroup->getPieceStorage()->getDiskAdaptor().get())
                    ->getDiskWriter();
-    auto bdw = static_cast<bittorrent::BencodeDiskWriter*>(dw.get());
-    int error = bdw->finalize();
-    if (error == 0) {
-      torrent = bdw->getResult();
-    }
+    torrentData = static_cast<ByteArrayDiskWriter*>(dw.get())->getString();
   }
-  else {
-    std::string content;
-    try {
-      requestGroup->getPieceStorage()->getDiskAdaptor()->openExistingFile();
-      content =
-          util::toString(requestGroup->getPieceStorage()->getDiskAdaptor());
-      requestGroup->getPieceStorage()->getDiskAdaptor()->closeFile();
-    }
-    catch (Exception& e) {
-      requestGroup->getPieceStorage()->getDiskAdaptor()->closeFile();
-      throw;
-    }
-    ssize_t error;
-    torrent = bittorrent::ValueBaseBencodeParser().parseFinal(
-        content.c_str(), content.size(), error);
-  }
-  if (!torrent) {
-    throw DL_ABORT_EX2("Could not parse BitTorrent metainfo",
-                       error_code::BENCODE_PARSE_ERROR);
-  }
+
   std::vector<std::shared_ptr<RequestGroup>> newRgs;
-  createRequestGroupForBitTorrent(newRgs, requestGroup->getOption(),
-                                  std::vector<std::string>(), "",
-                                  torrent.get());
+  createRequestGroupForBitTorrent(
+      newRgs, requestGroup->getOption(), {},
+      requestGroup->inMemoryDownload() ? ""
+                                       : requestGroup->getFirstFilePath(),
+      torrentData);
   requestGroup->followedBy(std::begin(newRgs), std::end(newRgs));
   for (auto& rg : newRgs) {
     rg->following(requestGroup->getGID());

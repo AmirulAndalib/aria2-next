@@ -70,46 +70,6 @@ public:
 
   virtual ~UnknownLengthPieceStorage();
 
-#ifdef ENABLE_BITTORRENT
-
-  /**
-   * Returns true if the peer has a piece that localhost doesn't have.
-   * Otherwise returns false.
-   */
-  virtual bool
-  hasMissingPiece(const std::shared_ptr<Peer>& peer) override;
-
-  virtual void getMissingPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                               size_t minMissingBlocks,
-                               const std::shared_ptr<Peer>& peer,
-                               cuid_t cuid) override;
-
-  virtual void getMissingPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                               size_t minMissingBlocks,
-                               const std::shared_ptr<Peer>& peer,
-                               const std::vector<size_t>& excludedIndexes,
-                               cuid_t cuid) override;
-
-  virtual void getMissingFastPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                                   size_t minMissingBlocks,
-                                   const std::shared_ptr<Peer>& peer,
-                                   cuid_t cuid) override;
-
-  virtual void getMissingFastPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                                   size_t minMissingBlocks,
-                                   const std::shared_ptr<Peer>& peer,
-                                   const std::vector<size_t>& excludedIndexes,
-                                   cuid_t cuid) override;
-
-  virtual std::shared_ptr<Piece>
-  getMissingPiece(const std::shared_ptr<Peer>& peer,
-                  cuid_t cuid) override;
-
-  virtual std::shared_ptr<Piece>
-  getMissingPiece(const std::shared_ptr<Peer>& peer,
-                  const std::vector<size_t>& excludedIndexes,
-                  cuid_t cuid) override;
-#endif // ENABLE_BITTORRENT
 
   virtual bool hasMissingUnusedPiece() override;
 

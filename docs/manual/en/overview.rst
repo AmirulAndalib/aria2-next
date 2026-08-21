@@ -4,12 +4,11 @@ aria2 - The ultra fast download utility
 Aria2 Next maintenance note
 ---------------------------
 
-Aria2 Next is maintained by AnInsomniacy since 2026 as the aria2-compatible
-``aria2-next`` engine for Motrix Next and other consumers. Maintenance focuses on
-reliability fixes, current dependency baselines, and reproducible
-cross-platform releases. CMake is the only supported build system for this
-repository. Ninja is the default generator used by local development and
-release automation.
+Aria2 Next is maintained by AnInsomniacy since 2026 as the ``aria2-next``
+engine for Motrix Next and other consumers. BitTorrent uses
+libtorrent-rasterbar 2.1. Maintenance focuses on reliability, current
+dependency baselines, and reproducible cross-platform releases. CMake is the
+only supported build system, and Ninja is the default generator.
 
 Disclaimer
 ----------
@@ -19,22 +18,17 @@ You must use this program at your own risk.
 Introduction
 ------------
 
-aria2 is a utility for downloading files. The supported protocols are
-HTTP(S), FTP, SFTP, BitTorrent, Metalink, and ED2K file links. aria2 can download a
-file from multiple sources/protocols and tries to utilize your maximum
-download bandwidth. It supports downloading a file from
-HTTP(S)/FTP/SFTP and BitTorrent at the same time, while the data
-downloaded from HTTP(S)/FTP/SFTP is uploaded to the BitTorrent
-swarm. Using Metalink's chunk checksums, aria2 automatically validates
-chunks of data while downloading a file like BitTorrent.
+aria2-next downloads files over HTTP(S), FTP, SFTP, BitTorrent, Metalink, and
+ED2K file links. BitTorrent v1, v2, and hybrid torrents are handled by
+libtorrent-rasterbar 2.1. Metalink chunk checksums validate downloaded chunks.
 
 Aria2 Next includes native ED2K/eMule support aligned with aMule's network
 behavior. The maintained runtime, persistence, discovery, transfer, and
 verification design is documented in ``docs/maintenance/ed2k-runtime.md``.
 
 The maintained fork is located at https://github.com/AnInsomniacy/aria2-next.
-It preserves aria2 command-line, configuration, session, JSON-RPC, and
-libaria2 compatibility.
+It retains the maintained command-line, configuration, session, JSON-RPC, and
+libaria2 surfaces without emulating removed BitTorrent internals.
 
 See the upstream `aria2 Online Manual
 <https://aria2.github.io/manual/en/html/>`_ to learn how to use aria2.
@@ -47,8 +41,8 @@ Here is a list of features:
 * Command-line interface
 * Download files through HTTP(S)/FTP/SFTP/BitTorrent/ED2K
 * Segmented downloading
-* Metalink version 4 (RFC 5854) support(HTTP/FTP/SFTP/BitTorrent)
-* Metalink version 3.0 support(HTTP/FTP/SFTP/BitTorrent)
+* Metalink version 4 (RFC 5854) support for HTTP/FTP/SFTP
+* Metalink version 3.0 support for HTTP/FTP/SFTP
 * Metalink/HTTP (RFC 6249) support
 * HTTP/1.1 implementation
 * HTTP Proxy support
@@ -334,19 +328,13 @@ The number of files to open simultaneously can be controlled by
 DHT
 ~~~
 
-aria2 supports mainline compatible DHT. By default, the routing table
-for IPv4 DHT is saved to ``$XDG_CACHE_HOME/aria2/dht.dat`` and the
-routing table for IPv6 DHT is saved to
-``$XDG_CACHE_HOME/aria2/dht6.dat`` unless files exist at
-``$HOME/.aria2/dht.dat`` or ``$HOME/.aria2/dht6.dat``. aria2 uses the
-same port number to listen on for both IPv4 and IPv6 DHT.
+libtorrent provides mainline-compatible IPv4 and IPv6 DHT. DHT and UDP
+trackers use the UDP side of ``--listen-port``.
 
 UDP tracker
 ~~~~~~~~~~~
 
-UDP tracker support is enabled when IPv4 DHT is enabled.  The port
-number of the UDP tracker is shared with DHT. Use ``--dht-listen-port``
-option to change the port number.
+UDP trackers remain available when DHT is disabled.
 
 Other things should be noted
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -354,20 +342,14 @@ Other things should be noted
 * ``-o`` option is used to change the file name of .torrent file itself,
   not a file name of a file in .torrent file. For this purpose, use
   ``--index-out`` option instead.
-* The port numbers that aria2 uses by default are 6881-6999 for TCP
-  and UDP.
-* aria2 doesn't configure port-forwarding automatically. Please
-  configure your router or firewall manually.
-* The maximum number of peers is 55. This limit may be exceeded when
-  the download rate is low. This download rate can be adjusted using
-  ``--bt-request-peer-speed-limit`` option.
-* As of release 0.10.0, aria2 stops sending request messages after
-  selective download completes.
+* The default TCP and UDP listen port is 6881.
+* libtorrent attempts UPnP and NAT-PMP port mapping.
+* The default maximum number of peers per torrent is 55.
 
 Metalink
 --------
 
-The current Metalink implementation supports HTTP(S)/FTP/SFTP/BitTorrent.
+The current Metalink implementation supports HTTP(S), FTP, and SFTP.
 Other protocols in Metalink documents are ignored. Both Metalink4 (RFC 5854) and
 Metalink version 3.0 documents are supported.
 

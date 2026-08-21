@@ -44,58 +44,6 @@ public:
 
   virtual ~MockPieceStorage() {}
 
-#ifdef ENABLE_BITTORRENT
-
-  virtual bool hasMissingPiece(const std::shared_ptr<Peer>& peer) override
-  {
-    return false;
-  }
-
-  virtual void getMissingPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                               size_t minMissingBlocks,
-                               const std::shared_ptr<Peer>& peer,
-                               cuid_t cuid) override
-  {
-  }
-
-  virtual void getMissingPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                               size_t minMissingBlocks,
-                               const std::shared_ptr<Peer>& peer,
-                               const std::vector<size_t>& excludedIndexes,
-                               cuid_t cuid) override
-  {
-  }
-
-  virtual void getMissingFastPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                                   size_t minMissingBlocks,
-                                   const std::shared_ptr<Peer>& peer,
-                                   cuid_t cuid) override
-  {
-  }
-
-  virtual void getMissingFastPiece(std::vector<std::shared_ptr<Piece>>& pieces,
-                                   size_t minMissingBlocks,
-                                   const std::shared_ptr<Peer>& peer,
-                                   const std::vector<size_t>& excludedIndexes,
-                                   cuid_t cuid) override
-  {
-  }
-
-  virtual std::shared_ptr<Piece>
-  getMissingPiece(const std::shared_ptr<Peer>& peer, cuid_t cuid) override
-  {
-    return std::shared_ptr<Piece>(new Piece());
-  }
-
-  virtual std::shared_ptr<Piece>
-  getMissingPiece(const std::shared_ptr<Peer>& peer,
-                  const std::vector<size_t>& excludedIndexes,
-                  cuid_t cuid) override
-  {
-    return std::shared_ptr<Piece>(new Piece());
-  }
-
-#endif // ENABLE_BITTORRENT
 
   virtual bool hasMissingUnusedPiece() override { return false; }
 

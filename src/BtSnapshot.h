@@ -1,0 +1,107 @@
+/* <!-- copyright */
+/*
+ * aria2 - The high speed download utility
+ *
+ * Copyright (C) 2026 The aria2-next contributors
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+/* copyright --> */
+#ifndef D_BT_SNAPSHOT_H
+#define D_BT_SNAPSHOT_H
+
+#include "common.h"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace aria2 {
+
+struct BtFileSnapshot {
+  std::string path;
+  int64_t length = 0;
+  int64_t completedLength = 0;
+  bool selected = true;
+};
+
+struct BtPeerSnapshot {
+  std::string peerId;
+  std::string clientName;
+  std::string ip;
+  uint16_t port = 0;
+  std::string bitfield;
+  std::string flags;
+  std::string transport;
+  std::string encryption;
+  std::vector<std::string> sources;
+  int64_t downloaded = 0;
+  int64_t uploaded = 0;
+  int64_t completedLength = 0;
+  int downloadSpeed = 0;
+  int uploadSpeed = 0;
+  int progressPpm = 0;
+  bool amChoking = false;
+  bool amInterested = false;
+  bool peerChoking = false;
+  bool peerInterested = false;
+  bool incoming = false;
+  bool snubbed = false;
+  bool optimisticUnchoke = false;
+  bool handshaking = false;
+  bool seeder = false;
+};
+
+struct BtSnapshot {
+  enum class State {
+    Adding,
+    DownloadingMetadata,
+    AwaitingFileSelection,
+    Checking,
+    Downloading,
+    Finished,
+    Seeding,
+    Paused,
+    Stopping,
+    Stopped,
+    Error,
+  };
+
+  State state = State::Adding;
+  std::string name;
+  std::string infoHashV1;
+  std::string infoHashV2;
+  std::string magnetLink;
+  std::string currentTracker;
+  std::string errorMessage;
+  std::string bitfield;
+  std::vector<std::vector<std::string>> announceList;
+  std::vector<BtFileSnapshot> files;
+  std::vector<BtPeerSnapshot> peers;
+  int64_t totalLength = 0;
+  int64_t completedLength = 0;
+  int64_t allTimeDownload = 0;
+  int64_t allTimeUpload = 0;
+  int downloadSpeed = 0;
+  int uploadSpeed = 0;
+  int numPeers = 0;
+  int numSeeds = 0;
+  int numComplete = -1;
+  int numIncomplete = -1;
+  int progressPpm = 0;
+  int queuePosition = -1;
+  int seedingTime = 0;
+  bool privateTorrent = false;
+  bool hasMetadata = false;
+  bool finished = false;
+  bool seeding = false;
+};
+
+const char* btStateName(BtSnapshot::State state);
+
+} // namespace aria2
+
+#endif // D_BT_SNAPSHOT_H

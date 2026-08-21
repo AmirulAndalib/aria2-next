@@ -140,6 +140,8 @@ jobs:
           curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
 
       - name: Build zlib
         run: |
@@ -193,6 +195,14 @@ jobs:
           make -j$(nproc)
           sudo make install
 
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile linux
+          packaging/scripts/build-libtorrent \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile linux
@@ -216,6 +226,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
+
+      - name: Verify runtime dependencies
+        run: packaging/scripts/check-runtime-deps linux build/release/aria2-next
 
       - name: Package
         run: |
@@ -264,6 +277,8 @@ jobs:
           curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
 
       - name: Build zlib
         run: |
@@ -317,6 +332,14 @@ jobs:
           make -j$(nproc)
           sudo make install
 
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile linux
+          packaging/scripts/build-libtorrent \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile linux
@@ -340,6 +363,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
+
+      - name: Verify runtime dependencies
+        run: packaging/scripts/check-runtime-deps linux build/release/aria2-next
 
       - name: Package
         run: |
@@ -383,6 +409,8 @@ jobs:
           curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
           curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
 
       - name: Build zlib
@@ -448,6 +476,17 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
           make install
 
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile macos
+          packaging/scripts/build-libtorrent \
+            -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_VERSION_MIN" \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile macos
@@ -469,6 +508,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
+
+      - name: Verify runtime dependencies
+        run: packaging/scripts/check-runtime-deps macos build/release/aria2-next
 
       - name: Package
         run: |
@@ -512,6 +554,8 @@ jobs:
           curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
           curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
 
       - name: Build zlib
@@ -577,6 +621,17 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
           make install
 
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile macos
+          packaging/scripts/build-libtorrent \
+            -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_VERSION_MIN" \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile macos
@@ -598,6 +653,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             strip build/release/aria2-next
           fi
+
+      - name: Verify runtime dependencies
+        run: packaging/scripts/check-runtime-deps macos build/release/aria2-next
 
       - name: Package
         run: |
@@ -637,7 +695,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip \
+            patch ca-certificates pkg-config curl tar dpkg-dev lzip perl \
             gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
       - name: Verify runner tools
@@ -652,6 +710,9 @@ jobs:
           curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
+          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
 
       - name: Build expat
         run: |
@@ -729,6 +790,36 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
           sudo cmake --build build/libssh2 --target install -j$(nproc)
 
+      - name: Build OpenSSL
+        run: |
+          source packaging/dependencies.env
+          . packaging/scripts/release-size-profile windows
+          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
+          ./Configure mingw64 no-shared no-module no-tests no-apps no-autoload-config \
+            --cross-compile-prefix="$HOST-" \
+            --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib \
+            $RELEASE_CFLAGS
+          make -j$(nproc)
+          sudo make install_sw
+
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile windows
+          packaging/scripts/build-libtorrent \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_RC_COMPILER="$HOST-windres" \
+            -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile windows
@@ -756,6 +847,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             $HOST-strip build/release/aria2-next.exe
           fi
+
+      - name: Verify runtime dependencies
+        run: OBJDUMP="$HOST-objdump" packaging/scripts/check-runtime-deps windows-x86_64 build/release/aria2-next.exe
 
       - name: Package
         run: |
@@ -809,7 +903,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip
+            patch ca-certificates pkg-config curl tar dpkg-dev lzip perl
           . packaging/dependencies.env
           . packaging/scripts/common.sh
           curl_fetch "$LLVM_MINGW_URL" "$LLVM_MINGW_ARCHIVE" "$LLVM_MINGW_SHA256"
@@ -828,6 +922,9 @@ jobs:
           curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
+          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
 
       - name: Build expat
         run: |
@@ -907,6 +1004,40 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
           sudo env "PATH=$PATH" cmake --build build/libssh2 --target install -j$(nproc)
 
+      - name: Build OpenSSL
+        run: |
+          source packaging/dependencies.env
+          . packaging/scripts/release-size-profile windows
+          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
+          ./Configure --config="$GITHUB_WORKSPACE/packaging/openssl/mingw-arm64.conf" \
+            mingw-arm64 no-shared no-module no-tests no-apps no-asm no-autoload-config \
+            --cross-compile-prefix="$HOST-" \
+            --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib \
+            $RELEASE_CFLAGS
+          make -j$(nproc)
+          sudo env "PATH=$PATH" make install_sw
+
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile windows
+          AR_PATH=$(command -v "$AR")
+          RANLIB_PATH=$(command -v "$RANLIB")
+          packaging/scripts/build-libtorrent \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_AR="$AR_PATH" \
+            -DCMAKE_RANLIB="$RANLIB_PATH" \
+            -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile windows
@@ -937,6 +1068,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             $STRIP build/release/aria2-next.exe
           fi
+
+      - name: Verify runtime dependencies
+        run: OBJDUMP="$HOST-objdump" packaging/scripts/check-runtime-deps windows-arm64 build/release/aria2-next.exe
 
       - name: Package
         run: |
@@ -1030,6 +1164,8 @@ jobs:
           curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
           curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
           curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
 
       - name: Build OpenSSL
         run: |
@@ -1099,6 +1235,25 @@ jobs:
             PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
           make -j$(nproc) install
 
+      - name: Build libtorrent
+        run: |
+          . packaging/scripts/release-size-profile android
+          packaging/scripts/build-libtorrent \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_ANDROID_NDK="$NDK" \
+            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+            -DCMAKE_ANDROID_STL_TYPE=c++_static \
+            -DCMAKE_SYSTEM_VERSION="$API" \
+            -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DCMAKE_FIND_ROOT_PATH="$PREFIX;$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
+            -DCMAKE_FIND_LIBRARY_SUFFIXES=.a \
+            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX/lib $RELEASE_LDFLAGS"
+
       - name: Build aria2
         run: |
           . packaging/scripts/release-size-profile android
@@ -1130,6 +1285,9 @@ jobs:
           if [ "$STRIP_BINARY" = true ]; then
             "$STRIP" build/release/aria2-next
           fi
+
+      - name: Verify runtime dependencies
+        run: READELF=llvm-readelf packaging/scripts/check-runtime-deps android-arm64 build/release/aria2-next
 
       - name: Package
         run: |

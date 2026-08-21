@@ -48,6 +48,15 @@ jobs:
           cmake --build build/ci-cares
           cmake --install build/ci-cares
 
+      - name: Build libtorrent
+        run: |
+          . packaging/dependencies.env
+          . packaging/scripts/common.sh
+          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
+          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
+          PREFIX="$PWD/build/ci-deps" CMAKE_BUILD_TYPE=Release \
+            packaging/scripts/build-libtorrent
+
       - name: Configure
         run: |
           PKG_CONFIG_PATH="$PWD/build/ci-deps/lib/pkgconfig" \
@@ -75,5 +84,6 @@ jobs:
           bash -n scripts/bump-version.sh
           bash -n scripts/release.sh
           bash -n packaging/scripts/common.sh
+          bash -n packaging/scripts/build-libtorrent
           bash -n packaging/scripts/check-runtime-deps
           bash -n packaging/scripts/verify-runner-tools

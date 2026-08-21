@@ -74,12 +74,7 @@ void MetalinkPostDownloadHandlerTest::testGetNextRequestGroups()
   MetalinkPostDownloadHandler handler;
   std::vector<std::shared_ptr<RequestGroup>> groups;
   handler.getNextRequestGroups(groups, &rg);
-#ifdef ENABLE_BITTORRENT
-  REQUIRE_EQ((size_t)6 /* 5 + 1 torrent file download */,
-                       groups.size());
-#else
   REQUIRE_EQ((size_t)5, groups.size());
-#endif // ENABLE_BITTORRENT
 
   for (auto& nrg : groups) {
     REQUIRE_EQ(rg.getGID(), nrg->following());

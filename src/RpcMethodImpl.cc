@@ -36,6 +36,7 @@
 
 #include <cassert>
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <sstream>
 
@@ -71,16 +72,11 @@
 #include "MessageDigest.h"
 #include "message_digest_helper.h"
 #include "OpenedFileCounter.h"
+#include "SocketCore.h"
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
-#  include "BtRegistry.h"
-#  include "BtPeerBlocklist.h"
-#  include "BtPeerListener.h"
-#  include "SocketCore.h"
-#  include "PeerStorage.h"
-#  include "Peer.h"
-#  include "BtRuntime.h"
-#  include "BtAnnounce.h"
+#  include "BtDownload.h"
+#  include "BtSession.h"
+#  include "BtMetadata.h"
 #endif // ENABLE_BITTORRENT
 #include "CheckIntegrityEntry.h"
 
@@ -658,6 +654,11 @@ std::unique_ptr<ValueBase> UnpauseRpcMethod::process(const RpcRequest& req,
         fmt("GID#%s cannot be unpaused now", GroupId::toHex(gid).c_str()));
   }
   else {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      group->getBtDownload()->consumeMetadataPause();
+    }
+#endif
     group->setPauseRequested(false);
     e->getRequestGroupMan()->requestQueueCheck();
   }
@@ -669,6 +670,11 @@ std::unique_ptr<ValueBase> UnpauseAllRpcMethod::process(const RpcRequest& req,
 {
   auto& groups = e->getRequestGroupMan()->getReservedGroups();
   for (auto& group : groups) {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      group->getBtDownload()->consumeMetadataPause();
+    }
+#endif
     group->setPauseRequested(false);
   }
   e->getRequestGroupMan()->requestQueueCheck();
@@ -722,6 +728,25 @@ void createFileEntry(List* files, InputIterator first, InputIterator last,
   }
 }
 } // namespace
+
+#ifdef ENABLE_BITTORRENT
+namespace {
+void createBtFileEntry(List* files, const BtSnapshot& snapshot)
+{
+  size_t index = 1;
+  for (const auto& file : snapshot.files) {
+    auto entry = Dict::g();
+    entry->put(KEY_INDEX, util::uitos(index++));
+    entry->put(KEY_PATH, file.path);
+    entry->put(KEY_SELECTED, file.selected ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_LENGTH, util::itos(file.length));
+    entry->put(KEY_COMPLETED_LENGTH, util::itos(file.completedLength));
+    entry->put(KEY_URIS, List::g());
+    files->append(std::move(entry));
+  }
+}
+} // namespace
+#endif
 
 namespace {
 template <typename InputIterator>
@@ -919,6 +944,14 @@ void gatherProgressCommon(Dict* entryDict,
     entryDict->put(KEY_CONNECTIONS, util::itos(group->getNumConnection()));
   }
   if (requested_key(keys, KEY_BITFIELD)) {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload() &&
+        !group->getBtDownload()->snapshot().bitfield.empty()) {
+      entryDict->put(KEY_BITFIELD,
+                     group->getBtDownload()->snapshot().bitfield);
+    }
+    else
+#endif
     if (ps) {
       if (ps->getBitfieldLength() > 0) {
         entryDict->put(KEY_BITFIELD,
@@ -955,9 +988,17 @@ void gatherProgressCommon(Dict* entryDict,
   }
   if (requested_key(keys, KEY_FILES)) {
     auto files = List::g();
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      createBtFileEntry(files.get(), group->getBtDownload()->snapshot());
+    }
+    else
+#endif // ENABLE_BITTORRENT
+    {
     createFileEntry(files.get(), std::begin(dctx->getFileEntries()),
                     std::end(dctx->getFileEntries()), dctx->getTotalLength(),
                     dctx->getPieceLength(), ps);
+    }
     entryDict->put(KEY_FILES, std::move(files));
   }
   if (requested_key(keys, KEY_DIR)) {
@@ -973,162 +1014,125 @@ void gatherProgressCommon(Dict* entryDict,
 }
 
 #ifdef ENABLE_BITTORRENT
-void gatherBitTorrentMetadata(Dict* btDict, TorrentAttribute* torrentAttrs)
+void gatherBitTorrentMetadata(Dict* btDict,
+                              const BtSnapshot& snapshot,
+                              const BtMetadata* attrs)
 {
-  const auto magnetLink = bittorrent::torrent2Magnet(torrentAttrs);
-  if (!magnetLink.empty()) {
-    btDict->put(KEY_MAGNET_LINK, magnetLink);
+  if (!snapshot.magnetLink.empty()) {
+    btDict->put(KEY_MAGNET_LINK, snapshot.magnetLink);
   }
-  if (!torrentAttrs->comment.empty()) {
-    btDict->put(KEY_COMMENT, torrentAttrs->comment);
+  if (attrs && !attrs->comment.empty()) {
+    btDict->put(KEY_COMMENT, attrs->comment);
   }
-  if (torrentAttrs->creationDate) {
-    btDict->put(KEY_CREATION_DATE, Integer::g(torrentAttrs->creationDate));
+  if (attrs && attrs->creationDate) {
+    btDict->put(KEY_CREATION_DATE, Integer::g(attrs->creationDate));
   }
-  if (torrentAttrs->mode) {
-    btDict->put(KEY_MODE, bittorrent::getModeString(torrentAttrs->mode));
+  if (attrs && attrs->mode != BT_FILE_MODE_NONE) {
+    btDict->put(KEY_MODE, attrs->mode == BT_FILE_MODE_MULTI ? "multi"
+                                                            : "single");
   }
-  auto destAnnounceList = List::g();
-  for (auto& annlist : torrentAttrs->announceList) {
-    auto destAnnounceTier = List::g();
-    for (auto& ann : annlist) {
-      destAnnounceTier->append(ann);
+  auto announceList = List::g();
+  for (const auto& tier : snapshot.announceList) {
+    auto outputTier = List::g();
+    for (const auto& tracker : tier) {
+      outputTier->append(tracker);
     }
-    destAnnounceList->append(std::move(destAnnounceTier));
+    announceList->append(std::move(outputTier));
   }
-  btDict->put(KEY_ANNOUNCE_LIST, std::move(destAnnounceList));
-  if (!torrentAttrs->metadata.empty()) {
-    btDict->put(KEY_PRIVATE_TORRENT,
-                torrentAttrs->privateTorrent ? VLB_TRUE : VLB_FALSE);
-    auto infoDict = Dict::g();
-    infoDict->put(KEY_NAME, torrentAttrs->name);
-    btDict->put(KEY_INFO, std::move(infoDict));
+  btDict->put(KEY_ANNOUNCE_LIST, std::move(announceList));
+  btDict->put(KEY_PRIVATE_TORRENT,
+              snapshot.privateTorrent ? VLB_TRUE : VLB_FALSE);
+  btDict->put("state", btStateName(snapshot.state));
+  if (!snapshot.infoHashV1.empty()) {
+    btDict->put("infoHashV1", snapshot.infoHashV1);
+  }
+  if (!snapshot.infoHashV2.empty()) {
+    btDict->put("infoHashV2", snapshot.infoHashV2);
+  }
+  if (!snapshot.currentTracker.empty()) {
+    btDict->put("currentTracker", snapshot.currentTracker);
+  }
+  btDict->put("numPeers", util::itos(snapshot.numPeers));
+  btDict->put("numSeeds", util::itos(snapshot.numSeeds));
+  btDict->put("progress", fmt("%.6f", snapshot.progressPpm / 1000000.0));
+  if (snapshot.hasMetadata) {
+    auto info = Dict::g();
+    info->put(KEY_NAME, snapshot.name);
+    btDict->put(KEY_INFO, std::move(info));
   }
 }
 
 namespace {
 void gatherProgressBitTorrent(Dict* entryDict,
                               const std::shared_ptr<RequestGroup>& group,
-                              TorrentAttribute* torrentAttrs,
-                              BtObject* btObject,
                               const std::vector<std::string>& keys)
 {
+  const auto& download = group->getBtDownload();
+  if (!download) {
+    return;
+  }
+  const auto& snapshot = download->snapshot();
   if (requested_key(keys, KEY_INFO_HASH)) {
-    entryDict->put(KEY_INFO_HASH, util::toHex(torrentAttrs->infoHash));
+    entryDict->put(KEY_INFO_HASH, !snapshot.infoHashV1.empty()
+                                      ? snapshot.infoHashV1
+                                      : snapshot.infoHashV2);
   }
   if (requested_key(keys, KEY_BITTORRENT)) {
-    auto btDict = Dict::g();
-    gatherBitTorrentMetadata(btDict.get(), torrentAttrs);
-    entryDict->put(KEY_BITTORRENT, std::move(btDict));
+    auto bt = Dict::g();
+    auto attrs = static_cast<BtMetadata*>(
+        group->getDownloadContext()->getAttribute(CTX_ATTR_BT).get());
+    gatherBitTorrentMetadata(bt.get(), snapshot, attrs);
+    entryDict->put(KEY_BITTORRENT, std::move(bt));
   }
   if (requested_key(keys, KEY_NUM_SEEDERS)) {
-    if (!btObject) {
-      entryDict->put(KEY_NUM_SEEDERS, VLB_ZERO);
-    }
-    else {
-      auto& peerStorage = btObject->peerStorage;
-      assert(peerStorage);
-      auto& peers = peerStorage->getUsedPeers();
-      entryDict->put(KEY_NUM_SEEDERS,
-                     util::uitos(countSeeder(peers.begin(), peers.end())));
-    }
+    entryDict->put(KEY_NUM_SEEDERS, util::itos(snapshot.numSeeds));
   }
 }
-} // namespace
+}
 
 namespace {
-std::string createPeerFlags(const Peer& peer)
+void gatherPeer(List* peers, const BtSnapshot& snapshot)
 {
-  std::string flags;
-  auto append = [&flags](const char* flag) {
-    if (!flags.empty()) {
-      flags += ' ';
+  for (const auto& peer : snapshot.peers) {
+    auto entry = Dict::g();
+    if (!peer.handshaking) {
+      entry->put(KEY_PEER_ID, util::torrentPercentEncode(peer.peerId));
     }
-    flags += flag;
-  };
-
-  if (peer.amInterested()) {
-    append(peer.peerChoking() ? "d" : "D");
-  }
-  if (peer.peerInterested()) {
-    append(peer.amChoking() ? "u" : "U");
-  }
-  if (!peer.peerChoking() && !peer.amInterested()) {
-    append("K");
-  }
-  if (!peer.amChoking() && !peer.peerInterested()) {
-    append("?");
-  }
-  if (peer.optUnchoking()) {
-    append("O");
-  }
-  if (peer.snubbing()) {
-    append("S");
-  }
-  if (peer.isIncomingConnection()) {
-    append("I");
-  }
-  return flags;
-}
-
-void gatherPeer(List* peers, const std::shared_ptr<PeerStorage>& ps,
-                const DownloadContext* dctx,
-                const TorrentAttribute* torrentAttrs)
-{
-  auto& usedPeers = ps->getUsedPeers();
-  for (auto& peer : usedPeers) {
-    if (!peer->isActive()) {
-      continue;
+    if (!peer.clientName.empty()) {
+      entry->put(KEY_PEER_CLIENT_NAME, peer.clientName);
     }
-    auto peerEntry = Dict::g();
-    if (peer->isHandshakeCompleted()) {
-      peerEntry->put(KEY_PEER_ID, util::torrentPercentEncode(peer->getPeerId(),
-                                                             PEER_ID_LENGTH));
+    entry->put(KEY_IP, peer.ip);
+    entry->put(KEY_PORT, util::uitos(peer.port));
+    entry->put(KEY_BITFIELD, peer.bitfield);
+    entry->put(KEY_AM_CHOKING, peer.amChoking ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_AM_INTERESTED, peer.amInterested ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_PEER_CHOKING, peer.peerChoking ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_PEER_INTERESTED,
+               peer.peerInterested ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_DOWNLOAD_SPEED, util::itos(peer.downloadSpeed));
+    entry->put(KEY_UPLOAD_SPEED, util::itos(peer.uploadSpeed));
+    entry->put(KEY_DOWNLOADED, util::itos(peer.downloaded));
+    entry->put(KEY_UPLOADED, util::itos(peer.uploaded));
+    entry->put(KEY_COMPLETED_LENGTH, util::itos(peer.completedLength));
+    entry->put(KEY_PROGRESS, fmt("%.6f", peer.progressPpm / 1000000.0));
+    entry->put(KEY_FLAGS, peer.flags);
+    entry->put(KEY_INCOMING, peer.incoming ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_SNUBBED, peer.snubbed ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_OPTIMISTIC_UNCHOKE,
+               peer.optimisticUnchoke ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_HANDSHAKING, peer.handshaking ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_SEEDER, peer.seeder ? VLB_TRUE : VLB_FALSE);
+    entry->put("transport", peer.transport);
+    entry->put("encryption", peer.encryption);
+    auto sources = List::g();
+    for (const auto& source : peer.sources) {
+      sources->append(source);
     }
-    if (!peer->getClientName().empty()) {
-      peerEntry->put(KEY_PEER_CLIENT_NAME, peer->getClientName());
-    }
-    peerEntry->put(KEY_IP, peer->getIPAddress());
-    peerEntry->put(KEY_PORT, util::uitos(peer->getRemotePort()));
-    if (peer->hasListenPort()) {
-      peerEntry->put(KEY_LISTEN_PORT, util::uitos(peer->getListenPort()));
-    }
-    peerEntry->put(KEY_BITFIELD,
-                   util::toHex(peer->getBitfield(), peer->getBitfieldLength()));
-    peerEntry->put(KEY_AM_CHOKING, peer->amChoking() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_AM_INTERESTED,
-                   peer->amInterested() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_PEER_CHOKING,
-                   peer->peerChoking() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_PEER_INTERESTED,
-                   peer->peerInterested() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_DOWNLOAD_SPEED,
-                   util::itos(peer->calculateDownloadSpeed()));
-    peerEntry->put(KEY_UPLOAD_SPEED, util::itos(peer->calculateUploadSpeed()));
-    peerEntry->put(KEY_DOWNLOADED,
-                   util::itos(peer->getSessionDownloadLength()));
-    peerEntry->put(KEY_UPLOADED, util::itos(peer->getSessionUploadLength()));
-    if (!torrentAttrs->metadata.empty() && dctx->getTotalLength() > 0) {
-      const auto completedLength = peer->getCompletedLength();
-      peerEntry->put(KEY_COMPLETED_LENGTH, util::itos(completedLength));
-      peerEntry->put(
-          KEY_PROGRESS,
-          fmt("%.6f", static_cast<double>(completedLength) /
-                         static_cast<double>(dctx->getTotalLength())));
-    }
-    peerEntry->put(KEY_FLAGS, createPeerFlags(*peer));
-    peerEntry->put(KEY_INCOMING,
-                   peer->isIncomingConnection() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_SNUBBED, peer->snubbing() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_OPTIMISTIC_UNCHOKE,
-                   peer->optUnchoking() ? VLB_TRUE : VLB_FALSE);
-    peerEntry->put(KEY_HANDSHAKING,
-                   peer->isHandshakeCompleted() ? VLB_FALSE : VLB_TRUE);
-    peerEntry->put(KEY_SEEDER, peer->isSeeder() ? VLB_TRUE : VLB_FALSE);
-    peers->append(std::move(peerEntry));
+    entry->put("sources", std::move(sources));
+    peers->append(std::move(entry));
   }
 }
-} // namespace
+}
 #endif // ENABLE_BITTORRENT
 
 namespace {
@@ -1138,10 +1142,7 @@ void gatherProgress(Dict* entryDict, const std::shared_ptr<RequestGroup>& group,
   gatherProgressCommon(entryDict, group, keys);
 #ifdef ENABLE_BITTORRENT
   if (group->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
-    gatherProgressBitTorrent(
-        entryDict, group,
-        bittorrent::getTorrentAttrs(group->getDownloadContext()),
-        e->getBtRegistry()->get(group->getGID()), keys);
+    gatherProgressBitTorrent(entryDict, group, keys);
   }
 #endif // ENABLE_BITTORRENT
   if (e->getCheckIntegrityMan()) {
@@ -1210,9 +1211,17 @@ void gatherStoppedDownload(Dict* entryDict,
   }
   if (requested_key(keys, KEY_FILES)) {
     auto files = List::g();
+#ifdef ENABLE_BITTORRENT
+    if (!ds->btSnapshot.files.empty()) {
+      createBtFileEntry(files.get(), ds->btSnapshot);
+    }
+    else
+#endif
+    {
     createFileEntry(files.get(), std::begin(ds->fileEntries),
                     std::end(ds->fileEntries), ds->totalLength, ds->pieceLength,
                     ds->bitfield);
+    }
     entryDict->put(KEY_FILES, std::move(files));
   }
   if (requested_key(keys, KEY_TOTAL_LENGTH)) {
@@ -1259,10 +1268,10 @@ void gatherStoppedDownload(Dict* entryDict,
 #ifdef ENABLE_BITTORRENT
   if (ds->attrs.size() > CTX_ATTR_BT && ds->attrs[CTX_ATTR_BT]) {
     const auto attrs =
-        static_cast<TorrentAttribute*>(ds->attrs[CTX_ATTR_BT].get());
+        static_cast<BtMetadata*>(ds->attrs[CTX_ATTR_BT].get());
     if (requested_key(keys, KEY_BITTORRENT)) {
       auto btDict = Dict::g();
-      gatherBitTorrentMetadata(btDict.get(), attrs);
+      gatherBitTorrentMetadata(btDict.get(), ds->btSnapshot, attrs);
       entryDict->put(KEY_BITTORRENT, std::move(btDict));
     }
   }
@@ -1284,6 +1293,12 @@ std::unique_ptr<ValueBase> GetFilesRpcMethod::process(const RpcRequest& req,
                             GroupId::toHex(gid).c_str()));
     }
     else {
+#ifdef ENABLE_BITTORRENT
+      if (!dr->btSnapshot.files.empty()) {
+        createBtFileEntry(files.get(), dr->btSnapshot);
+        return std::move(files);
+      }
+#endif
       createFileEntry(files.get(), std::begin(dr->fileEntries),
                       std::end(dr->fileEntries), dr->totalLength,
                       dr->pieceLength, dr->bitfield);
@@ -1333,12 +1348,8 @@ std::unique_ptr<ValueBase> GetPeersRpcMethod::process(const RpcRequest& req,
                           GroupId::toHex(gid).c_str()));
   }
   auto peers = List::g();
-  auto btObject = e->getBtRegistry()->get(group->getGID());
-  if (btObject) {
-    assert(btObject->peerStorage);
-    auto dctx = group->getDownloadContext().get();
-    gatherPeer(peers.get(), btObject->peerStorage, dctx,
-               bittorrent::getTorrentAttrs(dctx));
+  if (group->getBtDownload()) {
+    gatherPeer(peers.get(), group->getBtDownload()->snapshot());
   }
   return std::move(peers);
 }
@@ -1360,34 +1371,24 @@ SetBtPeerBlocklistRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     ++index;
   }
 
-  const auto& blocklist = e->getBtRegistry()->getPeerBlocklist();
-  size_t disconnectedPeers = 0;
-  size_t removedPeers = 0;
-  if (blocklist->replace(rules, "RPC")) {
-    removedPeers = e->getBtRegistry()->removeBlockedPeers();
-    disconnectedPeers = e->disconnectBlockedBtPeers();
-    A2_LOG_DEBUG(fmt("Applied %lu BT peer blocklist rules; disconnected %lu "
-                     "and removed %lu peers.",
-                     static_cast<unsigned long>(blocklist->count()),
-                     static_cast<unsigned long>(disconnectedPeers),
-                     static_cast<unsigned long>(removedPeers)));
+  std::string error;
+  if (!e->getBtSession()->replaceIpFilter(rules, error) && !error.empty()) {
+    throw DL_ABORT_EX(error);
   }
   auto result = Dict::g();
-  result->put("ruleCount", Integer::g(blocklist->count()));
-  result->put("revision", Integer::g(blocklist->revision()));
-  result->put("disconnectedPeers", Integer::g(disconnectedPeers));
-  result->put("removedPeers", Integer::g(removedPeers));
+  result->put("ruleCount", Integer::g(e->getBtSession()->ipFilterRuleCount()));
+  result->put("revision", Integer::g(e->getBtSession()->ipFilterRevision()));
   return result;
 }
 
 std::unique_ptr<ValueBase>
 GetBtEndpointRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
-  const auto& registry = e->getBtRegistry();
+  const auto& session = e->getBtSession();
   auto result = Dict::g();
-  result->put("listenPort", util::uitos(registry->getListenPort()));
-  result->put("announcePort", util::uitos(registry->getAnnouncePort()));
-  result->put("externalIp", registry->getExternalIp());
+  result->put("listenPort", util::uitos(session->listenPort()));
+  result->put("announcePort", util::uitos(session->announcePort()));
+  result->put("externalIp", session->externalAddress());
   return result;
 }
 #endif // ENABLE_BITTORRENT
@@ -1966,7 +1967,11 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
     sgl.normalize();
     dctx->setFileFilter(std::move(sgl));
   }
-  if (option.defined(PREF_SPLIT)) {
+  if (option.defined(PREF_SPLIT)
+#ifdef ENABLE_BITTORRENT
+      && !group->getBtDownload()
+#endif
+  ) {
     group->setNumConcurrentCommand(grOption->getAsInt(PREF_SPLIT));
   }
   if (option.defined(PREF_MAX_CONNECTION_PER_SERVER)) {
@@ -2013,17 +2018,8 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
   }
 #ifdef ENABLE_BITTORRENT
   if (option.defined(PREF_DIR) || option.defined(PREF_INDEX_OUT)) {
-    if (dctx->hasAttribute(CTX_ATTR_BT)) {
-      std::istringstream indexOutIn(grOption->get(PREF_INDEX_OUT));
-      std::vector<std::pair<size_t, std::string>> indexPaths =
-          util::createIndexPaths(indexOutIn);
-      for (std::vector<std::pair<size_t, std::string>>::const_iterator
-               i = indexPaths.begin(),
-               eoi = indexPaths.end();
-           i != eoi; ++i) {
-        dctx->setFilePathWithIndex(
-            (*i).first, util::applyDir(grOption->get(PREF_DIR), (*i).second));
-      }
+    if (group->getBtDownload()) {
+      group->getBtDownload()->updateFilePaths(dctx, grOption.get());
     }
   }
 #endif // ENABLE_BITTORRENT
@@ -2035,65 +2031,40 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
     group->setMaxUploadSpeedLimit(grOption->getAsInt(PREF_MAX_UPLOAD_LIMIT));
   }
 #ifdef ENABLE_BITTORRENT
-  auto btObject = e->getBtRegistry()->get(group->getGID());
-  if (btObject) {
-    if (option.defined(PREF_BT_MAX_PEERS)) {
-      btObject->btRuntime->setMaxPeers(grOption->getAsInt(PREF_BT_MAX_PEERS));
-    }
+  if (group->getBtDownload() && e->getBtSession()) {
+    e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
+                                            grOption.get());
   }
-#endif // ENABLE_BITTORRENT
+#endif
 }
 
 void changeGlobalOption(const Option& option, DownloadEngine* e)
 {
 #ifdef ENABLE_BITTORRENT
-  auto& registry = e->getBtRegistry();
-  const auto endpointChanged = option.defined(PREF_BT_EXTERNAL_IP) ||
-                               option.defined(PREF_BT_EXTERNAL_PORT);
-  const auto externalIp = option.defined(PREF_BT_EXTERNAL_IP)
-                              ? option.get(PREF_BT_EXTERNAL_IP)
-                              : e->getOption()->get(PREF_BT_EXTERNAL_IP);
-  const auto externalPort = option.defined(PREF_BT_EXTERNAL_PORT)
-                                ? option.getAsInt(PREF_BT_EXTERNAL_PORT)
-                                : e->getOption()->getAsInt(
-                                      PREF_BT_EXTERNAL_PORT);
-  if (endpointChanged && !externalIp.empty()) {
-    unsigned char address[16];
-    if (net::getBinAddr(address, externalIp) == 0) {
-      throw DL_ABORT_EX("BitTorrent external IP address is invalid.");
+  if (option.defined(PREF_BT_EXTERNAL_IP) &&
+      !option.blank(PREF_BT_EXTERNAL_IP)) {
+    std::array<unsigned char, 16> address{};
+    if (net::getBinAddr(address.data(), option.get(PREF_BT_EXTERNAL_IP)) == 0) {
+      throw DL_ABORT_EX("bt-external-ip must be a numeric IP address");
     }
-  }
-  if (option.defined(PREF_LISTEN_PORT) &&
-      registry->getPeerListener()->active()) {
-    const auto previousPort = registry->getListenPort();
-    if (!registry->getPeerListener()->rebind(
-            option.get(PREF_LISTEN_PORT),
-            !e->getOption()->getAsBool(PREF_DISABLE_IPV6))) {
-      throw DL_ABORT_EX("Failed to bind the requested BitTorrent TCP port.");
-    }
-    registry->onListenPortChanged(previousPort);
-  }
-  if (endpointChanged) {
-    registry->setExternalEndpoint(externalIp, externalPort);
   }
   if (option.defined(PREF_BT_PEER_BLOCKLIST)) {
-    const auto previousRevision =
-        e->getBtRegistry()->getPeerBlocklist()->revision();
     const auto& path = option.get(PREF_BT_PEER_BLOCKLIST);
     if (path.empty()) {
-      e->getBtRegistry()->getPeerBlocklist()->clear();
+      std::string error;
+      e->getBtSession()->replaceIpFilter({}, error);
     }
     else {
-      e->getBtRegistry()->getPeerBlocklist()->load(path);
-    }
-    if (previousRevision !=
-        e->getBtRegistry()->getPeerBlocklist()->revision()) {
-      e->getBtRegistry()->removeBlockedPeers();
-      e->disconnectBlockedBtPeers();
+      e->getBtSession()->loadIpFilter(path);
     }
   }
 #endif // ENABLE_BITTORRENT
   e->getOption()->merge(option);
+#ifdef ENABLE_BITTORRENT
+  if (e->getBtSession()) {
+    e->getBtSession()->applyGlobalOptions(e->getOption());
+  }
+#endif
   bool reconfigureLogging = false;
   auto logSettings = logging::getSettings();
   if (option.defined(PREF_MAX_OVERALL_DOWNLOAD_LIMIT)) {

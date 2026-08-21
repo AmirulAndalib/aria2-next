@@ -24,7 +24,7 @@
 #include "SelectEventPoll.h"
 #include "Segment.h"
 #include "SegmentMan.h"
-#include "DefaultBtProgressInfoFile.h"
+#include "DefaultProgressInfoFile.h"
 #include "array_fun.h"
 #include "base32.h"
 #include "base64.h"
@@ -45,7 +45,7 @@
 #include "util.h"
 #include "FileEntry.h"
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
+#  include "BtDownload.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -121,6 +121,7 @@ public:
 
 #ifdef ENABLE_BITTORRENT
   void testCreateRequestGroupForUri_BitTorrent();
+  void testCreateRequestGroupForUri_MagnetMetadataGate();
   void testCreateRequestGroupForBitTorrent();
 #endif // ENABLE_BITTORRENT
 
@@ -190,6 +191,7 @@ A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_parameterized)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUriList)
 #ifdef ENABLE_BITTORRENT
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_BitTorrent)
+A2_TEST(DownloadHelperTest, testCreateRequestGroupForUri_MagnetMetadataGate)
 A2_TEST(DownloadHelperTest, testCreateRequestGroupForBitTorrent)
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_METALINK
@@ -1933,7 +1935,7 @@ void DownloadHelperTest::testEd2kPeerTransferIgnoresDuplicateData()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-duplicate";
   const std::string outfile = outdir + "/aria2 next duplicate transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultBtProgressInfoFile::getSuffix()).remove();
+  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string data = "verified ed2k data";
@@ -1967,7 +1969,7 @@ void DownloadHelperTest::testEd2kPeerTransferAcceptsParallelPieceBlocks()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-parallel";
   const std::string outfile = outdir + "/aria2 next parallel transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultBtProgressInfoFile::getSuffix()).remove();
+  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string first(Piece::BLOCK_LENGTH, 'a');
@@ -2005,7 +2007,7 @@ void DownloadHelperTest::testEd2kPeerTransferCancelsOwnerAfterParallelHashFailur
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-parallel-bad";
   const std::string outfile = outdir + "/aria2 next parallel bad transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultBtProgressInfoFile::getSuffix()).remove();
+  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string first(Piece::BLOCK_LENGTH, 'a');
@@ -2044,7 +2046,7 @@ void DownloadHelperTest::testEd2kPeerTransferAppliesAichRecoveryData()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-aich-recovery";
   const std::string outfile = outdir + "/aria2 next aich transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultBtProgressInfoFile::getSuffix()).remove();
+  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   std::string block0(ed2k::EMBLOCK_LENGTH, 'a');
@@ -2106,7 +2108,7 @@ void DownloadHelperTest::testEd2kSchedulingKeepsInlineSourceLabel()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-inline-source-label";
   const std::string outfile = outdir + "/aria2 next.bin";
   File(outfile).remove();
-  File(outfile + DefaultBtProgressInfoFile::getSuffix()).remove();
+  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   std::vector<std::string> uris{
@@ -2436,10 +2438,33 @@ void DownloadHelperTest::testCreateRequestGroupForUri_BitTorrent()
     auto auxURIs =
         torrentGroup->getDownloadContext()->getFirstFileEntry()->getUris();
     REQUIRE(auxURIs.empty());
-    REQUIRE_EQ(3, torrentGroup->getNumConcurrentCommand());
+    REQUIRE_EQ(1, torrentGroup->getNumConcurrentCommand());
     std::shared_ptr<DownloadContext> btctx = torrentGroup->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/aria2-test"), btctx->getBasePath());
   }
+}
+
+void DownloadHelperTest::testCreateRequestGroupForUri_MagnetMetadataGate()
+{
+  const std::string magnet =
+      "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "&dn=metadata-gate-test";
+  option_->put(PREF_DIR, A2_TEST_OUT_DIR);
+  option_->put(PREF_ENABLE_RPC, A2_V_TRUE);
+  option_->put(PREF_PAUSE_METADATA, A2_V_TRUE);
+
+  std::vector<std::shared_ptr<RequestGroup>> result;
+  createRequestGroupForUri(result, option_, {magnet});
+
+  REQUIRE_EQ((size_t)1, result.size());
+  const auto& group = result.front();
+  REQUIRE(group->getBtDownload());
+  REQUIRE(group->getBtDownload()->shouldPauseAfterMetadata());
+  REQUIRE(group->followedBy().empty());
+  REQUIRE_EQ((a2_gid_t)0, group->following());
+
+  group->getOption()->put(PREF_PAUSE_METADATA, A2_V_FALSE);
+  REQUIRE(!group->getBtDownload()->shouldPauseAfterMetadata());
 }
 #endif // ENABLE_BITTORRENT
 
@@ -2459,11 +2484,7 @@ void DownloadHelperTest::testCreateRequestGroupForUri_Metalink()
 
 // group1: http://alpha/file, ...
 // group2-7: 6 file entry in Metalink and 1 torrent file download
-#  ifdef ENABLE_BITTORRENT
-    REQUIRE_EQ((size_t)7, result.size());
-#  else  // !ENABLE_BITTORRENT
     REQUIRE_EQ((size_t)6, result.size());
-#  endif // !ENABLE_BITTORRENT
 
     std::shared_ptr<RequestGroup> group = result[0];
     auto xuris = group->getDownloadContext()->getFirstFileEntry()->getUris();
@@ -2542,19 +2563,12 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
     REQUIRE_EQ((size_t)1, result.size());
 
     std::shared_ptr<RequestGroup> group = result[0];
-    auto uris = group->getDownloadContext()->getFirstFileEntry()->getUris();
-    std::sort(std::begin(uris), std::end(uris));
-    // See -s option is ignored. See processRootDictionary() in
-    // bittorrent_helper.cc
-    REQUIRE_EQ((size_t)3, uris.size());
-    for (size_t i = 0; i < auxURIs.size(); ++i) {
-      REQUIRE_EQ(auxURIs[i] + "/aria2-test/aria2/src/aria2c",
-                           uris[i]);
-    }
-    REQUIRE_EQ(5, group->getNumConcurrentCommand());
-    auto attrs = bittorrent::getTorrentAttrs(group->getDownloadContext());
-    // http://tracker1 was deleted.
-    REQUIRE_EQ((size_t)2, attrs->announceList.size());
+    REQUIRE(group->getBtDownload());
+    REQUIRE(group->getBtDownload()->hasMetadata());
+    REQUIRE_EQ((size_t)2,
+               group->getBtDownload()->snapshot().announceList.size());
+    REQUIRE_EQ((size_t)2,
+               group->getDownloadContext()->getFileEntries().size());
   }
   {
     // no URIs are given
@@ -2593,11 +2607,7 @@ void DownloadHelperTest::testCreateRequestGroupForMetalink()
 
     createRequestGroupForMetalink(result, option_);
 
-#  ifdef ENABLE_BITTORRENT
-    REQUIRE_EQ((size_t)6, result.size());
-#  else  // !ENABLE_BITTORRENT
     REQUIRE_EQ((size_t)5, result.size());
-#  endif // !ENABLE_BITTORRENT
     std::shared_ptr<RequestGroup> group = result[0];
     auto uris = group->getDownloadContext()->getFirstFileEntry()->getUris();
     std::sort(uris.begin(), uris.end());

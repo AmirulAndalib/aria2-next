@@ -197,11 +197,10 @@ bool writeUri(IOFile& fp, InputIterator first, InputIterator last,
 }
 } // namespace
 
-// The downloads whose followedBy() is empty is persisted with its
-// GID without no problem. For other cases, there are several patterns.
+// Persist the GID that represents the user-visible source.
 //
 // 1. magnet URI
-//  GID of metadata download is persisted.
+//  The single BitTorrent GID is persisted.
 // 2. URI to torrent file
 //  GID of torrent file download is persisted.
 // 3. URI to metalink file

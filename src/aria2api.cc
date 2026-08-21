@@ -62,7 +62,8 @@
 #include "Notifier.h"
 #include "ApiCallbackDownloadEventListener.h"
 #ifdef ENABLE_BITTORRENT
-#  include "bittorrent_helper.h"
+#  include "BtDownload.h"
+#  include "BtMetadata.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {
@@ -420,6 +421,11 @@ int unpauseDownload(Session* session, A2Gid gid)
     return -1;
   }
   else {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      group->getBtDownload()->consumeMetadataPause();
+    }
+#endif
     group->setPauseRequested(false);
     e->getRequestGroupMan()->requestQueueCheck();
   }
@@ -576,6 +582,38 @@ FileData createFileData(const std::shared_ptr<FileEntry>& fe, int index,
 }
 } // namespace
 
+#ifdef ENABLE_BITTORRENT
+namespace {
+FileData createBtFileData(const BtFileSnapshot& snapshot, int index)
+{
+  FileData file;
+  file.index = index;
+  file.path = snapshot.path;
+  file.length = snapshot.length;
+  file.completedLength = snapshot.completedLength;
+  file.selected = snapshot.selected;
+  return file;
+}
+
+BtMetaInfoData createBtMetaInfo(const BtMetadata* metadata,
+                                const BtSnapshot& snapshot)
+{
+  BtMetaInfoData result;
+  if (!metadata) {
+    return result;
+  }
+  result.announceList = snapshot.announceList;
+  result.comment = metadata->comment;
+  result.creationDate = metadata->creationDate;
+  result.mode = metadata->mode;
+  if (snapshot.hasMetadata) {
+    result.name = snapshot.name;
+  }
+  return result;
+}
+} // namespace
+#endif
+
 namespace {
 template <typename OutputIterator, typename InputIterator>
 void createFileEntry(OutputIterator out, InputIterator first,
@@ -691,6 +729,12 @@ struct RequestGroupDH : public DownloadHandle {
   }
   virtual std::string getBitfield() override
   {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      const auto& value = group->getBtDownload()->snapshot().bitfield;
+      return util::fromHex(value.begin(), value.end());
+    }
+#endif
     const std::shared_ptr<PieceStorage>& ps = group->getPieceStorage();
     if (ps) {
       return std::string(reinterpret_cast<const char*>(ps->getBitfield()),
@@ -706,7 +750,9 @@ struct RequestGroupDH : public DownloadHandle {
   {
 #ifdef ENABLE_BITTORRENT
     if (group->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
-      return bittorrent::getTorrentAttrs(group->getDownloadContext())->infoHash;
+      return static_cast<BtMetadata*>(
+                 group->getDownloadContext()->getAttribute(CTX_ATTR_BT).get())
+          ->infoHash;
     }
 #endif // ENABLE_BITTORRENT
     return "";
@@ -741,6 +787,15 @@ struct RequestGroupDH : public DownloadHandle {
   virtual std::vector<FileData> getFiles() override
   {
     std::vector<FileData> res;
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      int index = 1;
+      for (const auto& file : group->getBtDownload()->snapshot().files) {
+        res.push_back(createBtFileData(file, index++));
+      }
+      return res;
+    }
+#endif
     const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
     createFileEntry(std::back_inserter(res), dctx->getFileEntries().begin(),
                     dctx->getFileEntries().end(), dctx->getTotalLength(),
@@ -754,6 +809,12 @@ struct RequestGroupDH : public DownloadHandle {
   }
   virtual FileData getFile(int index) override
   {
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      return createBtFileData(
+          group->getBtDownload()->snapshot().files.at(index - 1), index);
+    }
+#endif
     const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
     BitfieldMan bf(dctx->getPieceLength(), dctx->getTotalLength());
     const std::shared_ptr<PieceStorage>& ps = group->getPieceStorage();
@@ -767,15 +828,10 @@ struct RequestGroupDH : public DownloadHandle {
     BtMetaInfoData res;
 #ifdef ENABLE_BITTORRENT
     if (group->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
-      auto torrentAttrs =
-          bittorrent::getTorrentAttrs(group->getDownloadContext());
-      res.announceList = torrentAttrs->announceList;
-      res.comment = torrentAttrs->comment;
-      res.creationDate = torrentAttrs->creationDate;
-      res.mode = torrentAttrs->mode;
-      if (!torrentAttrs->metadata.empty()) {
-        res.name = torrentAttrs->name;
-      }
+      auto torrentAttrs = static_cast<BtMetadata*>(
+          group->getDownloadContext()->getAttribute(CTX_ATTR_BT).get());
+      return createBtMetaInfo(torrentAttrs,
+                              group->getBtDownload()->snapshot());
     }
     else
 #endif // ENABLE_BITTORRENT
@@ -840,6 +896,15 @@ struct DownloadResultDH : public DownloadHandle {
   virtual std::vector<FileData> getFiles() override
   {
     std::vector<FileData> res;
+#ifdef ENABLE_BITTORRENT
+    if (!dr->btSnapshot.files.empty()) {
+      int index = 1;
+      for (const auto& file : dr->btSnapshot.files) {
+        res.push_back(createBtFileData(file, index++));
+      }
+      return res;
+    }
+#endif
     createFileEntry(std::back_inserter(res), dr->fileEntries.begin(),
                     dr->fileEntries.end(), dr->totalLength, dr->pieceLength,
                     dr->bitfield);
@@ -848,6 +913,11 @@ struct DownloadResultDH : public DownloadHandle {
   virtual int getNumFiles() override { return dr->fileEntries.size(); }
   virtual FileData getFile(int index) override
   {
+#ifdef ENABLE_BITTORRENT
+    if (!dr->btSnapshot.files.empty()) {
+      return createBtFileData(dr->btSnapshot.files.at(index - 1), index);
+    }
+#endif
     BitfieldMan bf(dr->pieceLength, dr->totalLength);
     bf.setBitfield(reinterpret_cast<const unsigned char*>(dr->bitfield.data()),
                    dr->bitfield.size());
@@ -855,6 +925,13 @@ struct DownloadResultDH : public DownloadHandle {
   }
   virtual BtMetaInfoData getBtMetaInfo() override
   {
+#ifdef ENABLE_BITTORRENT
+    if (dr->attrs.size() > CTX_ATTR_BT && dr->attrs[CTX_ATTR_BT]) {
+      return createBtMetaInfo(
+          static_cast<BtMetadata*>(dr->attrs[CTX_ATTR_BT].get()),
+          dr->btSnapshot);
+    }
+#endif
     return BtMetaInfoData();
   }
   virtual const std::string& getOption(const std::string& name) override

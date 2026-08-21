@@ -1,0 +1,53 @@
+#!/bin/sh
+
+set -eu
+
+: "${PREFIX:?PREFIX is required}"
+: "${CMAKE_BUILD_TYPE:=Release}"
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+. "$repo_root/packaging/dependencies.env"
+
+if command -v nproc >/dev/null 2>&1; then
+  jobs=$(nproc)
+else
+  jobs=$(sysctl -n hw.ncpu)
+fi
+
+tar xf "$BOOST_ARCHIVE"
+tar xf "$LIBTORRENT_ARCHIVE"
+
+if [ "${PREFIX#/usr/local}" != "$PREFIX" ]; then
+  sudo mkdir -p "$PREFIX/include"
+  sudo cp -R "boost_${BOOST_VERSION_UNDERSCORE}/boost" "$PREFIX/include/"
+else
+  mkdir -p "$PREFIX/include"
+  cp -R "boost_${BOOST_VERSION_UNDERSCORE}/boost" "$PREFIX/include/"
+fi
+
+cmake -S "libtorrent-rasterbar-$LIBTORRENT_VERSION" \
+  -B build/libtorrent -G Ninja \
+  -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+  -DCMAKE_PREFIX_PATH="$PREFIX" \
+  -DBoost_INCLUDE_DIR="$PREFIX/include" \
+  -DBoost_NO_BOOST_CMAKE=ON \
+  -DBUILD_SHARED_LIBS=OFF \
+  -Ddeprecated-functions=OFF \
+  -Dbuild_tests=OFF \
+  -Dbuild_examples=OFF \
+  -Dbuild_tools=OFF \
+  -Dpython-bindings=OFF \
+  -Dwebtorrent=OFF \
+  -Dlogging=OFF \
+  -Dencryption=ON \
+  -Ddht=ON \
+  "$@"
+
+cmake --build build/libtorrent -j"$jobs"
+if [ "${PREFIX#/usr/local}" != "$PREFIX" ]; then
+  sudo cmake --install build/libtorrent
+else
+  cmake --install build/libtorrent
+fi

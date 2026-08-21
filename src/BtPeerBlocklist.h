@@ -51,6 +51,8 @@ public:
                const std::string& source);
 
   bool contains(const std::string& ipaddr) const;
+  const std::vector<Range>& ipv4Ranges() const { return ipv4Ranges_; }
+  const std::vector<Range>& ipv6Ranges() const { return ipv6Ranges_; }
   size_t count() const { return ruleCount_; }
   uint64_t revision() const { return revision_; }
 };

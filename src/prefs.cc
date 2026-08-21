@@ -525,53 +525,18 @@ PrefPtr PREF_SELECT_FILE = makePref("select-file");
 PrefPtr PREF_SEED_TIME = makePref("seed-time");
 // values: 1*digit ['.' [ 1*digit ] ]
 PrefPtr PREF_SEED_RATIO = makePref("seed-ratio");
-// values: 1*digit
-PrefPtr PREF_BT_KEEP_ALIVE_INTERVAL = makePref("bt-keep-alive-interval");
-// values: a string, less than or equals to 20 bytes length
-PrefPtr PREF_PEER_ID_PREFIX = makePref("peer-id-prefix");
-// values: a string representing the extended BT handshake peer user agent
-PrefPtr PREF_PEER_AGENT = makePref("peer-agent");
 // values: true | false
 PrefPtr PREF_ENABLE_PEER_EXCHANGE = makePref("enable-peer-exchange");
 // values: true | false
 PrefPtr PREF_ENABLE_DHT = makePref("enable-dht");
-// values: a string
-PrefPtr PREF_DHT_LISTEN_ADDR = makePref("dht-listen-addr");
-// values: 1*digit
-PrefPtr PREF_DHT_LISTEN_PORT = makePref("dht-listen-port");
-// values: a string
-PrefPtr PREF_DHT_ENTRY_POINT_HOST = makePref("dht-entry-point-host");
-// values: 1*digit
-PrefPtr PREF_DHT_ENTRY_POINT_PORT = makePref("dht-entry-point-port");
-// values: a string  = makePref(hostname:port);
-PrefPtr PREF_DHT_ENTRY_POINT = makePref("dht-entry-point");
-// values: a string
-PrefPtr PREF_DHT_FILE_PATH = makePref("dht-file-path");
-// values: true | false
-PrefPtr PREF_ENABLE_DHT6 = makePref("enable-dht6");
-// values: a string
-PrefPtr PREF_DHT_LISTEN_ADDR6 = makePref("dht-listen-addr6");
-// values: a string
-PrefPtr PREF_DHT_ENTRY_POINT_HOST6 = makePref("dht-entry-point-host6");
-// values: 1*digit
-PrefPtr PREF_DHT_ENTRY_POINT_PORT6 = makePref("dht-entry-point-port6");
-// values: a string  = makePref(hostname:port)
-PrefPtr PREF_DHT_ENTRY_POINT6 = makePref("dht-entry-point6");
-// values: a string
-PrefPtr PREF_DHT_FILE_PATH6 = makePref("dht-file-path6");
 // values: plain | arc4
 PrefPtr PREF_BT_MIN_CRYPTO_LEVEL = makePref("bt-min-crypto-level");
 // values:: true | false
 PrefPtr PREF_BT_REQUIRE_CRYPTO = makePref("bt-require-crypto");
 // values: 1*digit
-PrefPtr PREF_BT_REQUEST_PEER_SPEED_LIMIT =
-    makePref("bt-request-peer-speed-limit");
-// values: 1*digit
 PrefPtr PREF_BT_MAX_OPEN_FILES = makePref("bt-max-open-files");
 // values: true | false
 PrefPtr PREF_BT_SEED_UNVERIFIED = makePref("bt-seed-unverified");
-// values: true | false
-PrefPtr PREF_BT_HASH_CHECK_SEED = makePref("bt-hash-check-seed");
 // values: 1*digit
 PrefPtr PREF_BT_MAX_PEERS = makePref("bt-max-peers");
 // values: a string (file path)
@@ -582,27 +547,13 @@ PrefPtr PREF_BT_EXTERNAL_IP = makePref("bt-external-ip");
 PrefPtr PREF_BT_EXTERNAL_PORT = makePref("bt-external-port");
 // values: 1*digit '=' a string that your file system recognizes as a file name.
 PrefPtr PREF_INDEX_OUT = makePref("index-out");
-// values: 1*digit
-PrefPtr PREF_BT_TRACKER_INTERVAL = makePref("bt-tracker-interval");
-// values: 1*digit
-PrefPtr PREF_BT_STOP_TIMEOUT = makePref("bt-stop-timeout");
-// values: head[=SIZE]|tail[=SIZE], ...
-PrefPtr PREF_BT_PRIORITIZE_PIECE = makePref("bt-prioritize-piece");
-// values: true | false
-PrefPtr PREF_BT_SAVE_METADATA = makePref("bt-save-metadata");
-// values: true | false
-PrefPtr PREF_BT_METADATA_ONLY = makePref("bt-metadata-only");
 // values: true | false
 PrefPtr PREF_BT_ENABLE_LPD = makePref("bt-enable-lpd");
-// values: string
-PrefPtr PREF_BT_LPD_INTERFACE = makePref("bt-lpd-interface");
 // values: 1*digit
 PrefPtr PREF_BT_TRACKER_TIMEOUT = makePref("bt-tracker-timeout");
 // values: 1*digit
 PrefPtr PREF_BT_TRACKER_CONNECT_TIMEOUT =
     makePref("bt-tracker-connect-timeout");
-// values: 1*digit
-PrefPtr PREF_DHT_MESSAGE_TIMEOUT = makePref("dht-message-timeout");
 // values: string
 PrefPtr PREF_ON_BT_DOWNLOAD_COMPLETE = makePref("on-bt-download-complete");
 // values: string
@@ -613,11 +564,6 @@ PrefPtr PREF_BT_EXCLUDE_TRACKER = makePref("bt-exclude-tracker");
 PrefPtr PREF_BT_REMOVE_UNSELECTED_FILE = makePref("bt-remove-unselected-file");
 PrefPtr PREF_DETACH_SHARE_ONLY = makePref("detach-share-only");
 PrefPtr PREF_BT_FORCE_ENCRYPTION = makePref("bt-force-encryption");
-// values: true | false
-PrefPtr PREF_BT_ENABLE_HOOK_AFTER_HASH_CHECK =
-    makePref("bt-enable-hook-after-hash-check");
-// values: true | false
-PrefPtr PREF_BT_LOAD_SAVED_METADATA = makePref("bt-load-saved-metadata");
 
 /**
  * Metalink related preferences
