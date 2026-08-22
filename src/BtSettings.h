@@ -14,6 +14,7 @@
 #define D_BT_SETTINGS_H
 
 #include <string>
+#include <vector>
 
 #include <libtorrent/settings_pack.hpp>
 
@@ -26,7 +27,9 @@ struct BtConfig {
   std::string listenInterfaces;
   std::string outgoingInterfaces;
   std::string networkIdentity;
+  std::vector<std::string> routeAddresses;
   bool dhtEnabled = false;
+  bool automaticRoute = false;
   int trackerCompletionTimeout = 30;
   int trackerReceiveTimeout = 10;
 
@@ -36,7 +39,10 @@ struct BtConfig {
   }
 };
 
+std::vector<std::string> detectBtRouteAddresses(const Option* option);
 BtConfig makeBtConfig(const Option* option);
+BtConfig makeBtConfig(const Option* option,
+                      const std::vector<std::string>& routeAddresses);
 
 } // namespace aria2
 

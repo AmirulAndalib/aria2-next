@@ -643,8 +643,6 @@ set(ARIA2_SOURCES_ENABLE_ASYNC_DNS
 )
 
 set(ARIA2_SOURCES_ENABLE_BITTORRENT
-  src/BtDiscovery.cc
-  src/BtDiscovery.h
   src/BtDownload.cc
   src/BtDownload.h
   src/BtDownloadImpl.h

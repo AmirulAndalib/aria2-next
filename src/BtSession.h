@@ -55,7 +55,6 @@ struct BtSessionStatus {
   uint64_t payloadUploaded = 0;
   uint64_t trackerDownloaded = 0;
   uint64_t trackerUploaded = 0;
-  uint64_t networkEpoch = 0;
   bool dhtStateHealthy = false;
 };
 
@@ -74,9 +73,7 @@ private:
   void finishResumeSave(BtDownload* download);
   void discardRemovedResume(BtDownload* download);
   void resumeTorrent(BtDownload* download);
-  void activateDiscovery(BtDownload* download);
-  void syncDiscovery(BtDownload* download);
-  void advanceNetworkEpoch();
+  void refreshAutomaticRoute(bool reopenSockets);
 
 public:
   explicit BtSession(const Option* option);

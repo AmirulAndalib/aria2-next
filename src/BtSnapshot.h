@@ -136,12 +136,6 @@ struct BtSnapshot {
   int connectCandidates = 0;
   int numUploads = 0;
   int availabilityPpm = -1;
-  uint64_t discoveryEpoch = 0;
-  uint64_t networkEpoch = 0;
-  int trackerPeersReceived = 0;
-  std::string discoveryState;
-  std::string retryTracker;
-  bool trackerRetryUsed = false;
   bool privateTorrent = false;
   bool hasMetadata = false;
   bool finished = false;

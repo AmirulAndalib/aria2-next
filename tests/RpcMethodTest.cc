@@ -1439,7 +1439,6 @@ void RpcMethodTest::testGetBtSessionStatus()
   REQUIRE_EQ(std::string("203.0.113.7"), getString(endpoint, "externalIp"));
   REQUIRE_EQ(std::string("0"), getString(endpoint, "dhtNodes"));
   REQUIRE_EQ(std::string("0"), getString(endpoint, "establishedPeers"));
-  REQUIRE_EQ(std::string("2"), getString(endpoint, "networkEpoch"));
   REQUIRE(endpoint->containsKey("dhtStateHealthy"));
   REQUIRE(endpoint->containsKey("listenEndpoints"));
 

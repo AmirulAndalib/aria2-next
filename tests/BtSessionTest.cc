@@ -1,5 +1,4 @@
 #include "BtSession.h"
-#include "BtDiscovery.h"
 #include "BtResumeStore.h"
 #include "BtSettings.h"
 
@@ -21,14 +20,12 @@ class BtSessionTest {
 public:
   void testSessionStateRoundTrip();
   void testDesktopSettings();
-  void testDiscoveryRecovery();
   void testTrackerOwnership();
   void testResumeStore();
 };
 
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
 A2_TEST(BtSessionTest, testDesktopSettings)
-A2_TEST(BtSessionTest, testDiscoveryRecovery)
 A2_TEST(BtSessionTest, testTrackerOwnership)
 A2_TEST(BtSessionTest, testResumeStore)
 
@@ -56,13 +53,16 @@ void BtSessionTest::testDesktopSettings()
   option.put(PREF_ENABLE_DHT, A2_V_FALSE);
   option.put(PREF_BT_PORT_MAPPING, A2_V_FALSE);
 
-  const auto defaultConfig = makeBtConfig(&option);
-  REQUIRE_EQ(std::string("0.0.0.0:0,[::]:0"),
+  const auto defaultConfig =
+      makeBtConfig(&option, {"192.0.2.10", "2001:db8::10"});
+  REQUIRE_EQ(std::string("192.0.2.10:0,[2001:db8::10]:0"),
              defaultConfig.listenInterfaces);
+  REQUIRE(defaultConfig.outgoingInterfaces.empty());
+  REQUIRE(defaultConfig.automaticRoute);
   option.put(PREF_BT_INTERFACE, "en0");
   const auto config = makeBtConfig(&option);
   const auto& settings = config.settings;
-  REQUIRE_EQ(libtorrent::settings_pack::pe_forced,
+  REQUIRE_EQ(libtorrent::settings_pack::pe_enabled,
              settings.get_int(libtorrent::settings_pack::out_enc_policy));
   REQUIRE_EQ(libtorrent::settings_pack::pe_enabled,
              settings.get_int(libtorrent::settings_pack::in_enc_policy));
@@ -71,22 +71,20 @@ void BtSessionTest::testDesktopSettings()
   REQUIRE(!settings.get_bool(libtorrent::settings_pack::prefer_rc4));
   REQUIRE_EQ(20,
              settings.get_int(libtorrent::settings_pack::unchoke_slots_limit));
-  REQUIRE(settings.get_bool(libtorrent::settings_pack::smooth_connects));
-  REQUIRE_EQ(30,
-             settings.get_int(libtorrent::settings_pack::connection_speed));
-  REQUIRE_EQ(30, settings.get_int(
-                     libtorrent::settings_pack::torrent_connect_boost));
+  REQUIRE_EQ(10,
+             settings.get_int(libtorrent::settings_pack::peer_connect_timeout));
   REQUIRE_EQ(3,
              settings.get_int(libtorrent::settings_pack::handshake_timeout));
   REQUIRE_EQ(1, settings.get_int(
                     libtorrent::settings_pack::min_reconnect_time));
+  REQUIRE(!settings.has_val(libtorrent::settings_pack::request_queue_time));
   REQUIRE_EQ(3,
              settings.get_int(libtorrent::settings_pack::max_failcount));
-  REQUIRE_EQ(1,
+  REQUIRE_EQ(3,
              settings.get_int(libtorrent::settings_pack::request_queue_time));
-  REQUIRE_EQ(4096, settings.get_int(
+  REQUIRE_EQ(500, settings.get_int(
                        libtorrent::settings_pack::max_out_request_queue));
-  REQUIRE_EQ(2, settings.get_int(
+  REQUIRE_EQ(20, settings.get_int(
                     libtorrent::settings_pack::whole_pieces_threshold));
   REQUIRE_EQ(50, settings.get_int(
                      libtorrent::settings_pack::max_concurrent_http_announces));
@@ -97,6 +95,7 @@ void BtSessionTest::testDesktopSettings()
   REQUIRE_EQ(10, config.trackerReceiveTimeout);
   REQUIRE_EQ(std::string("en0:0"), config.listenInterfaces);
   REQUIRE_EQ(std::string("en0"), config.outgoingInterfaces);
+  REQUIRE(!config.automaticRoute);
 
   option.put(PREF_BT_ENCRYPTION, V_REQUIRED);
   const auto required = makeBtConfig(&option).settings;
@@ -111,32 +110,6 @@ void BtSessionTest::testDesktopSettings()
              disabled.get_int(libtorrent::settings_pack::out_enc_policy));
   REQUIRE_EQ(libtorrent::settings_pack::pe_disabled,
              disabled.get_int(libtorrent::settings_pack::in_enc_policy));
-}
-
-void BtSessionTest::testDiscoveryRecovery()
-{
-  BtDiscoveryController controller;
-  BtDiscoveryState state;
-  controller.activate(state, 3);
-  REQUIRE_EQ(std::string("discovering"),
-             std::string(btDiscoveryPhaseName(state.phase)));
-  REQUIRE(controller.requestTrackerRetry(
-      state, true, 1, "http://tracker.example/announce"));
-  REQUIRE(!controller.requestTrackerRetry(
-      state, true, 2, "http://tracker.example/announce"));
-  REQUIRE(state.trackerRetryUsed);
-  REQUIRE_EQ(std::string("http://tracker.example/announce"),
-             state.retryTracker);
-  controller.trackerReplied(state, 6);
-  REQUIRE_EQ(6, state.trackerPeersReceived);
-  REQUIRE_EQ(std::string("discovering"),
-             std::string(btDiscoveryPhaseName(state.phase)));
-  controller.peersObserved(state, 1);
-  REQUIRE_EQ(std::string("healthy"),
-             std::string(btDiscoveryPhaseName(state.phase)));
-  controller.peersObserved(state, 0);
-  REQUIRE_EQ(std::string("discovering"),
-             std::string(btDiscoveryPhaseName(state.phase)));
 }
 
 void BtSessionTest::testTrackerOwnership()

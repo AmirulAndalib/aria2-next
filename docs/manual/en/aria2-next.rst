@@ -745,10 +745,11 @@ BitTorrent Specific Options
 .. option:: --bt-interface=<INTERFACE>[,...]
 
   Bind BitTorrent listeners, outgoing TCP peers, uTP, UDP trackers, and DHT to
-  the given network interface names or numeric IP addresses. An empty value
-  listens on all IPv4 and enabled IPv6 interfaces and lets the operating system
-  select outgoing TCP addresses. This setting is independent of
-  :option:`--interface` and :option:`--multiple-interface`.
+  the given network interface names or numeric IP addresses. Without this
+  option, aria2-next asks the operating system to select one route address for
+  each available IP family. The route is refreshed after network changes and
+  system resume. This setting is independent of :option:`--interface` and
+  :option:`--multiple-interface`.
 
 .. option:: --bt-dht-bootstrap-nodes=<HOST:PORT>[,...]
 
@@ -758,10 +759,10 @@ BitTorrent Specific Options
 
 .. option:: --bt-encryption=preferred|required|disabled
 
-  Select peer transport encryption. ``preferred`` initiates encrypted outgoing
-  handshakes and accepts encrypted or plain incoming peers. ``required`` rejects
-  unencrypted handshakes, and ``disabled`` accepts only plain peer connections.
-  Encrypted handshakes negotiate plain or RC4 payloads. Default: ``preferred``
+  Select peer transport encryption. ``preferred`` accepts encrypted or plain
+  connections in either direction. ``required`` rejects unencrypted handshakes,
+  and ``disabled`` accepts only plain peer connections. Encrypted handshakes
+  negotiate plain or RC4 payloads. Default: ``preferred``
 
 .. option:: --bt-transport=tcp|utp|both
 
@@ -3231,18 +3232,15 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   Return tracker runtime status for the BitTorrent download denoted by *gid*.
   Each entry contains ``url``, ``source``, ``tier``, ``status``, ``failures``,
   ``seeders``, ``leechers``, ``downloads``, ``updating``, ``verified``,
-  ``nextAnnounce``, ``minAnnounce``, ``retryUsed``, and an optional
-  ``message``. The announce values are seconds from now or ``-1`` when no time
+  ``nextAnnounce``, ``minAnnounce``, and an optional ``message``. The announce
+  values are seconds from now or ``-1`` when no time
   is scheduled. ``source`` is ``metainfo``, ``magnet``, ``resume``, ``global``,
   or ``rpc``. ``endpoints`` reports the same runtime state for each local
   endpoint and protocol version. ``status`` is ``waiting``, ``updating``,
   ``working``, or ``error``.
 
-  During a discovery epoch, aria2-next retries one transient tracker failure.
-  Peer connection attempts, failure accounting, reconnect backoff, and peer
-  turnover remain controlled by libtorrent. The desktop connection profile
-  accelerates the first connection set and uses bounded native retries so a
-  failed handshake batch does not stall torrent startup.
+  Tracker retries, failure accounting, reconnect backoff, and peer turnover are
+  controlled by libtorrent.
 
 .. function:: aria2.replaceBtTrackers([secret], gid, trackers)
 
@@ -3253,7 +3251,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
 .. function:: aria2.getBtSessionStatus([secret])
 
-  Return current session-wide BitTorrent discovery and endpoint status. Values
+  Return current session-wide BitTorrent transport and endpoint status. Values
   are strings except ``listenEndpoints``, which is an array of strings.
 
   ``listenPort``
@@ -3302,9 +3300,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   ``trackerDownloaded``, ``trackerUploaded``
     Cumulative tracker traffic bytes for the session.
-
-  ``networkEpoch``
-    Monotonic generation of the active BitTorrent network identity.
 
   ``dhtStateHealthy``
     ``true`` when the current routing table or the persisted last-known-good DHT

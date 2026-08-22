@@ -18,6 +18,10 @@
 #include <string>
 #include <vector>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/udp.hpp>
+
 #include <libtorrent/alert.hpp>
 #include <libtorrent/fingerprint.hpp>
 #include <libtorrent/version.hpp>
@@ -72,13 +76,39 @@ std::string withListenPort(const std::string& interface, int port)
   return interface + ':' + std::to_string(port);
 }
 
-std::string makeListenInterfaces(const Option* option)
+std::string routeAddress(const boost::asio::ip::address& destination)
+{
+  boost::asio::io_context context;
+  boost::asio::ip::udp::socket socket(context);
+  boost::system::error_code error;
+  socket.open(destination.is_v4() ? boost::asio::ip::udp::v4()
+                                  : boost::asio::ip::udp::v6(),
+              error);
+  if (error) {
+    return {};
+  }
+  socket.connect({destination, 9}, error);
+  if (error) {
+    return {};
+  }
+  const auto local = socket.local_endpoint(error);
+  if (error || local.address().is_unspecified()) {
+    return {};
+  }
+  return local.address().to_string();
+}
+
+std::string makeListenInterfaces(
+    const Option* option, const std::vector<std::string>& routeAddresses)
 {
   const auto port = option->getAsInt(PREF_LISTEN_PORT);
-  const auto configured = splitInterfaces(option);
-  if (!configured.empty()) {
+  auto interfaces = splitInterfaces(option);
+  if (interfaces.empty()) {
+    interfaces = routeAddresses;
+  }
+  if (!interfaces.empty()) {
     std::string result;
-    for (const auto& interface : configured) {
+    for (const auto& interface : interfaces) {
       if (option->getAsBool(PREF_DISABLE_IPV6) &&
           interface.find(':') != std::string::npos) {
         continue;
@@ -94,36 +124,59 @@ std::string makeListenInterfaces(const Option* option)
     return result;
   }
 
-  auto result = "0.0.0.0:" + std::to_string(port);
-  if (!option->getAsBool(PREF_DISABLE_IPV6)) {
-    result += ",[::]:" + std::to_string(port);
-  }
-  return result;
-}
-
-void configurePeerConnections(lt::settings_pack& settings)
-{
-  settings.set_bool(lt::settings_pack::smooth_connects, true);
-  settings.set_int(lt::settings_pack::connection_speed, 30);
-  settings.set_int(lt::settings_pack::torrent_connect_boost, 30);
-  settings.set_int(lt::settings_pack::handshake_timeout, 3);
-  settings.set_int(lt::settings_pack::min_reconnect_time, 1);
-  settings.set_int(lt::settings_pack::max_failcount, 3);
-  settings.set_int(lt::settings_pack::request_queue_time, 1);
-  settings.set_int(lt::settings_pack::max_out_request_queue, 4096);
-  settings.set_int(lt::settings_pack::whole_pieces_threshold, 2);
+  return {};
 }
 
 } // namespace
 
+std::vector<std::string> detectBtRouteAddresses(const Option* option)
+{
+  if (!splitInterfaces(option).empty() || !option->get(PREF_BT_PROXY).empty()) {
+    return {};
+  }
+
+  std::vector<std::string> result;
+  const auto ipv4 = routeAddress(boost::asio::ip::make_address("192.0.2.1"));
+  if (!ipv4.empty()) {
+    result.push_back(ipv4);
+  }
+  if (!option->getAsBool(PREF_DISABLE_IPV6)) {
+    const auto ipv6 =
+        routeAddress(boost::asio::ip::make_address("2001:db8::1"));
+    if (!ipv6.empty() &&
+        std::find(result.begin(), result.end(), ipv6) == result.end()) {
+      result.push_back(ipv6);
+    }
+  }
+  return result;
+}
+
 BtConfig makeBtConfig(const Option* option)
+{
+  return makeBtConfig(option, detectBtRouteAddresses(option));
+}
+
+BtConfig makeBtConfig(const Option* option,
+                      const std::vector<std::string>& routeAddresses)
 {
   BtConfig config;
   lt::settings_pack settings;
-  config.listenInterfaces = makeListenInterfaces(option);
+  const auto configuredInterfaces = splitInterfaces(option);
+  config.automaticRoute =
+      configuredInterfaces.empty() && option->get(PREF_BT_PROXY).empty();
+  if (config.automaticRoute) {
+    config.routeAddresses = routeAddresses;
+  }
+  else if (configuredInterfaces.empty()) {
+    config.routeAddresses.push_back("0.0.0.0");
+    if (!option->getAsBool(PREF_DISABLE_IPV6)) {
+      config.routeAddresses.push_back("::");
+    }
+  }
+  config.listenInterfaces =
+      makeListenInterfaces(option, config.routeAddresses);
   settings.set_str(lt::settings_pack::listen_interfaces,
                    config.listenInterfaces);
-  const auto configuredInterfaces = splitInterfaces(option);
   if (!configuredInterfaces.empty()) {
     for (const auto& interface : configuredInterfaces) {
       if (option->getAsBool(PREF_DISABLE_IPV6) &&
@@ -198,7 +251,9 @@ BtConfig makeBtConfig(const Option* option)
   settings.set_bool(lt::settings_pack::enable_outgoing_utp, enableUtp);
   settings.set_int(lt::settings_pack::mixed_mode_algorithm,
                    lt::settings_pack::prefer_tcp);
-  configurePeerConnections(settings);
+  settings.set_int(lt::settings_pack::peer_connect_timeout, 10);
+  settings.set_int(lt::settings_pack::handshake_timeout, 3);
+  settings.set_int(lt::settings_pack::min_reconnect_time, 1);
   settings.set_str(lt::settings_pack::user_agent,
                    "aria2-next/" PACKAGE_VERSION " libtorrent/" +
                        std::to_string(LIBTORRENT_VERSION_MAJOR) + "." +
@@ -271,15 +326,12 @@ BtConfig makeBtConfig(const Option* option)
   settings.set_int(lt::settings_pack::tracker_receive_timeout,
                    config.trackerReceiveTimeout);
   const auto& encryption = option->get(PREF_BT_ENCRYPTION);
-  const auto outgoingEncryption =
-      encryption == V_DISABLED ? lt::settings_pack::pe_disabled
-                               : lt::settings_pack::pe_forced;
-  const auto incomingEncryption =
+  const auto encryptionPolicy =
       encryption == V_REQUIRED   ? lt::settings_pack::pe_forced
       : encryption == V_DISABLED ? lt::settings_pack::pe_disabled
                                  : lt::settings_pack::pe_enabled;
-  settings.set_int(lt::settings_pack::out_enc_policy, outgoingEncryption);
-  settings.set_int(lt::settings_pack::in_enc_policy, incomingEncryption);
+  settings.set_int(lt::settings_pack::out_enc_policy, encryptionPolicy);
+  settings.set_int(lt::settings_pack::in_enc_policy, encryptionPolicy);
   settings.set_int(lt::settings_pack::allowed_enc_level,
                    lt::settings_pack::pe_both);
   settings.set_bool(lt::settings_pack::prefer_rc4, false);

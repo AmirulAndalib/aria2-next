@@ -1040,16 +1040,6 @@ void gatherBitTorrentMetadata(Dict* btDict, const BtSnapshot& snapshot,
   btDict->put(KEY_PRIVATE_TORRENT,
               snapshot.privateTorrent ? VLB_TRUE : VLB_FALSE);
   btDict->put("state", btStateName(snapshot.state));
-  btDict->put("discoveryState", snapshot.discoveryState);
-  btDict->put("discoveryEpoch", util::uitos(snapshot.discoveryEpoch));
-  btDict->put("networkEpoch", util::uitos(snapshot.networkEpoch));
-  btDict->put("trackerPeersReceived",
-              util::itos(snapshot.trackerPeersReceived));
-  btDict->put("trackerRetryUsed",
-              snapshot.trackerRetryUsed ? VLB_TRUE : VLB_FALSE);
-  if (!snapshot.retryTracker.empty()) {
-    btDict->put("retryTracker", snapshot.retryTracker);
-  }
   if (!snapshot.infoHashV1.empty()) {
     btDict->put("infoHashV1", snapshot.infoHashV1);
   }
@@ -1399,11 +1389,6 @@ GetBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     entry->put("minAnnounce", util::itos(tracker.minAnnounceSeconds));
     entry->put("updating", tracker.updating ? VLB_TRUE : VLB_FALSE);
     entry->put("verified", tracker.verified ? VLB_TRUE : VLB_FALSE);
-    entry->put("retryUsed",
-               snapshot.trackerRetryUsed &&
-                       snapshot.retryTracker == tracker.url
-                   ? VLB_TRUE
-                   : VLB_FALSE);
     if (!tracker.message.empty()) {
       entry->put("message", tracker.message);
     }
@@ -1536,7 +1521,6 @@ GetBtSessionStatusRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   result->put("payloadUploaded", util::uitos(status.payloadUploaded));
   result->put("trackerDownloaded", util::uitos(status.trackerDownloaded));
   result->put("trackerUploaded", util::uitos(status.trackerUploaded));
-  result->put("networkEpoch", util::uitos(status.networkEpoch));
   result->put("dhtStateHealthy",
               status.dhtStateHealthy ? VLB_TRUE : VLB_FALSE);
   if (!status.portMappingError.empty()) {

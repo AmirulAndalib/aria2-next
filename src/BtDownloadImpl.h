@@ -20,7 +20,6 @@
 #include <libtorrent/add_torrent_params.hpp>
 #include <libtorrent/torrent_handle.hpp>
 
-#include "BtDiscovery.h"
 #include "BtDownload.h"
 #include "TimerA2.h"
 
@@ -47,7 +46,6 @@ struct BtDownload::Impl {
   bool trackerOverride = false;
   uint64_t trackerRevision = 1;
   uint64_t appliedTrackerRevision = 0;
-  BtDiscoveryState discovery;
   std::string resumePath;
   std::string previousSavePath;
   bool resumeLoaded = false;
