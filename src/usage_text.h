@@ -338,6 +338,8 @@
   _(" --bt-dht-bootstrap-nodes=NODES Set comma-separated DHT bootstrap HOST:PORT entries.")
 #define TEXT_BT_MAX_CONNECTIONS                                          \
   _(" --bt-max-connections=NUM    Set the session-wide peer connection limit.")
+#define TEXT_BT_MAX_UPLOADS                                              \
+  _(" --bt-max-uploads=NUM        Set the session-wide upload slot limit.")
 #define TEXT_BT_PROXY                                                    \
   _(" --bt-proxy=URI              Route BitTorrent traffic through HTTP, SOCKS4, or SOCKS5.")
 #define TEXT_BT_PORT_MAPPING                                             \
@@ -345,12 +347,30 @@
 #define TEXT_BT_MAX_OPEN_FILES                                          \
   _(" --bt-max-open-files=NUM      Specify the session-wide maximum number of open\n" \
     "                              BitTorrent files.")
+#define TEXT_BT_IO_THREADS                                               \
+  _(" --bt-io-threads=NUM          Set native libtorrent disk I/O threads.")
+#define TEXT_BT_HASHING_THREADS                                          \
+  _(" --bt-hashing-threads=NUM     Set native libtorrent recheck threads.")
+#define TEXT_BT_MAX_CONCURRENT_HTTP_ANNOUNCES                            \
+  _(" --bt-max-concurrent-http-announces=NUM Limit parallel HTTP tracker announces.")
+#define TEXT_BT_ANNOUNCE_ALL_TIERS                                       \
+  _(" --bt-announce-all-tiers[=true|false] Announce to every tracker tier.")
+#define TEXT_BT_ANNOUNCE_ALL_TRACKERS                                    \
+  _(" --bt-announce-all-trackers[=true|false] Announce to every tracker in a tier.")
+#define TEXT_BT_ANONYMOUS_MODE                                           \
+  _(" --bt-anonymous-mode[=true|false] Hide identifying client information.")
 #define TEXT_BT_SEED_UNVERIFIED                                         \
   _(" --bt-seed-unverified[=true|false] Seed previously downloaded files without\n" \
     "                              verifying piece hashes.")
 #define TEXT_BT_MAX_PEERS                                               \
   _(" --bt-max-peers=NUM           Specify the maximum number of peers per torrent.\n" \
     "                              0 means unlimited.")
+#define TEXT_BT_MAX_UPLOADS_PER_TORRENT                                  \
+  _(" --bt-max-uploads-per-torrent=NUM Set upload slots per torrent.")
+#define TEXT_BT_FIRST_LAST_PIECE_FIRST                                   \
+  _(" --bt-first-last-piece-first[=true|false] Prioritize file boundaries.")
+#define TEXT_BT_SUPER_SEEDING                                            \
+  _(" --bt-super-seeding[=true|false] Enable super seeding for this torrent.")
 #define TEXT_BT_PEER_BLOCKLIST                                           \
   _(" --bt-peer-blocklist=PATH      Reject BitTorrent peers whose IP address matches\n" \
     "                              an IP or CIDR rule in PATH. Both IPv4 and IPv6\n" \
@@ -718,7 +738,8 @@
     "                              --async-dns=false.")
 #define TEXT_BT_TRACKER                                                 \
   _(" --bt-tracker=URI[,...]       Comma separated list of additional BitTorrent\n" \
-    "                              tracker's announce URI. These URIs are not\n" \
+    "                              tracker announce URIs in one fallback tier.\n" \
+    "                              These URIs are not\n" \
     "                              affected by --bt-exclude-tracker option because\n" \
     "                              they are added after URIs in --bt-exclude-tracker\n" \
     "                              option are removed.")
@@ -875,14 +896,6 @@
     "                              file contains a lot of URIs to download.\n" \
     "                              If false is given, aria2 reads all URIs and\n" \
     "                              options at startup.")
-#define TEXT_BT_REMOVE_UNSELECTED_FILE                                  \
-  _(" --bt-remove-unselected-file[=true|false] Removes the unselected files when\n" \
-    "                              download is completed in BitTorrent. To\n" \
-    "                              select files, use --select-file option. If\n" \
-    "                              it is not used, all files are assumed to be\n" \
-    "                              selected. Please use this option with care\n" \
-    "                              because it will actually remove files from\n" \
-    "                              your disk.")
 #define TEXT_ENABLE_MMAP                        \
   _(" --enable-mmap[=true|false]   Map files into memory.")
 #define TEXT_RPC_CERTIFICATE                                            \
@@ -1047,6 +1060,5 @@
     "                              keep in mind that there is no upper bound to the\n" \
     "                              number of unfinished download result to keep. If\n" \
     "                              that is undesirable, turn this option off.")
-
 
 // clang-format on

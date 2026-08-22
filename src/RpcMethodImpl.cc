@@ -331,8 +331,7 @@ createEd2kSearchResultEntry(const ed2k::SearchResultEntry& entry)
   dict->put(KEY_NAME, entry.name);
   dict->put(KEY_LENGTH, util::itos(entry.size));
   dict->put(KEY_SOURCE_COUNT, util::uitos(entry.sourceCount));
-  dict->put(KEY_COMPLETE_SOURCE_COUNT,
-            util::uitos(entry.completeSourceCount));
+  dict->put(KEY_COMPLETE_SOURCE_COUNT, util::uitos(entry.completeSourceCount));
   dict->put(KEY_FILE_TYPE, entry.fileType);
   dict->put(KEY_EXTENSION, entry.extension);
   dict->put(KEY_MEDIA_ARTIST, entry.mediaArtist);
@@ -372,16 +371,14 @@ std::unique_ptr<ValueBase> Ed2kSearchRpcMethod::process(const RpcRequest& req,
 }
 
 std::unique_ptr<ValueBase>
-GetEd2kSearchResultsRpcMethod::process(const RpcRequest& req,
-                                       DownloadEngine* e)
+GetEd2kSearchResultsRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
   const String* gidParam = checkRequiredParam<String>(req, 0);
   a2_gid_t gid = str2Gid(gidParam);
   auto group = e->getRequestGroupMan()->findGroup(gid);
   if (!group || !group->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K)) {
-    throw DL_ABORT_EX(
-        fmt("No ED2K search data is available for GID#%s",
-            GroupId::toHex(gid).c_str()));
+    throw DL_ABORT_EX(fmt("No ED2K search data is available for GID#%s",
+                          GroupId::toHex(gid).c_str()));
   }
   auto attrs = getEd2kAttrs(group->getDownloadContext());
   auto result = Dict::g();
@@ -443,8 +440,8 @@ std::unique_ptr<ValueBase> AddTorrentRpcMethod::process(const RpcRequest& req,
     }
     else {
       A2_LOG_DEBUG(fmt("Uploaded torrent data was not saved."
-                      " Failed to write file %s",
-                      filename.c_str()));
+                       " Failed to write file %s",
+                       filename.c_str()));
       filename.clear();
     }
   }
@@ -500,8 +497,8 @@ std::unique_ptr<ValueBase> AddMetalinkRpcMethod::process(const RpcRequest& req,
     }
     else {
       A2_LOG_DEBUG(fmt("Uploaded metalink data was not saved."
-                      " Failed to write file %s",
-                      filename.c_str()));
+                       " Failed to write file %s",
+                       filename.c_str()));
       createRequestGroupForMetalink(result, requestOption, metalinkParam->s());
     }
   }
@@ -884,10 +881,9 @@ std::unique_ptr<Dict> createEd2kStatusEntry(const Ed2kAttribute* attrs,
   dict->put("lowIdPeerCount", util::uitos(countEd2kLowIdPeers(attrs)));
   dict->put("callbackWaitingPeerCount",
             util::uitos(countEd2kCallbackWaitingPeers(attrs)));
-  dict->put("kadNodeCount",
-            util::uitos(attrs->kadRoutingTable
-                            ? attrs->kadRoutingTable->liveSize()
-                            : 0));
+  dict->put("kadNodeCount", util::uitos(attrs->kadRoutingTable
+                                            ? attrs->kadRoutingTable->liveSize()
+                                            : 0));
   dict->put("kadRouterCount",
             util::uitos(attrs->kadRoutingTable
                             ? attrs->kadRoutingTable->getRouterNodes().size()
@@ -903,8 +899,7 @@ std::unique_ptr<Dict> createEd2kStatusEntry(const Ed2kAttribute* attrs,
   dict->put("searchResultCount", util::uitos(attrs->searchResults.size()));
   if (rgman && rgman->getEd2kUploadQueue()) {
     auto uploadQueue = rgman->getEd2kUploadQueue();
-    dict->put("uploadingPeerCount",
-              util::uitos(uploadQueue->uploadingCount()));
+    dict->put("uploadingPeerCount", util::uitos(uploadQueue->uploadingCount()));
     dict->put("waitingUploadPeerCount",
               util::uitos(uploadQueue->waitingCount()));
     dict->put("peerCreditCount",
@@ -951,12 +946,11 @@ void gatherProgressCommon(Dict* entryDict,
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload() &&
         !group->getBtDownload()->snapshot().bitfield.empty()) {
-      entryDict->put(KEY_BITFIELD,
-                     group->getBtDownload()->snapshot().bitfield);
+      entryDict->put(KEY_BITFIELD, group->getBtDownload()->snapshot().bitfield);
     }
     else
 #endif
-    if (ps) {
+        if (ps) {
       if (ps->getBitfieldLength() > 0) {
         entryDict->put(KEY_BITFIELD,
                        util::toHex(ps->getBitfield(), ps->getBitfieldLength()));
@@ -999,9 +993,9 @@ void gatherProgressCommon(Dict* entryDict,
     else
 #endif // ENABLE_BITTORRENT
     {
-    createFileEntry(files.get(), std::begin(dctx->getFileEntries()),
-                    std::end(dctx->getFileEntries()), dctx->getTotalLength(),
-                    dctx->getPieceLength(), ps);
+      createFileEntry(files.get(), std::begin(dctx->getFileEntries()),
+                      std::end(dctx->getFileEntries()), dctx->getTotalLength(),
+                      dctx->getPieceLength(), ps);
     }
     entryDict->put(KEY_FILES, std::move(files));
   }
@@ -1018,8 +1012,7 @@ void gatherProgressCommon(Dict* entryDict,
 }
 
 #ifdef ENABLE_BITTORRENT
-void gatherBitTorrentMetadata(Dict* btDict,
-                              const BtSnapshot& snapshot,
+void gatherBitTorrentMetadata(Dict* btDict, const BtSnapshot& snapshot,
                               const BtMetadata* attrs)
 {
   if (!snapshot.magnetLink.empty()) {
@@ -1032,8 +1025,8 @@ void gatherBitTorrentMetadata(Dict* btDict,
     btDict->put(KEY_CREATION_DATE, Integer::g(attrs->creationDate));
   }
   if (attrs && attrs->mode != BT_FILE_MODE_NONE) {
-    btDict->put(KEY_MODE, attrs->mode == BT_FILE_MODE_MULTI ? "multi"
-                                                            : "single");
+    btDict->put(KEY_MODE,
+                attrs->mode == BT_FILE_MODE_MULTI ? "multi" : "single");
   }
   auto announceList = List::g();
   for (const auto& tier : snapshot.announceList) {
@@ -1105,7 +1098,7 @@ void gatherProgressBitTorrent(Dict* entryDict,
     entryDict->put(KEY_NUM_SEEDERS, util::itos(snapshot.numSeeds));
   }
 }
-}
+} // namespace
 
 namespace {
 void gatherPeer(List* peers, const BtSnapshot& snapshot)
@@ -1124,8 +1117,7 @@ void gatherPeer(List* peers, const BtSnapshot& snapshot)
     entry->put(KEY_AM_CHOKING, peer.amChoking ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_AM_INTERESTED, peer.amInterested ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_PEER_CHOKING, peer.peerChoking ? VLB_TRUE : VLB_FALSE);
-    entry->put(KEY_PEER_INTERESTED,
-               peer.peerInterested ? VLB_TRUE : VLB_FALSE);
+    entry->put(KEY_PEER_INTERESTED, peer.peerInterested ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_DOWNLOAD_SPEED, util::itos(peer.downloadSpeed));
     entry->put(KEY_UPLOAD_SPEED, util::itos(peer.uploadSpeed));
     entry->put(KEY_DOWNLOADED, util::itos(peer.downloaded));
@@ -1149,7 +1141,7 @@ void gatherPeer(List* peers, const BtSnapshot& snapshot)
     peers->append(std::move(entry));
   }
 }
-}
+} // namespace
 #endif // ENABLE_BITTORRENT
 
 namespace {
@@ -1235,9 +1227,9 @@ void gatherStoppedDownload(Dict* entryDict,
     else
 #endif
     {
-    createFileEntry(files.get(), std::begin(ds->fileEntries),
-                    std::end(ds->fileEntries), ds->totalLength, ds->pieceLength,
-                    ds->bitfield);
+      createFileEntry(files.get(), std::begin(ds->fileEntries),
+                      std::end(ds->fileEntries), ds->totalLength,
+                      ds->pieceLength, ds->bitfield);
     }
     entryDict->put(KEY_FILES, std::move(files));
   }
@@ -1284,8 +1276,7 @@ void gatherStoppedDownload(Dict* entryDict,
 
 #ifdef ENABLE_BITTORRENT
   if (ds->attrs.size() > CTX_ATTR_BT && ds->attrs[CTX_ATTR_BT]) {
-    const auto attrs =
-        static_cast<BtMetadata*>(ds->attrs[CTX_ATTR_BT].get());
+    const auto attrs = static_cast<BtMetadata*>(ds->attrs[CTX_ATTR_BT].get());
     if (requested_key(keys, KEY_BITTORRENT)) {
       auto btDict = Dict::g();
       gatherBitTorrentMetadata(btDict.get(), ds->btSnapshot, attrs);
@@ -1407,10 +1398,8 @@ GetBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
       endpointEntry->put("seeders", util::itos(endpoint.seeders));
       endpointEntry->put("leechers", util::itos(endpoint.leechers));
       endpointEntry->put("downloads", util::itos(endpoint.downloads));
-      endpointEntry->put("updating",
-                         endpoint.updating ? VLB_TRUE : VLB_FALSE);
-      endpointEntry->put("verified",
-                         endpoint.verified ? VLB_TRUE : VLB_FALSE);
+      endpointEntry->put("updating", endpoint.updating ? VLB_TRUE : VLB_FALSE);
+      endpointEntry->put("verified", endpoint.verified ? VLB_TRUE : VLB_FALSE);
       if (!endpoint.message.empty()) {
         endpointEntry->put("message", endpoint.message);
       }
@@ -1435,7 +1424,7 @@ std::shared_ptr<BtDownload> requireBtDownload(const RpcRequest& req,
   }
   return group->getBtDownload();
 }
-}
+} // namespace
 
 std::unique_ptr<ValueBase>
 ForceBtReannounceRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
@@ -1450,6 +1439,30 @@ ForceBtRecheckRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
   const auto download = requireBtDownload(req, e);
   e->getBtSession()->forceRecheck(download);
+  return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
+ReplaceBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  const List* trackersParam = checkRequiredParam<List>(req, 1);
+  std::vector<BtTrackerConfig> trackers;
+  trackers.reserve(trackersParam->size());
+  size_t index = 0;
+  for (const auto& value : *trackersParam) {
+    const auto entry = downcast<Dict>(value);
+    const auto url = entry ? downcast<String>(entry->get("url")) : nullptr;
+    const auto tier = entry ? downcast<Integer>(entry->get("tier")) : nullptr;
+    if (!url || !tier) {
+      throw DL_ABORT_EX(fmt("The tracker at index %lu must contain string "
+                            "url and integer tier fields.",
+                            static_cast<unsigned long>(index)));
+    }
+    trackers.push_back({url->s(), static_cast<int>(tier->i())});
+    ++index;
+  }
+  e->getBtSession()->replaceTrackers(download, trackers);
   return createGIDResponse(download->group()->getGID());
 }
 
@@ -2199,6 +2212,9 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
         option.defined(PREF_BT_TRACKER) ||
         option.defined(PREF_BT_EXCLUDE_TRACKER) ||
         option.defined(PREF_BT_MAX_PEERS) ||
+        option.defined(PREF_BT_MAX_UPLOADS_PER_TORRENT) ||
+        option.defined(PREF_BT_FIRST_LAST_PIECE_FIRST) ||
+        option.defined(PREF_BT_SUPER_SEEDING) ||
         option.defined(PREF_ENABLE_DHT) ||
         option.defined(PREF_ENABLE_PEER_EXCHANGE) ||
         option.defined(PREF_BT_ENABLE_LPD) ||

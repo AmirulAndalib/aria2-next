@@ -753,7 +753,7 @@ BitTorrent Specific Options
 
   Select peer transport encryption. ``enabled`` accepts encrypted and plain
   peers, ``required`` rejects unencrypted handshakes, and ``disabled`` accepts
-  only plain peer connections. Default: ``enabled``
+  only plain peer connections. Encrypted streams use RC4. Default: ``enabled``
 
 .. option:: --bt-transport=tcp|utp|both
 
@@ -790,17 +790,61 @@ BitTorrent Specific Options
   Specify the session-wide maximum number of open BitTorrent files.
   Default: ``100``
 
+.. option:: --bt-io-threads=<NUM>
+
+  Set the number of native libtorrent disk I/O threads. Default: ``10``
+
+.. option:: --bt-hashing-threads=<NUM>
+
+  Set the number of additional threads used for complete torrent rechecks.
+  Download-time hashing remains part of the regular I/O pool. Default: ``1``
+
 .. option:: --bt-max-connections=<NUM>
 
   Set the session-wide maximum number of BitTorrent peer connections.
   Per-torrent limits are controlled by :option:`--bt-max-peers`. Default:
   ``500``
 
+.. option:: --bt-max-uploads=<NUM>
+
+  Set the session-wide maximum number of unchoked peers. Default: ``20``
+
 .. option:: --bt-max-peers=<NUM>
 
   Specify the maximum number of peers per torrent.  ``0`` means
   unlimited.
   Default: ``100``
+
+.. option:: --bt-max-uploads-per-torrent=<NUM>
+
+  Set the maximum number of unchoked peers per torrent. Default: ``4``
+
+.. option:: --bt-first-last-piece-first [true|false]
+
+  Give maximum priority to the first and last one percent of every selected
+  file. This is useful for file inspection without replacing the native
+  rarest-first picker for the rest of the torrent. Default: ``false``
+
+.. option:: --bt-super-seeding [true|false]
+
+  Enable libtorrent super seeding for the torrent. Default: ``false``
+
+.. option:: --bt-anonymous-mode [true|false]
+
+  Hide identifying client information from peer and tracker requests.
+  Default: ``false``
+
+.. option:: --bt-announce-all-tiers [true|false]
+
+  Announce to one tracker in every tracker tier. Default: ``true``
+
+.. option:: --bt-announce-all-trackers [true|false]
+
+  Announce to every tracker within each active tier. Default: ``false``
+
+.. option:: --bt-max-concurrent-http-announces=<NUM>
+
+  Limit concurrent HTTP and HTTPS tracker announces. Default: ``50``
 
 .. option:: --bt-peer-blocklist=<PATH>
 
@@ -823,16 +867,6 @@ BitTorrent Specific Options
   SOCKS5 also carries DHT UDP traffic. HTTP and SOCKS4 disable DHT to prevent
   direct UDP traffic. An empty value disables the proxy.
 
-.. option:: --bt-remove-unselected-file [true|false]
-
-   Removes the unselected files when download is completed in
-   BitTorrent. To select files, use
-   :option:`--select-file` option. If it is
-   not used, all files are assumed to be selected. Please use this
-   option with care because it will actually remove files from your
-   disk.
-   Default: ``false``
-
 .. option:: --bt-seed-unverified [true|false]
 
   Seed previously downloaded files without verifying piece hashes.
@@ -840,8 +874,8 @@ BitTorrent Specific Options
 
 .. option:: --bt-tracker=<URI>[,...]
 
-  Comma separated list of additional tracker announce URIs. Each URI is added
-  in one native fallback tier after the tiers from the torrent. Trackers are
+  Comma separated list of additional tracker announce URIs. The list is added
+  as one native fallback tier after the tiers from the torrent. Trackers are
   deduplicated and never injected into private torrents. WebTorrent ``ws://``
   and ``wss://`` trackers are rejected because maintained builds do not include
   WebRTC.
@@ -859,9 +893,9 @@ BitTorrent Specific Options
 
 .. option:: --bt-session-state-file=<FILE>
 
-  Store native libtorrent IPv4 and IPv6 DHT routing state in *FILE*. The file
-  is written atomically during operation and shutdown. It does not contain
-  torrents or runtime settings. Default:
+  Store native libtorrent IPv4 and IPv6 DHT routing state in *FILE*. Per-torrent
+  native fast-resume files are stored in a ``torrents`` directory beside this
+  file. All state is written atomically. Default:
   ``${HOME}/.aria2-next/bittorrent.session``
 
 .. option:: --enable-dht [true|false]
@@ -2089,9 +2123,11 @@ of URIs. These optional lines must start with white space(s).
   * :option:`bt-enable-lpd <--bt-enable-lpd>`
   * :option:`bt-encryption <--bt-encryption>`
   * :option:`bt-exclude-tracker <--bt-exclude-tracker>`
+  * :option:`bt-first-last-piece-first <--bt-first-last-piece-first>`
   * :option:`bt-max-peers <--bt-max-peers>`
-  * :option:`bt-remove-unselected-file <--bt-remove-unselected-file>`
+  * :option:`bt-max-uploads-per-torrent <--bt-max-uploads-per-torrent>`
   * :option:`bt-seed-unverified <--bt-seed-unverified>`
+  * :option:`bt-super-seeding <--bt-super-seeding>`
   * :option:`bt-tracker <--bt-tracker>`
   * :option:`bt-tracker-connect-timeout <--bt-tracker-connect-timeout>`
   * :option:`bt-tracker-timeout <--bt-tracker-timeout>`
@@ -3217,6 +3253,13 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   endpoint and protocol version. ``status`` is ``waiting``, ``updating``,
   ``working``, or ``error``.
 
+.. function:: aria2.replaceBtTrackers([secret], gid, trackers)
+
+  Replace the torrent's tracker list. *trackers* is an array of structs with a
+  string ``url`` and integer ``tier``. HTTP, HTTPS, and UDP trackers are
+  accepted. Duplicate URLs are removed while input order and explicit tiers
+  are preserved. The native fast-resume state is updated after the change.
+
 .. function:: aria2.getBtSessionStatus([secret])
 
   Return current session-wide BitTorrent discovery and endpoint status. Values
@@ -3551,7 +3594,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   aria2, and no user intervention is required):
 
   * :option:`bt-max-peers <--bt-max-peers>`
-  * :option:`bt-remove-unselected-file <--bt-remove-unselected-file>`
+  * :option:`bt-max-uploads-per-torrent <--bt-max-uploads-per-torrent>`
+  * :option:`bt-first-last-piece-first <--bt-first-last-piece-first>`
+  * :option:`bt-super-seeding <--bt-super-seeding>`
   * :option:`force-save <--force-save>`
   * :option:`max-download-limit <--max-download-limit>`
   * :option:`max-upload-limit <-u>`
@@ -3603,7 +3648,15 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   * :option:`bt-external-ip <--bt-external-ip>`
   * :option:`bt-external-port <--bt-external-port>`
+  * :option:`bt-anonymous-mode <--bt-anonymous-mode>`
+  * :option:`bt-announce-all-tiers <--bt-announce-all-tiers>`
+  * :option:`bt-announce-all-trackers <--bt-announce-all-trackers>`
+  * :option:`bt-hashing-threads <--bt-hashing-threads>`
+  * :option:`bt-io-threads <--bt-io-threads>`
+  * :option:`bt-max-concurrent-http-announces <--bt-max-concurrent-http-announces>`
+  * :option:`bt-max-connections <--bt-max-connections>`
   * :option:`bt-max-open-files <--bt-max-open-files>`
+  * :option:`bt-max-uploads <--bt-max-uploads>`
   * :option:`bt-peer-blocklist <--bt-peer-blocklist>`
   * :option:`download-result <--download-result>`
   * :option:`keep-unfinished-download-result <--keep-unfinished-download-result>`

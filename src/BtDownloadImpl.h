@@ -29,8 +29,8 @@ struct BtDownload::Impl {
   libtorrent::torrent_handle handle;
   std::vector<std::string> sourceTrackers;
   std::vector<int> sourceTrackerTiers;
+  bool customTrackers = false;
   std::string resumePath;
-  std::string pendingSavePath;
   std::string previousSavePath;
   bool resumeLoaded = false;
   bool resumeSaveOutstanding = false;

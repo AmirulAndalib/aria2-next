@@ -70,8 +70,7 @@ PrefPtr k2p(const std::string& k);
 
 const std::vector<InputAlias>& inputAliases();
 
-const std::string& normalizeInputValue(PrefPtr pref,
-                                       const std::string& value);
+const std::string& normalizeInputValue(PrefPtr pref, const std::string& value);
 
 // Deletes resources allocated for preferences. Call this function at
 // the end of the program only once.
@@ -438,8 +437,6 @@ extern PrefPtr PREF_ALL_PROXY_PASSWD;
 /**
  * BitTorrent related preferences
  */
-// values: 1*digit
-extern PrefPtr PREF_PEER_CONNECTION_TIMEOUT;
 // values: true | false
 extern PrefPtr PREF_SHOW_FILES;
 // values: 1*digit
@@ -472,16 +469,36 @@ extern PrefPtr PREF_BT_SESSION_STATE_FILE;
 extern PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES;
 // values: 1*digit
 extern PrefPtr PREF_BT_MAX_CONNECTIONS;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_UPLOADS;
 // values: HTTP, SOCKS4, or SOCKS5 URI
 extern PrefPtr PREF_BT_PROXY;
 // values: true | false
 extern PrefPtr PREF_BT_PORT_MAPPING;
 // values: 1*digit
 extern PrefPtr PREF_BT_MAX_OPEN_FILES;
+// values: 1*digit
+extern PrefPtr PREF_BT_IO_THREADS;
+// values: 1*digit
+extern PrefPtr PREF_BT_HASHING_THREADS;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES;
+// values: true | false
+extern PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS;
+// values: true | false
+extern PrefPtr PREF_BT_ANNOUNCE_ALL_TRACKERS;
+// values: true | false
+extern PrefPtr PREF_BT_ANONYMOUS_MODE;
 // values: true | false
 extern PrefPtr PREF_BT_SEED_UNVERIFIED;
 // values: 1*digit
 extern PrefPtr PREF_BT_MAX_PEERS;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_UPLOADS_PER_TORRENT;
+// values: true | false
+extern PrefPtr PREF_BT_FIRST_LAST_PIECE_FIRST;
+// values: true | false
+extern PrefPtr PREF_BT_SUPER_SEEDING;
 // values: a string (file path)
 extern PrefPtr PREF_BT_PEER_BLOCKLIST;
 // values: a string (IP address)
@@ -502,8 +519,6 @@ extern PrefPtr PREF_ON_BT_DOWNLOAD_COMPLETE;
 extern PrefPtr PREF_BT_TRACKER;
 // values: string
 extern PrefPtr PREF_BT_EXCLUDE_TRACKER;
-// values: true | false
-extern PrefPtr PREF_BT_REMOVE_UNSELECTED_FILE;
 // values: true |false
 extern PrefPtr PREF_DETACH_SHARE_ONLY;
 

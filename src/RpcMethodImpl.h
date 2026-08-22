@@ -320,6 +320,15 @@ public:
   static const char* getMethodName() { return "aria2.forceBtRecheck"; }
 };
 
+class ReplaceBtTrackersRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.replaceBtTrackers"; }
+};
+
 class SetBtPeerBlocklistRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
@@ -443,13 +452,12 @@ protected:
 
 class TellWaitingRpcMethod : public AbstractPaginationRpcMethod<RequestGroup> {
 protected:
-  virtual const RequestGroupList&
-  getItems(DownloadEngine* e) const override;
+  virtual const RequestGroupList& getItems(DownloadEngine* e) const override;
 
-  virtual void
-  createEntry(Dict* entryDict, const std::shared_ptr<RequestGroup>& item,
-              DownloadEngine* e,
-              const std::vector<std::string>& keys) const override;
+  virtual void createEntry(Dict* entryDict,
+                           const std::shared_ptr<RequestGroup>& item,
+                           DownloadEngine* e,
+                           const std::vector<std::string>& keys) const override;
 
 public:
   static const char* getMethodName() { return "aria2.tellWaiting"; }
@@ -458,13 +466,12 @@ public:
 class TellStoppedRpcMethod
     : public AbstractPaginationRpcMethod<DownloadResult> {
 protected:
-  virtual const DownloadResultList&
-  getItems(DownloadEngine* e) const override;
+  virtual const DownloadResultList& getItems(DownloadEngine* e) const override;
 
-  virtual void
-  createEntry(Dict* entryDict, const std::shared_ptr<DownloadResult>& item,
-              DownloadEngine* e,
-              const std::vector<std::string>& keys) const override;
+  virtual void createEntry(Dict* entryDict,
+                           const std::shared_ptr<DownloadResult>& item,
+                           DownloadEngine* e,
+                           const std::vector<std::string>& keys) const override;
 
 public:
   static const char* getMethodName() { return "aria2.tellStopped"; }

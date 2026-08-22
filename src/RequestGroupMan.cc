@@ -406,29 +406,6 @@ public:
                              static_cast<unsigned long>(nextGroups.size())));
             e_->getRequestGroupMan()->insertReservedGroup(0, nextGroups);
           }
-#ifdef ENABLE_BITTORRENT
-          // For in-memory download (e.g., Magnet URI), the
-          // FileEntry::getPath() does not return actual file path, so
-          // we don't remove it.
-          if (group->getOption()->getAsBool(PREF_BT_REMOVE_UNSELECTED_FILE) &&
-              !group->inMemoryDownload() && dctx->hasAttribute(CTX_ATTR_BT)) {
-            A2_LOG_DEBUG(fmt(MSG_REMOVING_UNSELECTED_FILE,
-                            GroupId::toHex(group->getGID()).c_str()));
-            const std::vector<std::shared_ptr<FileEntry>>& files =
-                dctx->getFileEntries();
-            for (auto& file : files) {
-              if (!file->isRequested()) {
-                if (File(file->getPath()).remove()) {
-                  A2_LOG_DEBUG(fmt(MSG_FILE_REMOVED, file->getPath().c_str()));
-                }
-                else {
-                  A2_LOG_DEBUG(
-                      fmt(MSG_FILE_COULD_NOT_REMOVED, file->getPath().c_str()));
-                }
-              }
-            }
-          }
-#endif // ENABLE_BITTORRENT
         }
         else {
           A2_LOG_INFO(

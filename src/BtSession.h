@@ -57,6 +57,11 @@ struct BtSessionStatus {
   uint64_t trackerUploaded = 0;
 };
 
+struct BtTrackerConfig {
+  std::string url;
+  int tier = 0;
+};
+
 class BtSession {
 public:
   struct Impl;
@@ -86,6 +91,8 @@ public:
                             const Option* option);
   void forceReannounce(const std::shared_ptr<BtDownload>& download);
   void forceRecheck(const std::shared_ptr<BtDownload>& download);
+  void replaceTrackers(const std::shared_ptr<BtDownload>& download,
+                       const std::vector<BtTrackerConfig>& trackers);
   void discard(const std::shared_ptr<BtDownload>& download);
   void remove(a2_gid_t gid);
 

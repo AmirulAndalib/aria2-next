@@ -30,7 +30,7 @@
 #include <libtorrent/torrent_info.hpp>
 
 #include "DlAbortEx.h"
-#include "BufferedFile.h"
+#include "BtResumeStore.h"
 #include "DownloadContext.h"
 #include "FileEntry.h"
 #include "Log.h"
@@ -189,65 +189,72 @@ void BtDownload::configure(const Option* option)
 {
   impl_->params.trackers = impl_->sourceTrackers;
   impl_->params.tracker_tiers = impl_->sourceTrackerTiers;
-  std::vector<std::string> excludedTrackers;
-  const auto& excluded = option->get(PREF_BT_EXCLUDE_TRACKER);
-  util::split(excluded.begin(), excluded.end(),
-              std::back_inserter(excludedTrackers), ',', true);
-  if (std::find(excludedTrackers.begin(), excludedTrackers.end(), "*") !=
-      excludedTrackers.end()) {
-    impl_->params.trackers.clear();
-    impl_->params.tracker_tiers.clear();
+  if (impl_->customTrackers) {
+    snapshot_.announceList = announceList(impl_->params);
+    snapshot_.magnetLink = lt::make_magnet_uri(impl_->params);
   }
-  for (size_t i = impl_->params.trackers.size(); i > 0; --i) {
-    const auto index = i - 1;
-    if (std::find(excludedTrackers.begin(), excludedTrackers.end(),
-                  impl_->params.trackers[index]) != excludedTrackers.end()) {
-      impl_->params.trackers.erase(impl_->params.trackers.begin() + index);
-      if (index < impl_->params.tracker_tiers.size()) {
-        impl_->params.tracker_tiers.erase(impl_->params.tracker_tiers.begin() +
-                                          index);
+  else {
+    std::vector<std::string> excludedTrackers;
+    const auto& excluded = option->get(PREF_BT_EXCLUDE_TRACKER);
+    util::split(excluded.begin(), excluded.end(),
+                std::back_inserter(excludedTrackers), ',', true);
+    if (std::find(excludedTrackers.begin(), excludedTrackers.end(), "*") !=
+        excludedTrackers.end()) {
+      impl_->params.trackers.clear();
+      impl_->params.tracker_tiers.clear();
+    }
+    for (size_t i = impl_->params.trackers.size(); i > 0; --i) {
+      const auto index = i - 1;
+      if (std::find(excludedTrackers.begin(), excludedTrackers.end(),
+                    impl_->params.trackers[index]) != excludedTrackers.end()) {
+        impl_->params.trackers.erase(impl_->params.trackers.begin() + index);
+        if (index < impl_->params.tracker_tiers.size()) {
+          impl_->params.tracker_tiers.erase(
+              impl_->params.tracker_tiers.begin() + index);
+        }
       }
     }
-  }
-  std::vector<std::string> addedTrackers;
-  const auto& added = option->get(PREF_BT_TRACKER);
-  util::split(added.begin(), added.end(), std::back_inserter(addedTrackers),
-              ',', true);
-  const bool metadataUnknownMagnet =
-      source_ == Source::Magnet && !impl_->params.ti;
-  const bool privateTorrent = impl_->params.ti && impl_->params.ti->priv();
-  if (!metadataUnknownMagnet && !privateTorrent) {
-    std::vector<std::string> usableTrackers;
-    for (auto tracker : addedTrackers) {
-      tracker = util::strip(tracker);
-      if (tracker.empty() ||
-          std::find(impl_->params.trackers.begin(), impl_->params.trackers.end(),
-                    tracker) != impl_->params.trackers.end()) {
-        continue;
+    std::vector<std::string> addedTrackers;
+    const auto& added = option->get(PREF_BT_TRACKER);
+    util::split(added.begin(), added.end(), std::back_inserter(addedTrackers),
+                ',', true);
+    const bool metadataUnknownMagnet =
+        source_ == Source::Magnet && !impl_->params.ti;
+    const bool privateTorrent = impl_->params.ti && impl_->params.ti->priv();
+    if (!metadataUnknownMagnet && !privateTorrent) {
+      std::vector<std::string> usableTrackers;
+      for (auto tracker : addedTrackers) {
+        tracker = util::strip(tracker);
+        if (tracker.empty() ||
+            std::find(impl_->params.trackers.begin(),
+                      impl_->params.trackers.end(),
+                      tracker) != impl_->params.trackers.end()) {
+          continue;
+        }
+        if (unsupportedTracker(tracker)) {
+          A2_LOG_DEBUG(fmt("Ignoring unsupported WebTorrent tracker: %s",
+                           tracker.c_str()));
+          continue;
+        }
+        if (std::find(usableTrackers.begin(), usableTrackers.end(), tracker) ==
+            usableTrackers.end()) {
+          usableTrackers.push_back(std::move(tracker));
+        }
       }
-      if (unsupportedTracker(tracker)) {
-        A2_LOG_DEBUG(fmt("Ignoring unsupported WebTorrent tracker: %s",
-                         tracker.c_str()));
-        continue;
-      }
-      if (std::find(usableTrackers.begin(), usableTrackers.end(), tracker) ==
-          usableTrackers.end()) {
-        usableTrackers.push_back(std::move(tracker));
-      }
-    }
 
-    const int baseTier = impl_->params.tracker_tiers.empty()
-                             ? 0
-                             : *std::max_element(
-                                   impl_->params.tracker_tiers.begin(),
-                                   impl_->params.tracker_tiers.end()) +
-                                   1;
-    if (baseTier > std::numeric_limits<uint8_t>::max()) {
-      throw DL_ABORT_EX("Too many BitTorrent tracker tiers");
-    }
-    for (const auto& tracker : usableTrackers) {
-      impl_->params.trackers.push_back(tracker);
-      impl_->params.tracker_tiers.push_back(baseTier);
+      const int baseTier =
+          impl_->params.tracker_tiers.empty()
+              ? 0
+              : *std::max_element(impl_->params.tracker_tiers.begin(),
+                                  impl_->params.tracker_tiers.end()) +
+                    1;
+      if (baseTier > std::numeric_limits<uint8_t>::max()) {
+        throw DL_ABORT_EX("Too many BitTorrent tracker tiers");
+      }
+      for (const auto& tracker : usableTrackers) {
+        impl_->params.trackers.push_back(tracker);
+        impl_->params.tracker_tiers.push_back(baseTier);
+      }
     }
   }
   snapshot_.announceList = announceList(impl_->params);
@@ -263,6 +270,7 @@ void BtDownload::configure(const Option* option)
   if (impl_->params.max_connections == 0) {
     impl_->params.max_connections = -1;
   }
+  impl_->params.max_uploads = option->getAsInt(PREF_BT_MAX_UPLOADS_PER_TORRENT);
   impl_->params.upload_limit = option->getAsInt(PREF_MAX_UPLOAD_LIMIT);
   if (impl_->params.upload_limit == 0) {
     impl_->params.upload_limit = -1;
@@ -280,7 +288,8 @@ void BtDownload::configure(const Option* option)
         lt::torrent_flags::disable_dht | lt::torrent_flags::disable_pex |
         lt::torrent_flags::disable_lsd | lt::torrent_flags::seed_mode |
         lt::torrent_flags::default_dont_download |
-        lt::torrent_flags::sequential_download);
+        lt::torrent_flags::sequential_download |
+        lt::torrent_flags::super_seeding);
   impl_->params.flags |= lt::torrent_flags::duplicate_is_error;
   impl_->params.flags |= lt::torrent_flags::update_subscribe;
   impl_->params.flags |= lt::torrent_flags::apply_ip_filter;
@@ -299,6 +308,9 @@ void BtDownload::configure(const Option* option)
   }
   if (option->getAsBool(PREF_FORCE_SEQUENTIAL)) {
     impl_->params.flags |= lt::torrent_flags::sequential_download;
+  }
+  if (option->getAsBool(PREF_BT_SUPER_SEEDING)) {
+    impl_->params.flags |= lt::torrent_flags::super_seeding;
   }
   if (source_ == Source::Magnet && !impl_->params.ti &&
       option->getAsBool(PREF_ENABLE_RPC) &&
@@ -404,24 +416,15 @@ void BtDownload::initialize(RequestGroup* group)
   }
   impl_->resumeLoaded = true;
 
-  auto basePath = group_->getDownloadContext()->getBasePath();
-  if (basePath.empty()) {
-    basePath =
-        util::applyDir(group_->getOption()->get(PREF_DIR),
-                       !snapshot_.infoHashV1.empty() ? snapshot_.infoHashV1
-                                                     : snapshot_.infoHashV2);
-  }
-  impl_->resumePath = basePath + ".aria2";
-
-  BufferedFile resume(impl_->resumePath.c_str(), BufferedFile::READ);
-  if (!resume) {
+  const auto& identity = !snapshot_.infoHashV1.empty() ? snapshot_.infoHashV1
+                                                       : snapshot_.infoHashV2;
+  impl_->resumePath = BtResumeStore::path(group_->getOption().get(), identity);
+  const auto resumeData = BtResumeStore::read(impl_->resumePath);
+  if (resumeData.empty()) {
     return;
   }
-
-  std::stringstream data;
-  resume.transfer(data);
   lt::error_code error;
-  auto restored = lt::read_resume_data(data.str(), error);
+  auto restored = lt::read_resume_data(resumeData, error);
   if (error) {
     A2_LOG_INFO(fmt("Ignoring BitTorrent resume data %s: %s",
                     impl_->resumePath.c_str(), error.message().c_str()));
@@ -451,6 +454,7 @@ void BtDownload::initialize(RequestGroup* group)
   }
   restored.save_path = impl_->params.save_path;
   restored.max_connections = impl_->params.max_connections;
+  restored.max_uploads = impl_->params.max_uploads;
   restored.upload_limit = impl_->params.upload_limit;
   restored.download_limit = impl_->params.download_limit;
   impl_->params = std::move(restored);

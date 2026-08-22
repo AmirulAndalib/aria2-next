@@ -39,7 +39,6 @@ namespace rpc {
 
 class RpcMethodTest {
 
-
 private:
   std::shared_ptr<DownloadEngine> e_;
   std::shared_ptr<Option> option_;
@@ -101,6 +100,7 @@ public:
   void testGatherStoppedDownload_bt();
   void testGetPeers();
   void testGetBtTrackers();
+  void testReplaceBtTrackers();
   void testGetBtSessionStatus();
   void testSetBtPeerBlocklist();
 #endif // ENABLE_BITTORRENT
@@ -160,6 +160,7 @@ A2_TEST(RpcMethodTest, testGatherProgressEd2kStatus)
 A2_TEST(RpcMethodTest, testGatherStoppedDownload_bt)
 A2_TEST(RpcMethodTest, testGetPeers)
 A2_TEST(RpcMethodTest, testGetBtTrackers)
+A2_TEST(RpcMethodTest, testReplaceBtTrackers)
 A2_TEST(RpcMethodTest, testGetBtSessionStatus)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
 #endif // ENABLE_BITTORRENT
@@ -242,12 +243,11 @@ void RpcMethodTest::testAddUri()
     REQUIRE_EQ(0, res.code);
     const RequestGroupList& rgs = e_->getRequestGroupMan()->getReservedGroups();
     REQUIRE_EQ((size_t)1, rgs.size());
-    REQUIRE_EQ(std::string("http://localhost/"),
-                         (*rgs.begin())
-                             ->getDownloadContext()
-                             ->getFirstFileEntry()
-                             ->getRemainingUris()
-                             .front());
+    REQUIRE_EQ(std::string("http://localhost/"), (*rgs.begin())
+                                                     ->getDownloadContext()
+                                                     ->getFirstFileEntry()
+                                                     ->getRemainingUris()
+                                                     .front());
   }
   {
     auto req = createReq(AddUriRpcMethod::getMethodName());
@@ -264,9 +264,9 @@ void RpcMethodTest::testAddUri()
     REQUIRE_EQ(
         0, GroupId::toNumericId(gid, downcast<String>(res.param)->s().c_str()));
     REQUIRE_EQ(std::string("/sink"),
-                         findReservedGroup(e_->getRequestGroupMan().get(), gid)
-                             ->getOption()
-                             ->get(PREF_DIR));
+               findReservedGroup(e_->getRequestGroupMan().get(), gid)
+                   ->getOption()
+                   ->get(PREF_DIR));
   }
 }
 
@@ -290,10 +290,10 @@ void RpcMethodTest::testAddUri_thunder()
   const RequestGroupList& rgs = e_->getRequestGroupMan()->getReservedGroups();
   REQUIRE_EQ((size_t)1, rgs.size());
   REQUIRE_EQ(url, (*rgs.begin())
-                                ->getDownloadContext()
-                                ->getFirstFileEntry()
-                                ->getRemainingUris()
-                                .front());
+                      ->getDownloadContext()
+                      ->getFirstFileEntry()
+                      ->getRemainingUris()
+                      .front());
 }
 
 void RpcMethodTest::testAddUri_badThunder()
@@ -309,8 +309,8 @@ void RpcMethodTest::testAddUri_badThunder()
   REQUIRE_EQ(1, res.code);
   const auto error = downcast<Dict>(res.param);
   REQUIRE(error);
-  REQUIRE(
-      util::startsWith(getString(error, "faultString"), "Malformed Thunder URI"));
+  REQUIRE(util::startsWith(getString(error, "faultString"),
+                           "Malformed Thunder URI"));
 }
 
 void RpcMethodTest::testAddUri_acceptsJsonBoolOption()
@@ -428,18 +428,17 @@ void RpcMethodTest::testAddTorrent()
     // Saving upload metadata is disabled by option.
     auto res = m.execute(createAddTorrentReq(), e_.get());
     REQUIRE(!File(e_->getOption()->get(PREF_DIR) +
-                         "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-                        .exists());
+                  "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
+                 .exists());
     REQUIRE_EQ(0, res.code);
-    REQUIRE_EQ(sizeof(a2_gid_t) * 2,
-                         downcast<String>(res.param)->s().size());
+    REQUIRE_EQ(sizeof(a2_gid_t) * 2, downcast<String>(res.param)->s().size());
   }
   e_->getOption()->put(PREF_RPC_SAVE_UPLOAD_METADATA, A2_V_TRUE);
   {
     auto res = m.execute(createAddTorrentReq(), e_.get());
     REQUIRE(File(e_->getOption()->get(PREF_DIR) +
-                        "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-                       .exists());
+                 "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
+                .exists());
     REQUIRE_EQ(0, res.code);
     a2_gid_t gid;
     REQUIRE_EQ(
@@ -447,13 +446,12 @@ void RpcMethodTest::testAddTorrent()
 
     auto group = findReservedGroup(e_->getRequestGroupMan().get(), gid);
     REQUIRE(group);
-    REQUIRE_EQ(e_->getOption()->get(PREF_DIR) +
-                             "/aria2-0.8.2.tar.bz2",
-                         group->getFirstFilePath());
+    REQUIRE_EQ(e_->getOption()->get(PREF_DIR) + "/aria2-0.8.2.tar.bz2",
+               group->getFirstFilePath());
     REQUIRE_EQ((size_t)0, group->getDownloadContext()
-                                        ->getFirstFileEntry()
-                                        ->getRemainingUris()
-                                        .size());
+                              ->getFirstFileEntry()
+                              ->getRemainingUris()
+                              .size());
   }
   {
     auto req = createAddTorrentReq();
@@ -471,11 +469,10 @@ void RpcMethodTest::testAddTorrent()
     REQUIRE_EQ(
         0, GroupId::toNumericId(gid, downcast<String>(res.param)->s().c_str()));
     REQUIRE_EQ(dir + "/aria2-0.8.2.tar.bz2",
-                         findReservedGroup(e_->getRequestGroupMan().get(), gid)
-                             ->getFirstFilePath());
-    REQUIRE(
-        File(dir + "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-            .exists());
+               findReservedGroup(e_->getRequestGroupMan().get(), gid)
+                   ->getFirstFilePath());
+    REQUIRE(File(dir + "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
+                .exists());
   }
 }
 
@@ -513,11 +510,10 @@ void RpcMethodTest::testAddTorrent_withPosition()
   req2.params->append(Integer::g(0));
   m.execute(std::move(req2), e_.get());
 
-  REQUIRE_EQ((size_t)1,
-                       getReservedGroup(e_->getRequestGroupMan().get(), 0)
-                           ->getDownloadContext()
-                           ->getFileEntries()
-                           .size());
+  REQUIRE_EQ((size_t)1, getReservedGroup(e_->getRequestGroupMan().get(), 0)
+                            ->getDownloadContext()
+                            ->getFileEntries()
+                            .size());
 }
 
 #endif // ENABLE_BITTORRENT
@@ -545,15 +541,13 @@ void RpcMethodTest::testAddMetalink()
     const List* resParams = downcast<List>(res.param);
     REQUIRE_EQ((size_t)2, resParams->size());
     a2_gid_t gid1, gid2;
-    REQUIRE_EQ(
-        0, GroupId::toNumericId(
-               gid1, downcast<String>(resParams->get(0))->s().c_str()));
-    REQUIRE_EQ(
-        0, GroupId::toNumericId(
-               gid2, downcast<String>(resParams->get(1))->s().c_str()));
+    REQUIRE_EQ(0, GroupId::toNumericId(
+                      gid1, downcast<String>(resParams->get(0))->s().c_str()));
+    REQUIRE_EQ(0, GroupId::toNumericId(
+                      gid2, downcast<String>(resParams->get(1))->s().c_str()));
     REQUIRE(!File(e_->getOption()->get(PREF_DIR) +
-                         "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
-                        .exists());
+                  "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
+                 .exists());
   }
   e_->getOption()->put(PREF_RPC_SAVE_UPLOAD_METADATA, A2_V_TRUE);
   {
@@ -562,25 +556,22 @@ void RpcMethodTest::testAddMetalink()
     const List* resParams = downcast<List>(res.param);
     REQUIRE_EQ((size_t)2, resParams->size());
     a2_gid_t gid3, gid4;
-    REQUIRE_EQ(
-        0, GroupId::toNumericId(
-               gid3, downcast<String>(resParams->get(0))->s().c_str()));
-    REQUIRE_EQ(
-        0, GroupId::toNumericId(
-               gid4, downcast<String>(resParams->get(1))->s().c_str()));
+    REQUIRE_EQ(0, GroupId::toNumericId(
+                      gid3, downcast<String>(resParams->get(0))->s().c_str()));
+    REQUIRE_EQ(0, GroupId::toNumericId(
+                      gid4, downcast<String>(resParams->get(1))->s().c_str()));
     REQUIRE(File(e_->getOption()->get(PREF_DIR) +
-                        "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
-                       .exists());
+                 "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
+                .exists());
 
     auto tar = findReservedGroup(e_->getRequestGroupMan().get(), gid3);
     REQUIRE(tar);
-    REQUIRE_EQ(e_->getOption()->get(PREF_DIR) +
-                             "/aria2-5.0.0.tar.bz2",
-                         tar->getFirstFilePath());
+    REQUIRE_EQ(e_->getOption()->get(PREF_DIR) + "/aria2-5.0.0.tar.bz2",
+               tar->getFirstFilePath());
     auto deb = findReservedGroup(e_->getRequestGroupMan().get(), gid4);
     REQUIRE(deb);
     REQUIRE_EQ(e_->getOption()->get(PREF_DIR) + "/aria2-5.0.0.deb",
-                         deb->getFirstFilePath());
+               deb->getFirstFilePath());
   }
   {
     auto req = createAddMetalinkReq();
@@ -597,12 +588,11 @@ void RpcMethodTest::testAddMetalink()
     const List* resParams = downcast<List>(res.param);
     REQUIRE_EQ((size_t)2, resParams->size());
     a2_gid_t gid5;
-    REQUIRE_EQ(
-        0, GroupId::toNumericId(
-               gid5, downcast<String>(resParams->get(0))->s().c_str()));
+    REQUIRE_EQ(0, GroupId::toNumericId(
+                      gid5, downcast<String>(resParams->get(0))->s().c_str()));
     REQUIRE_EQ(dir + "/aria2-5.0.0.tar.bz2",
-                         findReservedGroup(e_->getRequestGroupMan().get(), gid5)
-                             ->getFirstFilePath());
+               findReservedGroup(e_->getRequestGroupMan().get(), gid5)
+                   ->getFirstFilePath());
     REQUIRE(
         File(dir + "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4").exists());
   }
@@ -666,7 +656,7 @@ void RpcMethodTest::testGetOption()
   REQUIRE_EQ(0, res.code);
   const Dict* resopt = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("alpha"),
-                       downcast<String>(resopt->get(PREF_DIR->k))->s());
+             downcast<String>(resopt->get(PREF_DIR->k))->s());
 
   req = createReq(GetOptionRpcMethod::getMethodName());
   req.params->append(dr->gid->toHex());
@@ -674,7 +664,7 @@ void RpcMethodTest::testGetOption()
   REQUIRE_EQ(0, res.code);
   resopt = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("bravo"),
-                       downcast<String>(resopt->get(PREF_DIR->k))->s());
+             downcast<String>(resopt->get(PREF_DIR->k))->s());
   // Invalid GID
   req = createReq(GetOptionRpcMethod::getMethodName());
   req.params->append(GroupId::create()->toHex());
@@ -703,13 +693,11 @@ void RpcMethodTest::testChangeOption()
 
   REQUIRE_EQ(0, res.code);
   REQUIRE_EQ((int)100_k, group->getMaxDownloadSpeedLimit());
-  REQUIRE_EQ(std::string("102400"),
-                       option->get(PREF_MAX_DOWNLOAD_LIMIT));
+  REQUIRE_EQ(std::string("102400"), option->get(PREF_MAX_DOWNLOAD_LIMIT));
 #ifdef ENABLE_BITTORRENT
   REQUIRE_EQ(std::string("100"), option->get(PREF_BT_MAX_PEERS));
   REQUIRE_EQ((int)50_k, group->getMaxUploadSpeedLimit());
-  REQUIRE_EQ(std::string("51200"),
-                       option->get(PREF_MAX_UPLOAD_LIMIT));
+  REQUIRE_EQ(std::string("51200"), option->get(PREF_MAX_UPLOAD_LIMIT));
 #endif // ENABLE_BITTORRENT
 }
 
@@ -765,15 +753,15 @@ void RpcMethodTest::testChangeGlobalOption()
   auto res = m.execute(std::move(req), e_.get());
 
   REQUIRE_EQ(0, res.code);
-  REQUIRE_EQ(
-      (int)100_k, e_->getRequestGroupMan()->getMaxOverallDownloadSpeedLimit());
+  REQUIRE_EQ((int)100_k,
+             e_->getRequestGroupMan()->getMaxOverallDownloadSpeedLimit());
   REQUIRE_EQ(std::string("102400"),
-                       e_->getOption()->get(PREF_MAX_OVERALL_DOWNLOAD_LIMIT));
+             e_->getOption()->get(PREF_MAX_OVERALL_DOWNLOAD_LIMIT));
 #ifdef ENABLE_BITTORRENT
-  REQUIRE_EQ(
-      (int)50_k, e_->getRequestGroupMan()->getMaxOverallUploadSpeedLimit());
+  REQUIRE_EQ((int)50_k,
+             e_->getRequestGroupMan()->getMaxOverallUploadSpeedLimit());
   REQUIRE_EQ(std::string("51200"),
-                       e_->getOption()->get(PREF_MAX_OVERALL_UPLOAD_LIMIT));
+             e_->getOption()->get(PREF_MAX_OVERALL_UPLOAD_LIMIT));
 #endif // ENABLE_BITTORRENT
 }
 
@@ -806,7 +794,7 @@ void RpcMethodTest::testNoSuchMethod()
   auto res = m.execute(createReq("make.hamburger"), e_.get());
   REQUIRE_EQ(1, res.code);
   REQUIRE_EQ(std::string("No such method: make.hamburger"),
-                       getString(downcast<Dict>(res.param), "faultString"));
+             getString(downcast<Dict>(res.param), "faultString"));
 }
 
 void RpcMethodTest::testEd2kSearchResults()
@@ -860,15 +848,12 @@ void RpcMethodTest::testEd2kSearchResults()
   const auto result = downcast<Dict>(results->get(0));
   REQUIRE(result);
   REQUIRE_EQ(std::string("42424242424242424242424242424242"),
-                       getString(result, "hash"));
+             getString(result, "hash"));
   REQUIRE_EQ(std::string("movie.mkv"), getString(result, "name"));
-  REQUIRE_EQ(std::string("123456789"),
-                       getString(result, "length"));
+  REQUIRE_EQ(std::string("123456789"), getString(result, "length"));
   REQUIRE_EQ(std::string("8"), getString(result, "sourceCount"));
-  REQUIRE_EQ(std::string("5"),
-                       getString(result, "completeSourceCount"));
-  REQUIRE_EQ(std::string("server|kad"),
-                       getString(result, "sourceNetwork"));
+  REQUIRE_EQ(std::string("5"), getString(result, "completeSourceCount"));
+  REQUIRE_EQ(std::string("server|kad"), getString(result, "sourceNetwork"));
   REQUIRE_EQ(entry.ed2kLink, getString(result, "ed2kLink"));
 }
 
@@ -890,8 +875,7 @@ void RpcMethodTest::testEd2kSearchResultLinkCreatesDownload()
   REQUIRE_EQ(0, res.code);
   const auto& groups = e_->getRequestGroupMan()->getReservedGroups();
   REQUIRE_EQ((size_t)1, groups.size());
-  auto attrs =
-      getEd2kAttrs((*groups.begin())->getDownloadContext());
+  auto attrs = getEd2kAttrs((*groups.begin())->getDownloadContext());
   REQUIRE(attrs);
   REQUIRE_EQ(link.hash, attrs->link.hash);
   REQUIRE_EQ(link.name, attrs->link.name);
@@ -950,12 +934,10 @@ void RpcMethodTest::testTellWaiting()
   REQUIRE_EQ(0, res.code);
   const List* resParams = downcast<List>(res.param);
   REQUIRE_EQ((size_t)2, resParams->size());
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 1)->getGID()),
-      getString(downcast<Dict>(resParams->get(0)), "gid"));
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 2)->getGID()),
-      getString(downcast<Dict>(resParams->get(1)), "gid"));
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 1)->getGID()),
+             getString(downcast<Dict>(resParams->get(0)), "gid"));
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 2)->getGID()),
+             getString(downcast<Dict>(resParams->get(1)), "gid"));
   // waiting.size() == offset+num
   req = createReq(TellWaitingRpcMethod::getMethodName());
   req.params->append(Integer::g(1));
@@ -1014,12 +996,10 @@ void RpcMethodTest::testTellWaiting()
   REQUIRE_EQ(0, res.code);
   resParams = downcast<List>(res.param);
   REQUIRE_EQ((size_t)2, resParams->size());
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 3)->getGID()),
-      getString(downcast<Dict>(resParams->get(0)), "gid"));
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 2)->getGID()),
-      getString(downcast<Dict>(resParams->get(1)), "gid"));
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 3)->getGID()),
+             getString(downcast<Dict>(resParams->get(0)), "gid"));
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 2)->getGID()),
+             getString(downcast<Dict>(resParams->get(1)), "gid"));
   // negative offset and size < num
   req = RpcRequest(TellWaitingRpcMethod::getMethodName(), List::g());
   req.params->append(Integer::g(-1));
@@ -1062,8 +1042,7 @@ void RpcMethodTest::testGetVersion()
   REQUIRE_EQ(0, res.code);
   const Dict* resParams = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("aria2-next"), getString(resParams, "product"));
-  REQUIRE_EQ(std::string(PACKAGE_VERSION),
-                       getString(resParams, "version"));
+  REQUIRE_EQ(std::string(PACKAGE_VERSION), getString(resParams, "version"));
   REQUIRE_EQ(std::string("1.0.0"), getString(resParams, "rpcVersion"));
   const List* featureList = downcast<List>(resParams->get("enabledFeatures"));
   std::string features;
@@ -1096,14 +1075,10 @@ void RpcMethodTest::testGatherStoppedDownload()
   gatherStoppedDownload(entry.get(), d, keys);
 
   const List* followedByRes = downcast<List>(entry->get("followedBy"));
-  REQUIRE_EQ(GroupId::toHex(3),
-                       downcast<String>(followedByRes->get(0))->s());
-  REQUIRE_EQ(GroupId::toHex(4),
-                       downcast<String>(followedByRes->get(1))->s());
-  REQUIRE_EQ(GroupId::toHex(1),
-                       downcast<String>(entry->get("following"))->s());
-  REQUIRE_EQ(GroupId::toHex(2),
-                       downcast<String>(entry->get("belongsTo"))->s());
+  REQUIRE_EQ(GroupId::toHex(3), downcast<String>(followedByRes->get(0))->s());
+  REQUIRE_EQ(GroupId::toHex(4), downcast<String>(followedByRes->get(1))->s());
+  REQUIRE_EQ(GroupId::toHex(1), downcast<String>(entry->get("following"))->s());
+  REQUIRE_EQ(GroupId::toHex(2), downcast<String>(entry->get("belongsTo"))->s());
 
   keys.push_back("gid");
 
@@ -1198,42 +1173,31 @@ void RpcMethodTest::testGatherProgressEd2kStatus()
   auto ed2kStatus = downcast<Dict>(entry->get("ed2k"));
   REQUIRE(ed2kStatus);
   REQUIRE_EQ(std::string("42424242424242424242424242424242"),
-                       getString(ed2kStatus, "hash"));
-  REQUIRE_EQ(std::string("ed2k-status.bin"),
-                       getString(ed2kStatus, "name"));
+             getString(ed2kStatus, "hash"));
+  REQUIRE_EQ(std::string("ed2k-status.bin"), getString(ed2kStatus, "name"));
   REQUIRE_EQ(std::string("1024"), getString(ed2kStatus, "length"));
-  REQUIRE_EQ(
-      std::string("ed2k://|file|ed2k-status.bin|1024|"
-                  "42424242424242424242424242424242|/"),
-      getString(ed2kStatus, "ed2kLink"));
-  REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "partHashCount"));
+  REQUIRE_EQ(std::string("ed2k://|file|ed2k-status.bin|1024|"
+                         "42424242424242424242424242424242|/"),
+             getString(ed2kStatus, "ed2kLink"));
+  REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "partHashCount"));
   REQUIRE_EQ(std::string("2222222222222222222222222222222222222222"),
-                       getString(ed2kStatus, "aichRoot"));
-  REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "serverCount"));
-  REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "connectedServerCount"));
+             getString(ed2kStatus, "aichRoot"));
+  REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "serverCount"));
+  REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "connectedServerCount"));
   REQUIRE_EQ(std::string("2"), getString(ed2kStatus, "peerCount"));
+  REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "queuedPeerCount"));
+  REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "lowIdPeerCount"));
   REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "queuedPeerCount"));
-  REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "lowIdPeerCount"));
-  REQUIRE_EQ(std::string("1"),
-                       getString(ed2kStatus, "callbackWaitingPeerCount"));
+             getString(ed2kStatus, "callbackWaitingPeerCount"));
   REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "kadNodeCount"));
   REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "kadRouterCount"));
   REQUIRE(!downcast<Bool>(ed2kStatus->get("kadFirewalled"))->val());
-  REQUIRE_EQ(std::string("2"),
-                       getString(ed2kStatus, "searchResultCount"));
+  REQUIRE_EQ(std::string("2"), getString(ed2kStatus, "searchResultCount"));
   REQUIRE(downcast<Bool>(ed2kStatus->get("searchActive"))->val());
   REQUIRE(downcast<Bool>(ed2kStatus->get("searchMoreResults"))->val());
-  REQUIRE_EQ(std::string("0"),
-                       getString(ed2kStatus, "uploadingPeerCount"));
-  REQUIRE_EQ(std::string("0"),
-                       getString(ed2kStatus, "waitingUploadPeerCount"));
-  REQUIRE_EQ(std::string("0"),
-                       getString(ed2kStatus, "peerCreditCount"));
+  REQUIRE_EQ(std::string("0"), getString(ed2kStatus, "uploadingPeerCount"));
+  REQUIRE_EQ(std::string("0"), getString(ed2kStatus, "waitingUploadPeerCount"));
+  REQUIRE_EQ(std::string("0"), getString(ed2kStatus, "peerCreditCount"));
 }
 
 #ifdef ENABLE_BITTORRENT
@@ -1255,7 +1219,7 @@ void RpcMethodTest::testGatherStoppedDownload_bt()
   REQUIRE(btDict);
 
   REQUIRE_EQ((int64_t)1000000007,
-                       downcast<Integer>(btDict->get("creationDate"))->i());
+             downcast<Integer>(btDict->get("creationDate"))->i());
 }
 #endif // ENABLE_BITTORRENT
 
@@ -1285,25 +1249,23 @@ void RpcMethodTest::testGatherProgressCommon()
 
   const List* followedByRes = downcast<List>(entry->get("followedBy"));
   REQUIRE_EQ(GroupId::toHex(followedBy[0]->getGID()),
-                       downcast<String>(followedByRes->get(0))->s());
+             downcast<String>(followedByRes->get(0))->s());
   REQUIRE_EQ(GroupId::toHex(followedBy[1]->getGID()),
-                       downcast<String>(followedByRes->get(1))->s());
-  REQUIRE_EQ(leader->toHex(),
-                       downcast<String>(entry->get("following"))->s());
-  REQUIRE_EQ(parent->toHex(),
-                       downcast<String>(entry->get("belongsTo"))->s());
+             downcast<String>(followedByRes->get(1))->s());
+  REQUIRE_EQ(leader->toHex(), downcast<String>(entry->get("following"))->s());
+  REQUIRE_EQ(parent->toHex(), downcast<String>(entry->get("belongsTo"))->s());
   const List* files = downcast<List>(entry->get("files"));
   REQUIRE_EQ((size_t)1, files->size());
   const Dict* file = downcast<Dict>(files->get(0));
   REQUIRE_EQ(std::string("aria2.tar.bz2"),
-                       downcast<String>(file->get("path"))->s());
+             downcast<String>(file->get("path"))->s());
   REQUIRE_EQ(
       uris[0],
       downcast<String>(
           downcast<Dict>(downcast<List>(file->get("uris"))->get(0))->get("uri"))
           ->s());
   REQUIRE_EQ(e_->getOption()->get(PREF_DIR),
-                       downcast<String>(entry->get("dir"))->s());
+             downcast<String>(entry->get("dir"))->s());
 
   keys = {"seeder"};
   entry = Dict::g();
@@ -1415,12 +1377,46 @@ void RpcMethodTest::testGetBtTrackers()
              getString(downcast<Dict>(endpoints->get(0)), "protocol"));
 }
 
+void RpcMethodTest::testReplaceBtTrackers()
+{
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->populateDownloadContext(context, option_.get());
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option_);
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  download->initialize(group.get());
+  e_->getRequestGroupMan()->addReservedGroup(group);
+  e_->setBtSession(make_unique<BtSession>(option_.get()));
+
+  auto trackers = List::g();
+  auto first = Dict::g();
+  first->put("url", "https://one.example/announce");
+  first->put("tier", Integer::g(0));
+  trackers->append(std::move(first));
+  auto second = Dict::g();
+  second->put("url", "udp://two.example:6969/announce");
+  second->put("tier", Integer::g(1));
+  trackers->append(std::move(second));
+
+  ReplaceBtTrackersRpcMethod method;
+  auto request = createReq(ReplaceBtTrackersRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  request.params->append(std::move(trackers));
+  const auto response = method.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  const auto& announceList = download->snapshot().announceList;
+  REQUIRE_EQ((size_t)2, announceList.size());
+  REQUIRE_EQ(std::string("https://one.example/announce"), announceList[0][0]);
+  REQUIRE_EQ(std::string("udp://two.example:6969/announce"),
+             announceList[1][0]);
+}
+
 void RpcMethodTest::testGetBtSessionStatus()
 {
   e_->setBtSession(make_unique<BtSession>(option_.get()));
   ChangeGlobalOptionRpcMethod changeMethod;
-  auto changeRequest =
-      createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  auto changeRequest = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
   auto options = Dict::g();
   options->put(PREF_BT_EXTERNAL_IP->k, "203.0.113.7");
   options->put(PREF_BT_EXTERNAL_PORT->k, "62000");
@@ -1446,8 +1442,7 @@ void RpcMethodTest::testGetBtSessionStatus()
   changeRequest.params->append(std::move(options));
   response = changeMethod.execute(std::move(changeRequest), e_.get());
   REQUIRE_EQ(1, response.code);
-  REQUIRE_EQ(std::string("203.0.113.7"),
-             e_->getBtSession()->externalAddress());
+  REQUIRE_EQ(std::string("203.0.113.7"), e_->getBtSession()->externalAddress());
 }
 
 void RpcMethodTest::testSetBtPeerBlocklist()
@@ -1462,8 +1457,7 @@ void RpcMethodTest::testSetBtPeerBlocklist()
   auto response = method.execute(std::move(req), e_.get());
   REQUIRE_EQ(0, response.code);
   auto result = downcast<Dict>(response.param);
-  REQUIRE_EQ((int64_t)2,
-             downcast<Integer>(result->get("ruleCount"))->i());
+  REQUIRE_EQ((int64_t)2, downcast<Integer>(result->get("ruleCount"))->i());
   const auto revision = downcast<Integer>(result->get("revision"))->i();
 
   req = createReq(SetBtPeerBlocklistRpcMethod::getMethodName());
@@ -1494,8 +1488,8 @@ void RpcMethodTest::testChangePosition()
   auto res = m.execute(std::move(req), e_.get());
   REQUIRE_EQ(0, res.code);
   REQUIRE_EQ((int64_t)1, downcast<Integer>(res.param)->i());
-  REQUIRE_EQ(
-      gid, getReservedGroup(e_->getRequestGroupMan().get(), 1)->getGID());
+  REQUIRE_EQ(gid,
+             getReservedGroup(e_->getRequestGroupMan().get(), 1)->getGID());
 }
 
 void RpcMethodTest::testChangePosition_fail()
@@ -1554,16 +1548,15 @@ void RpcMethodTest::testChangeUri()
   req.params->append(std::move(adduris));
   auto res = m.execute(std::move(req), e_.get());
   REQUIRE_EQ(0, res.code);
-  REQUIRE_EQ(
-      (int64_t)2, downcast<Integer>(downcast<List>(res.param)->get(0))->i());
-  REQUIRE_EQ(
-      (int64_t)3, downcast<Integer>(downcast<List>(res.param)->get(1))->i());
+  REQUIRE_EQ((int64_t)2,
+             downcast<Integer>(downcast<List>(res.param)->get(0))->i());
+  REQUIRE_EQ((int64_t)3,
+             downcast<Integer>(downcast<List>(res.param)->get(1))->i());
   REQUIRE_EQ((size_t)0, files[0]->getRemainingUris().size());
   REQUIRE_EQ((size_t)0, files[2]->getRemainingUris().size());
   std::deque<std::string> uris = files[1]->getRemainingUris();
   REQUIRE_EQ((size_t)4, uris.size());
-  REQUIRE_EQ(std::string("http://example.org/aria2.tar.bz2"),
-                       uris[0]);
+  REQUIRE_EQ(std::string("http://example.org/aria2.tar.bz2"), uris[0]);
   REQUIRE_EQ(std::string("http://example.org/added1"), uris[1]);
   REQUIRE_EQ(std::string("http://example.org/added2"), uris[2]);
   REQUIRE_EQ(std::string("http://example.org/added3"), uris[3]);
@@ -1578,10 +1571,10 @@ void RpcMethodTest::testChangeUri()
   req.params->append(Integer::g(2));
   res = m.execute(std::move(req), e_.get());
   REQUIRE_EQ(0, res.code);
-  REQUIRE_EQ(
-      (int64_t)0, downcast<Integer>(downcast<List>(res.param)->get(0))->i());
-  REQUIRE_EQ(
-      (int64_t)2, downcast<Integer>(downcast<List>(res.param)->get(1))->i());
+  REQUIRE_EQ((int64_t)0,
+             downcast<Integer>(downcast<List>(res.param)->get(0))->i());
+  REQUIRE_EQ((int64_t)2,
+             downcast<Integer>(downcast<List>(res.param)->get(1))->i());
   uris = files[1]->getRemainingUris();
   REQUIRE_EQ((size_t)6, uris.size());
   REQUIRE_EQ(std::string("http://example.org/added1-1"), uris[2]);
@@ -1597,10 +1590,10 @@ void RpcMethodTest::testChangeUri()
   req.params->append(Integer::g(1000));
   res = m.execute(std::move(req), e_.get());
   REQUIRE_EQ(0, res.code);
-  REQUIRE_EQ(
-      (int64_t)0, downcast<Integer>(downcast<List>(res.param)->get(0))->i());
-  REQUIRE_EQ(
-      (int64_t)2, downcast<Integer>(downcast<List>(res.param)->get(1))->i());
+  REQUIRE_EQ((int64_t)0,
+             downcast<Integer>(downcast<List>(res.param)->get(0))->i());
+  REQUIRE_EQ((int64_t)2,
+             downcast<Integer>(downcast<List>(res.param)->get(1))->i());
   uris = files[0]->getRemainingUris();
   REQUIRE_EQ((size_t)2, uris.size());
   REQUIRE_EQ(std::string("http://example.org/added1-1"), uris[0]);
@@ -1679,7 +1672,7 @@ void RpcMethodTest::testGetSessionInfo()
       m.execute(createReq(GetSessionInfoRpcMethod::getMethodName()), e_.get());
   REQUIRE_EQ(0, res.code);
   REQUIRE_EQ(util::toHex(e_->getSessionId()),
-                       getString(downcast<Dict>(res.param), "sessionId"));
+             getString(downcast<Dict>(res.param), "sessionId"));
 }
 
 void RpcMethodTest::testPause()
@@ -1787,12 +1780,10 @@ void RpcMethodTest::testSystemMulticall()
   const List* resParams = downcast<List>(res.param);
   REQUIRE_EQ((size_t)7, resParams->size());
   auto& rgman = e_->getRequestGroupMan();
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 0)->getGID()),
-      downcast<String>(downcast<List>(resParams->get(0))->get(0))->s());
-  REQUIRE_EQ(
-      GroupId::toHex(getReservedGroup(rgman.get(), 1)->getGID()),
-      downcast<String>(downcast<List>(resParams->get(1))->get(0))->s());
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 0)->getGID()),
+             downcast<String>(downcast<List>(resParams->get(0))->get(0))->s());
+  REQUIRE_EQ(GroupId::toHex(getReservedGroup(rgman.get(), 1)->getGID()),
+             downcast<String>(downcast<List>(resParams->get(1))->get(0))->s());
   REQUIRE_EQ(
       (int64_t)1,
       downcast<Integer>(downcast<Dict>(resParams->get(2))->get("faultCode"))

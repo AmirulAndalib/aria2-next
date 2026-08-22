@@ -127,8 +127,7 @@ PrefPtr k2p(const std::string& key)
   return pref;
 }
 
-const std::string& normalizeInputValue(PrefPtr pref,
-                                       const std::string& value)
+const std::string& normalizeInputValue(PrefPtr pref, const std::string& value)
 {
   if ((pref == PREF_LOG_LEVEL || pref == PREF_CONSOLE_LOG_LEVEL) &&
       value == "notice") {
@@ -505,8 +504,6 @@ PrefPtr PREF_ALL_PROXY_PASSWD = makePref("all-proxy-passwd");
 /**
  * BitTorrent related preferences
  */
-// values: 1*digit
-PrefPtr PREF_PEER_CONNECTION_TIMEOUT = makePref("peer-connection-timeout");
 // values: true | false
 PrefPtr PREF_SHOW_FILES = makePref("show-files");
 // values: 1*digit
@@ -539,16 +536,28 @@ PrefPtr PREF_BT_SESSION_STATE_FILE = makePref("bt-session-state-file");
 PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES = makePref("bt-dht-bootstrap-nodes");
 // values: 1*digit
 PrefPtr PREF_BT_MAX_CONNECTIONS = makePref("bt-max-connections");
+PrefPtr PREF_BT_MAX_UPLOADS = makePref("bt-max-uploads");
 // values: URI
 PrefPtr PREF_BT_PROXY = makePref("bt-proxy");
 // values: true | false
 PrefPtr PREF_BT_PORT_MAPPING = makePref("bt-port-mapping");
 // values: 1*digit
 PrefPtr PREF_BT_MAX_OPEN_FILES = makePref("bt-max-open-files");
+PrefPtr PREF_BT_IO_THREADS = makePref("bt-io-threads");
+PrefPtr PREF_BT_HASHING_THREADS = makePref("bt-hashing-threads");
+PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES =
+    makePref("bt-max-concurrent-http-announces");
+PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS = makePref("bt-announce-all-tiers");
+PrefPtr PREF_BT_ANNOUNCE_ALL_TRACKERS = makePref("bt-announce-all-trackers");
+PrefPtr PREF_BT_ANONYMOUS_MODE = makePref("bt-anonymous-mode");
 // values: true | false
 PrefPtr PREF_BT_SEED_UNVERIFIED = makePref("bt-seed-unverified");
 // values: 1*digit
 PrefPtr PREF_BT_MAX_PEERS = makePref("bt-max-peers");
+PrefPtr PREF_BT_MAX_UPLOADS_PER_TORRENT =
+    makePref("bt-max-uploads-per-torrent");
+PrefPtr PREF_BT_FIRST_LAST_PIECE_FIRST = makePref("bt-first-last-piece-first");
+PrefPtr PREF_BT_SUPER_SEEDING = makePref("bt-super-seeding");
 // values: a string (file path)
 PrefPtr PREF_BT_PEER_BLOCKLIST = makePref("bt-peer-blocklist");
 // values: a string  = makePref(IP address)
@@ -571,7 +580,6 @@ PrefPtr PREF_BT_TRACKER = makePref("bt-tracker");
 // values: string
 PrefPtr PREF_BT_EXCLUDE_TRACKER = makePref("bt-exclude-tracker");
 // values: true | false
-PrefPtr PREF_BT_REMOVE_UNSELECTED_FILE = makePref("bt-remove-unselected-file");
 PrefPtr PREF_DETACH_SHARE_ONLY = makePref("detach-share-only");
 
 /**
