@@ -13,23 +13,41 @@
 #ifndef D_BT_DOWNLOAD_IMPL_H
 #define D_BT_DOWNLOAD_IMPL_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include <libtorrent/add_torrent_params.hpp>
 #include <libtorrent/torrent_handle.hpp>
 
+#include "BtDiscovery.h"
 #include "BtDownload.h"
 #include "TimerA2.h"
 
 namespace aria2 {
 
+enum class BtTrackerOrigin { Metainfo, Magnet, Resume, Global, Rpc };
+
+struct BtTrackerSpec {
+  std::string url;
+  int tier = 0;
+  BtTrackerOrigin origin = BtTrackerOrigin::Metainfo;
+
+  bool operator==(const BtTrackerSpec& other) const
+  {
+    return url == other.url && tier == other.tier && origin == other.origin;
+  }
+};
+
 struct BtDownload::Impl {
   libtorrent::add_torrent_params params;
   libtorrent::torrent_handle handle;
-  std::vector<std::string> sourceTrackers;
-  std::vector<int> sourceTrackerTiers;
-  bool customTrackers = false;
+  std::vector<BtTrackerSpec> sourceTrackers;
+  std::vector<BtTrackerSpec> effectiveTrackers;
+  bool trackerOverride = false;
+  uint64_t trackerRevision = 1;
+  uint64_t appliedTrackerRevision = 0;
+  BtDiscoveryState discovery;
   std::string resumePath;
   std::string previousSavePath;
   bool resumeLoaded = false;

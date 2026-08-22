@@ -755,7 +755,7 @@ void BitfieldManTest::testGetInorderMissingUnusedIndex()
   bt.clearAllBit();
   // 00000|00000|00000|00000
   for (int i = 0; i <= 1; ++i) {
-    bitfield::flipBit(ignoreBitfield, length, i);
+    ignoreBitfield[i / 8] ^= static_cast<unsigned char>(128u >> (i % 8));
   }
   REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
                                                  ignoreBitfield, length));

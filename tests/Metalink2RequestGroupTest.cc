@@ -28,13 +28,17 @@ public:
 
   void testGenerate();
   void testGenerate_with_local_metaurl();
+#ifdef ENABLE_BITTORRENT
   void testGenerate_groupByMetaurl();
+#endif // ENABLE_BITTORRENT
   void testGenerate_dosDirTraversal();
 };
 
 A2_TEST(Metalink2RequestGroupTest, testGenerate)
 A2_TEST(Metalink2RequestGroupTest, testGenerate_with_local_metaurl)
+#ifdef ENABLE_BITTORRENT
 A2_TEST(Metalink2RequestGroupTest, testGenerate_groupByMetaurl)
+#endif // ENABLE_BITTORRENT
 A2_TEST(Metalink2RequestGroupTest, testGenerate_dosDirTraversal)
 
 void Metalink2RequestGroupTest::testGenerate()
@@ -113,6 +117,7 @@ void Metalink2RequestGroupTest::testGenerate_with_local_metaurl()
                            ->getRemainingUris()[0]);
 }
 
+#ifdef ENABLE_BITTORRENT
 void Metalink2RequestGroupTest::testGenerate_groupByMetaurl()
 {
   std::vector<std::shared_ptr<RequestGroup>> groups;
@@ -137,6 +142,8 @@ void Metalink2RequestGroupTest::testGenerate_groupByMetaurl()
   REQUIRE_EQ(std::string("http://file2p1"),
              singleFiles[0]->getRemainingUris()[0]);
 }
+#endif // ENABLE_BITTORRENT
+
 void Metalink2RequestGroupTest::testGenerate_dosDirTraversal()
 {
 #ifdef __MINGW32__

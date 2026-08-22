@@ -78,11 +78,7 @@ void Aria2ApiTest::testAddMetalink()
   KeyVals options;
 #ifdef ENABLE_METALINK
   REQUIRE_EQ(0, addMetalink(session_, &gids, metalinkPath, options));
-#  ifdef ENABLE_BITTORRENT
-  REQUIRE_EQ((size_t)2, gids.size());
-#  else  // !ENABLE_BITTORRENT
   REQUIRE_EQ((size_t)1, gids.size());
-#  endif // !ENABLE_BITTORRENT
 
   gids.clear();
   options.push_back(KeyVals::value_type("file-allocation", "foo"));

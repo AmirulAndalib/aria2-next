@@ -105,35 +105,9 @@ size_t countOption() { return getPrefFactory()->getCount(); }
 
 PrefPtr i2p(size_t id) { return getPrefFactory()->i2p(id); }
 
-const std::vector<InputAlias>& inputAliases()
-{
-  static const std::vector<InputAlias> aliases = {
-      {"bt-detach-seed-only", PREF_DETACH_SHARE_ONLY},
-  };
-  return aliases;
-}
-
 PrefPtr k2p(const std::string& key)
 {
-  auto pref = getPrefFactory()->k2p(key);
-  if (pref->i != 0) {
-    return pref;
-  }
-  for (const auto& alias : inputAliases()) {
-    if (key == alias.name) {
-      return alias.target;
-    }
-  }
-  return pref;
-}
-
-const std::string& normalizeInputValue(PrefPtr pref, const std::string& value)
-{
-  if ((pref == PREF_LOG_LEVEL || pref == PREF_CONSOLE_LOG_LEVEL) &&
-      value == "notice") {
-    return V_INFO;
-  }
-  return value;
+  return getPrefFactory()->k2p(key);
 }
 
 void deletePrefResource() { delete getPrefFactory(); }
@@ -175,7 +149,7 @@ const std::string V_TUNNEL("tunnel");
 const std::string V_HTTP("http");
 const std::string V_HTTPS("https");
 const std::string V_FTP("ftp");
-const std::string V_ENABLED("enabled");
+const std::string V_PREFERRED("preferred");
 const std::string V_DISABLED("disabled");
 const std::string V_REQUIRED("required");
 const std::string V_TCP("tcp");
@@ -304,9 +278,6 @@ PrefPtr PREF_ENABLE_RPC = makePref("enable-rpc");
 // value: 1*digit
 PrefPtr PREF_RPC_LISTEN_PORT = makePref("rpc-listen-port");
 // value: string
-PrefPtr PREF_RPC_USER = makePref("rpc-user");
-// value: string
-PrefPtr PREF_RPC_PASSWD = makePref("rpc-passwd");
 // value: 1*digit
 PrefPtr PREF_RPC_MAX_REQUEST_SIZE = makePref("rpc-max-request-size");
 // value: true | false
@@ -356,7 +327,6 @@ PrefPtr PREF_CONDITIONAL_GET = makePref("conditional-get");
 // value: true | false
 PrefPtr PREF_SELECT_LEAST_USED_HOST = makePref("select-least-used-host");
 // value: true | false
-PrefPtr PREF_ENABLE_ASYNC_DNS6 = makePref("enable-async-dns6");
 // value: 1*digit
 PrefPtr PREF_MAX_DOWNLOAD_RESULT = makePref("max-download-result");
 // value: 1*digit
@@ -569,10 +539,13 @@ PrefPtr PREF_INDEX_OUT = makePref("index-out");
 // values: true | false
 PrefPtr PREF_BT_ENABLE_LPD = makePref("bt-enable-lpd");
 // values: 1*digit
-PrefPtr PREF_BT_TRACKER_TIMEOUT = makePref("bt-tracker-timeout");
+PrefPtr PREF_BT_TRACKER_COMPLETION_TIMEOUT =
+    makePref("bt-tracker-completion-timeout");
 // values: 1*digit
-PrefPtr PREF_BT_TRACKER_CONNECT_TIMEOUT =
-    makePref("bt-tracker-connect-timeout");
+PrefPtr PREF_BT_TRACKER_RECEIVE_TIMEOUT =
+    makePref("bt-tracker-receive-timeout");
+// values: interface name or numeric IP address list
+PrefPtr PREF_BT_INTERFACE = makePref("bt-interface");
 // values: string
 PrefPtr PREF_ON_BT_DOWNLOAD_COMPLETE = makePref("on-bt-download-complete");
 // values: string

@@ -62,6 +62,7 @@ build/default/aria2-next --version
 
 bash -n tools/build_test.sh
 bash -n packaging/scripts/common.sh
+bash -n packaging/scripts/build-release
 bash -n scripts/bump-version.sh
 bash -n scripts/release.sh
 

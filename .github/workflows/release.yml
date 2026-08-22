@@ -10,9 +10,7 @@ on:
         required: false
         default: release
         type: choice
-        options:
-          - release
-          - debug
+        options: [release, debug]
 
 permissions:
   contents: read
@@ -40,7 +38,7 @@ jobs:
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools release-tools
 
-      - name: Resolve Release Version
+      - name: Resolve release version
         id: resolve
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -48,32 +46,17 @@ jobs:
           REQUESTED_BUILD_PROFILE: ${{ github.event.inputs.build_profile }}
         run: |
           VERSION=$(sed -n 's/^  VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)
+          printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
 
-          if [ -z "$VERSION" ]; then
-            echo "Unable to read project version from CMakeLists.txt" >&2
-            exit 1
-          fi
-
-          if ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Invalid CMake project version: $VERSION" >&2
-            exit 1
-          fi
-
-          if [ "$EVENT_NAME" = "release" ]; then
+          if [ "$EVENT_NAME" = release ]; then
             BUILD_PROFILE=release
-            TAG_VERSION="${RELEASE_TAG#v}"
-
-            if ! printf '%s\n' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "Invalid release tag: $RELEASE_TAG" >&2
-              exit 1
-            fi
-
+            TAG_VERSION=${RELEASE_TAG#v}
             if [ "$VERSION" != "$TAG_VERSION" ]; then
-              echo "Release tag $RELEASE_TAG does not match CMake project version $VERSION" >&2
+              echo "Release tag $RELEASE_TAG does not match project version $VERSION" >&2
               exit 1
             fi
           else
-            BUILD_PROFILE="${REQUESTED_BUILD_PROFILE:-release}"
+            BUILD_PROFILE=${REQUESTED_BUILD_PROFILE:-release}
           fi
 
           case "$BUILD_PROFILE" in
@@ -104,1011 +87,180 @@ jobs:
             echo "windows_debug_map_flags=$WINDOWS_DEBUG_MAP_FLAGS"
           } >> "$GITHUB_OUTPUT"
 
-  # ---------------------------------------------------------------------------
-  # Linux x86_64
-  # ---------------------------------------------------------------------------
-  build-linux-x64:
-    name: Linux x86_64
+  build-native:
+    name: ${{ matrix.name }}
     needs: resolve-release
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            runner: ubuntu-22.04
+            platform: linux
+            verify_profile: linux
+            processor: x86_64
+            artifact: linux-x86_64
+          - name: Linux ARM64
+            runner: ubuntu-22.04-arm
+            platform: linux
+            verify_profile: linux
+            processor: aarch64
+            artifact: linux-aarch64
+          - name: macOS ARM64
+            runner: macos-15
+            platform: macos
+            verify_profile: macos
+            processor: arm64
+            artifact: macos-arm64
+          - name: macOS Intel
+            runner: macos-15-intel
+            platform: macos
+            verify_profile: macos
+            processor: x86_64
+            artifact: macos-x86_64
+    runs-on: ${{ matrix.runner }}
     env:
       ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
       CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      PREFIX: /usr/local
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            make binutils cmake ninja-build pkg-config curl tar ca-certificates libssl-dev
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools linux
-
-      - name: Download dependency sources
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --prefix=$PREFIX --static
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$LIBSSH2_ARCHIVE" && cd "libssh2-$LIBSSH2_VERSION"
-          CPPFLAGS="-I$PREFIX/include $RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX \
-            --with-crypto=openssl \
-            PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile linux
-          packaging/scripts/build-libtorrent \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile linux
-          PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_OPENSSL=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_SKIP_RPATH=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX" \
-            -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release --target aria2-next -j$(nproc)
-          if [ "$STRIP_BINARY" = true ]; then
-            strip build/release/aria2-next
-          fi
-
-      - name: Verify runtime dependencies
-        run: packaging/scripts/check-runtime-deps linux build/release/aria2-next
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-linux-x86_64"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: linux-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-linux-x86_64
-          archive: false
-
-  # ---------------------------------------------------------------------------
-  # Linux ARM64
-  # ---------------------------------------------------------------------------
-  build-linux-arm64:
-    name: Linux ARM64
-    needs: resolve-release
-    runs-on: ubuntu-22.04-arm
-    env:
-      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      PREFIX: /usr/local
-      STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            make binutils cmake ninja-build pkg-config curl tar ca-certificates libssl-dev
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools linux
-
-      - name: Download dependency sources
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --prefix=$PREFIX --static
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile linux
-          tar xf "$LIBSSH2_ARCHIVE" && cd "libssh2-$LIBSSH2_VERSION"
-          CPPFLAGS="-I$PREFIX/include $RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX \
-            --with-crypto=openssl \
-            PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-          make -j$(nproc)
-          sudo make install
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile linux
-          packaging/scripts/build-libtorrent \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile linux
-          PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_OPENSSL=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_SKIP_RPATH=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX" \
-            -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release --target aria2-next -j$(nproc)
-          if [ "$STRIP_BINARY" = true ]; then
-            strip build/release/aria2-next
-          fi
-
-      - name: Verify runtime dependencies
-        run: packaging/scripts/check-runtime-deps linux build/release/aria2-next
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-linux-aarch64"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: linux-aarch64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-linux-aarch64
-          archive: false
-
-  # ---------------------------------------------------------------------------
-  # macOS ARM64 (Apple Silicon, static)
-  # ---------------------------------------------------------------------------
-  build-macos-arm64:
-    name: macOS ARM64
-    needs: resolve-release
-    runs-on: macos-15
-    env:
-      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      PREFIX: ${{ github.workspace }}/packaging/build-deps
+      TARGET_PROCESSOR: ${{ matrix.processor }}
       MACOSX_VERSION_MIN: "11.0"
-      STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools macos
-
-      - name: Download dependency sources
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --prefix=$PREFIX --static
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build OpenSSL
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-arm64-cc no-shared no-module no-tests no-autoload-config \
-            --prefix=$PREFIX --openssldir=/etc/ssl --libdir=lib \
-            $RELEASE_CFLAGS
-          make -j$(sysctl -n hw.ncpu)
-          make install_sw
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$LIBSSH2_ARCHIVE" && cd "libssh2-$LIBSSH2_VERSION"
-          CPPFLAGS="-I$PREFIX/include $RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX \
-            --with-crypto=openssl --with-libssl-prefix=$PREFIX \
-            PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile macos
-          packaging/scripts/build-libtorrent \
-            -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DOPENSSL_USE_STATIC_LIBS=ON \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_VERSION_MIN" \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile macos
-          PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_OPENSSL=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX"
-          cmake --build build/release --target aria2-next -j$(sysctl -n hw.ncpu)
-          if [ "$STRIP_BINARY" = true ]; then
-            strip build/release/aria2-next
-          fi
-
-      - name: Verify runtime dependencies
-        run: packaging/scripts/check-runtime-deps macos build/release/aria2-next
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-macos-arm64"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: macos-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-macos-arm64
-          archive: false
-
-  # ---------------------------------------------------------------------------
-  # macOS Intel (x86_64, static)
-  # ---------------------------------------------------------------------------
-  build-macos-intel:
-    name: macOS Intel
-    needs: resolve-release
-    runs-on: macos-15-intel
-    env:
-      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      PREFIX: ${{ github.workspace }}/packaging/build-deps
-      MACOSX_VERSION_MIN: "11.0"
-      STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools macos
-
-      - name: Download dependency sources
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --prefix=$PREFIX --static
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build OpenSSL
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure darwin64-x86_64-cc no-shared no-module no-tests no-autoload-config \
-            --prefix=$PREFIX --openssldir=/etc/ssl --libdir=lib \
-            $RELEASE_CFLAGS
-          make -j$(sysctl -n hw.ncpu)
-          make install_sw
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile macos
-          tar xf "$LIBSSH2_ARCHIVE" && cd "libssh2-$LIBSSH2_VERSION"
-          CPPFLAGS="-I$PREFIX/include $RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure --disable-shared --enable-static --prefix=$PREFIX \
-            --with-crypto=openssl --with-libssl-prefix=$PREFIX \
-            PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile macos
-          packaging/scripts/build-libtorrent \
-            -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DOPENSSL_USE_STATIC_LIBS=ON \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_VERSION_MIN" \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile macos
-          PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_OPENSSL=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS" \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX"
-          cmake --build build/release --target aria2-next -j$(sysctl -n hw.ncpu)
-          if [ "$STRIP_BINARY" = true ]; then
-            strip build/release/aria2-next
-          fi
-
-      - name: Verify runtime dependencies
-        run: packaging/scripts/check-runtime-deps macos build/release/aria2-next
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-macos-x86_64"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: macos-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-macos-x86_64
-          archive: false
-
-  # ---------------------------------------------------------------------------
-  # Windows x86_64 (cross-compiled on Ubuntu)
-  # ---------------------------------------------------------------------------
-  build-windows-x64:
-    name: Windows x86_64
-    needs: resolve-release
-    runs-on: ubuntu-24.04
-    env:
-      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      HOST: x86_64-w64-mingw32
-      PREFIX: /usr/local/x86_64-w64-mingw32
-      CC: x86_64-w64-mingw32-gcc-posix
-      CXX: x86_64-w64-mingw32-g++-posix
-      STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
-      WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Install cross-compilation toolchain
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip perl \
-            gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl binutils
 
       - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools windows-x86_64
+        run: packaging/scripts/verify-runner-tools ${{ matrix.verify_profile }}
 
-      - name: Download dependencies
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
+      - name: Build release binary
+        run: packaging/scripts/build-release ${{ matrix.platform }}
 
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            CC="$CC" CXX="$CXX"
-          sudo make -j$(nproc) install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            CC="$CC"
-          sudo make -j$(nproc) install
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CC=$CC AR=$HOST-ar LD=$HOST-ld \
-          RANLIB=$HOST-ranlib STRIP=$HOST-strip \
-          CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --prefix=$PREFIX \
-            --libdir=$PREFIX/lib \
-            --includedir=$PREFIX/include \
-            --static
-          sudo make -j$(nproc) install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static --without-random \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            LIBS="-lws2_32" \
-            ac_cv_func_if_indextoname=no \
-            CC="$CC"
-          sudo make -j$(nproc) install
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$LIBSSH2_ARCHIVE"
-          cmake -S "libssh2-$LIBSSH2_VERSION" -B build/libssh2 -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_RC_COMPILER=$HOST-windres \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DCMAKE_INSTALL_PREFIX=$PREFIX \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DBUILD_STATIC_LIBS=ON \
-            -DBUILD_EXAMPLES=OFF \
-            -DBUILD_TESTING=OFF \
-            -DCRYPTO_BACKEND=WinCNG \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-          sudo cmake --build build/libssh2 --target install -j$(nproc)
-
-      - name: Build OpenSSL
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure mingw64 no-shared no-module no-tests no-apps no-autoload-config \
-            --cross-compile-prefix="$HOST-" \
-            --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib \
-            $RELEASE_CFLAGS
-          make -j$(nproc)
-          sudo make install_sw
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile windows
-          packaging/scripts/build-libtorrent \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER="$CC" \
-            -DCMAKE_CXX_COMPILER="$CXX" \
-            -DCMAKE_RC_COMPILER="$HOST-windres" \
-            -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DOPENSSL_USE_STATIC_LIBS=ON \
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile windows
-          PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_CXX_COMPILER=$CXX \
-            -DCMAKE_RC_COMPILER=$HOST-windres \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_OPENSSL=OFF \
-            -DARIA2_WITH_WINTLS=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX" \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS $WINDOWS_DEBUG_MAP_FLAGS" \
-            -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release --target aria2-next -j$(nproc)
-          if [ "$STRIP_BINARY" = true ]; then
-            $HOST-strip build/release/aria2-next.exe
-          fi
-
-      - name: Verify runtime dependencies
-        run: OBJDUMP="$HOST-objdump" packaging/scripts/check-runtime-deps windows-x86_64 build/release/aria2-next.exe
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next.exe "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-x86_64.exe"
-          if [ "$STRIP_BINARY" = false ]; then
-            cp build/release/aria2-next.map "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-x86_64.map"
-          fi
+      - name: Package binary
+        env:
+          VERSION: ${{ needs.resolve-release.outputs.version }}
+          ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
+        run: cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-${{ matrix.artifact }}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: windows-x86_64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-x86_64.exe
-          archive: false
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: needs.resolve-release.outputs.build_profile == 'debug'
-        with:
-          name: windows-x86_64-debug-map
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-x86_64.map
-          archive: false
+          name: ${{ matrix.artifact }}${{ needs.resolve-release.outputs.artifact_suffix }}
+          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-${{ matrix.artifact }}
           if-no-files-found: error
+          retention-days: 7
 
-  # ---------------------------------------------------------------------------
-  # Windows ARM64 (cross-compiled on Ubuntu with llvm-mingw)
-  # ---------------------------------------------------------------------------
-  build-windows-arm64:
-    name: Windows ARM64
+  build-windows:
+    name: ${{ matrix.name }}
     needs: resolve-release
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x86_64
+            architecture: x86_64
+            verify_profile: windows-x86_64
+            runtime_platform: windows-x86_64
+            artifact: windows-x86_64.exe
+            toolchain: mingw
+          - name: Windows ARM64
+            architecture: aarch64
+            verify_profile: windows-arm64
+            runtime_platform: windows-arm64
+            artifact: windows-arm64.exe
+            toolchain: llvm-mingw
     env:
       ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      HOST: aarch64-w64-mingw32
-      PREFIX: /usr/local/aarch64-w64-mingw32
       CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      CC: aarch64-w64-mingw32-clang
-      CXX: aarch64-w64-mingw32-clang++
-      AR: aarch64-w64-mingw32-ar
-      RANLIB: aarch64-w64-mingw32-ranlib
-      STRIP: aarch64-w64-mingw32-strip
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
+      TARGET_PROCESSOR: ${{ matrix.architecture }}
+      RUNTIME_PLATFORM: ${{ matrix.runtime_platform }}
       WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Install llvm-mingw toolchain
+      - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            make binutils cmake ninja-build \
-            patch ca-certificates pkg-config curl tar dpkg-dev lzip perl
+          packages="make cmake ninja-build perl curl tar binutils"
+          if [ "${{ matrix.toolchain }}" = mingw ]; then
+            packages="$packages gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
+          fi
+          sudo apt-get install -y --no-install-recommends $packages
+
+      - name: Install LLVM-MinGW
+        if: matrix.toolchain == 'llvm-mingw'
+        run: |
           . packaging/dependencies.env
           . packaging/scripts/common.sh
           curl_fetch "$LLVM_MINGW_URL" "$LLVM_MINGW_ARCHIVE" "$LLVM_MINGW_SHA256"
           tar xf "$LLVM_MINGW_ARCHIVE"
           echo "$PWD/llvm-mingw-$LLVM_MINGW_VERSION-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
 
+      - name: Configure toolchain
+        run: |
+          if [ "${{ matrix.toolchain }}" = mingw ]; then
+            prefix=x86_64-w64-mingw32
+            {
+              echo "CC=${prefix}-gcc-posix"
+              echo "CXX=${prefix}-g++-posix"
+              echo "RC=${prefix}-windres"
+              echo "AR=${prefix}-ar"
+              echo "RANLIB=${prefix}-ranlib"
+              echo "STRIP=${prefix}-strip"
+              echo "OBJDUMP=${prefix}-objdump"
+            } >> "$GITHUB_ENV"
+          else
+            prefix=aarch64-w64-mingw32
+            {
+              echo "CC=${prefix}-clang"
+              echo "CXX=${prefix}-clang++"
+              echo "RC=${prefix}-windres"
+              echo "AR=${prefix}-ar"
+              echo "RANLIB=${prefix}-ranlib"
+              echo "STRIP=${prefix}-strip"
+              echo "OBJDUMP=${prefix}-objdump"
+            } >> "$GITHUB_ENV"
+          fi
+
       - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools windows-arm64
+        run: packaging/scripts/verify-runner-tools ${{ matrix.verify_profile }}
 
-      - name: Download dependencies
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$SQLITE_URL" "$SQLITE_ARCHIVE" "$SQLITE_SHA256"
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
+      - name: Build release binary
+        run: packaging/scripts/build-release windows
 
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            CC="$CC" CXX="$CXX"
-          sudo env "PATH=$PATH" make -j$(nproc) install
-
-      - name: Build sqlite3
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$SQLITE_ARCHIVE" && cd "sqlite-autoconf-$SQLITE_AUTOCONF_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            CC="$CC"
-          sudo env "PATH=$PATH" make -j$(nproc) install
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CC=$CC AR=$AR LD=$HOST-ld \
-          RANLIB=$RANLIB STRIP=$STRIP \
-          CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --prefix=$PREFIX \
-            --libdir=$PREFIX/lib \
-            --includedir=$PREFIX/include \
-            --static
-          sudo env "PATH=$PATH" make -j$(nproc) install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --disable-shared --enable-static --without-random \
-            --prefix=$PREFIX --host=$HOST \
-            --build=$(dpkg-architecture -qDEB_BUILD_GNU_TYPE) \
-            CC="$CC" LIBS="-lws2_32" \
-            ac_cv_func_if_indextoname=no
-          sudo env "PATH=$PATH" make -j$(nproc) install
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          AR_PATH=$(command -v "$AR")
-          RANLIB_PATH=$(command -v "$RANLIB")
-          tar xf "$LIBSSH2_ARCHIVE"
-          cmake -S "libssh2-$LIBSSH2_VERSION" -B build/libssh2 -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_AR=$AR_PATH \
-            -DCMAKE_RANLIB=$RANLIB_PATH \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DCMAKE_INSTALL_PREFIX=$PREFIX \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DBUILD_STATIC_LIBS=ON \
-            -DBUILD_EXAMPLES=OFF \
-            -DBUILD_TESTING=OFF \
-            -DCRYPTO_BACKEND=WinCNG \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-          sudo env "PATH=$PATH" cmake --build build/libssh2 --target install -j$(nproc)
-
-      - name: Build OpenSSL
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile windows
-          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ./Configure --config="$GITHUB_WORKSPACE/packaging/openssl/mingw-arm64.conf" \
-            mingw-arm64 no-shared no-module no-tests no-apps no-asm no-autoload-config \
-            --cross-compile-prefix="$HOST-" \
-            --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib \
-            $RELEASE_CFLAGS
-          make -j$(nproc)
-          sudo env "PATH=$PATH" make install_sw
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile windows
-          AR_PATH=$(command -v "$AR")
-          RANLIB_PATH=$(command -v "$RANLIB")
-          packaging/scripts/build-libtorrent \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER="$CC" \
-            -DCMAKE_CXX_COMPILER="$CXX" \
-            -DCMAKE_AR="$AR_PATH" \
-            -DCMAKE_RANLIB="$RANLIB_PATH" \
-            -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DOPENSSL_USE_STATIC_LIBS=ON \
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile windows
-          AR_PATH=$(command -v "$AR")
-          RANLIB_PATH=$(command -v "$RANLIB")
-          PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_CXX_COMPILER=$CXX \
-            -DCMAKE_AR=$AR_PATH \
-            -DCMAKE_RANLIB=$RANLIB_PATH \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_OPENSSL=OFF \
-            -DARIA2_WITH_WINTLS=ON \
-            -DARIA2_WITH_SQLITE3=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_PREFIX_PATH="$PREFIX" \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$RELEASE_LDFLAGS $WINDOWS_DEBUG_MAP_FLAGS" \
-            -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config
-          cmake --build build/release --target aria2-next -j$(nproc)
-          if [ "$STRIP_BINARY" = true ]; then
-            $STRIP build/release/aria2-next.exe
-          fi
-
-      - name: Verify runtime dependencies
-        run: OBJDUMP="$HOST-objdump" packaging/scripts/check-runtime-deps windows-arm64 build/release/aria2-next.exe
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
-          cp build/release/aria2-next.exe "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-arm64.exe"
-          if [ "$STRIP_BINARY" = false ]; then
-            cp build/release/aria2-next.map "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-windows-arm64.map"
-          fi
+      - name: Package binary
+        env:
+          VERSION: ${{ needs.resolve-release.outputs.version }}
+          ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
+        run: cp build/release/aria2-next.exe "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-${{ matrix.artifact }}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: windows-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-arm64.exe
-          archive: false
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: needs.resolve-release.outputs.build_profile == 'debug'
-        with:
-          name: windows-arm64-debug-map
-          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-windows-arm64.map
-          archive: false
+          name: ${{ matrix.runtime_platform }}${{ needs.resolve-release.outputs.artifact_suffix }}
+          path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-${{ matrix.artifact }}
           if-no-files-found: error
+          retention-days: 7
 
-  # ---------------------------------------------------------------------------
-  # Android ARM64
-  # ---------------------------------------------------------------------------
   build-android-arm64:
     name: Android ARM64
     needs: resolve-release
     runs-on: ubuntu-24.04
     env:
-      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
-      ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
-      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
-      HOST: aarch64-linux-android
       API: "33"
-      PREFIX: ${{ github.workspace }}/packaging/android-deps
+      ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
+      CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
       STRIP_BINARY: ${{ needs.resolve-release.outputs.strip_binary }}
+      STRIP: llvm-strip
+      READELF: llvm-readelf
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -1117,181 +269,32 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            make binutils cmake ninja-build pkg-config curl tar unzip ca-certificates \
-            dpkg-dev perl
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools android
+          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl binutils
 
       - name: Resolve Android NDK
         run: |
           . packaging/dependencies.env
-          NDK_HOME="${ANDROID_NDK_LATEST_HOME:-}"
-          if [ -z "$NDK_HOME" ] || [ ! -d "$NDK_HOME" ]; then
-            echo "ANDROID_NDK_LATEST_HOME is not available on this runner" >&2
-            exit 1
-          fi
+          NDK_HOME=${ANDROID_NDK_LATEST_HOME:-}
+          test -d "$NDK_HOME"
           version_major=$(awk -F'= *' '/^Pkg\.Revision/ { split($2, parts, "."); print parts[1]; exit }' "$NDK_HOME/source.properties")
           if [ "$version_major" != "$ANDROID_NDK_VERSION" ]; then
-            echo "Unexpected Android NDK major version: $version_major, expected $ANDROID_NDK_VERSION" >&2
+            echo "Unexpected Android NDK major version: $version_major" >&2
             exit 1
           fi
-          toolchain="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
-          PATH="$toolchain/bin:$PATH"
-          command -v "aarch64-linux-android${API}-clang"
-          command -v "aarch64-linux-android${API}-clang++"
-          command -v llvm-ar
-          command -v llvm-ranlib
-          command -v llvm-strip
-          {
-            echo "NDK=$NDK_HOME"
-            echo "TOOLCHAIN=$toolchain"
-            echo "AR=llvm-ar"
-            echo "CC=${HOST}${API}-clang"
-            echo "CXX=${HOST}${API}-clang++"
-            echo "RANLIB=llvm-ranlib"
-            echo "STRIP=llvm-strip"
-          } >> "$GITHUB_ENV"
-          echo "$toolchain/bin" >> "$GITHUB_PATH"
+          echo "NDK=$NDK_HOME" >> "$GITHUB_ENV"
+          echo "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Download dependency sources
+      - name: Verify runner tools
+        run: packaging/scripts/verify-runner-tools android
+
+      - name: Build release binary
+        run: packaging/scripts/build-release android
+
+      - name: Package binary
+        env:
+          VERSION: ${{ needs.resolve-release.outputs.version }}
+          ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
         run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$OPENSSL_URL" "$OPENSSL_ARCHIVE" "$OPENSSL_SHA256"
-          curl_fetch "$EXPAT_URL" "$EXPAT_ARCHIVE" "$EXPAT_SHA256"
-          curl_fetch "$ZLIB_URL" "$ZLIB_ARCHIVE" "$ZLIB_SHA256"
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          curl_fetch "$LIBSSH2_URL" "$LIBSSH2_ARCHIVE" "$LIBSSH2_SHA256"
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-
-      - name: Build OpenSSL
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile android
-          tar xf "$OPENSSL_ARCHIVE" && cd "openssl-$OPENSSL_VERSION"
-          ANDROID_NDK_HOME="$NDK" ANDROID_NDK_ROOT="$NDK" PATH="$TOOLCHAIN/bin:$PATH" \
-          ./Configure no-shared no-module no-tests no-autoload-config \
-            --prefix="$PREFIX" --openssldir=/etc/ssl android-arm64 \
-            -D__ANDROID_API__=$API $RELEASE_CFLAGS
-          make -j$(nproc)
-          make install_sw
-
-      - name: Build expat
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile android
-          tar xf "$EXPAT_ARCHIVE" && cd "expat-$EXPAT_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --host="$HOST" \
-            --build="$(dpkg-architecture -qDEB_BUILD_GNU_TYPE)" \
-            --prefix="$PREFIX" \
-            --disable-shared
-          make -j$(nproc) install
-
-      - name: Build zlib
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile android
-          tar xf "$ZLIB_ARCHIVE" && cd "zlib-$ZLIB_VERSION"
-          CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
-          CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --prefix="$PREFIX" \
-            --libdir="$PREFIX/lib" \
-            --includedir="$PREFIX/include" \
-            --static
-          make -j$(nproc) install
-
-      - name: Build c-ares
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile android
-          tar xf "$CARES_ARCHIVE" && cd "c-ares-$CARES_VERSION"
-          CPPFLAGS="$RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --host="$HOST" \
-            --build="$(dpkg-architecture -qDEB_BUILD_GNU_TYPE)" \
-            --prefix="$PREFIX" \
-            --disable-shared
-          make -j$(nproc) install
-
-      - name: Build libssh2
-        run: |
-          source packaging/dependencies.env
-          . packaging/scripts/release-size-profile android
-          tar xf "$LIBSSH2_ARCHIVE" && cd "libssh2-$LIBSSH2_VERSION"
-          CPPFLAGS="-I$PREFIX/include $RELEASE_CPPFLAGS" CFLAGS="$RELEASE_CFLAGS" LDFLAGS="$RELEASE_LDFLAGS" \
-          ./configure \
-            --host="$HOST" \
-            --build="$(dpkg-architecture -qDEB_BUILD_GNU_TYPE)" \
-            --prefix="$PREFIX" \
-            --disable-shared \
-            --with-crypto=openssl \
-            --with-libssl-prefix="$PREFIX" \
-            PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-          make -j$(nproc) install
-
-      - name: Build libtorrent
-        run: |
-          . packaging/scripts/release-size-profile android
-          packaging/scripts/build-libtorrent \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_ANDROID_NDK="$NDK" \
-            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-            -DCMAKE_ANDROID_STL_TYPE=c++_static \
-            -DCMAKE_SYSTEM_VERSION="$API" \
-            -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DOPENSSL_USE_STATIC_LIBS=ON \
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX;$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
-            -DCMAKE_FIND_LIBRARY_SUFFIXES=.a \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX/lib $RELEASE_LDFLAGS"
-
-      - name: Build aria2
-        run: |
-          . packaging/scripts/release-size-profile android
-          PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
-          cmake -S . -B build/release -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_ANDROID_NDK="$NDK" \
-            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-            -DCMAKE_ANDROID_STL_TYPE=c++_static \
-            -DCMAKE_SYSTEM_VERSION="$API" \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DARIA2_STATIC_DEPENDENCIES=ON \
-            -DARIA2_WITH_WINTLS=OFF \
-            -DARIA2_WITH_OPENSSL=ON \
-            -DARIA2_WITH_EXPAT=ON \
-            -DARIA2_WITH_CARES=ON \
-            -DARIA2_WITH_SQLITE3=OFF \
-            -DARIA2_WITH_LIBSSH2=ON \
-            -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-            -DCMAKE_C_FLAGS="$RELEASE_CFLAGS" \
-            -DCMAKE_CXX_FLAGS="$RELEASE_CXXFLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX/lib $RELEASE_LDFLAGS" \
-            -DCMAKE_PREFIX_PATH="$PREFIX" \
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX;$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
-            -DCMAKE_FIND_LIBRARY_SUFFIXES=.a
-          cmake --build build/release --target aria2-next -j$(nproc)
-          if [ "$STRIP_BINARY" = true ]; then
-            "$STRIP" build/release/aria2-next
-          fi
-
-      - name: Verify runtime dependencies
-        run: READELF=llvm-readelf packaging/scripts/check-runtime-deps android-arm64 build/release/aria2-next
-
-      - name: Package
-        run: |
-          VERSION="${{ needs.resolve-release.outputs.version }}"
           cp build/release/aria2-next "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-android-arm64"
           chmod 755 "aria2-next-${VERSION}${ARTIFACT_SUFFIX}-android-arm64"
 
@@ -1299,21 +302,15 @@ jobs:
         with:
           name: android-arm64${{ needs.resolve-release.outputs.artifact_suffix }}
           path: aria2-next-${{ needs.resolve-release.outputs.version }}${{ needs.resolve-release.outputs.artifact_suffix }}-android-arm64
-          archive: false
+          if-no-files-found: error
+          retention-days: 7
 
-  # ---------------------------------------------------------------------------
-  # Publish or archive release assets
-  # ---------------------------------------------------------------------------
-  upload-release-assets:
+  publish-assets:
     name: Publish or Archive
     needs:
       - resolve-release
-      - build-linux-x64
-      - build-linux-arm64
-      - build-macos-arm64
-      - build-macos-intel
-      - build-windows-x64
-      - build-windows-arm64
+      - build-native
+      - build-windows
       - build-android-arm64
     runs-on: ubuntu-24.04
     permissions:
@@ -1342,27 +339,21 @@ jobs:
           cd ..
           mv checksums.sha256 "artifacts/aria2-next-${VERSION}${ARTIFACT_SUFFIX}-checksums.sha256"
 
-      - name: List release assets
-        run: ls -lhR artifacts/
-
-      - name: Upload assets to GitHub Release
+      - name: Upload release assets
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
-      - name: Trigger Docker publish
+      - name: Publish Docker images
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          gh workflow run docker-publish.yml \
-            --ref "$RELEASE_TAG" \
-            --field release_tag="$RELEASE_TAG"
+        run: gh workflow run docker-publish.yml --ref "$RELEASE_TAG" --field release_tag="$RELEASE_TAG"
 
-      - name: Upload artifacts for manual validation
+      - name: Archive validation assets
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -1370,3 +361,13 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Summary
+        run: |
+          {
+            echo "## Aria2 Next $VERSION"
+            echo
+            echo "Built and verified standalone binaries for Linux, macOS, Windows, and Android."
+            echo
+            echo "Release-triggered runs publish assets and dispatch Docker publishing. Manual runs archive validation assets only."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -41,9 +41,6 @@
 #include "util.h"
 #include "fmt.h"
 #include "cookie_helper.h"
-#ifndef HAVE_SQLITE3_OPEN_V2
-#  include "File.h"
-#endif // !HAVE_SQLITE3_OPEN_V2
 
 namespace aria2 {
 
@@ -58,7 +55,6 @@ Sqlite3CookieParser::Sqlite3CookieParser(const std::string& filename)
     : filename_(filename), db_(nullptr)
 {
   int ret;
-#ifdef HAVE_SQLITE3_OPEN_V2
   ret = sqlite3_open_v2(filename.c_str(), &db_, SQLITE_OPEN_READONLY, nullptr);
   if (SQLITE_OK != ret) {
     sqlite3_close(db_);
@@ -67,12 +63,6 @@ Sqlite3CookieParser::Sqlite3CookieParser(const std::string& filename)
     ret = sqlite3_open_v2(uri.c_str(), &db_,
                           SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nullptr);
   }
-#else  // !HAVE_SQLITE3_OPEN_V2
-  if (!File(filename).isFile()) {
-    return;
-  }
-  ret = sqlite3_open(filename.c_str(), &db_);
-#endif // !HAVE_SQLITE3_OPEN_V2
   if (SQLITE_OK != ret) {
     sqlite3_close(db_);
     db_ = nullptr;
@@ -160,7 +150,6 @@ std::vector<std::unique_ptr<Cookie>> Sqlite3CookieParser::parse()
   char* sqlite3ErrMsg = nullptr;
   int ret =
       sqlite3_exec(db_, getQuery(), cookieRowMapper, &tcookies, &sqlite3ErrMsg);
-#ifdef HAVE_SQLITE3_OPEN_V2
   if (SQLITE_OK != ret) {
     sqlite3_free(sqlite3ErrMsg);
     sqlite3ErrMsg = nullptr;
@@ -181,7 +170,6 @@ std::vector<std::unique_ptr<Cookie>> Sqlite3CookieParser::parse()
       sqlite3_close(immutableDb);
     }
   }
-#endif // HAVE_SQLITE3_OPEN_V2
   std::string errMsg;
   if (sqlite3ErrMsg) {
     errMsg = sqlite3ErrMsg;

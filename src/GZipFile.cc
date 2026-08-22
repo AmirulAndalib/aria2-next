@@ -61,13 +61,9 @@ GZipFile::GZipFile(const char* filename, const char* mode)
     if (fd != -1) {
       fp_ = gzdopen(fd, mode);
       if (fp_) {
-// fp_ retains fd and gzclose() will close fd as well.
-#if HAVE_GZBUFFER
+        // fp_ retains fd and gzclose() will close fd as well.
         gzbuffer(fp_, 1 << 17);
-#endif
-#if HAVE_GZSETPARAMS
         gzsetparams(fp_, 2, Z_DEFAULT_STRATEGY);
-#endif
       }
       else {
         ::close(fd);

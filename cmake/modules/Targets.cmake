@@ -26,20 +26,12 @@ endif()
 if(HAVE_WINTLS)
   list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_HAVE_WINTLS})
 endif()
-if(USE_INTERNAL_MD)
-  list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_USE_INTERNAL_MD})
-endif()
-if(HAVE_OPENSSL)
-  list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_HAVE_OPENSSL})
-endif()
+list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_OPENSSL_CRYPTO})
 if(HAVE_OPENSSL)
   list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_HAVE_OPENSSL_TLS})
 endif()
 if(APPLE AND HAVE_OPENSSL)
   list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_APPLE_TRUST})
-endif()
-if(HAVE_OPENSSL AND USE_OPENSSL_MD)
-  list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_HAVE_OPENSSL__USE_OPENSSL_MD})
 endif()
 if(HAVE_ZLIB)
   list(APPEND ARIA2_CORE_SOURCES ${ARIA2_SOURCES_HAVE_ZLIB})
@@ -106,19 +98,21 @@ if(WIN32)
     SPDLOG_WCHAR_FILENAMES)
 endif()
 
-add_library(wslay STATIC
-  third_party/wslay/lib/wslay_event.c
-  third_party/wslay/lib/wslay_frame.c
-  third_party/wslay/lib/wslay_net.c
-  third_party/wslay/lib/wslay_queue.c)
-target_include_directories(wslay
-  PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/wslay/lib/includes
-    ${CMAKE_CURRENT_BINARY_DIR}/third_party/wslay/lib/includes
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/wslay/lib
-    ${CMAKE_CURRENT_BINARY_DIR})
-target_compile_definitions(wslay PRIVATE HAVE_CONFIG_H WSLAY_VERSION="${PROJECT_VERSION}")
+if(ENABLE_WEBSOCKET)
+  add_library(wslay STATIC
+    third_party/wslay/lib/wslay_event.c
+    third_party/wslay/lib/wslay_frame.c
+    third_party/wslay/lib/wslay_net.c
+    third_party/wslay/lib/wslay_queue.c)
+  target_include_directories(wslay
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/wslay/lib/includes
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/third_party/wslay/lib
+      ${CMAKE_CURRENT_BINARY_DIR})
+  target_compile_definitions(wslay
+    PRIVATE HAVE_CONFIG_H
+    PUBLIC WSLAY_VERSION="${ARIA2_WSLAY_VERSION}")
+endif()
 
 if(ENABLE_LIBARIA2)
   add_library(aria2_core ${ARIA2_CORE_SOURCES})
@@ -141,26 +135,27 @@ if(ENABLE_WEBSOCKET)
   target_link_libraries(aria2_core PUBLIC wslay)
 endif()
 if(HAVE_ZLIB)
-  aria2_add_pkg_target(aria2_core ZLIB)
+  target_link_libraries(aria2_core PUBLIC aria2::zlib)
 endif()
 if(HAVE_LIBEXPAT)
-  aria2_add_pkg_target(aria2_core EXPAT)
+  target_link_libraries(aria2_core PUBLIC aria2::expat)
 endif()
 if(HAVE_SQLITE3)
-  aria2_add_pkg_target(aria2_core SQLITE3)
+  target_link_libraries(aria2_core PUBLIC aria2::sqlite)
 endif()
 if(HAVE_LIBCARES)
-  aria2_add_pkg_target(aria2_core LIBCARES)
+  target_link_libraries(aria2_core PUBLIC aria2::cares)
 endif()
 if(HAVE_LIBSSH2)
-  aria2_add_pkg_target(aria2_core LIBSSH2)
+  target_link_libraries(aria2_core PUBLIC aria2::libssh2)
 endif()
 if(ENABLE_BITTORRENT)
   target_link_libraries(aria2_core PUBLIC
     LibtorrentRasterbar::torrent-rasterbar)
 endif()
+target_link_libraries(aria2_core PUBLIC OpenSSL::Crypto)
 if(HAVE_OPENSSL)
-  aria2_add_pkg_target(aria2_core OPENSSL)
+  target_link_libraries(aria2_core PUBLIC OpenSSL::SSL)
 endif()
 if(APPLE AND HAVE_OPENSSL)
   target_link_libraries(aria2_core PUBLIC
@@ -179,7 +174,11 @@ add_executable(aria2-next src/main.cc)
 target_link_libraries(aria2-next PRIVATE aria2_core spdlog::spdlog_header_only)
 
 if(ARIA2_RELEASE_SIZE_OPTIMIZED)
-  foreach(target wslay aria2_core aria2-next)
+  set(ARIA2_RELEASE_TARGETS aria2_core aria2-next)
+  if(TARGET wslay)
+    list(APPEND ARIA2_RELEASE_TARGETS wslay)
+  endif()
+  foreach(target ${ARIA2_RELEASE_TARGETS})
     target_compile_options(${target} PRIVATE
       $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Os>
       $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-ffunction-sections>
@@ -199,7 +198,11 @@ endif()
 if(ARIA2_RELEASE_LTO)
   check_ipo_supported(RESULT aria2_ipo_supported OUTPUT aria2_ipo_output LANGUAGES C CXX)
   if(aria2_ipo_supported)
-    set_property(TARGET wslay aria2_core aria2-next PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set(ARIA2_LTO_TARGETS aria2_core aria2-next)
+    if(TARGET wslay)
+      list(APPEND ARIA2_LTO_TARGETS wslay)
+    endif()
+    set_property(TARGET ${ARIA2_LTO_TARGETS} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
   else()
     message(WARNING "ARIA2_RELEASE_LTO requested but IPO is not supported: ${aria2_ipo_output}")
   endif()

@@ -54,7 +54,6 @@
 #include "DownloadContext.h"
 #include "FileEntry.h"
 #include "BitfieldMan.h"
-#include "DownloadContext.h"
 #include "RpcMethodImpl.h"
 #include "console.h"
 #include "KeepRunningCommand.h"
@@ -64,6 +63,7 @@
 #ifdef ENABLE_BITTORRENT
 #  include "BtDownload.h"
 #  include "BtMetadata.h"
+#  include "BtSession.h"
 #endif // ENABLE_BITTORRENT
 
 namespace aria2 {

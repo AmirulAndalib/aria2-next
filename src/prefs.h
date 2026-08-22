@@ -37,7 +37,6 @@
 
 #include "common.h"
 #include <string>
-#include <vector>
 
 namespace aria2 {
 
@@ -53,24 +52,15 @@ typedef const Pref* PrefPtr;
 
 namespace option {
 
-struct InputAlias {
-  const char* name;
-  PrefPtr target;
-};
-
 // Returns the number of options.
 size_t countOption();
 
 // Returns Pref whose ID is id. id must be less than countOption().
 PrefPtr i2p(size_t id);
 
-// Resolves canonical option names and input aliases. If no match is found,
-// returns the special null Pref whose ID is 0.
+// Resolves an option name. If no match is found, returns the special null
+// Pref whose ID is 0.
 PrefPtr k2p(const std::string& k);
-
-const std::vector<InputAlias>& inputAliases();
-
-const std::string& normalizeInputValue(PrefPtr pref, const std::string& value);
 
 // Deletes resources allocated for preferences. Call this function at
 // the end of the program only once.
@@ -113,7 +103,7 @@ extern const std::string V_TUNNEL;
 extern const std::string V_HTTP;
 extern const std::string V_HTTPS;
 extern const std::string V_FTP;
-extern const std::string V_ENABLED;
+extern const std::string V_PREFERRED;
 extern const std::string V_DISABLED;
 extern const std::string V_REQUIRED;
 extern const std::string V_TCP;
@@ -238,9 +228,6 @@ extern PrefPtr PREF_ENABLE_RPC;
 // value: 1*digit
 extern PrefPtr PREF_RPC_LISTEN_PORT;
 // value: string
-extern PrefPtr PREF_RPC_USER;
-// value: string
-extern PrefPtr PREF_RPC_PASSWD;
 // value: 1*digit
 extern PrefPtr PREF_RPC_MAX_REQUEST_SIZE;
 // value: true | false
@@ -290,7 +277,6 @@ extern PrefPtr PREF_CONDITIONAL_GET;
 // value: true | false
 extern PrefPtr PREF_SELECT_LEAST_USED_HOST;
 // value: true | false
-extern PrefPtr PREF_ENABLE_ASYNC_DNS6;
 // value: 1*digit
 extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
 // value: 1*digit
@@ -510,9 +496,11 @@ extern PrefPtr PREF_INDEX_OUT;
 // values: true | false
 extern PrefPtr PREF_BT_ENABLE_LPD;
 // values: 1*digit
-extern PrefPtr PREF_BT_TRACKER_TIMEOUT;
+extern PrefPtr PREF_BT_TRACKER_COMPLETION_TIMEOUT;
 // values: 1*digit
-extern PrefPtr PREF_BT_TRACKER_CONNECT_TIMEOUT;
+extern PrefPtr PREF_BT_TRACKER_RECEIVE_TIMEOUT;
+// values: interface name or numeric IP address list
+extern PrefPtr PREF_BT_INTERFACE;
 // values: string
 extern PrefPtr PREF_ON_BT_DOWNLOAD_COMPLETE;
 // values: string

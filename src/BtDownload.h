@@ -74,6 +74,7 @@ public:
                        const Option* option) const;
   void updateSelection(const std::shared_ptr<DownloadContext>& context);
   void initialize(RequestGroup* group);
+  std::string trackerSource(const std::string& url) const;
 
   const BtSnapshot& snapshot() const { return snapshot_; }
   BtSnapshot& mutableSnapshot() { return snapshot_; }

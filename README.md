@@ -99,11 +99,10 @@ cmake --build build/default
 ctest --test-dir build/default --output-on-failure
 ```
 
-Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_STATIC_DEPENDENCIES`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, `ARIA2_RELEASE_LTO`, `ARIA2_WITH_WINTLS`, `ARIA2_WITH_OPENSSL`, `ARIA2_WITH_EXPAT`, `ARIA2_WITH_CARES`, `ARIA2_WITH_SQLITE3`, and `ARIA2_WITH_LIBSSH2`.
+Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, `ARIA2_RELEASE_LTO`, `ARIA2_WITH_WINTLS`, and `ARIA2_WITH_OPENSSL`.
 
-Async DNS builds require c-ares 1.34.5 or newer.
-BitTorrent builds require libtorrent-rasterbar 2.1.1 or newer and its Boost
-headers. Maintained releases pin libtorrent-rasterbar 2.1.1 and Boost 1.91.0.
+The default superbuild compiles every library dependency from `third_party`.
+Only CMake, Ninja, Make, Perl, and a C11/C++17 platform toolchain are required.
 
 ## Downloads
 
@@ -177,7 +176,7 @@ Official container images are published automatically after the release assets u
 ## Dependency Baseline
 
 Release dependency versions are tracked in [`packaging/dependencies.env`](packaging/dependencies.env).
-The same file records versions, archive names, download URLs, and SHA-256 hashes for source archives consumed by release workflows.
+The corresponding source is stored under [`third_party/`](third_party/), so library builds require no network access.
 
 ## Repository Layout
 

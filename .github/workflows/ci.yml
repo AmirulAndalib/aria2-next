@@ -25,42 +25,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            make cmake ninja-build pkg-config curl tar ca-certificates \
-            libssl-dev libsqlite3-dev \
-            libxml2-dev zlib1g-dev libssh2-1-dev
+            make cmake ninja-build perl
 
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools ci
 
-      - name: Build c-ares
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$CARES_URL" "$CARES_ARCHIVE" "$CARES_SHA256"
-          tar xf "$CARES_ARCHIVE"
-          cmake -S "c-ares-$CARES_VERSION" -B build/ci-cares -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCARES_STATIC=ON \
-            -DCARES_SHARED=OFF \
-            -DCARES_BUILD_TESTS=OFF \
-            -DCARES_BUILD_TOOLS=OFF \
-            -DCMAKE_INSTALL_PREFIX="$PWD/build/ci-deps"
-          cmake --build build/ci-cares
-          cmake --install build/ci-cares
-
-      - name: Build libtorrent
-        run: |
-          . packaging/dependencies.env
-          . packaging/scripts/common.sh
-          curl_fetch "$BOOST_URL" "$BOOST_ARCHIVE" "$BOOST_SHA256"
-          curl_fetch "$LIBTORRENT_URL" "$LIBTORRENT_ARCHIVE" "$LIBTORRENT_SHA256"
-          PREFIX="$PWD/build/ci-deps" CMAKE_BUILD_TYPE=Release \
-            packaging/scripts/build-libtorrent
-
       - name: Configure
-        run: |
-          PKG_CONFIG_PATH="$PWD/build/ci-deps/lib/pkgconfig" \
-          cmake --preset default -DCMAKE_PREFIX_PATH="$PWD/build/ci-deps"
+        run: cmake --preset default
 
       - name: Build
         run: cmake --build --preset default
@@ -84,6 +55,6 @@ jobs:
           bash -n scripts/bump-version.sh
           bash -n scripts/release.sh
           bash -n packaging/scripts/common.sh
-          bash -n packaging/scripts/build-libtorrent
+          bash -n packaging/scripts/build-release
           bash -n packaging/scripts/check-runtime-deps
           bash -n packaging/scripts/verify-runner-tools

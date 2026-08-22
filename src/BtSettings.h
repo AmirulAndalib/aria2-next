@@ -13,13 +13,30 @@
 #ifndef D_BT_SETTINGS_H
 #define D_BT_SETTINGS_H
 
+#include <string>
+
 #include <libtorrent/settings_pack.hpp>
 
 namespace aria2 {
 
 class Option;
 
-libtorrent::settings_pack makeBtSettings(const Option* option);
+struct BtConfig {
+  libtorrent::settings_pack settings;
+  std::string listenInterfaces;
+  std::string outgoingInterfaces;
+  std::string networkIdentity;
+  bool dhtEnabled = false;
+  int trackerCompletionTimeout = 30;
+  int trackerReceiveTimeout = 10;
+
+  bool hasSameNetwork(const BtConfig& other) const
+  {
+    return networkIdentity == other.networkIdentity;
+  }
+};
+
+BtConfig makeBtConfig(const Option* option);
 
 } // namespace aria2
 

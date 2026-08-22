@@ -152,23 +152,10 @@ How to build
 aria2-next is written in C++17 with a small amount of C11; any current
 GCC, Clang, or llvm-mingw toolchain works.
 
-To build from source, you need the following development packages
-(package names may vary depending on the distribution you use):
-
-* libssl-dev       (Required for HTTPS, BitTorrent, Checksum support)
-* libssh2-1-dev    (Required for SFTP support)
-* libc-ares-dev    (Required for async DNS support)
-* libexpat1-dev    (Required for Metalink and XML-RPC support)
-* zlib1g-dev       (Required for gzip, deflate decoding support in HTTP)
-* libsqlite3-dev   (Required for Firefox3/Chromium cookie support)
-* pkg-config       (Required to detect installed libraries)
-
-The unit test framework (doctest) and the WebSocket library (wslay) are
-bundled under ``third_party/``, so no extra packages are needed for
-tests or JSON-RPC over WebSocket.
-
-Source builds require CMake 3.25+, Ninja, and pkg-config. Maintained
-OpenSSL builds require OpenSSL 3.0 or newer.
+Source builds require CMake 3.25+, Ninja, Make, Perl, and a C11/C++17 platform
+toolchain. All maintained library source is bundled under ``third_party/``.
+The default superbuild compiles an isolated static dependency stack without
+network access or system development packages.
 Install the documentation toolchain if you want to build the manual and man
 page::
 
@@ -186,16 +173,11 @@ A plain CMake invocation is also supported::
     $ cmake --build build/default
     $ ctest --test-dir build/default --output-on-failure
 
-To request static dependency metadata from pkg-config, use::
-
-    $ cmake -S . -B build/static -G Ninja -DARIA2_STATIC_DEPENDENCIES=ON
-    $ cmake --build build/static
-
 The executable is located at ``build/default/aria2-next`` when using the default
 preset.
 
-The CMake configure step checks available libraries and enables as many
-features as possible except experimental features not enabled by default.
+The CMake configure step validates the vendored dependency stack and enables
+the maintained feature set.
 
 Since 1.1.0, aria2 checks the certificate of HTTPS servers by default. OpenSSL
 builds load the system-wide CA certificate store at startup; if the library
@@ -415,9 +397,7 @@ libaria2
 
 The libaria2 is a C++ library that offers aria2 functionality to the
 client code. Currently, libaria2 is not built by default. To enable
-libaria2, use ``-DARIA2_ENABLE_LIBARIA2=ON`` CMake option.  By default,
-only the shared library is built. To build a static library, use
-``-DARIA2_STATIC_DEPENDENCIES=ON`` CMake option as well. See libaria2
+libaria2, use the ``-DARIA2_ENABLE_LIBARIA2=ON`` CMake option. See libaria2
 documentation to know how to use API.
 
 References

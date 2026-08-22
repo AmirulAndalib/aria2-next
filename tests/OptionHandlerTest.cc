@@ -26,7 +26,6 @@ public:
   void testFloatNumberOptionHandler_max();
   void testFloatNumberOptionHandler_min_max();
   void testHttpProxyOptionHandler();
-  void testDeprecatedOptionHandler();
 };
 
 A2_TEST(OptionHandlerTest, testBooleanOptionHandler)
@@ -42,7 +41,6 @@ A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_min)
 A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_max)
 A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_min_max)
 A2_TEST(OptionHandlerTest, testHttpProxyOptionHandler)
-A2_TEST(OptionHandlerTest, testDeprecatedOptionHandler)
 
 void OptionHandlerTest::testBooleanOptionHandler()
 {
@@ -292,25 +290,6 @@ void OptionHandlerTest::testHttpProxyOptionHandler()
   handler.parse(option, "http://[::1]:8080");
   REQUIRE_EQ(std::string("http://[::1]:8080/"),
                        option.get(PREF_HTTP_PROXY));
-}
-
-void OptionHandlerTest::testDeprecatedOptionHandler()
-{
-  {
-    DeprecatedOptionHandler handler(new DefaultOptionHandler(PREF_TIMEOUT));
-    Option option;
-    handler.parse(option, "foo");
-    REQUIRE(!option.defined(PREF_TIMEOUT));
-  }
-  {
-    DefaultOptionHandler dir(PREF_DIR);
-    DeprecatedOptionHandler handler(new DefaultOptionHandler(PREF_TIMEOUT),
-                                    &dir);
-    Option option;
-    handler.parse(option, "foo");
-    REQUIRE(!option.defined(PREF_TIMEOUT));
-    REQUIRE_EQ(std::string("foo"), option.get(PREF_DIR));
-  }
 }
 
 } // namespace aria2

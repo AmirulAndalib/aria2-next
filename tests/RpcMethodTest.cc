@@ -50,6 +50,9 @@ public:
     option_->put(PREF_DIR, A2_TEST_OUT_DIR "/aria2_RpcMethodTest");
     option_->put(PREF_PIECE_LENGTH, "1048576");
     option_->put(PREF_MAX_DOWNLOAD_RESULT, "10");
+    option_->put(PREF_BT_MAX_OPEN_FILES, "100");
+    option_->put(PREF_BT_IO_THREADS, "10");
+    option_->put(PREF_BT_HASHING_THREADS, "1");
     File(option_->get(PREF_DIR)).mkdirs();
     e_ = make_unique<DownloadEngine>(make_unique<SelectEventPoll>());
     e_->setOption(option_.get());
@@ -1348,6 +1351,7 @@ void RpcMethodTest::testGetBtTrackers()
 
   BtTrackerSnapshot tracker;
   tracker.url = "udp://tracker.example:6969/announce";
+  tracker.source = "metainfo";
   tracker.tier = 2;
   tracker.status = "working";
   tracker.seeders = 12;
@@ -1370,6 +1374,7 @@ void RpcMethodTest::testGetBtTrackers()
   REQUIRE_EQ((size_t)1, result->size());
   const auto entry = downcast<Dict>(result->get(0));
   REQUIRE_EQ(std::string("working"), getString(entry, "status"));
+  REQUIRE_EQ(std::string("metainfo"), getString(entry, "source"));
   REQUIRE_EQ(std::string("12"), getString(entry, "seeders"));
   const auto endpoints = downcast<List>(entry->get("endpoints"));
   REQUIRE_EQ((size_t)1, endpoints->size());
@@ -1434,6 +1439,8 @@ void RpcMethodTest::testGetBtSessionStatus()
   REQUIRE_EQ(std::string("203.0.113.7"), getString(endpoint, "externalIp"));
   REQUIRE_EQ(std::string("0"), getString(endpoint, "dhtNodes"));
   REQUIRE_EQ(std::string("0"), getString(endpoint, "establishedPeers"));
+  REQUIRE_EQ(std::string("2"), getString(endpoint, "networkEpoch"));
+  REQUIRE(endpoint->containsKey("dhtStateHealthy"));
   REQUIRE(endpoint->containsKey("listenEndpoints"));
 
   changeRequest = createReq(ChangeGlobalOptionRpcMethod::getMethodName());

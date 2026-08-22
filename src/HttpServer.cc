@@ -42,9 +42,7 @@
 #include "DlAbortEx.h"
 #include "message.h"
 #include "util.h"
-#include "util_security.h"
 #include "Log.h"
-#include "base64.h"
 #include "a2functional.h"
 #include "fmt.h"
 #include "SocketRecvBuffer.h"
@@ -56,8 +54,6 @@
 #endif // ENABLE_XML_RPC
 
 namespace aria2 {
-
-std::unique_ptr<util::security::HMAC> HttpServer::hmac_;
 
 HttpServer::HttpServer(const std::shared_ptr<SocketCore>& socket)
     : socket_(socket),
@@ -315,54 +311,6 @@ ssize_t HttpServer::sendResponse() { return socketBuffer_.send(); }
 bool HttpServer::sendBufferIsEmpty() const
 {
   return socketBuffer_.sendBufferIsEmpty();
-}
-
-bool HttpServer::authenticate()
-{
-  if (!username_) {
-    return true;
-  }
-
-  const std::string& authHeader =
-      lastRequestHeader_->find(HttpHeader::AUTHORIZATION);
-  if (authHeader.empty()) {
-    return false;
-  }
-  auto p = util::divide(std::begin(authHeader), std::end(authHeader), ' ');
-  if (!util::streq(p.first.first, p.first.second, "Basic")) {
-    return false;
-  }
-
-  std::string userpass = base64::decode(p.second.first, p.second.second);
-  auto up = util::divide(std::begin(userpass), std::end(userpass), ':', false);
-  std::string username(up.first.first, up.first.second);
-  std::string password(up.second.first, up.second.second);
-  return *username_ == hmac_->getResult(username) &&
-         (!password_ || *password_ == hmac_->getResult(password));
-}
-
-void HttpServer::setUsernamePassword(const std::string& username,
-                                     const std::string& password)
-{
-  using namespace util::security;
-
-  if (!hmac_) {
-    hmac_ = HMAC::createRandom();
-  }
-
-  if (!username.empty()) {
-    username_ = make_unique<HMACResult>(hmac_->getResult(username));
-  }
-  else {
-    username_.reset();
-  }
-
-  if (!password.empty()) {
-    password_ = make_unique<HMACResult>(hmac_->getResult(password));
-  }
-  else {
-    password_.reset();
-  }
 }
 
 int HttpServer::setupResponseRecv()

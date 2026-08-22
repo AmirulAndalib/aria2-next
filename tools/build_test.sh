@@ -1,39 +1,57 @@
 #!/bin/sh
 set -e
 
-BUILDDIR=${BUILDDIR:-/tmp/aria2buildtest}
 GENERATOR=${GENERATOR:-Ninja}
 JOBS=${JOBS:-2}
-mkdir -p "$BUILDDIR"
+
+cleanup_build_dir=false
+if [ -z "${BUILDDIR:-}" ]; then
+  BUILDDIR=$(mktemp -d "${TMPDIR:-/tmp}/aria2buildtest.XXXXXX")
+  cleanup_build_dir=true
+fi
+
+cleanup() {
+  if [ "$cleanup_build_dir" = true ]; then
+    cmake -E remove_directory "$BUILDDIR"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+dependency_build="$BUILDDIR/dependencies-build"
+cmake -E remove_directory "$dependency_build"
+cmake --fresh -S . -B "$dependency_build" -G "$GENERATOR" \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build "$dependency_build" -j"$JOBS" --target \
+  zlib_project expat_project sqlite_project cares_project \
+  openssl_project libssh2_project libtorrent_project
+
+dependency_root="$dependency_build/dependencies"
 
 build() {
   name=$1
   shift
   dir="$BUILDDIR/$name"
   echo "*** cmake build $name"
-  cmake -S . -B "$dir" -G "$GENERATOR" -DCMAKE_BUILD_TYPE=Debug "$@"
+  cmake -E remove_directory "$dir"
+  cmake --fresh -S . -B "$dir" -G "$GENERATOR" \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DARIA2_SUPERBUILD=OFF \
+    -DARIA2_DEPENDENCY_ROOT="$dependency_root" \
+    -DARIA2_BOOST_ROOT="$PWD/third_party/boost" \
+    "$@"
   cmake --build "$dir" -j"$JOBS"
   ctest --test-dir "$dir" --output-on-failure
-  cp "$dir/aria2-next" "$BUILDDIR/aria2-next_$name" 2>/dev/null || true
 }
 
 case "$1" in
-  clear)
-    rm -rf "$BUILDDIR"
-    ;;
   *)
     build default
-    build openssl -DARIA2_WITH_OPENSSL=ON
     build nossl -DARIA2_ENABLE_SSL=OFF
-    build nocares -DARIA2_WITH_CARES=OFF
-    build noxml -DARIA2_WITH_EXPAT=OFF
-    build nosqlite3 -DARIA2_WITH_SQLITE3=OFF
-    build nolibssh2 -DARIA2_WITH_LIBSSH2=OFF
     build nobt -DARIA2_ENABLE_BITTORRENT=OFF
     build noml -DARIA2_ENABLE_METALINK=OFF
     build nobt_noml -DARIA2_ENABLE_BITTORRENT=OFF -DARIA2_ENABLE_METALINK=OFF
+    build nowebsocket -DARIA2_ENABLE_WEBSOCKET=OFF
     build noepoll -DARIA2_ENABLE_EPOLL=OFF
-    build noepoll_nocares -DARIA2_ENABLE_EPOLL=OFF -DARIA2_WITH_CARES=OFF
     build libaria2 -DARIA2_ENABLE_LIBARIA2=ON
     ;;
 esac

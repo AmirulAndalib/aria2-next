@@ -30,7 +30,7 @@ case "$profile" in
     tools="git gh sha256sum sed grep sort"
     ;;
   ci)
-    tools="cmake ninja pkg-config make curl tar"
+    tools="cmake ninja make perl"
     ;;
   *)
     usage

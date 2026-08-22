@@ -1,25 +1,16 @@
 set(PACKAGE "Aria2 Next")
-set(PACKAGE_NAME "Aria2 Next")
-set(PACKAGE_TARNAME "aria2-next")
 set(PACKAGE_VERSION "${PROJECT_VERSION}")
 set(PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
 set(PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
 set(PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
-set(PACKAGE_STRING "Aria2 Next ${PROJECT_VERSION}")
 set(PACKAGE_BUGREPORT "https://github.com/AnInsomniacy/aria2-next/issues")
 set(PACKAGE_URL "https://github.com/AnInsomniacy/aria2-next")
-set(VERSION "${PROJECT_VERSION}")
 set(BUILD "${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
 set(HOST "${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
 set(TARGET "${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
-set(STDC_HEADERS 1)
 
 if(ARIA2_DEFAULT_DISK_CACHE)
   set(DEFAULT_DISK_CACHE "${ARIA2_DEFAULT_DISK_CACHE}")
-endif()
-
-if(WIN32)
-  set(SECURITY_WIN32 1)
 endif()
 
 aria2_check_include("alloca.h" HAVE_ALLOCA_H)
@@ -29,7 +20,6 @@ aria2_check_include("inttypes.h" HAVE_INTTYPES_H)
 aria2_check_include("io.h" HAVE_IO_H)
 aria2_check_include("iphlpapi.h" HAVE_IPHLPAPI_H)
 aria2_check_include("malloc.h" HAVE_MALLOC_H)
-aria2_check_include("memory.h" HAVE_MEMORY_H)
 aria2_check_include("netdb.h" HAVE_NETDB_H)
 aria2_check_include("netinet/in.h" HAVE_NETINET_IN_H)
 aria2_check_include("netinet/tcp.h" HAVE_NETINET_TCP_H)
@@ -38,8 +28,6 @@ aria2_check_include("pwd.h" HAVE_PWD_H)
 aria2_check_include("share.h" HAVE_SHARE_H)
 aria2_check_include("signal.h" HAVE_SIGNAL_H)
 aria2_check_include("stdint.h" HAVE_STDINT_H)
-aria2_check_include("stdlib.h" HAVE_STDLIB_H)
-aria2_check_include("string.h" HAVE_STRING_H)
 aria2_check_include("sys/ioctl.h" HAVE_SYS_IOCTL_H)
 aria2_check_include("sys/param.h" HAVE_SYS_PARAM_H)
 aria2_check_include("sys/resource.h" HAVE_SYS_RESOURCE_H)
@@ -67,10 +55,6 @@ else()
   aria2_check_include("winioctl.h" HAVE_WINIOCTL_H)
 endif()
 
-check_type_size("ptrdiff_t" PTRDIFF_T LANGUAGE CXX)
-if(HAVE_PTRDIFF_T)
-  set(HAVE_PTRDIFF_T 1)
-endif()
 check_cxx_source_compiles("
 #include <time.h>
 int main() {
@@ -93,10 +77,8 @@ aria2_check_c_symbol(fallocate HAVE_FALLOCATE "fcntl.h")
 aria2_check_c_symbol(gai_strerror HAVE_GAI_STRERROR "netdb.h")
 aria2_check_c_symbol(getaddrinfo HAVE_GETADDRINFO "sys/types.h;sys/socket.h;netdb.h")
 aria2_check_c_symbol(getifaddrs HAVE_GETIFADDRS "ifaddrs.h")
-aria2_check_c_symbol(getnameinfo HAVE_GETNAMEINFO "sys/types.h;sys/socket.h;netdb.h")
 aria2_check_c_symbol(gettimeofday HAVE_GETTIMEOFDAY "sys/time.h")
 aria2_check_c_symbol(kqueue HAVE_KQUEUE "sys/types.h;sys/event.h")
-aria2_check_c_symbol(memcpy HAVE_MEMCPY "string.h")
 aria2_check_c_symbol(mmap HAVE_MMAP "sys/mman.h")
 aria2_check_c_symbol(poll HAVE_POLL "poll.h")
 aria2_check_c_symbol(posix_fadvise HAVE_POSIX_FADVISE "fcntl.h")
@@ -128,14 +110,6 @@ aria2_check_c_compiles(HAVE_WORKING_FORK "
 #include <unistd.h>
 int main(void) {
   pid_t pid = fork();
-  return pid == (pid_t)-1;
-}")
-
-aria2_check_c_compiles(HAVE_WORKING_VFORK "
-#include <sys/types.h>
-#include <unistd.h>
-int main(void) {
-  pid_t pid = vfork();
   return pid == (pid_t)-1;
 }")
 
@@ -183,47 +157,19 @@ if(APPLE)
   set(HAVE_CFPREFERENCESCOPYAPPVALUE 1)
 endif()
 
-aria2_pkg_check(ZLIB "zlib>=${ARIA2_MIN_ZLIB_VERSION}")
-if(NOT ZLIB_FOUND)
-  message(FATAL_ERROR "zlib >= ${ARIA2_MIN_ZLIB_VERSION} is required")
-endif()
 set(HAVE_ZLIB 1)
-cmake_push_check_state(RESET)
-set(CMAKE_REQUIRED_LIBRARIES PkgConfig::ZLIB)
-check_function_exists(gzbuffer HAVE_GZBUFFER)
-check_function_exists(gzsetparams HAVE_GZSETPARAMS)
-cmake_pop_check_state()
 
-if(ARIA2_WITH_EXPAT)
-  aria2_pkg_check(EXPAT "expat")
-  if(EXPAT_FOUND)
-    set(HAVE_LIBEXPAT 1)
-  endif()
-endif()
+set(HAVE_LIBEXPAT 1)
 
-aria2_pkg_check(SQLITE3 "sqlite3>=${ARIA2_MIN_SQLITE3_VERSION}")
-if(ARIA2_WITH_SQLITE3 AND SQLITE3_FOUND)
-  set(HAVE_SQLITE3 1)
-  cmake_push_check_state(RESET)
-  set(CMAKE_REQUIRED_LIBRARIES PkgConfig::SQLITE3)
-  check_function_exists(sqlite3_open_v2 HAVE_SQLITE3_OPEN_V2)
-  cmake_pop_check_state()
-endif()
+set(HAVE_SQLITE3 1)
 
-aria2_pkg_check(LIBCARES "libcares>=${ARIA2_MIN_LIBCARES_VERSION}")
-if(ARIA2_WITH_CARES AND LIBCARES_FOUND)
-  set(HAVE_LIBCARES 1)
-  set(ENABLE_ASYNC_DNS 1)
-endif()
+set(HAVE_LIBCARES 1)
+set(ENABLE_ASYNC_DNS 1)
 
-aria2_pkg_check(LIBSSH2 "libssh2>=${ARIA2_MIN_LIBSSH2_VERSION}")
-if(ARIA2_WITH_LIBSSH2 AND LIBSSH2_FOUND)
-  set(HAVE_LIBSSH2 1)
-endif()
+set(HAVE_LIBSSH2 1)
+set(HAVE_OPENSSL_CRYPTO 1)
 
 if(ARIA2_ENABLE_BITTORRENT)
-  find_package(LibtorrentRasterbar ${ARIA2_MIN_LIBTORRENT_VERSION}
-    CONFIG REQUIRED)
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_LIBRARIES LibtorrentRasterbar::torrent-rasterbar)
   check_cxx_source_compiles("
@@ -246,8 +192,6 @@ int main() { return 0; }
   endif()
 endif()
 
-aria2_pkg_check_dynamic(OPENSSL "openssl>=${ARIA2_MIN_OPENSSL_VERSION}")
-
 if(ARIA2_ENABLE_SSL AND WIN32 AND ARIA2_WITH_WINTLS)
   cmake_push_check_state(RESET)
   check_cxx_source_compiles("
@@ -266,29 +210,9 @@ int main() {
   cmake_pop_check_state()
   set(HAVE_WINTLS 1)
   set(ENABLE_SSL 1)
-elseif(ARIA2_ENABLE_SSL AND ARIA2_WITH_OPENSSL AND OPENSSL_FOUND)
+elseif(ARIA2_ENABLE_SSL AND ARIA2_WITH_OPENSSL)
   set(HAVE_OPENSSL 1)
   set(ENABLE_SSL 1)
-endif()
-
-if(HAVE_OPENSSL)
-  cmake_push_check_state(RESET)
-  set(CMAKE_REQUIRED_LIBRARIES PkgConfig::OPENSSL)
-  check_function_exists(EVP_sha224 HAVE_EVP_SHA224)
-  check_function_exists(EVP_sha256 HAVE_EVP_SHA256)
-  check_function_exists(EVP_sha384 HAVE_EVP_SHA384)
-  check_function_exists(EVP_sha512 HAVE_EVP_SHA512)
-  cmake_pop_check_state()
-endif()
-
-# OpenSSL provides the message digests and MSE DH implementation. Other TLS
-# backends use the internal implementations. RC4 is always internal and is
-# compiled unconditionally (see ARIA2_SOURCES_ARC4).
-if(HAVE_OPENSSL)
-  set(USE_OPENSSL_MD 1)
-else()
-  set(USE_INTERNAL_MD 1)
-  set(USE_INTERNAL_MSE_DH 1)
 endif()
 
 if(ARIA2_ENABLE_BITTORRENT)

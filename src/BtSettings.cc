@@ -46,13 +46,15 @@ std::string lower(std::string value)
 std::vector<std::string> splitInterfaces(const Option* option)
 {
   std::vector<std::string> interfaces;
-  const auto& single = option->get(PREF_INTERFACE);
-  const auto& multiple = option->get(PREF_MULTIPLE_INTERFACE);
-  const auto& value = single.empty() ? multiple : single;
+  const auto& value = option->get(PREF_BT_INTERFACE);
   util::split(value.begin(), value.end(), std::back_inserter(interfaces), ',',
               true);
   for (auto& interface : interfaces) {
     interface = util::strip(interface);
+    if (interface.size() >= 2 && interface.front() == '[' &&
+        interface.back() == ']') {
+      interface = interface.substr(1, interface.size() - 2);
+    }
   }
   interfaces.erase(
       std::remove_if(interfaces.begin(), interfaces.end(),
@@ -99,27 +101,42 @@ std::string makeListenInterfaces(const Option* option)
   return result;
 }
 
+void configurePeerConnections(lt::settings_pack& settings)
+{
+  settings.set_bool(lt::settings_pack::smooth_connects, true);
+  settings.set_int(lt::settings_pack::connection_speed, 30);
+  settings.set_int(lt::settings_pack::torrent_connect_boost, 30);
+  settings.set_int(lt::settings_pack::handshake_timeout, 3);
+  settings.set_int(lt::settings_pack::min_reconnect_time, 1);
+  settings.set_int(lt::settings_pack::max_failcount, 3);
+  settings.set_int(lt::settings_pack::request_queue_time, 1);
+  settings.set_int(lt::settings_pack::max_out_request_queue, 4096);
+  settings.set_int(lt::settings_pack::whole_pieces_threshold, 2);
+}
+
 } // namespace
 
-lt::settings_pack makeBtSettings(const Option* option)
+BtConfig makeBtConfig(const Option* option)
 {
+  BtConfig config;
   lt::settings_pack settings;
-  const auto configuredInterfaces = splitInterfaces(option);
+  config.listenInterfaces = makeListenInterfaces(option);
   settings.set_str(lt::settings_pack::listen_interfaces,
-                   makeListenInterfaces(option));
+                   config.listenInterfaces);
+  const auto configuredInterfaces = splitInterfaces(option);
   if (!configuredInterfaces.empty()) {
-    std::string outgoing;
     for (const auto& interface : configuredInterfaces) {
       if (option->getAsBool(PREF_DISABLE_IPV6) &&
           interface.find(':') != std::string::npos) {
         continue;
       }
-      if (!outgoing.empty()) {
-        outgoing += ',';
+      if (!config.outgoingInterfaces.empty()) {
+        config.outgoingInterfaces += ',';
       }
-      outgoing += interface;
+      config.outgoingInterfaces += interface;
     }
-    settings.set_str(lt::settings_pack::outgoing_interfaces, outgoing);
+    settings.set_str(lt::settings_pack::outgoing_interfaces,
+                     config.outgoingInterfaces);
   }
   settings.set_int(lt::settings_pack::max_retry_port_bind, 0);
   settings.set_bool(lt::settings_pack::listen_system_port_fallback, false);
@@ -168,6 +185,7 @@ lt::settings_pack makeBtSettings(const Option* option)
   }
 
   settings.set_bool(lt::settings_pack::enable_dht, allowDht);
+  config.dhtEnabled = allowDht;
   settings.set_bool(lt::settings_pack::enable_lsd, allowLsd);
   settings.set_bool(lt::settings_pack::enable_upnp, allowPortMapping);
   settings.set_bool(lt::settings_pack::enable_natpmp, allowPortMapping);
@@ -180,6 +198,7 @@ lt::settings_pack makeBtSettings(const Option* option)
   settings.set_bool(lt::settings_pack::enable_outgoing_utp, enableUtp);
   settings.set_int(lt::settings_pack::mixed_mode_algorithm,
                    lt::settings_pack::prefer_tcp);
+  configurePeerConnections(settings);
   settings.set_str(lt::settings_pack::user_agent,
                    "aria2-next/" PACKAGE_VERSION " libtorrent/" +
                        std::to_string(LIBTORRENT_VERSION_MAJOR) + "." +
@@ -243,23 +262,35 @@ lt::settings_pack makeBtSettings(const Option* option)
   }
   settings.set_int(lt::settings_pack::announce_port,
                    option->getAsInt(PREF_BT_EXTERNAL_PORT));
+  config.trackerCompletionTimeout =
+      option->getAsInt(PREF_BT_TRACKER_COMPLETION_TIMEOUT);
+  config.trackerReceiveTimeout =
+      option->getAsInt(PREF_BT_TRACKER_RECEIVE_TIMEOUT);
   settings.set_int(lt::settings_pack::tracker_completion_timeout,
-                   option->getAsInt(PREF_BT_TRACKER_CONNECT_TIMEOUT));
+                   config.trackerCompletionTimeout);
   settings.set_int(lt::settings_pack::tracker_receive_timeout,
-                   option->getAsInt(PREF_BT_TRACKER_TIMEOUT));
+                   config.trackerReceiveTimeout);
   const auto& encryption = option->get(PREF_BT_ENCRYPTION);
-  const auto encryptionPolicy =
+  const auto outgoingEncryption =
+      encryption == V_DISABLED ? lt::settings_pack::pe_disabled
+                               : lt::settings_pack::pe_forced;
+  const auto incomingEncryption =
       encryption == V_REQUIRED   ? lt::settings_pack::pe_forced
       : encryption == V_DISABLED ? lt::settings_pack::pe_disabled
                                  : lt::settings_pack::pe_enabled;
-  settings.set_int(lt::settings_pack::out_enc_policy, encryptionPolicy);
-  settings.set_int(lt::settings_pack::in_enc_policy, encryptionPolicy);
+  settings.set_int(lt::settings_pack::out_enc_policy, outgoingEncryption);
+  settings.set_int(lt::settings_pack::in_enc_policy, incomingEncryption);
   settings.set_int(lt::settings_pack::allowed_enc_level,
-                   lt::settings_pack::pe_rc4);
-  settings.set_bool(lt::settings_pack::prefer_rc4, true);
+                   lt::settings_pack::pe_both);
+  settings.set_bool(lt::settings_pack::prefer_rc4, false);
   settings.set_bool(lt::settings_pack::validate_https_trackers, true);
   settings.set_bool(lt::settings_pack::ssrf_mitigation, true);
-  return settings;
+  config.networkIdentity =
+      config.listenInterfaces + '\n' + config.outgoingInterfaces + '\n' +
+      option->get(PREF_BT_PROXY) + '\n' + option->get(PREF_BT_EXTERNAL_IP) +
+      '\n' + option->get(PREF_BT_EXTERNAL_PORT);
+  config.settings = std::move(settings);
+  return config;
 }
 
 } // namespace aria2

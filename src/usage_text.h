@@ -328,7 +328,7 @@
   _(" --enable-dht[=true|false]    Enable IPv4 and IPv6 DHT. Private torrents never\n" \
     "                              use DHT.")
 #define TEXT_BT_ENCRYPTION                                               \
-  _(" --bt-encryption=MODE         Select enabled, required, or disabled peer\n" \
+  _(" --bt-encryption=MODE         Select preferred, required, or disabled peer\n" \
     "                              transport encryption.")
 #define TEXT_BT_TRANSPORT                                                \
   _(" --bt-transport=MODE          Select tcp, utp, or both peer transports.")
@@ -622,14 +622,15 @@
     "                              requirement of COMMAND.")
 #define TEXT_INTERFACE                                                  \
   _(" --interface=INTERFACE        Bind sockets to given interface. You can specify\n" \
-    "                              interface name, IP address and hostname.")
+    "                              interface name, IP address and hostname.\n" \
+    "                              BitTorrent uses --bt-interface.")
 #define TEXT_MULTIPLE_INTERFACE                                         \
   _(" --multiple-interface=INTERFACES Comma separated list of interfaces to bind\n" \
     "                              sockets to. Requests will be split among the\n" \
     "                              interfaces to achieve link aggregation. You can\n" \
     "                              specify interface name, IP address and hostname.\n" \
     "                              If --interface is used, this option will be\n" \
-    "                              ignored.")
+    "                              ignored. BitTorrent uses --bt-interface.")
 #define TEXT_DISABLE_IPV6                               \
   _(" --disable-ipv6[=true|false]  Disable IPv6.")
 #define TEXT_HTTP_NO_CACHE                      \
@@ -684,14 +685,12 @@
     "                              is 0, aria2 downloads file from scratch when all\n" \
     "                              given URIs do not support resume.\n" \
     "                              See --always-resume option.")
-#define TEXT_BT_TRACKER_TIMEOUT                                 \
-  _(" --bt-tracker-timeout=SEC     Set timeout in seconds.")
-#define TEXT_BT_TRACKER_CONNECT_TIMEOUT                                 \
-  _(" --bt-tracker-connect-timeout=SEC Set the connect timeout in seconds to\n" \
-    "                              establish connection to tracker. After the\n" \
-    "                              connection is established, this option makes no\n" \
-    "                              effect and --bt-tracker-timeout option is used\n" \
-    "                              instead.")
+#define TEXT_BT_TRACKER_COMPLETION_TIMEOUT                              \
+  _(" --bt-tracker-completion-timeout=SEC Set the total tracker request timeout.")
+#define TEXT_BT_TRACKER_RECEIVE_TIMEOUT                                 \
+  _(" --bt-tracker-receive-timeout=SEC Set the tracker no-data timeout.")
+#define TEXT_BT_INTERFACE                                               \
+  _(" --bt-interface=INTERFACE,... Bind BitTorrent traffic to interfaces or IPs.")
 #define TEXT_HTTP_ACCEPT_GZIP                   \
   _(" --http-accept-gzip[=true|false] Send 'Accept-Encoding: deflate, gzip' request\n" \
     "                              header and inflate response if remote server\n" \
@@ -732,10 +731,6 @@
     "                              download completed but before seeding.\n" \
     "                              See --on-download-start option for the\n" \
     "                              requirement of COMMAND.")
-#define TEXT_ENABLE_ASYNC_DNS6                  \
-  _(" --enable-async-dns6[=true|false] Enable IPv6 name resolution in asynchronous\n" \
-    "                              DNS resolver. This option will be ignored when\n" \
-    "                              --async-dns=false.")
 #define TEXT_BT_TRACKER                                                 \
   _(" --bt-tracker=URI[,...]       Comma separated list of additional BitTorrent\n" \
     "                              tracker announce URIs in one fallback tier.\n" \
@@ -787,14 +782,6 @@
     "                              drops connection. Decimal values are allowed.\n" \
     "                              You can append K or M(1K = 1024, 1M = 1024K).\n" \
     "                              Fractional bytes are rounded down.")
-#define TEXT_RPC_USER                               \
-  _(" --rpc-user=USER              Set JSON-RPC/XML-RPC user. This option will be\n" \
-    "                              deprecated in the future release. Migrate to\n" \
-    "                              --rpc-secret option as soon as possible.")
-#define TEXT_RPC_PASSWD                                     \
-  _(" --rpc-passwd=PASSWD          Set JSON-RPC/XML-RPC password. This option will\n" \
-    "                              be deprecated in the future release. Migrate to\n" \
-    "                              --rpc-secret option as soon as possible.")
 #define TEXT_RPC_LISTEN_ALL                                         \
   _(" --rpc-listen-all[=true|false] Listen incoming JSON-RPC/XML-RPC requests on all\n" \
     "                              network interfaces. If false is given, listen only\n" \

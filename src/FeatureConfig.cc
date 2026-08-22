@@ -48,9 +48,9 @@
 #ifdef HAVE_SQLITE3
 #  include <sqlite3.h>
 #endif // HAVE_SQLITE3
-#ifdef HAVE_OPENSSL
+#ifdef HAVE_OPENSSL_CRYPTO
 #  include <openssl/opensslv.h>
-#endif // HAVE_OPENSSL
+#endif // HAVE_OPENSSL_CRYPTO
 #ifdef HAVE_LIBCARES
 #  include <ares.h>
 #endif // HAVE_LIBCARES
@@ -203,9 +203,9 @@ std::string usedLibs()
 #ifdef HAVE_WINTLS
   res += "WinTLS ";
 #endif // HAVE_WINTLS
-#ifdef HAVE_OPENSSL
+#ifdef HAVE_OPENSSL_CRYPTO
   res += "OpenSSL/" OPENSSL_VERSION_STR " ";
-#endif // HAVE_OPENSSL
+#endif // HAVE_OPENSSL_CRYPTO
 #ifdef HAVE_LIBCARES
   res += "c-ares/" ARES_VERSION_STR " ";
 #endif // HAVE_LIBCARES

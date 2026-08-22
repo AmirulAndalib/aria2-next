@@ -71,7 +71,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/RarestPieceSelectorTest.cc
   tests/PieceStatManTest.cc
   tests/InorderPieceSelector.h
-  tests/LongestSequencePieceSelectorTest.cc
   tests/a2algoTest.cc
   tests/bitfieldTest.cc
   tests/DownloadContextTest.cc
@@ -87,7 +86,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/RpcResponseTest.cc
   tests/RpcMethodTest.cc
   tests/WebSocketSessionManTest.cc
-  tests/HttpServerTest.cc
   tests/BufferedFileTest.cc
   tests/GeomStreamPieceSelectorTest.cc
   tests/SegListTest.cc

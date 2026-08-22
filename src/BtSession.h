@@ -55,6 +55,8 @@ struct BtSessionStatus {
   uint64_t payloadUploaded = 0;
   uint64_t trackerDownloaded = 0;
   uint64_t trackerUploaded = 0;
+  uint64_t networkEpoch = 0;
+  bool dhtStateHealthy = false;
 };
 
 struct BtTrackerConfig {
@@ -70,7 +72,11 @@ private:
   std::unique_ptr<Impl> impl_;
   void requestResumeCheckpoint(BtDownload* download, bool force = false);
   void finishResumeSave(BtDownload* download);
+  void discardRemovedResume(BtDownload* download);
   void resumeTorrent(BtDownload* download);
+  void activateDiscovery(BtDownload* download);
+  void syncDiscovery(BtDownload* download);
+  void advanceNetworkEpoch();
 
 public:
   explicit BtSession(const Option* option);
@@ -89,7 +95,6 @@ public:
   void applyGlobalOptions(const Option* option);
   void applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
                             const Option* option);
-  void forceReannounce(const std::shared_ptr<BtDownload>& download);
   void forceRecheck(const std::shared_ptr<BtDownload>& download);
   void replaceTrackers(const std::shared_ptr<BtDownload>& download,
                        const std::vector<BtTrackerConfig>& trackers);

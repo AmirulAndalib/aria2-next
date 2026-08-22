@@ -306,19 +306,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->setChangeGlobalOption(true);
     handlers.push_back(op);
   }
-#ifdef ENABLE_ASYNC_DNS
-  {
-    // TODO Deprecated
-    OptionHandler* op(new DeprecatedOptionHandler(
-        new BooleanOptionHandler(PREF_ENABLE_ASYNC_DNS6, TEXT_ENABLE_ASYNC_DNS6,
-                                 NO_DEFAULT_VALUE, OptionHandler::OPT_ARG)));
-    op->addTag(TAG_ADVANCED);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
-    handlers.push_back(op);
-  }
-#endif // ENABLE_ASYNC_DNS
   {
     // https://no-color.org/: a non-empty NO_COLOR environment variable
     // disables colored output unless --enable-color is given explicitly.
@@ -871,22 +858,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     OptionHandler* op(new BooleanOptionHandler(
         PREF_RPC_SECURE, TEXT_RPC_SECURE, A2_V_FALSE, OptionHandler::OPT_ARG));
     op->addTag(TAG_RPC);
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new DeprecatedOptionHandler(
-        new DefaultOptionHandler(PREF_RPC_USER, TEXT_RPC_USER), nullptr, true,
-        "Migrate to --rpc-secret option as soon as possible."));
-    op->addTag(TAG_RPC);
-    op->setEraseAfterParse(true);
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new DeprecatedOptionHandler(
-        new DefaultOptionHandler(PREF_RPC_PASSWD, TEXT_RPC_PASSWD), nullptr,
-        true));
-    op->addTag(TAG_RPC);
-    op->setEraseAfterParse(true);
     handlers.push_back(op);
   }
   // HTTP/FTP options
@@ -1585,8 +1556,8 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   }
   {
     OptionHandler* op(new ParameterOptionHandler(
-        PREF_BT_ENCRYPTION, TEXT_BT_ENCRYPTION, V_ENABLED,
-        {V_ENABLED, V_REQUIRED, V_DISABLED}));
+        PREF_BT_ENCRYPTION, TEXT_BT_ENCRYPTION, V_PREFERRED,
+        {V_PREFERRED, V_REQUIRED, V_DISABLED}));
     op->addTag(TAG_BITTORRENT);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);
@@ -1786,22 +1757,28 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(new NumberOptionHandler(PREF_BT_TRACKER_CONNECT_TIMEOUT,
-                                              TEXT_BT_TRACKER_CONNECT_TIMEOUT,
-                                              "30", 1, 600));
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_TRACKER_COMPLETION_TIMEOUT,
+        TEXT_BT_TRACKER_COMPLETION_TIMEOUT, "30", 1, 600));
     op->addTag(TAG_BITTORRENT);
-    op->setInitialOption(true);
     op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
     OptionHandler* op(new NumberOptionHandler(
-        PREF_BT_TRACKER_TIMEOUT, TEXT_BT_TRACKER_TIMEOUT, "10", 1, 600));
+        PREF_BT_TRACKER_RECEIVE_TIMEOUT, TEXT_BT_TRACKER_RECEIVE_TIMEOUT, "10",
+        1, 600));
     op->addTag(TAG_BITTORRENT);
-    op->setInitialOption(true);
     op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new DefaultOptionHandler(
+        PREF_BT_INTERFACE, TEXT_BT_INTERFACE, NO_DEFAULT_VALUE,
+        "INTERFACE,..."));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
     handlers.push_back(op);
   }
   {

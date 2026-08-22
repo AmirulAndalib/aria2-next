@@ -13,7 +13,7 @@ This file defines repository rules for AI coding agents. Human contributors shou
 | Build | CMake 3.25+ with Ninja as the default generator |
 | Tests | CTest plus the doctest unit test suite (vendored in third_party/doctest) |
 | Packaging | Cross-platform release automation under `packaging/` and `.github/workflows/release.yml` |
-| Third-party source | Vendored `third_party/wslay` with local ownership rules |
+| Third-party source | Vendored dependency stack under `third_party/` with local ownership rules |
 
 ## Key Paths
 
@@ -143,6 +143,7 @@ bash -n tools/build_test.sh
 bash -n scripts/bump-version.sh
 bash -n scripts/release.sh
 bash -n packaging/scripts/common.sh
+bash -n packaging/scripts/build-release
 ```
 
 ## Failed Release Recovery

@@ -36,16 +36,9 @@
 #define D_DH_KEY_EXCHANGE_H
 
 #include "common.h"
-#ifdef USE_INTERNAL_MSE_DH
-#  include "InternalDHKeyExchange.h"
-namespace aria2 {
-using DHKeyExchange = InternalDHKeyExchange;
-}
-#elif HAVE_OPENSSL
-#  include "LibsslDHKeyExchange.h"
+#include "LibsslDHKeyExchange.h"
 namespace aria2 {
 using DHKeyExchange = LibsslDHKeyExchange;
 }
-#endif // USE_INTERNAL_MSE_DH
 
 #endif // D_DH_KEY_EXCHANGE_H

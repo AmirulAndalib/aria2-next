@@ -187,10 +187,6 @@ void OptionParserTest::testLogRotationOptions()
   catch (Exception&) {
   }
 
-  parser->find(PREF_LOG_LEVEL)->parse(configured, "notice");
-  parser->find(PREF_CONSOLE_LOG_LEVEL)->parse(configured, "notice");
-  REQUIRE_EQ(V_INFO, configured.get(PREF_LOG_LEVEL));
-  REQUIRE_EQ(V_INFO, configured.get(PREF_CONSOLE_LOG_LEVEL));
 }
 
 void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
@@ -199,7 +195,6 @@ void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
   const auto seedRatio = parser->find(PREF_SEED_RATIO);
   const auto seedTime = parser->find(PREF_SEED_TIME);
   const auto detachShareOnly = parser->find(PREF_DETACH_SHARE_ONLY);
-  const auto oldBtDetachSeedOnly = option::k2p("bt-detach-seed-only");
 
   REQUIRE(seedRatio);
   REQUIRE(seedRatio->hasTag(TAG_BITTORRENT));
@@ -210,13 +205,6 @@ void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
   REQUIRE(detachShareOnly);
   REQUIRE(detachShareOnly->hasTag(TAG_BITTORRENT));
   REQUIRE(detachShareOnly->hasTag(TAG_ED2K));
-  REQUIRE_EQ(PREF_DETACH_SHARE_ONLY, oldBtDetachSeedOnly);
-
-  Option configured;
-  std::stringstream input;
-  input << "bt-detach-seed-only=true\n";
-  parser->parse(configured, input);
-  REQUIRE(configured.getAsBool(PREF_DETACH_SHARE_ONLY));
 }
 
 void OptionParserTest::testParseArg()
@@ -238,8 +226,8 @@ void OptionParserTest::testParseArg()
   strncpy(optionDir, "--dir", sizeof(optionDir));
   char argDir[6];
   strncpy(argDir, "BRAVO", sizeof(argDir));
-  char optionDetachShareOnly[31];
-  strncpy(optionDetachShareOnly, "--bt-detach-seed-only=true",
+  char optionDetachShareOnly[25];
+  strncpy(optionDetachShareOnly, "--detach-share-only=true",
           sizeof(optionDetachShareOnly));
 
   char nonopt1[8];

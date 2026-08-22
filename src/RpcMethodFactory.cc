@@ -59,7 +59,6 @@ std::vector<std::string> rpcMethodNames = {
     "aria2.getPeers",
     "aria2.getBtTrackers",
     "aria2.getBtSessionStatus",
-    "aria2.forceBtReannounce",
     "aria2.forceBtRecheck",
     "aria2.replaceBtTrackers",
     "aria2.setBtPeerBlocklist",
@@ -145,9 +144,6 @@ std::unique_ptr<RpcMethod> createMethod(const std::string& methodName)
   }
   if (methodName == GetBtTrackersRpcMethod::getMethodName()) {
     return make_unique<GetBtTrackersRpcMethod>();
-  }
-  if (methodName == ForceBtReannounceRpcMethod::getMethodName()) {
-    return make_unique<ForceBtReannounceRpcMethod>();
   }
   if (methodName == ForceBtRecheckRpcMethod::getMethodName()) {
     return make_unique<ForceBtRecheckRpcMethod>();

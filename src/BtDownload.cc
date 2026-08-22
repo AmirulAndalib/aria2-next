@@ -111,8 +111,17 @@ makeImpl(lt::add_torrent_params params,
                           webSeeds.end());
   auto impl = make_unique<BtDownload::Impl>();
   impl->params = std::move(params);
-  impl->sourceTrackers = impl->params.trackers;
-  impl->sourceTrackerTiers = impl->params.tracker_tiers;
+  const auto origin = impl->params.ti ? BtTrackerOrigin::Metainfo
+                                     : BtTrackerOrigin::Magnet;
+  for (size_t i = 0; i < impl->params.trackers.size(); ++i) {
+    impl->sourceTrackers.push_back(
+        {impl->params.trackers[i],
+         i < impl->params.tracker_tiers.size()
+             ? impl->params.tracker_tiers[i]
+             : 0,
+         origin});
+  }
+  impl->effectiveTrackers = impl->sourceTrackers;
   return impl;
 }
 
@@ -126,6 +135,38 @@ bool hashesMatch(const lt::info_hash_t& expected, const lt::info_hash_t& actual)
 bool unsupportedTracker(const std::string& url)
 {
   return util::startsWith(url, "ws://") || util::startsWith(url, "wss://");
+}
+
+const char* trackerOriginName(BtTrackerOrigin origin)
+{
+  switch (origin) {
+  case BtTrackerOrigin::Metainfo:
+    return "metainfo";
+  case BtTrackerOrigin::Magnet:
+    return "magnet";
+  case BtTrackerOrigin::Resume:
+    return "resume";
+  case BtTrackerOrigin::Global:
+    return "global";
+  case BtTrackerOrigin::Rpc:
+    return "rpc";
+  }
+  return "unknown";
+}
+
+std::vector<BtTrackerSpec>
+trackerSpecs(const lt::add_torrent_params& params, BtTrackerOrigin origin)
+{
+  std::vector<BtTrackerSpec> result;
+  result.reserve(params.trackers.size());
+  for (size_t i = 0; i < params.trackers.size(); ++i) {
+    result.push_back({params.trackers[i],
+                      i < params.tracker_tiers.size()
+                          ? params.tracker_tiers[i]
+                          : 0,
+                      origin});
+  }
+  return result;
 }
 
 } // namespace
@@ -187,33 +228,26 @@ std::shared_ptr<BtDownload> BtDownload::fromMagnet(const std::string& uri)
 
 void BtDownload::configure(const Option* option)
 {
-  impl_->params.trackers = impl_->sourceTrackers;
-  impl_->params.tracker_tiers = impl_->sourceTrackerTiers;
-  if (impl_->customTrackers) {
-    snapshot_.announceList = announceList(impl_->params);
-    snapshot_.magnetLink = lt::make_magnet_uri(impl_->params);
-  }
-  else {
+  auto effectiveTrackers = impl_->sourceTrackers;
+
+  if (!impl_->trackerOverride) {
     std::vector<std::string> excludedTrackers;
     const auto& excluded = option->get(PREF_BT_EXCLUDE_TRACKER);
     util::split(excluded.begin(), excluded.end(),
                 std::back_inserter(excludedTrackers), ',', true);
     if (std::find(excludedTrackers.begin(), excludedTrackers.end(), "*") !=
         excludedTrackers.end()) {
-      impl_->params.trackers.clear();
-      impl_->params.tracker_tiers.clear();
+      effectiveTrackers.clear();
     }
-    for (size_t i = impl_->params.trackers.size(); i > 0; --i) {
-      const auto index = i - 1;
-      if (std::find(excludedTrackers.begin(), excludedTrackers.end(),
-                    impl_->params.trackers[index]) != excludedTrackers.end()) {
-        impl_->params.trackers.erase(impl_->params.trackers.begin() + index);
-        if (index < impl_->params.tracker_tiers.size()) {
-          impl_->params.tracker_tiers.erase(
-              impl_->params.tracker_tiers.begin() + index);
-        }
-      }
-    }
+    effectiveTrackers.erase(
+        std::remove_if(
+            effectiveTrackers.begin(), effectiveTrackers.end(),
+            [&excludedTrackers](const BtTrackerSpec& tracker) {
+              return std::find(excludedTrackers.begin(),
+                               excludedTrackers.end(), tracker.url) !=
+                     excludedTrackers.end();
+            }),
+        effectiveTrackers.end());
     std::vector<std::string> addedTrackers;
     const auto& added = option->get(PREF_BT_TRACKER);
     util::split(added.begin(), added.end(), std::back_inserter(addedTrackers),
@@ -226,9 +260,10 @@ void BtDownload::configure(const Option* option)
       for (auto tracker : addedTrackers) {
         tracker = util::strip(tracker);
         if (tracker.empty() ||
-            std::find(impl_->params.trackers.begin(),
-                      impl_->params.trackers.end(),
-                      tracker) != impl_->params.trackers.end()) {
+            std::find_if(effectiveTrackers.begin(), effectiveTrackers.end(),
+                         [&tracker](const BtTrackerSpec& entry) {
+                           return entry.url == tracker;
+                         }) != effectiveTrackers.end()) {
           continue;
         }
         if (unsupportedTracker(tracker)) {
@@ -243,20 +278,39 @@ void BtDownload::configure(const Option* option)
       }
 
       const int baseTier =
-          impl_->params.tracker_tiers.empty()
+          effectiveTrackers.empty()
               ? 0
-              : *std::max_element(impl_->params.tracker_tiers.begin(),
-                                  impl_->params.tracker_tiers.end()) +
+              : std::max_element(
+                    effectiveTrackers.begin(), effectiveTrackers.end(),
+                    [](const BtTrackerSpec& lhs, const BtTrackerSpec& rhs) {
+                      return lhs.tier < rhs.tier;
+                    })
+                        ->tier +
                     1;
       if (baseTier > std::numeric_limits<uint8_t>::max()) {
         throw DL_ABORT_EX("Too many BitTorrent tracker tiers");
       }
       for (const auto& tracker : usableTrackers) {
-        impl_->params.trackers.push_back(tracker);
-        impl_->params.tracker_tiers.push_back(baseTier);
+        effectiveTrackers.push_back(
+            {tracker, baseTier, BtTrackerOrigin::Global});
       }
     }
   }
+  std::vector<std::string> trackers;
+  std::vector<int> trackerTiers;
+  trackers.reserve(effectiveTrackers.size());
+  trackerTiers.reserve(effectiveTrackers.size());
+  for (const auto& tracker : effectiveTrackers) {
+    trackers.push_back(tracker.url);
+    trackerTiers.push_back(tracker.tier);
+  }
+  if (trackers != impl_->params.trackers ||
+      trackerTiers != impl_->params.tracker_tiers) {
+    impl_->params.trackers = std::move(trackers);
+    impl_->params.tracker_tiers = std::move(trackerTiers);
+    ++impl_->trackerRevision;
+  }
+  impl_->effectiveTrackers = std::move(effectiveTrackers);
   snapshot_.announceList = announceList(impl_->params);
   snapshot_.magnetLink = lt::make_magnet_uri(impl_->params);
   if (group_ && group_->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
@@ -445,8 +499,7 @@ void BtDownload::initialize(RequestGroup* group)
     restored.ti = impl_->params.ti;
   }
   else if (restored.ti) {
-    impl_->sourceTrackers = restored.trackers;
-    impl_->sourceTrackerTiers = restored.tracker_tiers;
+    impl_->sourceTrackers = trackerSpecs(restored, BtTrackerOrigin::Resume);
   }
   if (impl_->params.info_hashes.has_v1() ||
       impl_->params.info_hashes.has_v2()) {
@@ -482,6 +535,16 @@ void BtDownload::initialize(RequestGroup* group)
 }
 
 bool BtDownload::hasMetadata() const { return snapshot_.hasMetadata; }
+
+std::string BtDownload::trackerSource(const std::string& url) const
+{
+  const auto found = std::find_if(
+      impl_->effectiveTrackers.begin(), impl_->effectiveTrackers.end(),
+      [&url](const BtTrackerSpec& entry) { return entry.url == url; });
+  return found == impl_->effectiveTrackers.end()
+             ? "unknown"
+             : trackerOriginName(found->origin);
+}
 
 bool BtDownload::active() const
 {

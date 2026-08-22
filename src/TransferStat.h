@@ -49,9 +49,6 @@ struct TransferStat {
   {
   }
 
-  TransferStat& operator+=(const TransferStat& stat);
-  TransferStat& operator-=(const TransferStat& stat);
-
   int downloadSpeed;
   int uploadSpeed;
   /**
@@ -66,10 +63,6 @@ struct TransferStat {
   int64_t sessionUploadLength;
   int64_t allTimeUploadLength;
 };
-
-TransferStat operator+(const TransferStat& a, const TransferStat& b);
-
-TransferStat operator-(const TransferStat& a, const TransferStat& b);
 
 } // namespace aria2
 

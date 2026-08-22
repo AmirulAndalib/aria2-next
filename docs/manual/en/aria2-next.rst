@@ -109,7 +109,7 @@ Basic Options
    usage for the options whose name includes that word.  Available
    Values: ``#basic``, ``#advanced``, ``#http``, ``#https``, ``#ftp``,
    ``#metalink``, ``#bittorrent``, ``#ed2k``, ``#cookie``, ``#hook``, ``#file``,
-   ``#rpc``, ``#checksum``, ``#experimental``, ``#deprecated``, ``#help``,
+   ``#rpc``, ``#checksum``, ``#experimental``, ``#help``,
    ``#all``
    Default: ``#basic``
 
@@ -712,7 +712,6 @@ P2P Sharing Options
   queue gets started. But be aware that share-only item is still
   recognized as active download in RPC method.  Default: ``false``
 
-  The input name ``bt-detach-seed-only`` is normalized to this option.
   Help, RPC, and serialized sessions always use ``detach-share-only``.
 
 .. option:: --seed-ratio=<RATIO>
@@ -743,17 +742,26 @@ BitTorrent Specific Options
   aria2 doesn't use this feature for that download even if ``true`` is
   given.  Default: ``true``
 
+.. option:: --bt-interface=<INTERFACE>[,...]
+
+  Bind BitTorrent listeners, outgoing TCP peers, uTP, UDP trackers, and DHT to
+  the given network interface names or numeric IP addresses. An empty value
+  listens on all IPv4 and enabled IPv6 interfaces and lets the operating system
+  select outgoing TCP addresses. This setting is independent of
+  :option:`--interface` and :option:`--multiple-interface`.
+
 .. option:: --bt-dht-bootstrap-nodes=<HOST:PORT>[,...]
 
   Set the DHT bootstrap nodes used when no saved routing nodes are available.
   The native libtorrent routing table is restored before these nodes are used.
   Default: ``dht.libtorrent.org:25401,dht.transmissionbt.com:6881,router.bt.ouinet.work:6881``
 
-.. option:: --bt-encryption=enabled|required|disabled
+.. option:: --bt-encryption=preferred|required|disabled
 
-  Select peer transport encryption. ``enabled`` accepts encrypted and plain
-  peers, ``required`` rejects unencrypted handshakes, and ``disabled`` accepts
-  only plain peer connections. Encrypted streams use RC4. Default: ``enabled``
+  Select peer transport encryption. ``preferred`` initiates encrypted outgoing
+  handshakes and accepts encrypted or plain incoming peers. ``required`` rejects
+  unencrypted handshakes, and ``disabled`` accepts only plain peer connections.
+  Encrypted handshakes negotiate plain or RC4 payloads. Default: ``preferred``
 
 .. option:: --bt-transport=tcp|utp|both
 
@@ -875,27 +883,27 @@ BitTorrent Specific Options
 .. option:: --bt-tracker=<URI>[,...]
 
   Comma separated list of additional tracker announce URIs. The list is added
-  as one native fallback tier after the tiers from the torrent. Trackers are
+  as one native tier after the tiers from the torrent. Trackers are
   deduplicated and never injected into private torrents. WebTorrent ``ws://``
   and ``wss://`` trackers are rejected because maintained builds do not include
   WebRTC.
 
-.. option:: --bt-tracker-connect-timeout=<SEC>
+.. option:: --bt-tracker-completion-timeout=<SEC>
 
-  Set the connect timeout in seconds to establish connection to
-  tracker. After the connection is established, this option makes no
-  effect and :option:`--bt-tracker-timeout` option is used instead.  Default:
-  ``30``
+  Set the maximum number of seconds for a complete tracker request after the
+  request has been sent. Default: ``30``
 
-.. option:: --bt-tracker-timeout=<SEC>
+.. option:: --bt-tracker-receive-timeout=<SEC>
 
-  Set timeout in seconds. Default: ``10``
+  Set the maximum number of seconds that a tracker request may receive no data.
+  Default: ``10``
 
 .. option:: --bt-session-state-file=<FILE>
 
-  Store native libtorrent IPv4 and IPv6 DHT routing state in *FILE*. Per-torrent
-  native fast-resume files are stored in a ``torrents`` directory beside this
-  file. All state is written atomically. Default:
+  Store the last known usable native libtorrent IPv4 and IPv6 DHT routing state
+  in *FILE*. Disabling DHT or observing an empty routing table never replaces a
+  usable state. Per-torrent native fast-resume files are stored in a ``torrents``
+  directory beside this file. All state is written atomically. Default:
   ``${HOME}/.aria2-next/bittorrent.session``
 
 .. option:: --enable-dht [true|false]
@@ -1088,16 +1096,6 @@ RPC Options
   You can append ``K`` or ``M`` (1K = 1024, 1M = 1024K). Fractional bytes
   are rounded down. Default: ``2M``
 
-.. option:: --rpc-passwd=<PASSWD>
-
-  Set JSON-RPC/XML-RPC password.
-
-  .. Warning::
-
-    :option:`--rpc-passwd` option will be deprecated in the future
-    release. Migrate to :option:`--rpc-secret` option as soon as
-    possible.
-
 .. option:: --rpc-private-key=<FILE>
 
   Use the private key in FILE for RPC server.  The private key must be
@@ -1126,16 +1124,6 @@ RPC Options
   scheme. Use :option:`--rpc-certificate` and
   :option:`--rpc-private-key` options to specify the server
   certificate and private key.
-
-.. option:: --rpc-user=<USER>
-
-  Set JSON-RPC/XML-RPC user.
-
-  .. Warning::
-
-    :option:`--rpc-user` option will be deprecated in the future
-    release. Migrate to :option:`--rpc-secret` option as soon as
-    possible.
 
 Advanced Options
 ~~~~~~~~~~~~~~~~
@@ -1209,15 +1197,12 @@ Advanced Options
 .. option:: --conf-path=<PATH>
 
   Change the configuration file path to PATH.
-  Default: ``$HOME/.aria2/aria2.conf`` if present, otherwise
-  ``$XDG_CONFIG_HOME/aria2/aria2.conf``.
+  Default: ``$XDG_CONFIG_HOME/aria2/aria2.conf``.
 
 .. option:: --console-log-level=<LEVEL>
 
   Set log level to output to console.  LEVEL is either ``trace``, ``debug``,
   ``info``, ``warn`` or ``error``.  Default: ``info``
-  The input value ``notice`` is normalized to ``info``.
-
 .. option:: --content-disposition-default-utf8 [true|false]
 
   Handle quoted string in Content-Disposition header as UTF-8 instead
@@ -1401,6 +1386,8 @@ Advanced Options
   address and host name.
   Possible Values: interface, IP address, host name
 
+  BitTorrent uses :option:`--bt-interface`.
+
   .. note::
 
     If an interface has multiple addresses, it is highly recommended to
@@ -1465,13 +1452,13 @@ Advanced Options
   :option:`--interface` is used, this option will be ignored.
   Possible Values: interface, IP address, hostname
 
+  BitTorrent uses :option:`--bt-interface`.
+
 .. option:: --log-level=<LEVEL>
 
   Set log level to output.
   LEVEL is either ``trace``, ``debug``, ``info``, ``warn`` or ``error``.
   Default: ``trace``
-  The input value ``notice`` is normalized to ``info``.
-
 .. option:: --log-max-size=<SIZE>
 
   Set the maximum size of each log file. aria2-next rotates the active log
@@ -1975,12 +1962,9 @@ FILES
 aria2.conf
 ~~~~~~~~~~
 
-By default, aria2 checks whether the legacy path
-``$HOME/.aria2/aria2.conf`` is present, otherwise it parses
-``$XDG_CONFIG_HOME/aria2/aria2.conf`` as its configuration file.  You
-can specify the path to configuration file using :option:`--conf-path`
-option.  If you don't want to use the configuration file, use
-:option:`--no-conf` option.
+By default, aria2 parses ``$XDG_CONFIG_HOME/aria2/aria2.conf``. You can
+specify another configuration file using :option:`--conf-path`. Use
+:option:`--no-conf` to disable configuration-file loading.
 
 The configuration file is a text file and has 1 option per each
 line. In each line, you can specify name-value pair in the format:
@@ -2129,8 +2113,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`bt-seed-unverified <--bt-seed-unverified>`
   * :option:`bt-super-seeding <--bt-super-seeding>`
   * :option:`bt-tracker <--bt-tracker>`
-  * :option:`bt-tracker-connect-timeout <--bt-tracker-connect-timeout>`
-  * :option:`bt-tracker-timeout <--bt-tracker-timeout>`
   * :option:`check-integrity <-V>`
   * :option:`checksum <--checksum>`
   * :option:`conditional-get <--conditional-get>`
@@ -3247,11 +3229,20 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 .. function:: aria2.getBtTrackers([secret], gid)
 
   Return tracker runtime status for the BitTorrent download denoted by *gid*.
-  Each entry contains ``url``, ``tier``, ``status``, ``failures``, ``seeders``,
-  ``leechers``, ``downloads``, ``updating``, ``verified``, and an optional
-  ``message``. ``endpoints`` reports the same runtime state for each local
+  Each entry contains ``url``, ``source``, ``tier``, ``status``, ``failures``,
+  ``seeders``, ``leechers``, ``downloads``, ``updating``, ``verified``,
+  ``nextAnnounce``, ``minAnnounce``, ``retryUsed``, and an optional
+  ``message``. The announce values are seconds from now or ``-1`` when no time
+  is scheduled. ``source`` is ``metainfo``, ``magnet``, ``resume``, ``global``,
+  or ``rpc``. ``endpoints`` reports the same runtime state for each local
   endpoint and protocol version. ``status`` is ``waiting``, ``updating``,
   ``working``, or ``error``.
+
+  During a discovery epoch, aria2-next retries one transient tracker failure.
+  Peer connection attempts, failure accounting, reconnect backoff, and peer
+  turnover remain controlled by libtorrent. The desktop connection profile
+  accelerates the first connection set and uses bounded native retries so a
+  failed handshake batch does not stall torrent startup.
 
 .. function:: aria2.replaceBtTrackers([secret], gid, trackers)
 
@@ -3272,7 +3263,8 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   ``announcePort``
     The effective TCP port announced to trackers, DHT, and supported peers.
     This is :option:`--bt-external-port` when it is nonzero, otherwise
-    ``listenPort``.
+    ``listenPort``. HTTP proxy sessions report libtorrent's non-listening
+    announce port ``1``.
 
   ``externalIp``
     The numeric external IP address configured by
@@ -3311,13 +3303,15 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   ``trackerDownloaded``, ``trackerUploaded``
     Cumulative tracker traffic bytes for the session.
 
+  ``networkEpoch``
+    Monotonic generation of the active BitTorrent network identity.
+
+  ``dhtStateHealthy``
+    ``true`` when the current routing table or the persisted last-known-good DHT
+    state contains usable nodes.
+
   ``portMappingError``
     Latest UPnP or NAT-PMP error, when present.
-
-.. function:: aria2.forceBtReannounce([secret], gid)
-
-  Request an immediate tracker and DHT announce for the active BitTorrent task.
-  Tracker minimum intervals remain enforced by libtorrent.
 
 .. function:: aria2.forceBtRecheck([secret], gid)
 

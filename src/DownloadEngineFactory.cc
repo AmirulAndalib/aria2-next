@@ -175,11 +175,8 @@ std::unique_ptr<DownloadEngine> DownloadEngineFactory::newDownloadEngine(
         make_unique<WatchProcessCommand>(e->newCUID(), e.get(), pid));
   }
   if (op->getAsBool(PREF_ENABLE_RPC)) {
-    if (op->get(PREF_RPC_SECRET).empty() && op->get(PREF_RPC_USER).empty()) {
-      A2_LOG_WARN("Neither --rpc-secret nor a combination of --rpc-user and "
-                  "--rpc-passwd is set. This is insecure. It is extremely "
-                  "recommended to specify --rpc-secret with the adequate "
-                  "secrecy or now deprecated --rpc-user and --rpc-passwd.");
+    if (op->get(PREF_RPC_SECRET).empty()) {
+      A2_LOG_WARN("--rpc-secret is not set. Remote RPC access is insecure.");
     }
     bool ok = false;
     bool secure = op->getAsBool(PREF_RPC_SECURE);

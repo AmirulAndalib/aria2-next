@@ -8,9 +8,10 @@ Maintained by [@AnInsomniacy](https://github.com/AnInsomniacy). Issues and pull 
 
 - CMake 3.25 or newer
 - Ninja
+- Make
+- Perl
 - A C11 and C++17 capable compiler
-- No extra test dependency: the doctest framework is vendored in third_party/doctest
-- libtorrent-rasterbar 2.1.1 or newer, Boost headers, OpenSSL, zlib, SQLite, Expat, c-ares, and libssh2 development packages when building the default feature set
+- No external library packages: all maintained dependencies are vendored under `third_party`
 
 ### Getting Started
 
@@ -67,6 +68,7 @@ bash -n tools/build_test.sh
 bash -n scripts/bump-version.sh
 bash -n scripts/release.sh
 bash -n packaging/scripts/common.sh
+bash -n packaging/scripts/build-release
 bash -n packaging/scripts/check-runtime-deps
 bash -n packaging/scripts/verify-runner-tools
 ```

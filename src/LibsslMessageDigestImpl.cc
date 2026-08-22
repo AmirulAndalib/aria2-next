@@ -87,18 +87,10 @@ std::unique_ptr<MessageDigestImpl> MessageDigestImpl::sha1()
 
 MessageDigestImpl::hashes_t MessageDigestImpl::hashes = {
     {"sha-1", make_hi<MessageDigestSHA1>()},
-#ifdef HAVE_EVP_SHA224
     {"sha-224", make_hi<MessageDigestBase<EVP_sha224>>()},
-#endif
-#ifdef HAVE_EVP_SHA224
     {"sha-256", make_hi<MessageDigestBase<EVP_sha256>>()},
-#endif
-#ifdef HAVE_EVP_SHA224
     {"sha-384", make_hi<MessageDigestBase<EVP_sha384>>()},
-#endif
-#ifdef HAVE_EVP_SHA224
     {"sha-512", make_hi<MessageDigestBase<EVP_sha512>>()},
-#endif
     {"md5", make_hi<MessageDigestMD5>()},
     ADLER32_MESSAGE_DIGEST};
 

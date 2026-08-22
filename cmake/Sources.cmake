@@ -42,7 +42,6 @@ set(ARIA2_SOURCES_BASE
   src/base32.h
   src/base64.h
   src/BinaryStream.h
-  src/bitfield.cc
   src/bitfield.h
   src/BitfieldMan.cc
   src/BitfieldMan.h
@@ -165,8 +164,6 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kKadState.cc
   src/Ed2kKadState.h
   src/DHKeyExchange.h
-  src/InternalDHKeyExchange.cc
-  src/InternalDHKeyExchange.h
   src/MSEDHKeyExchange.h
   src/ed2k_aich.cc
   src/ed2k_aich.h
@@ -314,8 +311,6 @@ set(ARIA2_SOURCES_BASE
   src/Lock.h
   src/Log.cc
   src/Log.h
-  src/LongestSequencePieceSelector.cc
-  src/LongestSequencePieceSelector.h
   src/MemoryBufferPreDownloadHandler.h
   src/MemoryPreDownloadHandler.h
   src/message.h
@@ -346,7 +341,6 @@ set(ARIA2_SOURCES_BASE
   src/Notifier.h
   src/NsCookieParser.cc
   src/NsCookieParser.h
-  src/NullHandle.h
   src/NullOutputFile.h
   src/NullProgressInfoFile.h
   src/NullSinkStreamFilter.cc
@@ -477,7 +471,6 @@ set(ARIA2_SOURCES_BASE
   src/TimerA2.cc
   src/TimerA2.h
   src/timespec.h
-  src/TransferStat.cc
   src/TransferStat.h
   src/UnionSeedCriteria.cc
   src/UnionSeedCriteria.h
@@ -594,15 +587,10 @@ set(ARIA2_SOURCES_HAVE_WINTLS
   src/WinTLSSession.h
 )
 
-set(ARIA2_SOURCES_USE_INTERNAL_MD
-  src/InternalMessageDigestImpl.cc
-  src/crypto_hash.cc
-  src/crypto_hash.h
-)
-
-set(ARIA2_SOURCES_HAVE_OPENSSL
+set(ARIA2_SOURCES_OPENSSL_CRYPTO
   src/LibsslDHKeyExchange.cc
   src/LibsslDHKeyExchange.h
+  src/LibsslMessageDigestImpl.cc
 )
 
 set(ARIA2_SOURCES_HAVE_OPENSSL_TLS
@@ -615,10 +603,6 @@ set(ARIA2_SOURCES_HAVE_OPENSSL_TLS
 set(ARIA2_SOURCES_APPLE_TRUST
   src/AppleTrustVerifier.cc
   src/AppleTrustVerifier.h
-)
-
-set(ARIA2_SOURCES_HAVE_OPENSSL__USE_OPENSSL_MD
-  src/LibsslMessageDigestImpl.cc
 )
 
 set(ARIA2_SOURCES_HAVE_ZLIB
@@ -659,6 +643,8 @@ set(ARIA2_SOURCES_ENABLE_ASYNC_DNS
 )
 
 set(ARIA2_SOURCES_ENABLE_BITTORRENT
+  src/BtDiscovery.cc
+  src/BtDiscovery.h
   src/BtDownload.cc
   src/BtDownload.h
   src/BtDownloadImpl.h
@@ -696,7 +682,6 @@ set(ARIA2_SOURCES_ENABLE_METALINK
   src/MetalinkMetaurl.h
   src/MetalinkParserController.cc
   src/MetalinkParserController.h
-  src/MetalinkParserState.cc
   src/MetalinkParserState.h
   src/MetalinkParserStateImpl.cc
   src/MetalinkParserStateImpl.h

@@ -42,9 +42,6 @@
 /* Define to 1 if epoll is available. */
 #cmakedefine HAVE_EPOLL @HAVE_EPOLL@
 
-/* Define to 1 if you have the 'EVP_sha224' function. */
-#cmakedefine HAVE_EVP_SHA224 @HAVE_EVP_SHA224@
-
 /* Define to 1 if you have the `fallocate' function. */
 #cmakedefine HAVE_FALLOCATE @HAVE_FALLOCATE@
 
@@ -59,12 +56,6 @@
 
 /* Define to 1 if you have the 'gettimeofday' function. */
 #cmakedefine HAVE_GETTIMEOFDAY @HAVE_GETTIMEOFDAY@
-
-/* Define to 1 if you have the 'gzbuffer' function. */
-#cmakedefine HAVE_GZBUFFER @HAVE_GZBUFFER@
-
-/* Define to 1 if you have the 'gzsetparams' function. */
-#cmakedefine HAVE_GZSETPARAMS @HAVE_GZSETPARAMS@
 
 /* Define to 1 if you have the <ifaddrs.h> header file. */
 #cmakedefine HAVE_IFADDRS_H @HAVE_IFADDRS_H@
@@ -111,6 +102,9 @@
 /* Define to 1 if you have old openssl. */
 /* Define to 1 if you have openssl. */
 #cmakedefine HAVE_OPENSSL @HAVE_OPENSSL@
+
+/* Define to 1 if OpenSSL cryptographic primitives are available. */
+#cmakedefine HAVE_OPENSSL_CRYPTO @HAVE_OPENSSL_CRYPTO@
 
 /* Define 1 if struct option.name is const char* */
 #cmakedefine HAVE_OPTION_CONST_NAME @HAVE_OPTION_CONST_NAME@
@@ -160,17 +154,8 @@
 /* Define to 1 if you have sqlite3. */
 #cmakedefine HAVE_SQLITE3 @HAVE_SQLITE3@
 
-/* Define to 1 if you have the 'sqlite3_open_v2' function. */
-#cmakedefine HAVE_SQLITE3_OPEN_V2 @HAVE_SQLITE3_OPEN_V2@
-
 /* Define to 1 if you have the <stdint.h> header file. */
 #cmakedefine HAVE_STDINT_H @HAVE_STDINT_H@
-
-/* Define to 1 if you have the <stdlib.h> header file. */
-#cmakedefine HAVE_STDLIB_H @HAVE_STDLIB_H@
-
-/* Define to 1 if you have the <string.h> header file. */
-#cmakedefine HAVE_STRING_H @HAVE_STRING_H@
 
 /* Define to 1 if you have the 'strptime' function. */
 #cmakedefine HAVE_STRPTIME @HAVE_STRPTIME@
@@ -235,25 +220,11 @@
 /* Define to 1 if struct kevent.udata is intptr_t */
 #cmakedefine KEVENT_UDATA_INTPTR_T @KEVENT_UDATA_INTPTR_T@
 
-/* Define to 1 if 'lstat' dereferences a symlink specified with a trailing
-   slash. */
-#cmakedefine LSTAT_FOLLOWS_SLASHED_SYMLINK @LSTAT_FOLLOWS_SLASHED_SYMLINK@
-
-
 /* Name of package */
 #cmakedefine PACKAGE "@PACKAGE@"
 
 /* Define to the address where bug reports for this package should be sent. */
 #cmakedefine PACKAGE_BUGREPORT "@PACKAGE_BUGREPORT@"
-
-/* Define to the full name of this package. */
-#cmakedefine PACKAGE_NAME "@PACKAGE_NAME@"
-
-/* Define to the full name and version of this package. */
-#cmakedefine PACKAGE_STRING "@PACKAGE_STRING@"
-
-/* Define to the one symbol short name of this package. */
-#cmakedefine PACKAGE_TARNAME "@PACKAGE_TARNAME@"
 
 /* Define to the home page for this package. */
 #cmakedefine PACKAGE_URL "@PACKAGE_URL@"
@@ -264,218 +235,9 @@
 #cmakedefine PACKAGE_VERSION_MINOR @PACKAGE_VERSION_MINOR@
 #cmakedefine PACKAGE_VERSION_PATCH @PACKAGE_VERSION_PATCH@
 
-/* Use security.h in WIN32 mode */
-#cmakedefine SECURITY_WIN32 @SECURITY_WIN32@
-
-/* Define to 1 if all of the C89 standard headers exist (not just the ones
-   required in a freestanding environment). This macro is provided for
-   backward compatibility; new code need not use it. */
-#cmakedefine STDC_HEADERS @STDC_HEADERS@
-
 /* Define target-type */
 #cmakedefine TARGET "@TARGET@"
-
-/* Define to 1 if your <sys/time.h> declares 'struct tm'. */
-#cmakedefine TM_IN_SYS_TIME @TM_IN_SYS_TIME@
-
-/* Define to 1 if internal BIGNUM support is enabled. */
-#cmakedefine USE_INTERNAL_MSE_DH @USE_INTERNAL_MSE_DH@
-
-/* What message digest implementation to use */
-#cmakedefine USE_INTERNAL_MD @USE_INTERNAL_MD@
-
-/* What message digest implementation to use */
-#cmakedefine USE_OPENSSL_MD @USE_OPENSSL_MD@
-
-/* Enable extensions on AIX, Interix, z/OS.  */
-#ifndef _ALL_SOURCE
-# undef _ALL_SOURCE
-#endif
-/* Enable extensions on Cosmopolitan Libc. */
-#ifndef _COSMO_SOURCE
-# undef _COSMO_SOURCE
-#endif
-/* Enable general extensions on macOS.  */
-#ifndef _DARWIN_C_SOURCE
-# undef _DARWIN_C_SOURCE
-#endif
-/* Enable general extensions on Solaris.  */
-#ifndef __EXTENSIONS__
-# undef __EXTENSIONS__
-#endif
-/* Enable GNU extensions on systems that have them.  */
-#ifndef _GNU_SOURCE
-# undef _GNU_SOURCE
-#endif
-/* Enable X/Open compliant socket functions that do not require linking
-   with -lxnet on HP-UX 11.11.  */
-#ifndef _HPUX_ALT_XOPEN_SOCKET_API
-# undef _HPUX_ALT_XOPEN_SOCKET_API
-#endif
-/* Identify the host operating system as Minix.
-   This macro does not affect the system headers' behavior.
-   A future release of Autoconf may stop defining this macro.  */
-#ifndef _MINIX
-# undef _MINIX
-#endif
-/* Enable general extensions on NetBSD.
-   Enable NetBSD compatibility extensions on Minix.  */
-#ifndef _NETBSD_SOURCE
-# undef _NETBSD_SOURCE
-#endif
-/* Enable OpenBSD compatibility extensions on NetBSD.
-   Oddly enough, this does nothing on OpenBSD.  */
-#ifndef _OPENBSD_SOURCE
-# undef _OPENBSD_SOURCE
-#endif
-/* Define to 1 if needed for POSIX-compatible behavior.  */
-#ifndef _POSIX_SOURCE
-# undef _POSIX_SOURCE
-#endif
-/* Define to 2 if needed for POSIX-compatible behavior.  */
-#ifndef _POSIX_1_SOURCE
-# undef _POSIX_1_SOURCE
-#endif
-/* Enable POSIX-compatible threading on Solaris.  */
-#ifndef _POSIX_PTHREAD_SEMANTICS
-# undef _POSIX_PTHREAD_SEMANTICS
-#endif
-/* Enable extensions specified by ISO/IEC TS 18661-5:2014.  */
-#ifndef __STDC_WANT_IEC_60559_ATTRIBS_EXT__
-# undef __STDC_WANT_IEC_60559_ATTRIBS_EXT__
-#endif
-/* Enable extensions specified by ISO/IEC TS 18661-1:2014.  */
-#ifndef __STDC_WANT_IEC_60559_BFP_EXT__
-# undef __STDC_WANT_IEC_60559_BFP_EXT__
-#endif
-/* Enable extensions specified by ISO/IEC TS 18661-2:2015.  */
-#ifndef __STDC_WANT_IEC_60559_DFP_EXT__
-# undef __STDC_WANT_IEC_60559_DFP_EXT__
-#endif
-/* Enable extensions specified by C23 Annex F.  */
-#ifndef __STDC_WANT_IEC_60559_EXT__
-# undef __STDC_WANT_IEC_60559_EXT__
-#endif
-/* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
-#ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
-# undef __STDC_WANT_IEC_60559_FUNCS_EXT__
-#endif
-/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
-#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
-# undef __STDC_WANT_IEC_60559_TYPES_EXT__
-#endif
-/* Enable extensions specified by ISO/IEC TR 24731-2:2010.  */
-#ifndef __STDC_WANT_LIB_EXT2__
-# undef __STDC_WANT_LIB_EXT2__
-#endif
-/* Enable extensions specified by ISO/IEC 24747:2009.  */
-#ifndef __STDC_WANT_MATH_SPEC_FUNCS__
-# undef __STDC_WANT_MATH_SPEC_FUNCS__
-#endif
-/* Enable extensions on HP NonStop.  */
-#ifndef _TANDEM_SOURCE
-# undef _TANDEM_SOURCE
-#endif
-/* Enable X/Open extensions.  Define to 500 only if necessary
-   to make mbstate_t available.  */
-#ifndef _XOPEN_SOURCE
-# undef _XOPEN_SOURCE
-#endif
-
-
-/* Version number of package */
-#cmakedefine VERSION "@VERSION@"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first. */
 #cmakedefine WORDS_BIGENDIAN @WORDS_BIGENDIAN@
-
-/* Number of bits in a file offset, on hosts where this is settable. */
-#cmakedefine _FILE_OFFSET_BITS @_FILE_OFFSET_BITS@
-
-/* Define to 1 on platforms where this makes off_t a 64-bit type. */
-#cmakedefine _LARGE_FILES @_LARGE_FILES@
-
-/* Number of bits in time_t, on hosts where this is settable. */
-#cmakedefine _TIME_BITS @_TIME_BITS@
-
-/* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
-   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
-   #define below would cause a syntax error. */
-#cmakedefine _UINT32_T @_UINT32_T@
-
-/* Define for Solaris 2.5.1 so the uint64_t typedef from <sys/synch.h>,
-   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
-   #define below would cause a syntax error. */
-#cmakedefine _UINT64_T @_UINT64_T@
-
-/* Define for Solaris 2.5.1 so the uint8_t typedef from <sys/synch.h>,
-   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
-   #define below would cause a syntax error. */
-#cmakedefine _UINT8_T @_UINT8_T@
-
-/* Define to 1 on platforms where this makes time_t a 64-bit type. */
-#cmakedefine __MINGW_USE_VC2005_COMPAT @__MINGW_USE_VC2005_COMPAT@
-
-/* Define to empty if 'const' does not conform to ANSI C. */
-#cmakedefine const @const@
-
-/* Define to '__inline__' or '__inline' if that's what the C compiler
-   calls it, or to nothing if 'inline' is not supported under any name.  */
-#ifndef __cplusplus
-#cmakedefine inline @inline@
-#endif
-
-/* Define to the type of a signed integer type of width exactly 16 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine int16_t @int16_t@
-
-/* Define to the type of a signed integer type of width exactly 32 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine int32_t @int32_t@
-
-/* Define to the type of a signed integer type of width exactly 64 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine int64_t @int64_t@
-
-/* Define to the type of a signed integer type of width exactly 8 bits if such
-   a type exists and the standard includes do not define it. */
-#cmakedefine int8_t @int8_t@
-
-/* Define to 'int' if <sys/types.h> does not define. */
-#cmakedefine mode_t @mode_t@
-
-/* Define to 'long int' if <sys/types.h> does not define. */
-#cmakedefine off_t @off_t@
-
-/* Define as a signed integer type capable of holding a process identifier. */
-#cmakedefine pid_t @pid_t@
-
-/* Define as 'unsigned int' if <stddef.h> doesn't define. */
-#cmakedefine size_t @size_t@
-
-/* Define as 'int' if <sys/types.h> doesn't define. */
-#cmakedefine ssize_t @ssize_t@
-
-/* Define to the type of an unsigned integer type of width exactly 16 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine uint16_t @uint16_t@
-
-/* Define to the type of an unsigned integer type of width exactly 32 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine uint32_t @uint32_t@
-
-/* Define to the type of an unsigned integer type of width exactly 64 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine uint64_t @uint64_t@
-
-/* Define to the type of an unsigned integer type of width exactly 8 bits if
-   such a type exists and the standard includes do not define it. */
-#cmakedefine uint8_t @uint8_t@
-
-/* Define as 'fork' if 'vfork' does not work. */
-#cmakedefine vfork @vfork@
-
-/* Define to empty if the keyword 'volatile' does not work. Warning: valid
-   code using 'volatile' can become incorrect without. Disable with care. */
-#cmakedefine volatile @volatile@

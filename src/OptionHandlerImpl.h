@@ -267,53 +267,6 @@ public:
   virtual std::string createPossibleValuesString() const override;
 };
 
-// This class is used to deprecate option and optionally handle its
-// option value using replacing option.
-class DeprecatedOptionHandler : public OptionHandler {
-private:
-  OptionHandler* depOptHandler_;
-  const OptionHandler* repOptHandler_;
-  bool stillWork_;
-  std::string additionalMessage_;
-
-public:
-  // depOptHandler is deprecated option and repOptHandler is replacing
-  // new option. If there is no replacing option, specify nullptr.  If
-  // there is no replacing option, but the option still lives, give
-  // true to stillWork. Set additional message to additionalMessage.
-  DeprecatedOptionHandler(OptionHandler* depOptHandler,
-                          const OptionHandler* repOptHandler = nullptr,
-                          bool stillWork = false,
-                          std::string additionalMessage = "");
-  virtual ~DeprecatedOptionHandler();
-  virtual void parse(Option& option,
-                     const std::string& arg) const override;
-  virtual std::string createPossibleValuesString() const override;
-  virtual bool hasTag(uint32_t tag) const override;
-  virtual void addTag(uint32_t tag) override;
-  virtual std::string toTagString() const override;
-  virtual const char* getName() const override;
-  virtual const char* getDescription() const override;
-  virtual const std::string& getDefaultValue() const override;
-  virtual bool isHidden() const override;
-  virtual void hide() override;
-  virtual PrefPtr getPref() const override;
-  virtual ARG_TYPE getArgType() const override;
-  virtual char getShortName() const override;
-  virtual bool getEraseAfterParse() const override;
-  virtual void setEraseAfterParse(bool eraseAfterParse) override;
-  virtual bool getInitialOption() const override;
-  virtual void setInitialOption(bool f) override;
-  virtual bool getChangeOption() const override;
-  virtual void setChangeOption(bool f) override;
-  virtual bool getChangeOptionForReserved() const override;
-  virtual void setChangeOptionForReserved(bool f) override;
-  virtual bool getChangeGlobalOption() const override;
-  virtual void setChangeGlobalOption(bool f) override;
-  virtual bool getCumulative() const override;
-  virtual void setCumulative(bool f) override;
-};
-
 } // namespace aria2
 
 #endif // D_OPTION_HANDLER_IMPL_H

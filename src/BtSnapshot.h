@@ -64,12 +64,15 @@ struct BtTrackerEndpointSnapshot {
   int seeders = -1;
   int leechers = -1;
   int downloads = -1;
+  int64_t nextAnnounceSeconds = -1;
+  int64_t minAnnounceSeconds = -1;
   bool updating = false;
   bool verified = false;
 };
 
 struct BtTrackerSnapshot {
   std::string url;
+  std::string source;
   std::string status;
   std::string message;
   int tier = 0;
@@ -77,6 +80,8 @@ struct BtTrackerSnapshot {
   int seeders = -1;
   int leechers = -1;
   int downloads = -1;
+  int64_t nextAnnounceSeconds = -1;
+  int64_t minAnnounceSeconds = -1;
   bool updating = false;
   bool verified = false;
   std::vector<BtTrackerEndpointSnapshot> endpoints;
@@ -131,6 +136,12 @@ struct BtSnapshot {
   int connectCandidates = 0;
   int numUploads = 0;
   int availabilityPpm = -1;
+  uint64_t discoveryEpoch = 0;
+  uint64_t networkEpoch = 0;
+  int trackerPeersReceived = 0;
+  std::string discoveryState;
+  std::string retryTracker;
+  bool trackerRetryUsed = false;
   bool privateTorrent = false;
   bool hasMetadata = false;
   bool finished = false;

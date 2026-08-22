@@ -1884,12 +1884,8 @@ std::string getXDGDir(const std::string& environmentVariable,
 
 std::string getConfigFile()
 {
-  std::string filename = getHomeDir() + "/.aria2/aria2.conf";
-  if (!File(filename).exists()) {
-    filename = getXDGDir("XDG_CONFIG_HOME", getHomeDir() + "/.config") +
-               "/aria2/aria2.conf";
-  }
-  return filename;
+  return getXDGDir("XDG_CONFIG_HOME", getHomeDir() + "/.config") +
+         "/aria2/aria2.conf";
 }
 
 int64_t getRealSize(const std::string& sizeWithUnit)

@@ -12,10 +12,6 @@ maintenance task owns its own subdirectory.
 | `cmake-migration/progress.md` | Completed checkpoint log for the CMake migration |
 | `upstream-issue-review/summary.md` | Completed human-readable summary of the upstream issue review |
 | `upstream-issue-review/matrix.csv` | Completed issue-by-issue review matrix |
-| `ed2k/overview.md` | Historical tracker for the first native ED2K/eMule draft |
-| `ed2k/checkpoints.csv` | Historical checkpoint matrix for the first ED2K/eMule draft |
-| `ed2k/reference-parity.csv` | Historical parity ledger for the first ED2K/eMule draft |
-| `ed2k/progress.md` | Historical chronological ED2K/eMule draft log |
 | `ed2k-runtime.md` | Current ED2K runtime architecture and verification record |
 
 Maintenance records should be durable and compact. Temporary API payloads,

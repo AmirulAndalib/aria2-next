@@ -1,20 +1,19 @@
 # Packaging
 
-This directory owns release packaging, cross-compilation helpers, platform package resources, and release dependency metadata.
+This directory owns release packaging, cross-compilation helpers, container resources, and release dependency metadata.
 
-`dependencies.env` is the authoritative dependency source for maintained release automation. It records versions, archive names, URLs, and SHA-256 hashes for downloaded release inputs.
+`dependencies.env` is the authoritative version baseline for vendored libraries and maintained release toolchains. Library source is stored under `third_party/`; release jobs do not download it.
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `notes/` | Platform notes copied into binary packages |
 | `docker/` | Linux runtime container image definition |
-| `macos/` | macOS package resources |
+| `openssl/` | Maintained OpenSSL target configuration |
 | `scripts/` | Release packaging helpers |
-| `dependencies.env` | Maintained dependency baseline and source archive hashes |
+| `dependencies.env` | Maintained library and toolchain version baseline |
 
-Supported packaging paths build this repository checkout through CMake. Third-party dependencies may use their own upstream build systems while they are being built as release dependencies.
+Supported packaging paths build this repository checkout and its vendored library source without network dependency resolution.
 
 Official release builds use `packaging/scripts/release-size-profile` to apply size-oriented compiler flags, per-function and per-data sections, and platform linker dead-code elimination. The profile is used by GitHub release jobs so portable artifacts keep the maintained dependency baseline without retaining avoidable unused code.
 
@@ -24,6 +23,6 @@ Container images are published automatically after official release assets are u
 
 `packaging/scripts/check-runtime-deps` and `packaging/scripts/size-audit` remain available for manual release inspection.
 
-The release dependency boundary is platform-specific. Boost headers and libtorrent-rasterbar are built from the pinned source archives for every release target, and libtorrent is linked statically. Linux release binaries may use the system ELF loader, C/C++ runtime, and OpenSSL 3 runtime, while zlib, Expat, SQLite, c-ares, libssh2, and libtorrent must be linked into the executable. macOS release binaries use Apple Security framework trust evaluation and may link only Apple system libraries and frameworks at runtime; third-party dependencies must be linked into the executable. Windows release binaries use WinTLS for aria2, libssh2 WinCNG, and a statically linked OpenSSL build for libtorrent; they may link only Windows system DLLs at runtime. Android release binaries may link only Android system runtime libraries and must not require `libc++_shared.so`.
+The release dependency boundary is platform-specific. Vendored libraries are built for every release target and linked statically. Linux binaries may use the system ELF loader and C/C++ runtime. macOS binaries may link only Apple system libraries and frameworks. Windows binaries use WinTLS for aria2 and may link only Windows system DLLs. Android binaries may link only Android system runtime libraries and must not require `libc++_shared.so`.
 
 Maintained libtorrent builds explicitly enable DHT, peer encryption, protocol extensions, mutable torrents, and streaming priorities. I2P and WebTorrent are disabled because aria2-next does not expose those transports and the release artifacts do not ship their runtime dependencies.

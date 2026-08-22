@@ -1,34 +1,34 @@
-# Third-Party Source
+# Vendored Dependencies
 
-This directory contains source code bundled into aria2-next builds. Files here keep their upstream layout and coding style unless a local build or security fix is required.
+This directory contains the curated source required to build aria2-next
+without downloading library dependencies during configuration or compilation.
 
-## wslay
+| Dependency | Version | Integration |
+| --- | --- | --- |
+| Boost | 1.91.0 | Headers used by libtorrent |
+| c-ares | 1.34.5 | Static async DNS library |
+| doctest | 2.4.12 | Header-only unit test framework |
+| Expat | 2.8.1 | Static XML parser |
+| libssh2 | 1.11.1 | Static SFTP transport |
+| libtorrent-rasterbar | 2.1.1 | Static BitTorrent engine |
+| OpenSSL | 3.5.6 | Static TLS and cryptography library |
+| spdlog | 1.17.0 | Header-only logging library |
+| SQLite | 3.53.1 | Static cookie database reader |
+| wslay | 1.1.1 | Static WebSocket implementation |
+| zlib | 1.3.2 | Static compression library |
 
-`third_party/wslay` provides the WebSocket implementation used by aria2 JSON-RPC over WebSocket support. The bundled source is retained because wslay 1.1.1 is still the current upstream release and CMake now builds the required static library directly from its source files.
+The default CMake superbuild compiles these sources into an isolated prefix
+under the selected build directory. It never searches Homebrew, system package
+directories, or a network dependency provider for these libraries.
 
-The bundled copy keeps source files, public headers, license material, and useful upstream notes. Obsolete generated build files and legacy build-system files are intentionally not retained.
+Vendored directories contain no nested Git repositories or submodules.
+Dependency versions are updated manually together with
+`packaging/dependencies.env`.
 
-aria2-next does not apply aria2 formatting rules to files under `third_party/`. Changes in this directory should be limited to build integration, security fixes, or compatibility fixes that cannot reasonably wait for upstream.
+Vendored trees retain the upstream build files, source, headers, and license
+material used by the maintained CMake configurations. Alternate build systems,
+examples, tests, tools, unsupported crypto backends, and unsupported platform
+ports are removed.
 
-Future work may add system wslay support so distributions can link against a system-provided package. That is intentionally outside the current migration because this pass preserves existing bundled behavior while making the ownership boundary explicit.
-
-## spdlog
-
-`third_party/spdlog` contains the build-required subset of spdlog 1.17.0. aria2-next uses the official header-only mode with the bundled fmt implementation so local, cross-platform, Android, libaria2, and release builds use one reproducible logging stack without configure-time network access or runtime shared-library dependencies.
-
-The bundled copy keeps public headers, license material, and the upstream README. Library sources, CMake packaging, examples, benchmarks, tests, CI configuration, and package-manager metadata are not retained because the header-only integration does not build or maintain them.
-
-The bundled fmt `format.h` uses its native `max_value<size_t>()` helper instead of the non-portable `SIZE_MAX` macro so GCC-based MinGW and llvm-mingw builds compile consistently.
-
-## doctest
-
-`third_party/doctest` contains the single-header doctest 2.4.12 test framework used by the aria2-next unit test suite. Vendoring the header means the tests always build: a missing system test-framework package can never silently reduce `ctest` to a green no-op.
-
-The bundled copy keeps the single header and license material only. The test adapter lives in `tests/a2doctest.h`; each former CppUnit fixture registers its methods through the `A2_TEST` macro, which preserves per-test `setUp()`/`tearDown()` semantics.
-
-## Release-only source dependencies
-
-Boost and libtorrent-rasterbar are external build dependencies and are not
-vendored in this directory. Maintained release builds fetch their pinned source
-archives from `packaging/dependencies.env`, build libtorrent as a static
-library, and record the resolved libtorrent version in `aria2-next --version`.
+Boost is a header subset for the maintained libtorrent configuration. Disabled
+WebTorrent, I2P, and fallback cryptography include trees are excluded.
