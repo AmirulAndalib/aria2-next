@@ -91,6 +91,8 @@
 namespace aria2 {
 
 namespace {
+constexpr int DEFAULT_CORE_OPEN_FILES = 100;
+
 template <typename InputIterator>
 void appendReservedGroup(RequestGroupList& list, InputIterator first,
                          InputIterator last)
@@ -122,7 +124,7 @@ RequestGroupMan::RequestGroupMan(
       removedLastErrorResult_(error_code::FINISHED),
       maxDownloadResult_(option->getAsInt(PREF_MAX_DOWNLOAD_RESULT)),
       openedFileCounter_(std::make_shared<OpenedFileCounter>(
-          this, option->getAsInt(PREF_BT_MAX_OPEN_FILES))),
+          this, DEFAULT_CORE_OPEN_FILES)),
       ed2kUploadQueue_(make_unique<ed2k::UploadQueue>(
           option->getAsInt(PREF_ED2K_UPLOAD_SLOTS))),
       ed2kSession_(make_unique<ed2k::Ed2kSession>(

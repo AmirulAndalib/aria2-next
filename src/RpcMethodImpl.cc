@@ -130,7 +130,6 @@ const char KEY_FLAGS[] = "flags";
 const char KEY_INCOMING[] = "incoming";
 const char KEY_SNUBBED[] = "snubbed";
 const char KEY_OPTIMISTIC_UNCHOKE[] = "optimisticUnchoke";
-const char KEY_HANDSHAKING[] = "handshaking";
 const char KEY_PRIVATE_TORRENT[] = "privateTorrent";
 const char KEY_SEEDER[] = "seeder";
 const char KEY_INDEX[] = "index";
@@ -545,6 +544,11 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
     }
     else {
       if (group->isDependencyResolved()) {
+#ifdef ENABLE_BITTORRENT
+        if (group->getBtDownload() && e->getBtSession()) {
+          e->getBtSession()->discard(group->getBtDownload());
+        }
+#endif
         e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {
@@ -1053,8 +1057,21 @@ void gatherBitTorrentMetadata(Dict* btDict,
     btDict->put("currentTracker", snapshot.currentTracker);
   }
   btDict->put("numPeers", util::itos(snapshot.numPeers));
+  btDict->put("connectingPeers", util::itos(snapshot.connectingPeers));
+  btDict->put("handshakingPeers", util::itos(snapshot.handshakingPeers));
   btDict->put("numSeeds", util::itos(snapshot.numSeeds));
   btDict->put("progress", fmt("%.6f", snapshot.progressPpm / 1000000.0));
+  if (snapshot.availabilityPpm >= 0) {
+    btDict->put("availability",
+                fmt("%.6f", snapshot.availabilityPpm / 1000000.0));
+  }
+  btDict->put("failedLength", util::itos(snapshot.failedBytes));
+  btDict->put("redundantLength", util::itos(snapshot.redundantBytes));
+  btDict->put("activeTime", util::itos(snapshot.activeTime));
+  btDict->put("finishedTime", util::itos(snapshot.finishedTime));
+  btDict->put("seedingTime", util::itos(snapshot.seedingTime));
+  btDict->put("connectCandidates", util::itos(snapshot.connectCandidates));
+  btDict->put("uploadingPeers", util::itos(snapshot.numUploads));
   if (snapshot.hasMetadata) {
     auto info = Dict::g();
     info->put(KEY_NAME, snapshot.name);
@@ -1095,7 +1112,7 @@ void gatherPeer(List* peers, const BtSnapshot& snapshot)
 {
   for (const auto& peer : snapshot.peers) {
     auto entry = Dict::g();
-    if (!peer.handshaking) {
+    if (peer.state == "connected") {
       entry->put(KEY_PEER_ID, util::torrentPercentEncode(peer.peerId));
     }
     if (!peer.clientName.empty()) {
@@ -1120,7 +1137,7 @@ void gatherPeer(List* peers, const BtSnapshot& snapshot)
     entry->put(KEY_SNUBBED, peer.snubbed ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_OPTIMISTIC_UNCHOKE,
                peer.optimisticUnchoke ? VLB_TRUE : VLB_FALSE);
-    entry->put(KEY_HANDSHAKING, peer.handshaking ? VLB_TRUE : VLB_FALSE);
+    entry->put("state", peer.state);
     entry->put(KEY_SEEDER, peer.seeder ? VLB_TRUE : VLB_FALSE);
     entry->put("transport", peer.transport);
     entry->put("encryption", peer.encryption);
@@ -1355,6 +1372,88 @@ std::unique_ptr<ValueBase> GetPeersRpcMethod::process(const RpcRequest& req,
 }
 
 std::unique_ptr<ValueBase>
+GetBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const String* gidParam = checkRequiredParam<String>(req, 0);
+  const auto gid = str2Gid(gidParam);
+  const auto group = e->getRequestGroupMan()->findGroup(gid);
+  if (!group || !group->getBtDownload()) {
+    throw DL_ABORT_EX(fmt("No tracker data is available for GID#%s",
+                          GroupId::toHex(gid).c_str()));
+  }
+
+  auto trackers = List::g();
+  for (const auto& tracker : group->getBtDownload()->snapshot().trackers) {
+    auto entry = Dict::g();
+    entry->put("url", tracker.url);
+    entry->put("tier", util::itos(tracker.tier));
+    entry->put("status", tracker.status);
+    entry->put("failures", util::itos(tracker.failures));
+    entry->put("seeders", util::itos(tracker.seeders));
+    entry->put("leechers", util::itos(tracker.leechers));
+    entry->put("downloads", util::itos(tracker.downloads));
+    entry->put("updating", tracker.updating ? VLB_TRUE : VLB_FALSE);
+    entry->put("verified", tracker.verified ? VLB_TRUE : VLB_FALSE);
+    if (!tracker.message.empty()) {
+      entry->put("message", tracker.message);
+    }
+    auto endpoints = List::g();
+    for (const auto& endpoint : tracker.endpoints) {
+      auto endpointEntry = Dict::g();
+      endpointEntry->put("localEndpoint", endpoint.localEndpoint);
+      endpointEntry->put("protocol", endpoint.protocol);
+      endpointEntry->put("status", endpoint.status);
+      endpointEntry->put("failures", util::itos(endpoint.failures));
+      endpointEntry->put("seeders", util::itos(endpoint.seeders));
+      endpointEntry->put("leechers", util::itos(endpoint.leechers));
+      endpointEntry->put("downloads", util::itos(endpoint.downloads));
+      endpointEntry->put("updating",
+                         endpoint.updating ? VLB_TRUE : VLB_FALSE);
+      endpointEntry->put("verified",
+                         endpoint.verified ? VLB_TRUE : VLB_FALSE);
+      if (!endpoint.message.empty()) {
+        endpointEntry->put("message", endpoint.message);
+      }
+      endpoints->append(std::move(endpointEntry));
+    }
+    entry->put("endpoints", std::move(endpoints));
+    trackers->append(std::move(entry));
+  }
+  return trackers;
+}
+
+namespace {
+std::shared_ptr<BtDownload> requireBtDownload(const RpcRequest& req,
+                                              DownloadEngine* e)
+{
+  const String* gidParam = checkRequiredParam<String>(req, 0);
+  const auto gid = str2Gid(gidParam);
+  const auto group = e->getRequestGroupMan()->findGroup(gid);
+  if (!group || !group->getBtDownload()) {
+    throw DL_ABORT_EX(fmt("No BitTorrent task is available for GID#%s",
+                          GroupId::toHex(gid).c_str()));
+  }
+  return group->getBtDownload();
+}
+}
+
+std::unique_ptr<ValueBase>
+ForceBtReannounceRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  e->getBtSession()->forceReannounce(download);
+  return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
+ForceBtRecheckRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  e->getBtSession()->forceRecheck(download);
+  return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
 SetBtPeerBlocklistRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
   const List* rulesParam = checkRequiredParam<List>(req, 0);
@@ -1382,13 +1481,41 @@ SetBtPeerBlocklistRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 }
 
 std::unique_ptr<ValueBase>
-GetBtEndpointRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+GetBtSessionStatusRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
-  const auto& session = e->getBtSession();
+  const auto status = e->getBtSession()->status();
   auto result = Dict::g();
-  result->put("listenPort", util::uitos(session->listenPort()));
-  result->put("announcePort", util::uitos(session->announcePort()));
-  result->put("externalIp", session->externalAddress());
+  result->put("listenPort", util::uitos(status.listenPort));
+  result->put("announcePort", util::uitos(status.announcePort));
+  result->put("externalIp", status.externalAddress);
+  result->put("mappedTcpPort", util::uitos(status.mappedTcpPort));
+  result->put("mappedUdpPort", util::uitos(status.mappedUdpPort));
+  result->put("dhtNodes", util::uitos(status.dhtNodes));
+  result->put("dhtReplacementNodes", util::uitos(status.dhtReplacements));
+  result->put("dhtActiveRequests", util::uitos(status.dhtActiveRequests));
+  result->put("droppedAlerts", util::uitos(status.droppedAlerts));
+  result->put("peerSockets", util::uitos(status.peerSockets));
+  result->put("establishedPeers", util::uitos(status.establishedPeers));
+  result->put("handshakingPeers", util::uitos(status.handshakingPeers));
+  result->put("halfOpenPeers", util::uitos(status.halfOpenPeers));
+  result->put("tcpPeers", util::uitos(status.tcpPeers));
+  result->put("utpPeers", util::uitos(status.utpPeers));
+  result->put("queuedTrackerAnnounces",
+              util::uitos(status.queuedTrackerAnnounces));
+  result->put("connectionAttempts", util::uitos(status.connectionAttempts));
+  result->put("connectionTimeouts", util::uitos(status.connectionTimeouts));
+  result->put("payloadDownloaded", util::uitos(status.payloadDownloaded));
+  result->put("payloadUploaded", util::uitos(status.payloadUploaded));
+  result->put("trackerDownloaded", util::uitos(status.trackerDownloaded));
+  result->put("trackerUploaded", util::uitos(status.trackerUploaded));
+  if (!status.portMappingError.empty()) {
+    result->put("portMappingError", status.portMappingError);
+  }
+  auto endpoints = List::g();
+  for (const auto& endpoint : status.listenEndpoints) {
+    endpoints->append(endpoint);
+  }
+  result->put("listenEndpoints", std::move(endpoints));
   return result;
 }
 #endif // ENABLE_BITTORRENT
@@ -2041,6 +2168,11 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
 void changeGlobalOption(const Option& option, DownloadEngine* e)
 {
 #ifdef ENABLE_BITTORRENT
+  if (e->getBtSession()) {
+    Option candidate(*e->getOption());
+    candidate.merge(option);
+    e->getBtSession()->validateGlobalOptions(&candidate);
+  }
   if (option.defined(PREF_BT_EXTERNAL_IP) &&
       !option.blank(PREF_BT_EXTERNAL_IP)) {
     std::array<unsigned char, 16> address{};
@@ -2063,6 +2195,28 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
 #ifdef ENABLE_BITTORRENT
   if (e->getBtSession()) {
     e->getBtSession()->applyGlobalOptions(e->getOption());
+    const bool updateTorrents =
+        option.defined(PREF_BT_TRACKER) ||
+        option.defined(PREF_BT_EXCLUDE_TRACKER) ||
+        option.defined(PREF_BT_MAX_PEERS) ||
+        option.defined(PREF_ENABLE_DHT) ||
+        option.defined(PREF_ENABLE_PEER_EXCHANGE) ||
+        option.defined(PREF_BT_ENABLE_LPD) ||
+        option.defined(PREF_FORCE_SEQUENTIAL);
+    if (updateTorrents) {
+      auto apply = [&](auto& groups) {
+        for (const auto& group : groups) {
+          if (!group->getBtDownload()) {
+            continue;
+          }
+          group->getOption()->merge(option);
+          e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
+                                                  group->getOption().get());
+        }
+      };
+      apply(e->getRequestGroupMan()->getRequestGroups());
+      apply(e->getRequestGroupMan()->getReservedGroups());
+    }
   }
 #endif
   bool reconfigureLogging = false;
@@ -2112,10 +2266,6 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
     catch (RecoverableException& e) {
       // TODO no exception handling
     }
-  }
-  if (option.defined(PREF_BT_MAX_OPEN_FILES)) {
-    auto& openedFileCounter = e->getRequestGroupMan()->getOpenedFileCounter();
-    openedFileCounter->setMaxOpenFiles(option.getAsInt(PREF_BT_MAX_OPEN_FILES));
   }
 }
 

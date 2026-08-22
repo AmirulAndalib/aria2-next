@@ -293,6 +293,33 @@ public:
   static const char* getMethodName() { return "aria2.getPeers"; }
 };
 
+class GetBtTrackersRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.getBtTrackers"; }
+};
+
+class ForceBtReannounceRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.forceBtReannounce"; }
+};
+
+class ForceBtRecheckRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.forceBtRecheck"; }
+};
+
 class SetBtPeerBlocklistRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
@@ -302,13 +329,13 @@ public:
   static const char* getMethodName() { return "aria2.setBtPeerBlocklist"; }
 };
 
-class GetBtEndpointRpcMethod : public RpcMethod {
+class GetBtSessionStatusRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
                                              DownloadEngine* e) override;
 
 public:
-  static const char* getMethodName() { return "aria2.getBtEndpoint"; }
+  static const char* getMethodName() { return "aria2.getBtSessionStatus"; }
 };
 #endif // ENABLE_BITTORRENT
 

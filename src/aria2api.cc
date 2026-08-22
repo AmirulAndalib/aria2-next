@@ -385,6 +385,11 @@ int removeDownload(Session* session, A2Gid gid, bool force)
     }
     else {
       if (group->isDependencyResolved()) {
+#ifdef ENABLE_BITTORRENT
+        if (group->getBtDownload() && e->getBtSession()) {
+          e->getBtSession()->discard(group->getBtDownload());
+        }
+#endif
         e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {

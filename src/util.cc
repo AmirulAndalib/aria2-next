@@ -1892,17 +1892,6 @@ std::string getConfigFile()
   return filename;
 }
 
-std::string getDHTFile(bool ipv6)
-{
-  std::string filename =
-      getHomeDir() + (ipv6 ? "/.aria2/dht6.dat" : "/.aria2/dht.dat");
-  if (!File(filename).exists()) {
-    filename = getXDGDir("XDG_CACHE_HOME", getHomeDir() + "/.cache") +
-               (ipv6 ? "/aria2/dht6.dat" : "/aria2/dht.dat");
-  }
-  return filename;
-}
-
 int64_t getRealSize(const std::string& sizeWithUnit)
 {
   std::string::size_type p = sizeWithUnit.find_first_of("KMkm");

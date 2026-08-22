@@ -173,11 +173,15 @@ const std::string V_BINARY("binary");
 const std::string V_ASCII("ascii");
 const std::string V_GET("get");
 const std::string V_TUNNEL("tunnel");
-const std::string V_PLAIN("plain");
-const std::string V_ARC4("arc4");
 const std::string V_HTTP("http");
 const std::string V_HTTPS("https");
 const std::string V_FTP("ftp");
+const std::string V_ENABLED("enabled");
+const std::string V_DISABLED("disabled");
+const std::string V_REQUIRED("required");
+const std::string V_TCP("tcp");
+const std::string V_UTP("utp");
+const std::string V_BOTH("both");
 const std::string A2_V_TLS11("TLSv1.1");
 const std::string A2_V_TLS12("TLSv1.2");
 const std::string A2_V_TLS13("TLSv1.3");
@@ -503,10 +507,6 @@ PrefPtr PREF_ALL_PROXY_PASSWD = makePref("all-proxy-passwd");
  */
 // values: 1*digit
 PrefPtr PREF_PEER_CONNECTION_TIMEOUT = makePref("peer-connection-timeout");
-// values: 1*digit
-PrefPtr PREF_BT_TIMEOUT = makePref("bt-timeout");
-// values: 1*digit
-PrefPtr PREF_BT_REQUEST_TIMEOUT = makePref("bt-request-timeout");
 // values: true | false
 PrefPtr PREF_SHOW_FILES = makePref("show-files");
 // values: 1*digit
@@ -529,10 +529,20 @@ PrefPtr PREF_SEED_RATIO = makePref("seed-ratio");
 PrefPtr PREF_ENABLE_PEER_EXCHANGE = makePref("enable-peer-exchange");
 // values: true | false
 PrefPtr PREF_ENABLE_DHT = makePref("enable-dht");
-// values: plain | arc4
-PrefPtr PREF_BT_MIN_CRYPTO_LEVEL = makePref("bt-min-crypto-level");
-// values:: true | false
-PrefPtr PREF_BT_REQUIRE_CRYPTO = makePref("bt-require-crypto");
+// values: enabled | required | disabled
+PrefPtr PREF_BT_ENCRYPTION = makePref("bt-encryption");
+// values: tcp | utp | both
+PrefPtr PREF_BT_TRANSPORT = makePref("bt-transport");
+// values: a string that your file system recognizes as a file name.
+PrefPtr PREF_BT_SESSION_STATE_FILE = makePref("bt-session-state-file");
+// values: HOST:PORT[,HOST:PORT...]
+PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES = makePref("bt-dht-bootstrap-nodes");
+// values: 1*digit
+PrefPtr PREF_BT_MAX_CONNECTIONS = makePref("bt-max-connections");
+// values: URI
+PrefPtr PREF_BT_PROXY = makePref("bt-proxy");
+// values: true | false
+PrefPtr PREF_BT_PORT_MAPPING = makePref("bt-port-mapping");
 // values: 1*digit
 PrefPtr PREF_BT_MAX_OPEN_FILES = makePref("bt-max-open-files");
 // values: true | false
@@ -563,7 +573,6 @@ PrefPtr PREF_BT_EXCLUDE_TRACKER = makePref("bt-exclude-tracker");
 // values: true | false
 PrefPtr PREF_BT_REMOVE_UNSELECTED_FILE = makePref("bt-remove-unselected-file");
 PrefPtr PREF_DETACH_SHARE_ONLY = makePref("detach-share-only");
-PrefPtr PREF_BT_FORCE_ENCRYPTION = makePref("bt-force-encryption");
 
 /**
  * Metalink related preferences

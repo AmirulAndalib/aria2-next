@@ -327,12 +327,21 @@
 #define TEXT_ENABLE_DHT                                         \
   _(" --enable-dht[=true|false]    Enable IPv4 and IPv6 DHT. Private torrents never\n" \
     "                              use DHT.")
-#define TEXT_BT_MIN_CRYPTO_LEVEL                                        \
-  _(" --bt-min-crypto-level=plain|arc4 Select allowed payload encryption. plain allows\n" \
-    "                              plaintext and RC4; arc4 allows RC4 only.")
-#define TEXT_BT_REQUIRE_CRYPTO                                          \
-  _(" --bt-require-crypto[=true|false] Require encrypted incoming and outgoing\n" \
-    "                              BitTorrent connections.")
+#define TEXT_BT_ENCRYPTION                                               \
+  _(" --bt-encryption=MODE         Select enabled, required, or disabled peer\n" \
+    "                              transport encryption.")
+#define TEXT_BT_TRANSPORT                                                \
+  _(" --bt-transport=MODE          Select tcp, utp, or both peer transports.")
+#define TEXT_BT_SESSION_STATE_FILE                                       \
+  _(" --bt-session-state-file=FILE Store native libtorrent DHT routing state in FILE.")
+#define TEXT_BT_DHT_BOOTSTRAP_NODES                                      \
+  _(" --bt-dht-bootstrap-nodes=NODES Set comma-separated DHT bootstrap HOST:PORT entries.")
+#define TEXT_BT_MAX_CONNECTIONS                                          \
+  _(" --bt-max-connections=NUM    Set the session-wide peer connection limit.")
+#define TEXT_BT_PROXY                                                    \
+  _(" --bt-proxy=URI              Route BitTorrent traffic through HTTP, SOCKS4, or SOCKS5.")
+#define TEXT_BT_PORT_MAPPING                                             \
+  _(" --bt-port-mapping[=true|false] Enable UPnP and NAT-PMP port mapping.")
 #define TEXT_BT_MAX_OPEN_FILES                                          \
   _(" --bt-max-open-files=NUM      Specify the session-wide maximum number of open\n" \
     "                              BitTorrent files.")
@@ -996,14 +1005,6 @@
     "                              recognized as active download in RPC method.")
 #define TEXT_MIN_TLS_VERSION                                            \
   _(" --min-tls-version=VERSION    Specify minimum SSL/TLS version to enable.")
-#define TEXT_BT_FORCE_ENCRYPTION                                        \
-  _(" --bt-force-encryption[=true|false]\n"                             \
-    "                              Requires BitTorrent message payload encryption\n" \
-    "                              with arc4. This is a shorthand of\n" \
-    "                              --bt-require-crypto --bt-min-crypto-level=arc4.\n" \
-    "                              If true is given, deny legacy BitTorrent\n" \
-    "                              handshake and only use Obfuscation handshake and\n" \
-    "                              always encrypt message payload.")
 #define TEXT_SSH_HOST_KEY_MD                                            \
   _(" --ssh-host-key-md=TYPE=DIGEST\n"                                  \
     "                              Set checksum for SSH host public key. TYPE is\n" \

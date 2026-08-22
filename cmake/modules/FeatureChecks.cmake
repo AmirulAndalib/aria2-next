@@ -224,6 +224,26 @@ endif()
 if(ARIA2_ENABLE_BITTORRENT)
   find_package(LibtorrentRasterbar ${ARIA2_MIN_LIBTORRENT_VERSION}
     CONFIG REQUIRED)
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_LIBRARIES LibtorrentRasterbar::torrent-rasterbar)
+  check_cxx_source_compiles("
+#include <libtorrent/config.hpp>
+#ifdef TORRENT_DISABLE_DHT
+#error DHT support is required
+#endif
+#ifdef TORRENT_DISABLE_EXTENSIONS
+#error extension support is required
+#endif
+#ifdef TORRENT_DISABLE_ENCRYPTION
+#error peer encryption support is required
+#endif
+int main() { return 0; }
+" ARIA2_LIBTORRENT_REQUIRED_FEATURES)
+  cmake_pop_check_state()
+  if(NOT ARIA2_LIBTORRENT_REQUIRED_FEATURES)
+    message(FATAL_ERROR
+      "libtorrent must include DHT, protocol extensions, and peer encryption")
+  endif()
 endif()
 
 aria2_pkg_check_dynamic(OPENSSL "openssl>=${ARIA2_MIN_OPENSSL_VERSION}")

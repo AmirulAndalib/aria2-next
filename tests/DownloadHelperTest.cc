@@ -2554,6 +2554,9 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
   option_->put(PREF_BT_EXCLUDE_TRACKER, "http://tracker1");
+  option_->put(PREF_BT_TRACKER,
+               "udp://one.example:1/announce,udp://two.example:2/announce,"
+               "udp://three.example:3/announce,udp://four.example:4/announce");
   {
     std::vector<std::shared_ptr<RequestGroup>> result;
 
@@ -2565,10 +2568,25 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
     std::shared_ptr<RequestGroup> group = result[0];
     REQUIRE(group->getBtDownload());
     REQUIRE(group->getBtDownload()->hasMetadata());
-    REQUIRE_EQ((size_t)2,
+    REQUIRE_EQ((size_t)3,
                group->getBtDownload()->snapshot().announceList.size());
     REQUIRE_EQ((size_t)2,
                group->getDownloadContext()->getFileEntries().size());
+  }
+  {
+    std::ifstream input(A2_TEST_DIR "/test.torrent", std::ios::binary);
+    std::string data((std::istreambuf_iterator<char>(input)),
+                     std::istreambuf_iterator<char>());
+    const auto misplacedPrivateFlag = data.find("7:privatei1e");
+    REQUIRE(misplacedPrivateFlag != std::string::npos);
+    data.erase(misplacedPrivateFlag, std::string("7:privatei1e").size());
+    const auto infoDictionary = data.find("4:infod");
+    REQUIRE(infoDictionary != std::string::npos);
+    data.insert(infoDictionary + std::string("4:infod").size(),
+                "7:privatei1e");
+    auto download = BtDownload::fromBuffer(data, {});
+    download->configure(option_.get());
+    REQUIRE_EQ((size_t)2, download->snapshot().announceList.size());
   }
   {
     // no URIs are given

@@ -100,7 +100,8 @@ public:
 #ifdef ENABLE_BITTORRENT
   void testGatherStoppedDownload_bt();
   void testGetPeers();
-  void testGetBtEndpoint();
+  void testGetBtTrackers();
+  void testGetBtSessionStatus();
   void testSetBtPeerBlocklist();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
@@ -158,7 +159,8 @@ A2_TEST(RpcMethodTest, testGatherProgressEd2kStatus)
 #ifdef ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherStoppedDownload_bt)
 A2_TEST(RpcMethodTest, testGetPeers)
-A2_TEST(RpcMethodTest, testGetBtEndpoint)
+A2_TEST(RpcMethodTest, testGetBtTrackers)
+A2_TEST(RpcMethodTest, testGetBtSessionStatus)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
@@ -1337,6 +1339,7 @@ void RpcMethodTest::testGetPeers()
   peer.port = 49152;
   peer.bitfield = "80";
   peer.flags = "D U O I";
+  peer.state = "connected";
   peer.downloaded = 1024;
   peer.uploaded = 512;
   peer.completedLength = 1024;
@@ -1368,8 +1371,51 @@ void RpcMethodTest::testGetPeers()
   REQUIRE_EQ(std::string("D U O I"), getString(entry, "flags"));
   REQUIRE_EQ(std::string("true"), getString(entry, "incoming"));
   REQUIRE_EQ(std::string("49152"), getString(entry, "port"));
+  REQUIRE_EQ(std::string("connected"), getString(entry, "state"));
 }
-void RpcMethodTest::testGetBtEndpoint()
+
+void RpcMethodTest::testGetBtTrackers()
+{
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->populateDownloadContext(context, option_.get());
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option_);
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  e_->getRequestGroupMan()->addReservedGroup(group);
+
+  BtTrackerSnapshot tracker;
+  tracker.url = "udp://tracker.example:6969/announce";
+  tracker.tier = 2;
+  tracker.status = "working";
+  tracker.seeders = 12;
+  tracker.leechers = 4;
+  tracker.verified = true;
+  BtTrackerEndpointSnapshot trackerEndpoint;
+  trackerEndpoint.localEndpoint = "192.0.2.1:6881";
+  trackerEndpoint.protocol = "v1";
+  trackerEndpoint.status = "working";
+  trackerEndpoint.verified = true;
+  tracker.endpoints.push_back(std::move(trackerEndpoint));
+  download->mutableSnapshot().trackers.push_back(std::move(tracker));
+
+  GetBtTrackersRpcMethod method;
+  auto request = createReq(GetBtTrackersRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  const auto response = method.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  const auto result = downcast<List>(response.param);
+  REQUIRE_EQ((size_t)1, result->size());
+  const auto entry = downcast<Dict>(result->get(0));
+  REQUIRE_EQ(std::string("working"), getString(entry, "status"));
+  REQUIRE_EQ(std::string("12"), getString(entry, "seeders"));
+  const auto endpoints = downcast<List>(entry->get("endpoints"));
+  REQUIRE_EQ((size_t)1, endpoints->size());
+  REQUIRE_EQ(std::string("v1"),
+             getString(downcast<Dict>(endpoints->get(0)), "protocol"));
+}
+
+void RpcMethodTest::testGetBtSessionStatus()
 {
   e_->setBtSession(make_unique<BtSession>(option_.get()));
   ChangeGlobalOptionRpcMethod changeMethod;
@@ -1382,14 +1428,17 @@ void RpcMethodTest::testGetBtEndpoint()
   auto response = changeMethod.execute(std::move(changeRequest), e_.get());
   REQUIRE_EQ(0, response.code);
 
-  GetBtEndpointRpcMethod getMethod;
+  GetBtSessionStatusRpcMethod getMethod;
   response = getMethod.execute(
-      createReq(GetBtEndpointRpcMethod::getMethodName()), e_.get());
+      createReq(GetBtSessionStatusRpcMethod::getMethodName()), e_.get());
   REQUIRE_EQ(0, response.code);
   auto endpoint = downcast<Dict>(response.param);
   REQUIRE_EQ(std::string("0"), getString(endpoint, "listenPort"));
   REQUIRE_EQ(std::string("62000"), getString(endpoint, "announcePort"));
   REQUIRE_EQ(std::string("203.0.113.7"), getString(endpoint, "externalIp"));
+  REQUIRE_EQ(std::string("0"), getString(endpoint, "dhtNodes"));
+  REQUIRE_EQ(std::string("0"), getString(endpoint, "establishedPeers"));
+  REQUIRE(endpoint->containsKey("listenEndpoints"));
 
   changeRequest = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
   options = Dict::g();

@@ -35,6 +35,7 @@ struct BtPeerSnapshot {
   uint16_t port = 0;
   std::string bitfield;
   std::string flags;
+  std::string state;
   std::string transport;
   std::string encryption;
   std::vector<std::string> sources;
@@ -51,8 +52,34 @@ struct BtPeerSnapshot {
   bool incoming = false;
   bool snubbed = false;
   bool optimisticUnchoke = false;
-  bool handshaking = false;
   bool seeder = false;
+};
+
+struct BtTrackerEndpointSnapshot {
+  std::string localEndpoint;
+  std::string protocol;
+  std::string status;
+  std::string message;
+  int failures = 0;
+  int seeders = -1;
+  int leechers = -1;
+  int downloads = -1;
+  bool updating = false;
+  bool verified = false;
+};
+
+struct BtTrackerSnapshot {
+  std::string url;
+  std::string status;
+  std::string message;
+  int tier = 0;
+  int failures = 0;
+  int seeders = -1;
+  int leechers = -1;
+  int downloads = -1;
+  bool updating = false;
+  bool verified = false;
+  std::vector<BtTrackerEndpointSnapshot> endpoints;
 };
 
 struct BtSnapshot {
@@ -81,19 +108,29 @@ struct BtSnapshot {
   std::vector<std::vector<std::string>> announceList;
   std::vector<BtFileSnapshot> files;
   std::vector<BtPeerSnapshot> peers;
+  std::vector<BtTrackerSnapshot> trackers;
   int64_t totalLength = 0;
   int64_t completedLength = 0;
   int64_t allTimeDownload = 0;
   int64_t allTimeUpload = 0;
+  int64_t failedBytes = 0;
+  int64_t redundantBytes = 0;
   int downloadSpeed = 0;
   int uploadSpeed = 0;
   int numPeers = 0;
+  int connectingPeers = 0;
+  int handshakingPeers = 0;
   int numSeeds = 0;
   int numComplete = -1;
   int numIncomplete = -1;
   int progressPpm = 0;
   int queuePosition = -1;
   int seedingTime = 0;
+  int activeTime = 0;
+  int finishedTime = 0;
+  int connectCandidates = 0;
+  int numUploads = 0;
+  int availabilityPpm = -1;
   bool privateTorrent = false;
   bool hasMetadata = false;
   bool finished = false;

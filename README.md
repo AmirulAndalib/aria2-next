@@ -22,6 +22,8 @@ Aria2 Next is an actively maintained download engine and the embedded engine use
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID pauses with a complete file list before any payload is requested.
 
+The BitTorrent session persists native IPv4 and IPv6 DHT routing state, keeps paused torrents inside libtorrent for fast recovery, checkpoints fast-resume data while running, preserves native tracker tiers, and isolates private torrents from global tracker injection. TCP, uTP, PEX, Local Peer Discovery, UPnP/NAT-PMP, transport encryption, v1/v2 torrents, sparse or allocated storage, sequential mode, and HTTP/SOCKS proxying use native libtorrent facilities.
+
 ## Native ED2K/eMule Support
 
 Aria2 Next includes native ED2K/eMule support aligned with aMule's network behavior. ED2K works through the normal aria2 CLI, session, and JSON-RPC flows, including server and Kad discovery, peer transfer, search, sharing, upload queues, protocol obfuscation, persistent runtime identity, and restart source seeds. The maintained architecture and verification scope are documented in [`docs/maintenance/ed2k-runtime.md`](docs/maintenance/ed2k-runtime.md).

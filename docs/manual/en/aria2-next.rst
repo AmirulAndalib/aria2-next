@@ -90,7 +90,8 @@ Basic Options
   provided, hash check is only done when file has been already
   download. This is determined by file length. If hash check fails,
   file is re-downloaded from scratch.  If both piece hashes and a hash
-  of entire file are provided, only piece hashes are used. Default:
+  of entire file are provided, only piece hashes are used. BitTorrent checks
+  use libtorrent's native checking queue and hashing threads. Default:
   ``false``
 
 .. option:: -c, --continue [true|false]
@@ -740,7 +741,26 @@ BitTorrent Specific Options
 
   Enable Local Peer Discovery.  If a private flag is set in a torrent,
   aria2 doesn't use this feature for that download even if ``true`` is
-  given.  Default: ``false``
+  given.  Default: ``true``
+
+.. option:: --bt-dht-bootstrap-nodes=<HOST:PORT>[,...]
+
+  Set the DHT bootstrap nodes used when no saved routing nodes are available.
+  The native libtorrent routing table is restored before these nodes are used.
+  Default: ``dht.libtorrent.org:25401,dht.transmissionbt.com:6881,router.bt.ouinet.work:6881``
+
+.. option:: --bt-encryption=enabled|required|disabled
+
+  Select peer transport encryption. ``enabled`` accepts encrypted and plain
+  peers, ``required`` rejects unencrypted handshakes, and ``disabled`` accepts
+  only plain peer connections. Default: ``enabled``
+
+.. option:: --bt-transport=tcp|utp|both
+
+  Select the peer transport. ``tcp`` enables TCP only, ``utp`` enables uTP
+  only, and ``both`` enables libtorrent's native transport selection. When
+  both are active, TCP is preferred by the mixed-mode bandwidth algorithm.
+  Default: ``both``
 
 .. option:: --bt-exclude-tracker=<URI>[,...]
 
@@ -765,25 +785,22 @@ BitTorrent Specific Options
   This option can be changed through :func:`aria2.changeGlobalOption`.
   Default: ``0``
 
-.. option:: --bt-force-encryption [true|false]
-
-  Requires BitTorrent message payload encryption with arc4.  This is a
-  shorthand of :option:`--bt-require-crypto`
-  :option:`--bt-min-crypto-level`\=arc4.  This option does not change
-  the option value of those options.  If ``true`` is given, deny
-  legacy BitTorrent handshake and only use Obfuscation handshake and
-  always encrypt message payload.  Default: ``false``
-
 .. option:: --bt-max-open-files=<NUM>
 
   Specify the session-wide maximum number of open BitTorrent files.
   Default: ``100``
 
+.. option:: --bt-max-connections=<NUM>
+
+  Set the session-wide maximum number of BitTorrent peer connections.
+  Per-torrent limits are controlled by :option:`--bt-max-peers`. Default:
+  ``500``
+
 .. option:: --bt-max-peers=<NUM>
 
   Specify the maximum number of peers per torrent.  ``0`` means
   unlimited.
-  Default: ``55``
+  Default: ``100``
 
 .. option:: --bt-peer-blocklist=<PATH>
 
@@ -793,11 +810,18 @@ BitTorrent Specific Options
   changed through :func:`aria2.changeGlobalOption` to reload the file while
   aria2 is running. Setting it to an empty string clears the active blocklist.
 
-.. option:: --bt-min-crypto-level=plain|arc4
+.. option:: --bt-port-mapping [true|false]
 
-  Select the allowed message payload encryption. ``plain`` allows plaintext
-  and RC4 payloads. ``arc4`` allows RC4 payloads only.
-  Default: ``plain``
+  Let libtorrent map the active TCP and UDP ports through UPnP and NAT-PMP.
+  Port mapping is disabled while a BitTorrent proxy is active. Default:
+  ``true``
+
+.. option:: --bt-proxy=<URI>
+
+  Route BitTorrent peer, tracker, web-seed, and hostname traffic through an
+  ``http://``, ``socks4://``, or ``socks5://`` URI. A port is required.
+  SOCKS5 also carries DHT UDP traffic. HTTP and SOCKS4 disable DHT to prevent
+  direct UDP traffic. An empty value disables the proxy.
 
 .. option:: --bt-remove-unselected-file [true|false]
 
@@ -809,11 +833,6 @@ BitTorrent Specific Options
    disk.
    Default: ``false``
 
-.. option:: --bt-require-crypto [true|false]
-
-  Require encrypted incoming and outgoing BitTorrent connections.
-  Default: ``false``
-
 .. option:: --bt-seed-unverified [true|false]
 
   Seed previously downloaded files without verifying piece hashes.
@@ -821,21 +840,29 @@ BitTorrent Specific Options
 
 .. option:: --bt-tracker=<URI>[,...]
 
-  Comma separated list of additional BitTorrent tracker's announce
-  URI. These URIs are not affected by :option:`--bt-exclude-tracker` option
-  because they are added after URIs in :option:`--bt-exclude-tracker` option are
-  removed.
+  Comma separated list of additional tracker announce URIs. Each URI is added
+  in one native fallback tier after the tiers from the torrent. Trackers are
+  deduplicated and never injected into private torrents. WebTorrent ``ws://``
+  and ``wss://`` trackers are rejected because maintained builds do not include
+  WebRTC.
 
 .. option:: --bt-tracker-connect-timeout=<SEC>
 
   Set the connect timeout in seconds to establish connection to
   tracker. After the connection is established, this option makes no
   effect and :option:`--bt-tracker-timeout` option is used instead.  Default:
-  ``60``
+  ``30``
 
 .. option:: --bt-tracker-timeout=<SEC>
 
-  Set timeout in seconds. Default: ``60``
+  Set timeout in seconds. Default: ``10``
+
+.. option:: --bt-session-state-file=<FILE>
+
+  Store native libtorrent IPv4 and IPv6 DHT routing state in *FILE*. The file
+  is written atomically during operation and shutdown. It does not contain
+  torrents or runtime settings. Default:
+  ``${HOME}/.aria2-next/bittorrent.session``
 
 .. option:: --enable-dht [true|false]
 
@@ -1281,6 +1308,9 @@ Advanced Options
   Possible Values: ``none``, ``prealloc``, ``trunc``, ``falloc``
   Default: ``trunc``
 
+  BitTorrent storage is owned by libtorrent. ``prealloc`` selects its allocated
+  storage mode. The other values select its recommended sparse storage mode.
+
   .. Warning::
 
      Using ``trunc`` seemingly allocates disk space very quickly, but
@@ -1517,7 +1547,10 @@ Advanced Options
 .. option:: -Z, --force-sequential [true|false]
 
   Fetch URIs in the command-line sequentially and download each URI in a
-  separate session, like the usual command-line download utilities.
+  separate session, like the usual command-line download utilities. For a
+  BitTorrent task, enable libtorrent sequential piece mode instead of the
+  default rarest-first picker. The option can be changed while a torrent is
+  active.
   Default: ``false``
 
 .. option:: --max-overall-download-limit=<SPEED>
@@ -1942,6 +1975,7 @@ aria2 expands ``${HOME}`` found in the following option values to
 user's home directory:
 
 * :option:`ca-certificate <--ca-certificate>`
+* :option:`bt-session-state-file <--bt-session-state-file>`
 * :option:`certificate <--certificate>`
 * :option:`dir <--dir>`
 * :option:`input-file <--input-file>`
@@ -1969,14 +2003,12 @@ Note that this expansion occurs even if the above options are used in
 the command-line.  This means that expansion may occur 2 times: first,
 shell and then aria2-next.
 
-dht.dat
-~~~~~~~~
+bittorrent.session
+~~~~~~~~~~~~~~~~~~
 
-Unless the legacy file paths ``$HOME/.aria2/dht.dat`` and
-``$HOME/.aria2/dht6.dat`` are pointing to existing files, the routing
-table of IPv4 DHT is saved to the path
-``$XDG_CACHE_HOME/aria2/dht.dat`` and the routing table of IPv6 DHT is
-saved to the path ``$XDG_CACHE_HOME/aria2/dht6.dat``.
+The native libtorrent DHT routing table is stored in the file selected by
+:option:`--bt-session-state-file`. aria2-next does not read the former
+``dht.dat`` or ``dht6.dat`` formats.
 
 Netrc
 ~~~~~
@@ -2055,12 +2087,10 @@ of URIs. These optional lines must start with white space(s).
   * :option:`async-dns <--async-dns>`
   * :option:`auto-file-renaming <--auto-file-renaming>`
   * :option:`bt-enable-lpd <--bt-enable-lpd>`
+  * :option:`bt-encryption <--bt-encryption>`
   * :option:`bt-exclude-tracker <--bt-exclude-tracker>`
-  * :option:`bt-force-encryption <--bt-force-encryption>`
   * :option:`bt-max-peers <--bt-max-peers>`
-  * :option:`bt-min-crypto-level <--bt-min-crypto-level>`
   * :option:`bt-remove-unselected-file <--bt-remove-unselected-file>`
-  * :option:`bt-require-crypto <--bt-require-crypto>`
   * :option:`bt-seed-unverified <--bt-seed-unverified>`
   * :option:`bt-tracker <--bt-tracker>`
   * :option:`bt-tracker-connect-timeout <--bt-tracker-connect-timeout>`
@@ -2729,6 +2759,12 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     ``numPeers``
       Number of connected peers as a decimal string.
 
+    ``connectingPeers``
+      Number of peer sockets establishing a transport connection.
+
+    ``handshakingPeers``
+      Number of connected sockets completing the BitTorrent handshake.
+
     ``numSeeds``
       Number of connected seeds as a decimal string.
 
@@ -3096,8 +3132,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   ``optimisticUnchoke``
     ``true`` if the peer is selected for optimistic unchoking.
 
-  ``handshaking``
-    ``true`` while the connection has not completed the BitTorrent handshake.
+  ``state``
+    Connection lifecycle state: ``connecting``, ``handshaking``, or
+    ``connected``.
 
   ``seeder``
     ``true`` if this peer is a seeder. Otherwise ``false``.
@@ -3171,10 +3208,19 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
       'seeder': 'false,
       'uploadSpeed': '6890'}]
 
-.. function:: aria2.getBtEndpoint([secret])
+.. function:: aria2.getBtTrackers([secret], gid)
 
-  This method returns the active session-wide BitTorrent endpoint. Values are
-  strings.
+  Return tracker runtime status for the BitTorrent download denoted by *gid*.
+  Each entry contains ``url``, ``tier``, ``status``, ``failures``, ``seeders``,
+  ``leechers``, ``downloads``, ``updating``, ``verified``, and an optional
+  ``message``. ``endpoints`` reports the same runtime state for each local
+  endpoint and protocol version. ``status`` is ``waiting``, ``updating``,
+  ``working``, or ``error``.
+
+.. function:: aria2.getBtSessionStatus([secret])
+
+  Return current session-wide BitTorrent discovery and endpoint status. Values
+  are strings except ``listenEndpoints``, which is an array of strings.
 
   ``listenPort``
     The local TCP port currently accepting incoming BitTorrent connections.
@@ -3188,6 +3234,52 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   ``externalIp``
     The numeric external IP address configured by
     :option:`--bt-external-ip`, otherwise the address detected by libtorrent.
+
+  ``listenEndpoints``
+    Every active local libtorrent listener.
+
+  ``mappedTcpPort``, ``mappedUdpPort``
+    External ports reported by UPnP or NAT-PMP. ``0`` means that no mapping has
+    succeeded.
+
+  ``dhtNodes``, ``dhtReplacementNodes``, ``dhtActiveRequests``
+    Current DHT routing and lookup counts.
+
+  ``droppedAlerts``
+    Number of libtorrent alert types dropped because the internal queue was
+    exhausted.
+
+  ``peerSockets``, ``halfOpenPeers``, ``tcpPeers``, ``utpPeers``
+    Current session-wide transport socket gauges.
+
+  ``establishedPeers``, ``handshakingPeers``
+    Completed BitTorrent peer connections and sockets still negotiating the
+    BitTorrent handshake.
+
+  ``connectionAttempts``, ``connectionTimeouts``
+    Cumulative peer connection counters.
+
+  ``queuedTrackerAnnounces``
+    Tracker announces waiting for an available libtorrent announce slot.
+
+  ``payloadDownloaded``, ``payloadUploaded``
+    Cumulative BitTorrent payload bytes for the session.
+
+  ``trackerDownloaded``, ``trackerUploaded``
+    Cumulative tracker traffic bytes for the session.
+
+  ``portMappingError``
+    Latest UPnP or NAT-PMP error, when present.
+
+.. function:: aria2.forceBtReannounce([secret], gid)
+
+  Request an immediate tracker and DHT announce for the active BitTorrent task.
+  Tracker minimum intervals remain enforced by libtorrent.
+
+.. function:: aria2.forceBtRecheck([secret], gid)
+
+  Discard the current fast-resume piece assumptions and perform a complete
+  libtorrent hash check for the task.
 
 .. function:: aria2.setBtPeerBlocklist([secret], rules)
 
@@ -4597,11 +4689,11 @@ Parallel downloads of an arbitrary number of URIs, metalink, torrent
 
 BitTorrent Encryption
 ^^^^^^^^^^^^^^^^^^^^^
-Encrypt the whole payload using ARC4 (obfuscation):
+Require encrypted BitTorrent peer handshakes:
 
 .. code-block:: console
 
-  $ aria2-next --bt-min-crypto-level=arc4 --bt-require-crypto=true file.torrent
+  $ aria2-next --bt-encryption=required file.torrent
 
 
 SEE ALSO

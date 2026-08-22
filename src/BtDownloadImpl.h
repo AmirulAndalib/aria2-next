@@ -20,6 +20,7 @@
 #include <libtorrent/torrent_handle.hpp>
 
 #include "BtDownload.h"
+#include "TimerA2.h"
 
 namespace aria2 {
 
@@ -29,7 +30,17 @@ struct BtDownload::Impl {
   std::vector<std::string> sourceTrackers;
   std::vector<int> sourceTrackerTiers;
   std::string resumePath;
+  std::string pendingSavePath;
+  std::string previousSavePath;
   bool resumeLoaded = false;
+  bool resumeSaveOutstanding = false;
+  bool checkpointPending = false;
+  bool stopSavePending = false;
+  bool initialRecheckStarted = false;
+  bool resumeAfterFilePriority = false;
+  bool fileSelectionResumePending = false;
+  Timer lastResumeSave = Timer::zero();
+  Timer lastTrackerUpdate = Timer::zero();
 };
 
 } // namespace aria2

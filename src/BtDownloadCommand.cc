@@ -43,7 +43,7 @@ BtDownloadCommand::~BtDownloadCommand() { group_->decreaseNumCommand(); }
 
 bool BtDownloadCommand::execute()
 {
-  engine_->setRefreshInterval(std::chrono::milliseconds(250));
+  engine_->setRefreshInterval(std::chrono::milliseconds(500));
 
   if (download_->failed()) {
     group_->setLastErrorCode(error_code::UNKNOWN_ERROR,
@@ -51,7 +51,14 @@ bool BtDownloadCommand::execute()
     if (download_->stopped()) {
       return true;
     }
-    session_->requestStop(download_, BtDownload::StopReason::Stop);
+    if (download_->recoverableError()) {
+      group_->setHaltRequested(true, RequestGroup::NONE);
+      group_->setPauseRequested(true);
+      session_->requestStop(download_, BtDownload::StopReason::Pause);
+    }
+    else {
+      session_->requestStop(download_, BtDownload::StopReason::Stop);
+    }
   }
 
   if (group_->isHaltRequested() && !download_->stopRequested()) {

@@ -14,6 +14,7 @@
 #include "BtDownloadImpl.h"
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <utility>
@@ -23,6 +24,7 @@
 #include <libtorrent/load_torrent.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/read_resume_data.hpp>
+#include <libtorrent/storage_defs.hpp>
 #include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
@@ -121,6 +123,11 @@ bool hashesMatch(const lt::info_hash_t& expected, const lt::info_hash_t& actual)
          (!expected.has_v2() || (actual.has_v2() && expected.v2 == actual.v2));
 }
 
+bool unsupportedTracker(const std::string& url)
+{
+  return util::startsWith(url, "ws://") || util::startsWith(url, "wss://");
+}
+
 } // namespace
 
 BtDownload::BtDownload(std::unique_ptr<Impl> impl, Source source)
@@ -206,16 +213,41 @@ void BtDownload::configure(const Option* option)
   const auto& added = option->get(PREF_BT_TRACKER);
   util::split(added.begin(), added.end(), std::back_inserter(addedTrackers),
               ',', true);
-  int tier = impl_->params.tracker_tiers.empty()
-                 ? 0
-                 : *std::max_element(impl_->params.tracker_tiers.begin(),
-                                     impl_->params.tracker_tiers.end()) +
-                       1;
-  for (const auto& tracker : addedTrackers) {
-    if (std::find(impl_->params.trackers.begin(), impl_->params.trackers.end(),
-                  tracker) == impl_->params.trackers.end()) {
+  const bool metadataUnknownMagnet =
+      source_ == Source::Magnet && !impl_->params.ti;
+  const bool privateTorrent = impl_->params.ti && impl_->params.ti->priv();
+  if (!metadataUnknownMagnet && !privateTorrent) {
+    std::vector<std::string> usableTrackers;
+    for (auto tracker : addedTrackers) {
+      tracker = util::strip(tracker);
+      if (tracker.empty() ||
+          std::find(impl_->params.trackers.begin(), impl_->params.trackers.end(),
+                    tracker) != impl_->params.trackers.end()) {
+        continue;
+      }
+      if (unsupportedTracker(tracker)) {
+        A2_LOG_DEBUG(fmt("Ignoring unsupported WebTorrent tracker: %s",
+                         tracker.c_str()));
+        continue;
+      }
+      if (std::find(usableTrackers.begin(), usableTrackers.end(), tracker) ==
+          usableTrackers.end()) {
+        usableTrackers.push_back(std::move(tracker));
+      }
+    }
+
+    const int baseTier = impl_->params.tracker_tiers.empty()
+                             ? 0
+                             : *std::max_element(
+                                   impl_->params.tracker_tiers.begin(),
+                                   impl_->params.tracker_tiers.end()) +
+                                   1;
+    if (baseTier > std::numeric_limits<uint8_t>::max()) {
+      throw DL_ABORT_EX("Too many BitTorrent tracker tiers");
+    }
+    for (const auto& tracker : usableTrackers) {
       impl_->params.trackers.push_back(tracker);
-      impl_->params.tracker_tiers.push_back(tier++);
+      impl_->params.tracker_tiers.push_back(baseTier);
     }
   }
   snapshot_.announceList = announceList(impl_->params);
@@ -239,12 +271,16 @@ void BtDownload::configure(const Option* option)
   if (impl_->params.download_limit == 0) {
     impl_->params.download_limit = -1;
   }
+  impl_->params.storage_mode = option->get(PREF_FILE_ALLOCATION) == V_PREALLOC
+                                   ? lt::storage_mode_allocate
+                                   : lt::storage_mode_sparse;
 
   impl_->params.flags &=
       ~(lt::torrent_flags::auto_managed | lt::torrent_flags::paused |
         lt::torrent_flags::disable_dht | lt::torrent_flags::disable_pex |
         lt::torrent_flags::disable_lsd | lt::torrent_flags::seed_mode |
-        lt::torrent_flags::default_dont_download);
+        lt::torrent_flags::default_dont_download |
+        lt::torrent_flags::sequential_download);
   impl_->params.flags |= lt::torrent_flags::duplicate_is_error;
   impl_->params.flags |= lt::torrent_flags::update_subscribe;
   impl_->params.flags |= lt::torrent_flags::apply_ip_filter;
@@ -260,6 +296,9 @@ void BtDownload::configure(const Option* option)
   }
   if (option->getAsBool(PREF_BT_SEED_UNVERIFIED) && impl_->params.ti) {
     impl_->params.flags |= lt::torrent_flags::seed_mode;
+  }
+  if (option->getAsBool(PREF_FORCE_SEQUENTIAL)) {
+    impl_->params.flags |= lt::torrent_flags::sequential_download;
   }
   if (source_ == Source::Magnet && !impl_->params.ti &&
       option->getAsBool(PREF_ENABLE_RPC) &&
@@ -389,8 +428,9 @@ void BtDownload::initialize(RequestGroup* group)
     return;
   }
 
-  if (restored.ti &&
-      !hashesMatch(impl_->params.info_hashes, restored.ti->info_hashes())) {
+  if (!hashesMatch(impl_->params.info_hashes, restored.info_hashes) ||
+      (restored.ti &&
+       !hashesMatch(impl_->params.info_hashes, restored.ti->info_hashes()))) {
     A2_LOG_INFO(
         fmt("Ignoring BitTorrent resume data with mismatched hashes: %s",
             impl_->resumePath.c_str()));
@@ -494,7 +534,7 @@ void BtDownload::beginSavingResume()
 
 void BtDownload::beginRemoving() { shutdownStage_ = ShutdownStage::Removing; }
 
-void BtDownload::finishRemoving()
+void BtDownload::finishStopping()
 {
   shutdownStage_ = ShutdownStage::Complete;
   switch (stopReason_) {
@@ -517,6 +557,7 @@ void BtDownload::consumeMetadataPause()
     return;
   }
   group_->getOption()->put(PREF_PAUSE_METADATA, A2_V_FALSE);
+  impl_->fileSelectionResumePending = true;
   snapshot_.state = BtSnapshot::State::Adding;
 }
 
@@ -525,6 +566,7 @@ void BtDownload::prepareStart()
   stopReason_ = StopReason::None;
   shutdownStage_ = ShutdownStage::Idle;
   snapshot_.errorMessage.clear();
+  recoverableError_ = false;
   snapshot_.state = snapshot_.hasMetadata
                         ? BtSnapshot::State::Adding
                         : BtSnapshot::State::DownloadingMetadata;

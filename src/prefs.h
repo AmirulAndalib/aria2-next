@@ -111,11 +111,15 @@ extern const std::string V_BINARY;
 extern const std::string V_ASCII;
 extern const std::string V_GET;
 extern const std::string V_TUNNEL;
-extern const std::string V_PLAIN;
-extern const std::string V_ARC4;
 extern const std::string V_HTTP;
 extern const std::string V_HTTPS;
 extern const std::string V_FTP;
+extern const std::string V_ENABLED;
+extern const std::string V_DISABLED;
+extern const std::string V_REQUIRED;
+extern const std::string V_TCP;
+extern const std::string V_UTP;
+extern const std::string V_BOTH;
 extern const std::string A2_V_TLS11;
 extern const std::string A2_V_TLS12;
 extern const std::string A2_V_TLS13;
@@ -436,10 +440,6 @@ extern PrefPtr PREF_ALL_PROXY_PASSWD;
  */
 // values: 1*digit
 extern PrefPtr PREF_PEER_CONNECTION_TIMEOUT;
-// values: 1*digit
-extern PrefPtr PREF_BT_TIMEOUT;
-// values: 1*digit
-extern PrefPtr PREF_BT_REQUEST_TIMEOUT;
 // values: true | false
 extern PrefPtr PREF_SHOW_FILES;
 // values: 1*digit
@@ -462,10 +462,20 @@ extern PrefPtr PREF_SEED_RATIO;
 extern PrefPtr PREF_ENABLE_PEER_EXCHANGE;
 // values: true | false
 extern PrefPtr PREF_ENABLE_DHT;
-// values: plain | arc4
-extern PrefPtr PREF_BT_MIN_CRYPTO_LEVEL;
-// values:: true | false
-extern PrefPtr PREF_BT_REQUIRE_CRYPTO;
+// values: enabled | required | disabled
+extern PrefPtr PREF_BT_ENCRYPTION;
+// values: tcp | utp | both
+extern PrefPtr PREF_BT_TRANSPORT;
+// values: a string (file path)
+extern PrefPtr PREF_BT_SESSION_STATE_FILE;
+// values: HOST:PORT[,HOST:PORT...]
+extern PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_CONNECTIONS;
+// values: HTTP, SOCKS4, or SOCKS5 URI
+extern PrefPtr PREF_BT_PROXY;
+// values: true | false
+extern PrefPtr PREF_BT_PORT_MAPPING;
 // values: 1*digit
 extern PrefPtr PREF_BT_MAX_OPEN_FILES;
 // values: true | false
@@ -496,8 +506,6 @@ extern PrefPtr PREF_BT_EXCLUDE_TRACKER;
 extern PrefPtr PREF_BT_REMOVE_UNSELECTED_FILE;
 // values: true |false
 extern PrefPtr PREF_DETACH_SHARE_ONLY;
-// values: true | false
-extern PrefPtr PREF_BT_FORCE_ENCRYPTION;
 
 /**
  * Metalink related preferences

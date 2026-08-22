@@ -39,6 +39,10 @@ cmake -S "libtorrent-rasterbar-$LIBTORRENT_VERSION" \
   -Dbuild_examples=OFF \
   -Dbuild_tools=OFF \
   -Dpython-bindings=OFF \
+  -Dextensions=ON \
+  -Dmutable-torrents=ON \
+  -Dstreaming=ON \
+  -Di2p=OFF \
   -Dwebtorrent=OFF \
   -Dlogging=OFF \
   -Dencryption=ON \

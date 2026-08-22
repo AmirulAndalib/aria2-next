@@ -48,6 +48,7 @@ private:
   Source source_;
   StopReason stopReason_ = StopReason::None;
   ShutdownStage shutdownStage_ = ShutdownStage::Idle;
+  bool recoverableError_ = false;
   RequestGroup* group_ = nullptr;
 
   BtDownload(std::unique_ptr<Impl> impl, Source source);
@@ -81,6 +82,7 @@ public:
   bool active() const;
   bool stopped() const;
   bool failed() const;
+  bool recoverableError() const { return recoverableError_; }
   bool stopRequested() const { return shutdownStage_ != ShutdownStage::Idle; }
   StopReason stopReason() const { return stopReason_; }
   ShutdownStage shutdownStage() const { return shutdownStage_; }
@@ -92,7 +94,7 @@ public:
   void requestStop(StopReason reason);
   void beginSavingResume();
   void beginRemoving();
-  void finishRemoving();
+  void finishStopping();
   void consumeMetadataPause();
   void prepareStart();
 

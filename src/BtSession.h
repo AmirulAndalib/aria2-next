@@ -30,12 +30,42 @@ class DownloadEngine;
 class Option;
 class RequestGroup;
 
+struct BtSessionStatus {
+  std::vector<std::string> listenEndpoints;
+  std::string externalAddress;
+  std::string portMappingError;
+  uint16_t listenPort = 0;
+  uint16_t announcePort = 0;
+  uint16_t mappedTcpPort = 0;
+  uint16_t mappedUdpPort = 0;
+  size_t dhtNodes = 0;
+  size_t dhtReplacements = 0;
+  size_t dhtActiveRequests = 0;
+  size_t droppedAlerts = 0;
+  size_t peerSockets = 0;
+  size_t establishedPeers = 0;
+  size_t handshakingPeers = 0;
+  size_t halfOpenPeers = 0;
+  size_t tcpPeers = 0;
+  size_t utpPeers = 0;
+  size_t queuedTrackerAnnounces = 0;
+  uint64_t connectionAttempts = 0;
+  uint64_t connectionTimeouts = 0;
+  uint64_t payloadDownloaded = 0;
+  uint64_t payloadUploaded = 0;
+  uint64_t trackerDownloaded = 0;
+  uint64_t trackerUploaded = 0;
+};
+
 class BtSession {
 public:
   struct Impl;
 
 private:
   std::unique_ptr<Impl> impl_;
+  void requestResumeCheckpoint(BtDownload* download, bool force = false);
+  void finishResumeSave(BtDownload* download);
+  void resumeTorrent(BtDownload* download);
 
 public:
   explicit BtSession(const Option* option);
@@ -50,14 +80,19 @@ public:
   void poll();
   void requestStop(const std::shared_ptr<BtDownload>& download,
                    BtDownload::StopReason reason);
+  void validateGlobalOptions(const Option* option) const;
   void applyGlobalOptions(const Option* option);
   void applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
                             const Option* option);
+  void forceReannounce(const std::shared_ptr<BtDownload>& download);
+  void forceRecheck(const std::shared_ptr<BtDownload>& download);
+  void discard(const std::shared_ptr<BtDownload>& download);
   void remove(a2_gid_t gid);
 
   uint16_t listenPort() const;
   uint16_t announcePort() const;
   std::string externalAddress() const;
+  BtSessionStatus status() const;
 
   bool replaceIpFilter(const std::vector<std::string>& rules,
                        std::string& error);
