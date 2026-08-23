@@ -10,11 +10,8 @@ fi
 
 section_flags="-Os -ffunction-sections -fdata-sections"
 debug_flags=
-prefix_flags=
-
-if [ -n "${GITHUB_WORKSPACE:-}" ]; then
-  prefix_flags="-ffile-prefix-map=$GITHUB_WORKSPACE=. -fdebug-prefix-map=$GITHUB_WORKSPACE=."
-fi
+build_workspace=${GITHUB_WORKSPACE:-$PWD}
+prefix_flags="-ffile-prefix-map=$build_workspace=. -fdebug-prefix-map=$build_workspace=."
 
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}
 export SOURCE_DATE_EPOCH

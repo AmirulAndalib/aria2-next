@@ -42,6 +42,24 @@ jobs:
       - name: Verify binary version
         run: build/default/aria2-next --version
 
+  release-smoke:
+    name: Linux Release Packaging
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl binutils
+
+      - name: Verify runner tools
+        run: packaging/scripts/verify-runner-tools linux
+
+      - name: Build and verify release binary
+        run: packaging/scripts/build-release linux
+
   script-syntax:
     name: Script Syntax
     runs-on: ubuntu-22.04

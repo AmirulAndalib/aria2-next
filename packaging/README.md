@@ -15,6 +15,12 @@ This directory owns release packaging, cross-compilation helpers, container reso
 
 Supported packaging paths build this repository checkout and its vendored library source without network dependency resolution.
 
+The shared CMake superbuild resolves compiler and binary tools to absolute
+paths before configuring dependencies. OpenSSL is installed through a staged,
+stable filesystem prefix so release binaries contain no runner-specific build
+paths. Platform toolchain settings, deployment targets, and Android API levels
+are applied consistently to every dependency.
+
 Official release builds use `packaging/scripts/release-size-profile` to apply size-oriented compiler flags, per-function and per-data sections, and platform linker dead-code elimination. The profile is used by GitHub release jobs so portable artifacts keep the maintained dependency baseline without retaining avoidable unused code.
 
 GitHub Release assets are bare executable binaries named `aria2-next-<version>-<platform>-<architecture>`, plus a SHA-256 checksum file. Source code and license material are provided by the GitHub release tag source archives.

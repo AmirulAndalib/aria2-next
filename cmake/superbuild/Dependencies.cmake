@@ -12,6 +12,25 @@ set(ARIA2_VENDOR_ROOT "${CMAKE_SOURCE_DIR}/third_party")
 set(ARIA2_DEPENDENCY_PREFIX "${CMAKE_BINARY_DIR}/dependencies")
 set(ARIA2_INNER_BINARY_DIR "${CMAKE_BINARY_DIR}/source")
 
+foreach(tool_variable
+    CMAKE_C_COMPILER
+    CMAKE_CXX_COMPILER
+    CMAKE_RC_COMPILER
+    CMAKE_AR
+    CMAKE_RANLIB)
+  if(DEFINED ${tool_variable} AND NOT "${${tool_variable}}" STREQUAL "")
+    cmake_path(IS_ABSOLUTE ${tool_variable} tool_is_absolute)
+    if(NOT tool_is_absolute)
+      unset(resolved_tool CACHE)
+      find_program(resolved_tool
+        NAMES "${${tool_variable}}"
+        NO_CMAKE_FIND_ROOT_PATH
+        REQUIRED)
+      set(${tool_variable} "${resolved_tool}")
+    endif()
+  endif()
+endforeach()
+
 set(ARIA2_EXTERNAL_CMAKE_ARGS
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DCMAKE_INSTALL_PREFIX=${ARIA2_DEPENDENCY_PREFIX}
@@ -31,6 +50,7 @@ foreach(variable
     CMAKE_RANLIB
     CMAKE_SYSTEM_NAME
     CMAKE_SYSTEM_PROCESSOR
+    CMAKE_SYSTEM_VERSION
     CMAKE_ANDROID_NDK
     CMAKE_ANDROID_ARCH_ABI
     CMAKE_ANDROID_STL_TYPE)
@@ -111,7 +131,11 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
     no-asm)
 endif()
 
-set(ARIA2_OPENSSL_ENV)
+set(ARIA2_OPENSSL_ENV
+  CPPFLAGS=
+  CFLAGS=
+  CXXFLAGS=
+  LDFLAGS=)
 if(CMAKE_C_COMPILER)
   list(APPEND ARIA2_OPENSSL_ENV CC=${CMAKE_C_COMPILER})
 endif()
@@ -128,9 +152,22 @@ if(CMAKE_RC_COMPILER)
   list(APPEND ARIA2_OPENSSL_ENV RC=${CMAKE_RC_COMPILER})
 endif()
 if(ANDROID)
+  list(APPEND ARIA2_OPENSSL_CONFIG_ARGS
+    -D__ANDROID_API__=${CMAKE_SYSTEM_VERSION})
   list(APPEND ARIA2_OPENSSL_ENV
     ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
     ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK})
+endif()
+if(APPLE)
+  list(APPEND ARIA2_OPENSSL_ENV
+    MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+endif()
+
+if(CMAKE_C_FLAGS)
+  separate_arguments(ARIA2_OPENSSL_C_FLAGS NATIVE_COMMAND "${CMAKE_C_FLAGS}")
+  list(FILTER ARIA2_OPENSSL_C_FLAGS EXCLUDE REGEX
+    "^-f(file|debug)-prefix-map=")
+  list(APPEND ARIA2_OPENSSL_CONFIG_ARGS ${ARIA2_OPENSSL_C_FLAGS})
 endif()
 
 ExternalProject_Add(openssl_project
@@ -147,13 +184,14 @@ ExternalProject_Add(openssl_project
       no-tests
       no-apps
       no-autoload-config
-      --prefix=${ARIA2_DEPENDENCY_PREFIX}
+      --prefix=/
       --openssldir=/etc/ssl
       --libdir=lib
   BUILD_COMMAND
     ${ARIA2_MAKE_EXECUTABLE} -j${ARIA2_BUILD_JOBS}
   INSTALL_COMMAND
-    ${ARIA2_MAKE_EXECUTABLE} install_sw
+    ${ARIA2_MAKE_EXECUTABLE}
+      DESTDIR=${ARIA2_DEPENDENCY_PREFIX} install_sw
   UPDATE_COMMAND ""
   TEST_COMMAND "")
 
@@ -161,7 +199,10 @@ set(ARIA2_LIBSSH2_DEPENDENCIES)
 set(ARIA2_LIBSSH2_CRYPTO_BACKEND OpenSSL)
 set(ARIA2_LIBSSH2_CRYPTO_ARGS
   -DOPENSSL_ROOT_DIR=${ARIA2_DEPENDENCY_PREFIX}
-  -DOPENSSL_USE_STATIC_LIBS=ON)
+  -DOPENSSL_USE_STATIC_LIBS=ON
+  -DOPENSSL_INCLUDE_DIR=${ARIA2_DEPENDENCY_PREFIX}/include
+  -DOPENSSL_CRYPTO_LIBRARY=${ARIA2_DEPENDENCY_PREFIX}/lib/libcrypto.a
+  -DOPENSSL_SSL_LIBRARY=${ARIA2_DEPENDENCY_PREFIX}/lib/libssl.a)
 if(WIN32)
   set(ARIA2_LIBSSH2_CRYPTO_BACKEND WinCNG)
   set(ARIA2_LIBSSH2_CRYPTO_ARGS)
@@ -196,6 +237,9 @@ if(ARIA2_ENABLE_BITTORRENT)
       -DBoost_NO_BOOST_CMAKE=ON
       -DOPENSSL_ROOT_DIR=${ARIA2_DEPENDENCY_PREFIX}
       -DOPENSSL_USE_STATIC_LIBS=ON
+      -DOPENSSL_INCLUDE_DIR=${ARIA2_DEPENDENCY_PREFIX}/include
+      -DOPENSSL_CRYPTO_LIBRARY=${ARIA2_DEPENDENCY_PREFIX}/lib/libcrypto.a
+      -DOPENSSL_SSL_LIBRARY=${ARIA2_DEPENDENCY_PREFIX}/lib/libssl.a
       -Dbuild_tests=OFF
       -Dbuild_examples=OFF
       -Dbuild_tools=OFF

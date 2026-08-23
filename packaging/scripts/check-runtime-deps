@@ -31,7 +31,8 @@ check_build_paths() {
     echo "Runtime dependency check failed: strings is required" >&2
     exit 1
   }
-  if strings "$binary" | grep -E '/Users/runner/work|/home/runner/work|[A-Za-z]:[/\\]a[/\\]' > "$tmp"; then
+  workspace=${GITHUB_WORKSPACE:-$PWD}
+  if strings "$binary" | grep -F "$workspace" > "$tmp"; then
     echo "Build runner path leaked into $platform artifact:" >&2
     cat "$tmp" >&2
     exit 1
