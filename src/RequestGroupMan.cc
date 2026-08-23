@@ -921,8 +921,11 @@ void RequestGroupMan::forceHalt()
 
 TransferStat RequestGroupMan::calculateStat()
 {
-  // TODO Currently, all time upload length is not set.
-  return netStat_.toTransferStat();
+  auto stat = netStat_.toTransferStat();
+  if (btTransferStat_) {
+    stat.add(*btTransferStat_);
+  }
+  return stat;
 }
 
 std::shared_ptr<DownloadResult>
@@ -1008,13 +1011,13 @@ void RequestGroupMan::removeStaleServerStat(const std::chrono::seconds& timeout)
 bool RequestGroupMan::doesOverallDownloadSpeedExceed()
 {
   return maxOverallDownloadSpeedLimit_ > 0 &&
-         maxOverallDownloadSpeedLimit_ < netStat_.calculateDownloadSpeed();
+         maxOverallDownloadSpeedLimit_ < calculateStat().downloadSpeed;
 }
 
 bool RequestGroupMan::doesOverallUploadSpeedExceed()
 {
   return maxOverallUploadSpeedLimit_ > 0 &&
-         maxOverallUploadSpeedLimit_ < netStat_.calculateUploadSpeed();
+         maxOverallUploadSpeedLimit_ < calculateStat().uploadSpeed;
 }
 
 void RequestGroupMan::getUsedHosts(

@@ -466,6 +466,7 @@ void BtDownload::updateSelection(
 void BtDownload::initialize(RequestGroup* group)
 {
   group_ = group;
+  impl_->gid = group_->getGID();
   configure(group_->getOption().get());
   if (impl_->resumeLoaded) {
     return;
@@ -513,6 +514,9 @@ void BtDownload::initialize(RequestGroup* group)
   restored.upload_limit = impl_->params.upload_limit;
   restored.download_limit = impl_->params.download_limit;
   impl_->params = std::move(restored);
+  snapshot_.allTimeDownload =
+      std::max<int64_t>(0, impl_->params.total_downloaded);
+  snapshot_.allTimeUpload = std::max<int64_t>(0, impl_->params.total_uploaded);
   configure(group_->getOption().get());
 
   if (!impl_->params.ti) {
@@ -531,7 +535,8 @@ void BtDownload::initialize(RequestGroup* group)
   if (source_ == Source::Magnet &&
       group_->getOption()->getAsBool(PREF_ENABLE_RPC) &&
       group_->getOption()->getAsBool(PREF_PAUSE_METADATA)) {
-    snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+    beginFileSelectionPause();
+    shutdownStage_ = ShutdownStage::Complete;
     group_->setPauseRequested(true);
   }
 }
@@ -550,8 +555,7 @@ std::string BtDownload::trackerSource(const std::string& url) const
 
 bool BtDownload::active() const
 {
-  return shutdownStage_ != ShutdownStage::Complete &&
-         snapshot_.state != BtSnapshot::State::Error;
+  return shutdownStage_ != ShutdownStage::Complete && !error_;
 }
 
 bool BtDownload::stopped() const
@@ -559,14 +563,21 @@ bool BtDownload::stopped() const
   return shutdownStage_ == ShutdownStage::Complete;
 }
 
-bool BtDownload::failed() const
-{
-  return snapshot_.state == BtSnapshot::State::Error;
-}
+bool BtDownload::failed() const { return error_; }
 
 bool BtDownload::awaitingFileSelection() const
 {
-  return snapshot_.state == BtSnapshot::State::AwaitingFileSelection;
+  return fileSelectionState_ == FileSelectionState::Awaiting;
+}
+
+bool BtDownload::fileSelectionReady() const
+{
+  return fileSelectionState_ == FileSelectionState::Ready;
+}
+
+bool BtDownload::fileSelectionResuming() const
+{
+  return fileSelectionState_ == FileSelectionState::Resuming;
 }
 
 bool BtDownload::shouldPauseAfterMetadata() const
@@ -578,18 +589,24 @@ bool BtDownload::shouldPauseAfterMetadata() const
 
 void BtDownload::requestStop(StopReason reason)
 {
+  snapshot_.downloadSpeed = 0;
+  snapshot_.uploadSpeed = 0;
   if (shutdownStage_ != ShutdownStage::Idle) {
     if (reason == StopReason::FileSelection &&
         stopReason_ == StopReason::Pause) {
       stopReason_ = reason;
-      snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+      snapshot_.state = awaitingFileSelection()
+                            ? BtSnapshot::State::AwaitingFileSelection
+                            : BtSnapshot::State::Stopping;
     }
     return;
   }
   stopReason_ = reason;
   shutdownStage_ = ShutdownStage::PendingHandle;
   if (reason == StopReason::FileSelection) {
-    snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+    snapshot_.state = awaitingFileSelection()
+                          ? BtSnapshot::State::AwaitingFileSelection
+                          : BtSnapshot::State::Stopping;
   }
   else {
     snapshot_.state = BtSnapshot::State::Stopping;
@@ -611,7 +628,9 @@ void BtDownload::finishStopping()
     snapshot_.state = BtSnapshot::State::Paused;
     break;
   case StopReason::FileSelection:
-    snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+    snapshot_.state = awaitingFileSelection()
+                          ? BtSnapshot::State::AwaitingFileSelection
+                          : BtSnapshot::State::Paused;
     break;
   case StopReason::None:
   case StopReason::Stop:
@@ -620,22 +639,130 @@ void BtDownload::finishStopping()
   }
 }
 
-void BtDownload::consumeMetadataPause()
+std::string BtDownload::fileSelectionError(const Option* option) const
 {
-  if (!awaitingFileSelection() || !group_) {
+  if (!snapshot_.hasMetadata || snapshot_.files.empty()) {
+    return "BitTorrent metadata is unavailable for file selection";
+  }
+  if (!option || !option->defined(PREF_SELECT_FILE) ||
+      option->blank(PREF_SELECT_FILE)) {
+    return "BitTorrent file selection requires select-file";
+  }
+  auto selected = util::parseIntSegments(option->get(PREF_SELECT_FILE));
+  selected.normalize();
+  if (!selected.hasNext()) {
+    return "BitTorrent file selection requires select-file";
+  }
+  while (selected.hasNext()) {
+    const auto index = selected.next();
+    if (index < 1 || static_cast<size_t>(index) > snapshot_.files.size()) {
+      return fmt("BitTorrent select-file index %d is out of range", index);
+    }
+  }
+  return {};
+}
+
+void BtDownload::validateFileSelection(const Option* option) const
+{
+  const auto error = fileSelectionError(option);
+  if (!error.empty()) {
+    throw DL_ABORT_EX(error);
+  }
+}
+
+void BtDownload::beginFileSelectionPause()
+{
+  stopReason_ = StopReason::FileSelection;
+  if (fileSelectionError(group_ ? group_->getOption().get() : nullptr)
+          .empty()) {
+    fileSelectionState_ = FileSelectionState::Ready;
+    snapshot_.state = BtSnapshot::State::Paused;
+  }
+  else {
+    fileSelectionState_ = FileSelectionState::Awaiting;
+    snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+  }
+}
+
+void BtDownload::submitFileSelection(const Option* option)
+{
+  validateFileSelection(option);
+  if (fileSelectionState_ == FileSelectionState::Awaiting ||
+      fileSelectionState_ == FileSelectionState::Ready) {
+    fileSelectionState_ = FileSelectionState::Ready;
+    snapshot_.state = BtSnapshot::State::Paused;
+  }
+}
+
+void BtDownload::prepareFileSelectionResume()
+{
+  if (fileSelectionState_ == FileSelectionState::Awaiting) {
+    throw DL_ABORT_EX(
+        "BitTorrent download is awaiting a valid select-file option");
+  }
+  if (fileSelectionState_ != FileSelectionState::Ready || !group_) {
     return;
   }
+  validateFileSelection(group_->getOption().get());
   group_->getOption()->put(PREF_PAUSE_METADATA, A2_V_FALSE);
-  impl_->fileSelectionResumePending = true;
+  fileSelectionState_ = FileSelectionState::Resuming;
   snapshot_.state = BtSnapshot::State::Adding;
+}
+
+void BtDownload::finishFileSelectionResume()
+{
+  if (fileSelectionState_ == FileSelectionState::Resuming) {
+    fileSelectionState_ = FileSelectionState::None;
+  }
+}
+
+void BtDownload::applyTransportState(BtSnapshot::State state)
+{
+  if (error_) {
+    snapshot_.state = BtSnapshot::State::Error;
+    return;
+  }
+  if (fileSelectionState_ == FileSelectionState::Awaiting) {
+    snapshot_.state = BtSnapshot::State::AwaitingFileSelection;
+    return;
+  }
+  if (fileSelectionState_ == FileSelectionState::Ready) {
+    snapshot_.state = BtSnapshot::State::Paused;
+    return;
+  }
+  if (shutdownStage_ != ShutdownStage::Idle) {
+    return;
+  }
+  snapshot_.state = state;
+}
+
+void BtDownload::setError(std::string message, bool recoverable)
+{
+  error_ = true;
+  snapshot_.state = BtSnapshot::State::Error;
+  snapshot_.errorMessage = std::move(message);
+  snapshot_.downloadSpeed = 0;
+  snapshot_.uploadSpeed = 0;
+  recoverableError_ = recoverable;
 }
 
 void BtDownload::prepareStart()
 {
+  if (fileSelectionState_ == FileSelectionState::Awaiting) {
+    throw DL_ABORT_EX(
+        "BitTorrent download is awaiting a valid select-file option");
+  }
+  if (fileSelectionState_ == FileSelectionState::Ready) {
+    throw DL_ABORT_EX("BitTorrent file selection has not been resumed");
+  }
   stopReason_ = StopReason::None;
   shutdownStage_ = ShutdownStage::Idle;
   snapshot_.errorMessage.clear();
+  error_ = false;
   recoverableError_ = false;
+  if (fileSelectionState_ != FileSelectionState::Resuming) {
+    fileSelectionState_ = FileSelectionState::None;
+  }
   snapshot_.state = snapshot_.hasMetadata
                         ? BtSnapshot::State::Adding
                         : BtSnapshot::State::DownloadingMetadata;

@@ -106,6 +106,8 @@ public:
   void testReplaceBtTrackers();
   void testGetBtSessionStatus();
   void testSetBtPeerBlocklist();
+  void testBtGlobalStat();
+  void testBtFileSelectionGate();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
   void testChangePosition();
@@ -166,6 +168,8 @@ A2_TEST(RpcMethodTest, testGetBtTrackers)
 A2_TEST(RpcMethodTest, testReplaceBtTrackers)
 A2_TEST(RpcMethodTest, testGetBtSessionStatus)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
+A2_TEST(RpcMethodTest, testBtGlobalStat)
+A2_TEST(RpcMethodTest, testBtFileSelectionGate)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
 A2_TEST(RpcMethodTest, testChangePosition)
@@ -1487,6 +1491,155 @@ void RpcMethodTest::testSetBtPeerBlocklist()
   REQUIRE_EQ(0, response.code);
   result = downcast<Dict>(response.param);
   REQUIRE_EQ(revision, downcast<Integer>(result->get("revision"))->i());
+}
+
+void RpcMethodTest::testBtGlobalStat()
+{
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option_);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->populateDownloadContext(context, option_.get());
+  group->setDownloadContext(context);
+  download->mutableSnapshot().downloadSpeed = 4096;
+  download->mutableSnapshot().uploadSpeed = 1024;
+  group->setBtDownload(download);
+  group->setPauseRequested(true);
+  e_->getRequestGroupMan()->addReservedGroup(group);
+
+  TransferStat bt;
+  bt.downloadSpeed = 4096;
+  bt.uploadSpeed = 1024;
+  e_->getRequestGroupMan()->setBtTransferStat(&bt);
+
+  TellStatusRpcMethod tellStatus;
+  auto request = createReq(TellStatusRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  auto keys = List::g();
+  keys->append("downloadSpeed");
+  keys->append("uploadSpeed");
+  request.params->append(std::move(keys));
+  auto response = tellStatus.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  const auto task = downcast<Dict>(response.param);
+  const auto taskDownloadSpeed = getString(task, "downloadSpeed");
+  const auto taskUploadSpeed = getString(task, "uploadSpeed");
+
+  GetGlobalStatRpcMethod globalStat;
+  response = globalStat.execute(
+      createReq(GetGlobalStatRpcMethod::getMethodName()), e_.get());
+  REQUIRE_EQ(0, response.code);
+  const auto global = downcast<Dict>(response.param);
+  REQUIRE_EQ(taskDownloadSpeed, getString(global, "downloadSpeed"));
+  REQUIRE_EQ(taskUploadSpeed, getString(global, "uploadSpeed"));
+}
+
+void RpcMethodTest::testBtFileSelectionGate()
+{
+  auto taskOption = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*taskOption);
+  taskOption->put(PREF_DIR, option_->get(PREF_DIR));
+  taskOption->put(PREF_ENABLE_RPC, A2_V_TRUE);
+  taskOption->put(PREF_PAUSE_METADATA, A2_V_TRUE);
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOption);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->configure(taskOption.get());
+  download->populateDownloadContext(context, taskOption.get());
+  download->updateSelection(context);
+  download->setGroup(group.get());
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  group->setPauseRequested(true);
+  download->beginFileSelectionPause();
+  download->requestStop(BtDownload::StopReason::FileSelection);
+  download->finishStopping();
+  e_->getRequestGroupMan()->addReservedGroup(group);
+
+  REQUIRE(download->awaitingFileSelection());
+  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+             download->snapshot().state);
+  download->applyTransportState(BtSnapshot::State::Downloading);
+  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+             download->snapshot().state);
+
+  GetFilesRpcMethod getFiles;
+  auto request = createReq(GetFilesRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  auto response = getFiles.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  REQUIRE_EQ((size_t)2, downcast<List>(response.param)->size());
+
+  TellWaitingRpcMethod tellWaiting;
+  request = createReq(TellWaitingRpcMethod::getMethodName());
+  request.params->append(Integer::g(0));
+  request.params->append(Integer::g(1));
+  auto waitingKeys = List::g();
+  waitingKeys->append("status");
+  waitingKeys->append("files");
+  waitingKeys->append("bittorrent");
+  request.params->append(std::move(waitingKeys));
+  response = tellWaiting.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  const auto waiting = downcast<List>(response.param);
+  REQUIRE_EQ((size_t)1, waiting->size());
+  const auto waitingTask = downcast<Dict>(waiting->get(0));
+  REQUIRE_EQ(std::string("paused"), getString(waitingTask, "status"));
+  REQUIRE_EQ((size_t)2, downcast<List>(waitingTask->get("files"))->size());
+  REQUIRE_EQ(std::string("awaitingFileSelection"),
+             getString(downcast<Dict>(waitingTask->get("bittorrent")),
+                       "state"));
+
+  UnpauseRpcMethod unpause;
+  request = createReq(UnpauseRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  response = unpause.execute(std::move(request), e_.get());
+  REQUIRE_EQ(1, response.code);
+  const auto unpauseError = downcast<Dict>(response.param);
+  const auto errorKey =
+      unpauseError->containsKey("message") ? "message" : "faultString";
+  REQUIRE(getString(unpauseError, errorKey)
+              .find("awaiting a valid select-file") != std::string::npos);
+  REQUIRE(group->isPauseRequested());
+  REQUIRE(download->awaitingFileSelection());
+  REQUIRE(taskOption->getAsBool(PREF_PAUSE_METADATA));
+
+  ChangeOptionRpcMethod changeOption;
+  request = createReq(ChangeOptionRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  auto emptyOptions = Dict::g();
+  emptyOptions->put(PREF_SELECT_FILE->k, "");
+  request.params->append(std::move(emptyOptions));
+  response = changeOption.execute(std::move(request), e_.get());
+  REQUIRE_EQ(1, response.code);
+  REQUIRE(download->awaitingFileSelection());
+
+  request = createReq(ChangeOptionRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  auto invalidOptions = Dict::g();
+  invalidOptions->put(PREF_SELECT_FILE->k, "3");
+  request.params->append(std::move(invalidOptions));
+  response = changeOption.execute(std::move(request), e_.get());
+  REQUIRE_EQ(1, response.code);
+  REQUIRE(download->awaitingFileSelection());
+
+  request = createReq(ChangeOptionRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  auto options = Dict::g();
+  options->put(PREF_SELECT_FILE->k, "2");
+  request.params->append(std::move(options));
+  response = changeOption.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  REQUIRE(!download->awaitingFileSelection());
+  REQUIRE(download->fileSelectionReady());
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
+
+  request = createReq(UnpauseRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  response = unpause.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  REQUIRE(!group->isPauseRequested());
+  REQUIRE(download->fileSelectionResuming());
+  REQUIRE(!taskOption->getAsBool(PREF_PAUSE_METADATA));
 }
 #endif // ENABLE_BITTORRENT
 

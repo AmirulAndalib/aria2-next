@@ -1,4 +1,5 @@
 #include "BtSession.h"
+#include "BtDownload.h"
 #include "BtResumeStore.h"
 #include "BtSettings.h"
 
@@ -6,28 +7,173 @@
 
 #include "BufferedFile.h"
 #include "File.h"
+#include "DownloadContext.h"
+#include "MetadataInfo.h"
+#include "RequestGroup.h"
+#include "RequestGroupMan.h"
+#include "SessionSerializer.h"
 #include "Option.h"
 #include "OptionParser.h"
 #include "prefs.h"
+#include "util.h"
 
 #include <libtorrent/address.hpp>
+#include <libtorrent/load_torrent.hpp>
+#include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/session.hpp>
 #include <libtorrent/session_params.hpp>
+#include <libtorrent/write_resume_data.hpp>
+
+#include <fstream>
+#include <sstream>
 
 namespace aria2 {
 
 class BtSessionTest {
 public:
   void testSessionStateRoundTrip();
+  void testTransferStatAggregation();
+  void testFileSelectionResumeState();
   void testDesktopSettings();
   void testTrackerOwnership();
   void testResumeStore();
 };
 
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
+A2_TEST(BtSessionTest, testTransferStatAggregation)
+A2_TEST(BtSessionTest, testFileSelectionResumeState)
 A2_TEST(BtSessionTest, testDesktopSettings)
 A2_TEST(BtSessionTest, testTrackerOwnership)
 A2_TEST(BtSessionTest, testResumeStore)
+
+void BtSessionTest::testTransferStatAggregation()
+{
+  BtSessionTransferStat stat;
+  stat.updateSessionPayload(4000, 500);
+  stat.update(1, 100, 20, 1000, true);
+  stat.update(2, 300, 40, 2000, true);
+  REQUIRE_EQ(400, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(60, stat.snapshot().uploadSpeed);
+  REQUIRE_EQ((int64_t)4000, stat.snapshot().sessionDownloadLength);
+  REQUIRE_EQ((int64_t)500, stat.snapshot().sessionUploadLength);
+  REQUIRE_EQ((int64_t)3000, stat.snapshot().allTimeUploadLength);
+
+  stat.update(1, 150, 25, 1100, true);
+  REQUIRE_EQ(450, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(65, stat.snapshot().uploadSpeed);
+  REQUIRE_EQ((int64_t)3100, stat.snapshot().allTimeUploadLength);
+
+  stat.suspend(1);
+  REQUIRE_EQ(300, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(40, stat.snapshot().uploadSpeed);
+  stat.suspend(2);
+  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
+
+  stat.update(2, 200, 30, 2100, true);
+  stat.retire(2);
+  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
+  REQUIRE_EQ((int64_t)3200, stat.snapshot().allTimeUploadLength);
+
+  stat.update(1, 50, 10, 1200, true);
+  stat.clearSpeeds();
+  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
+  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
+  REQUIRE_EQ((int64_t)3300, stat.snapshot().allTimeUploadLength);
+}
+
+void BtSessionTest::testFileSelectionResumeState()
+{
+  Option option;
+  OptionParser::getInstance()->parseDefaultValues(option);
+  option.put(PREF_DIR, A2_TEST_OUT_DIR "/bt-selection");
+  option.put(PREF_ENABLE_RPC, A2_V_TRUE);
+  option.put(PREF_PAUSE_METADATA, A2_V_TRUE);
+  option.put(PREF_BT_SESSION_STATE_FILE,
+             A2_TEST_OUT_DIR "/bt-selection/bittorrent.session");
+
+  libtorrent::error_code error;
+  auto params =
+      libtorrent::load_torrent_file(A2_TEST_DIR "/test.torrent", error, {});
+  REQUIRE(!error);
+  const auto magnet = libtorrent::make_magnet_uri(params);
+  auto probe = BtDownload::fromMagnet(magnet);
+  const auto identity = !probe->snapshot().infoHashV1.empty()
+                            ? probe->snapshot().infoHashV1
+                            : probe->snapshot().infoHashV2;
+  const auto resumePath = BtResumeStore::path(&option, identity);
+  const auto resume = libtorrent::write_resume_data_buf(params);
+  BtResumeStore::write(resumePath, resume.data(), resume.size());
+
+  auto makeGroup = [&magnet](const std::shared_ptr<Option>& taskOption) {
+    auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOption);
+    auto download = BtDownload::fromMagnet(magnet);
+    auto context = std::make_shared<DownloadContext>(16_k, 0);
+    download->configure(taskOption.get());
+    download->populateDownloadContext(context, taskOption.get());
+    group->setDownloadContext(context);
+    group->setBtDownload(download);
+    group->setMetadataInfo(
+        std::make_shared<MetadataInfo>(group->getGroupId(), magnet));
+    download->initialize(group.get());
+    return group;
+  };
+
+  auto awaitingOption = std::make_shared<Option>(option);
+  awaitingOption->remove(PREF_PAUSE);
+  auto awaiting = makeGroup(awaitingOption);
+  REQUIRE(awaiting->isPauseRequested());
+  REQUIRE(awaiting->getBtDownload()->awaitingFileSelection());
+  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+             awaiting->getBtDownload()->snapshot().state);
+  REQUIRE_EQ((size_t)2, awaiting->getBtDownload()->snapshot().files.size());
+  awaiting->getBtDownload()->applyTransportState(
+      BtSnapshot::State::Downloading);
+  REQUIRE(awaiting->getBtDownload()->awaitingFileSelection());
+  REQUIRE_EQ((size_t)2, awaiting->getBtDownload()->snapshot().files.size());
+
+  const auto serialize = [](const std::shared_ptr<RequestGroup>& group,
+                            const std::string& path) {
+    RequestGroupMan manager({group}, 1, group->getOption().get());
+    SessionSerializer serializer(&manager);
+    REQUIRE(serializer.save(path));
+    std::ifstream input(path, std::ios::binary);
+    std::ostringstream output;
+    output << input.rdbuf();
+    File(path).remove();
+    return output.str();
+  };
+  const auto awaitingSession = serialize(
+      awaiting, A2_TEST_OUT_DIR "/bt-selection/awaiting.session");
+  REQUIRE(awaitingSession.find(" pause=true\n") != std::string::npos);
+  REQUIRE(awaitingSession.find(" pause-metadata=true\n") != std::string::npos);
+
+  awaitingOption->put(PREF_SELECT_FILE, "2");
+  auto selected = util::parseIntSegments("2");
+  selected.normalize();
+  awaiting->getDownloadContext()->setFileFilter(std::move(selected));
+  awaiting->getBtDownload()->updateSelection(awaiting->getDownloadContext());
+  awaiting->getBtDownload()->submitFileSelection(awaitingOption.get());
+  awaiting->getBtDownload()->prepareFileSelectionResume();
+  awaiting->setPauseRequested(false);
+  REQUIRE(!awaitingOption->getAsBool(PREF_PAUSE_METADATA));
+  const auto selectedSession = serialize(
+      awaiting, A2_TEST_OUT_DIR "/bt-selection/selected.session");
+  REQUIRE(selectedSession.find(" pause=true\n") == std::string::npos);
+  REQUIRE(selectedSession.find(" select-file=2\n") != std::string::npos);
+  REQUIRE(selectedSession.find(" pause-metadata=false\n") != std::string::npos);
+
+  auto selectedOption = std::make_shared<Option>(*awaitingOption);
+  auto restored = makeGroup(selectedOption);
+  REQUIRE(!restored->isPauseRequested());
+  REQUIRE(!restored->getBtDownload()->awaitingFileSelection());
+  REQUIRE_EQ((size_t)2, restored->getBtDownload()->snapshot().files.size());
+  REQUIRE(!restored->getBtDownload()->snapshot().files[0].selected);
+  REQUIRE(restored->getBtDownload()->snapshot().files[1].selected);
+
+  File(resumePath).remove();
+}
 
 void BtSessionTest::testResumeStore()
 {

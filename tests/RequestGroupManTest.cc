@@ -86,6 +86,7 @@ public:
   void testUserRemoveDoesNotKeepControlFile();
   void testInsertReservedGroup();
   void testAddDownloadResult();
+  void testMergedTransferStat();
 };
 
 A2_TEST(RequestGroupManTest, testIsSameFileBeingDownloaded)
@@ -99,6 +100,38 @@ A2_TEST(RequestGroupManTest, testReduceMaxConcurrentDownloads)
 A2_TEST(RequestGroupManTest, testUserRemoveDoesNotKeepControlFile)
 A2_TEST(RequestGroupManTest, testInsertReservedGroup)
 A2_TEST(RequestGroupManTest, testAddDownloadResult)
+A2_TEST(RequestGroupManTest, testMergedTransferStat)
+
+void RequestGroupManTest::testMergedTransferStat()
+{
+  RequestGroupMan manager({}, 1, option_.get());
+  TransferStat bt;
+  bt.downloadSpeed = 2048;
+  bt.uploadSpeed = 512;
+  bt.sessionDownloadLength = 8192;
+  bt.sessionUploadLength = 1024;
+  bt.allTimeUploadLength = 4096;
+  manager.setBtTransferStat(&bt);
+  manager.getNetStat().addSessionDownloadLength(100);
+  manager.getNetStat().updateUploadLength(50);
+
+  const auto stat = manager.calculateStat();
+  REQUIRE_EQ(2048, stat.downloadSpeed);
+  REQUIRE_EQ(512, stat.uploadSpeed);
+  REQUIRE_EQ((int64_t)8292, stat.sessionDownloadLength);
+  REQUIRE_EQ((int64_t)1074, stat.sessionUploadLength);
+  REQUIRE_EQ((int64_t)4146, stat.allTimeUploadLength);
+
+  manager.setMaxOverallDownloadSpeedLimit(1024);
+  manager.setMaxOverallUploadSpeedLimit(256);
+  REQUIRE(manager.doesOverallDownloadSpeedExceed());
+  REQUIRE(manager.doesOverallUploadSpeedExceed());
+
+  bt.downloadSpeed = 0;
+  bt.uploadSpeed = 0;
+  REQUIRE(!manager.doesOverallDownloadSpeedExceed());
+  REQUIRE(!manager.doesOverallUploadSpeedExceed());
+}
 
 void RequestGroupManTest::testIsSameFileBeingDownloaded()
 {

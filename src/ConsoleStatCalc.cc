@@ -213,9 +213,9 @@ void printProgressCompact(ColorizedStream& o, const DownloadEngine* e,
                           const SizeFormatter& sizeFormatter)
 {
   if (!e->getRequestGroupMan()->downloadFinished()) {
-    NetStat& netstat = e->getRequestGroupMan()->getNetStat();
-    int dl = netstat.calculateDownloadSpeed();
-    int ul = netstat.calculateUploadSpeed();
+    const auto stat = e->getRequestGroupMan()->calculateStat();
+    int dl = stat.downloadSpeed;
+    int ul = stat.uploadSpeed;
     o << colors::magenta << "[" << colors::clear << "DL:" << colors::green
       << sizeFormatter(dl) << "B" << colors::clear;
     if (ul) {

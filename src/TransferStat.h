@@ -37,6 +37,9 @@
 
 #include "common.h"
 
+#include <algorithm>
+#include <limits>
+
 namespace aria2 {
 
 struct TransferStat {
@@ -62,6 +65,31 @@ struct TransferStat {
    */
   int64_t sessionUploadLength;
   int64_t allTimeUploadLength;
+
+  void add(const TransferStat& other)
+  {
+    const auto addSpeed = [](int lhs, int rhs) {
+      lhs = std::max(0, lhs);
+      rhs = std::max(0, rhs);
+      return static_cast<int>(std::min<int64_t>(
+          static_cast<int64_t>(lhs) + rhs, std::numeric_limits<int>::max()));
+    };
+    const auto addLength = [](int64_t lhs, int64_t rhs) {
+      lhs = std::max<int64_t>(0, lhs);
+      rhs = std::max<int64_t>(0, rhs);
+      return lhs > std::numeric_limits<int64_t>::max() - rhs
+                 ? std::numeric_limits<int64_t>::max()
+                 : lhs + rhs;
+    };
+    downloadSpeed = addSpeed(downloadSpeed, other.downloadSpeed);
+    uploadSpeed = addSpeed(uploadSpeed, other.uploadSpeed);
+    sessionDownloadLength =
+        addLength(sessionDownloadLength, other.sessionDownloadLength);
+    sessionUploadLength =
+        addLength(sessionUploadLength, other.sessionUploadLength);
+    allTimeUploadLength =
+        addLength(allTimeUploadLength, other.allTimeUploadLength);
+  }
 };
 
 } // namespace aria2

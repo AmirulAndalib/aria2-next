@@ -1225,8 +1225,11 @@ RPC Options
   file list and reports ``bittorrent.state`` as ``awaitingFileSelection``.
   Set :option:`select-file <--select-file>` through
   :func:`aria2.changeOption`, then resume the same GID with
-  :func:`aria2.unpause`. Resuming without ``select-file`` selects every file.
-  The metadata pause is consumed when the task resumes and is not repeated.
+  :func:`aria2.unpause`. The selection must contain at least one valid file
+  index. Resuming without a valid selection fails and leaves the task paused.
+  The metadata pause is consumed only after a valid selection and is not
+  repeated. The paused task and its file list remain available through
+  ``tellStatus``, ``tellWaiting``, and ``getFiles`` until the task is removed.
   Downloads generated from fetched torrent or Metalink documents are also
   paused before they start. This option is effective only when
   :option:`--enable-rpc=true <--enable-rpc>` is given.
@@ -2815,12 +2818,15 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   This method changes the status of the download denoted by *gid* (string) from
   ``paused`` to ``waiting``, making the download eligible to be restarted.
+  A Magnet task whose ``bittorrent.state`` is ``awaitingFileSelection`` rejects
+  this method until :func:`aria2.changeOption` sets a valid ``select-file``.
   This method returns the GID of the unpaused download.
 
 .. function:: aria2.unpauseAll([secret])
 
   This method is equal to calling :func:`aria2.unpause` for every paused
-  download. This methods returns ``OK``.
+  download. If any Magnet task is still awaiting file selection, no task is
+  changed and the method returns an error. Otherwise, it returns ``OK``.
 
 .. function:: aria2.tellStatus([secret], gid[, keys])
 
@@ -2944,7 +2950,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
       ``true`` if the torrent is private. Otherwise ``false``.
 
     ``state``
-      Libtorrent lifecycle state: ``adding``, ``downloadingMetadata``,
+      BitTorrent lifecycle state: ``adding``, ``downloadingMetadata``,
       ``awaitingFileSelection``, ``checking``, ``downloading``, ``finished``,
       ``seeding``, ``paused``, ``stopping``, ``stopped``, or ``error``.
 
@@ -3902,10 +3908,10 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   keys. Values are strings.
 
   ``downloadSpeed``
-    Overall download speed (byte/sec).
+    Overall download speed across all enabled protocols (byte/sec).
 
   ``uploadSpeed``
-    Overall upload speed(byte/sec).
+    Overall upload speed across all enabled protocols (byte/sec).
 
   ``numActive``
     The number of active downloads.

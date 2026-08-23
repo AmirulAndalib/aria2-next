@@ -21,6 +21,7 @@
 #include <libtorrent/torrent_handle.hpp>
 
 #include "BtDownload.h"
+#include "GroupId.h"
 #include "TimerA2.h"
 
 namespace aria2 {
@@ -39,6 +40,7 @@ struct BtTrackerSpec {
 };
 
 struct BtDownload::Impl {
+  a2_gid_t gid = 0;
   libtorrent::add_torrent_params params;
   libtorrent::torrent_handle handle;
   std::vector<BtTrackerSpec> sourceTrackers;
@@ -53,8 +55,6 @@ struct BtDownload::Impl {
   bool checkpointPending = false;
   bool stopSavePending = false;
   bool initialRecheckStarted = false;
-  bool resumeAfterFilePriority = false;
-  bool fileSelectionResumePending = false;
   Timer lastResumeSave = Timer::zero();
   Timer lastTrackerUpdate = Timer::zero();
 };

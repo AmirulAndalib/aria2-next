@@ -117,6 +117,9 @@ void IntegerRangeOptionHandler::parseArg(Option& option,
 {
   auto sgl = util::parseIntSegments(optarg);
   sgl.normalize();
+  if (!sgl.hasNext()) {
+    throw DL_ABORT_EX(fmt("%s requires at least one value.", pref_->k));
+  }
   while (sgl.hasNext()) {
     int v = sgl.next();
     if (v < min_ || max_ < v) {

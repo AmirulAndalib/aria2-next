@@ -134,6 +134,7 @@ TransferStat NetStat::toTransferStat()
   stat.uploadSpeed = calculateUploadSpeed();
   stat.sessionDownloadLength = getSessionDownloadLength();
   stat.sessionUploadLength = getSessionUploadLength();
+  stat.allTimeUploadLength = stat.sessionUploadLength;
   return stat;
 }
 

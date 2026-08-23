@@ -927,9 +927,7 @@ TransferStat RequestGroup::calculateStat() const
     return stat;
   }
 #endif // ENABLE_BITTORRENT
-  TransferStat stat = downloadContext_->getNetStat().toTransferStat();
-  stat.allTimeUploadLength = stat.sessionUploadLength;
-  return stat;
+  return downloadContext_->getNetStat().toTransferStat();
 }
 
 void RequestGroup::setHaltRequested(bool f, HaltReason haltReason)

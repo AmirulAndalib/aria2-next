@@ -1040,7 +1040,7 @@
   _(" --pause-metadata[=true|false]\n"       \
     "                              Pause a Magnet download on the same GID after its\n" \
     "                              file metadata is available and before payload is\n" \
-    "                              requested. Set select-file, then unpause the GID.\n" \
+    "                              requested. Set a valid select-file before unpausing.\n" \
     "                              Generated Metalink and torrent downloads are also\n" \
     "                              paused before they start. This option is effective\n" \
     "                              only when --enable-rpc=true is given.")

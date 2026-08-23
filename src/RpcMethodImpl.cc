@@ -659,7 +659,7 @@ std::unique_ptr<ValueBase> UnpauseRpcMethod::process(const RpcRequest& req,
   else {
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
-      group->getBtDownload()->consumeMetadataPause();
+      group->getBtDownload()->prepareFileSelectionResume();
     }
 #endif
     group->setPauseRequested(false);
@@ -672,10 +672,19 @@ std::unique_ptr<ValueBase> UnpauseAllRpcMethod::process(const RpcRequest& req,
                                                         DownloadEngine* e)
 {
   auto& groups = e->getRequestGroupMan()->getReservedGroups();
+#ifdef ENABLE_BITTORRENT
+  for (const auto& group : groups) {
+    if (group->getBtDownload() &&
+        group->getBtDownload()->awaitingFileSelection()) {
+      throw DL_ABORT_EX(fmt("GID#%s is awaiting a valid select-file option",
+                            GroupId::toHex(group->getGID()).c_str()));
+    }
+  }
+#endif // ENABLE_BITTORRENT
   for (auto& group : groups) {
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
-      group->getBtDownload()->consumeMetadataPause();
+      group->getBtDownload()->prepareFileSelectionResume();
     }
 #endif
     group->setPauseRequested(false);
@@ -2191,6 +2200,13 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
 {
   const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
   const std::shared_ptr<Option>& grOption = group->getOption();
+#ifdef ENABLE_BITTORRENT
+  if (option.defined(PREF_SELECT_FILE) && group->getBtDownload()) {
+    Option candidate(*grOption);
+    candidate.merge(option);
+    group->getBtDownload()->validateFileSelection(&candidate);
+  }
+#endif // ENABLE_BITTORRENT
   grOption->merge(option);
   if (option.defined(PREF_CHECKSUM)) {
     const std::string& checksum = grOption->get(PREF_CHECKSUM);
@@ -2268,9 +2284,15 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
     group->setMaxUploadSpeedLimit(grOption->getAsInt(PREF_MAX_UPLOAD_LIMIT));
   }
 #ifdef ENABLE_BITTORRENT
-  if (group->getBtDownload() && e->getBtSession()) {
-    e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
-                                            grOption.get());
+  if (group->getBtDownload()) {
+    if (e->getBtSession()) {
+      e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
+                                              grOption.get());
+    }
+    if (option.defined(PREF_SELECT_FILE)) {
+      group->getBtDownload()->updateSelection(dctx);
+      group->getBtDownload()->submitFileSelection(grOption.get());
+    }
   }
 #endif
 }

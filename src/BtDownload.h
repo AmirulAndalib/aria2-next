@@ -43,14 +43,19 @@ public:
   };
 
 private:
+  enum class FileSelectionState { None, Awaiting, Ready, Resuming };
+
   std::unique_ptr<Impl> impl_;
   BtSnapshot snapshot_;
   Source source_;
   StopReason stopReason_ = StopReason::None;
   ShutdownStage shutdownStage_ = ShutdownStage::Idle;
+  FileSelectionState fileSelectionState_ = FileSelectionState::None;
+  bool error_ = false;
   bool recoverableError_ = false;
   RequestGroup* group_ = nullptr;
 
+  std::string fileSelectionError(const Option* option) const;
   BtDownload(std::unique_ptr<Impl> impl, Source source);
 
 public:
@@ -88,7 +93,10 @@ public:
   StopReason stopReason() const { return stopReason_; }
   ShutdownStage shutdownStage() const { return shutdownStage_; }
   bool awaitingFileSelection() const;
+  bool fileSelectionReady() const;
+  bool fileSelectionResuming() const;
   bool shouldPauseAfterMetadata() const;
+  void validateFileSelection(const Option* option) const;
 
   void setGroup(RequestGroup* group) { group_ = group; }
   RequestGroup* group() const { return group_; }
@@ -96,7 +104,12 @@ public:
   void beginSavingResume();
   void beginRemoving();
   void finishStopping();
-  void consumeMetadataPause();
+  void beginFileSelectionPause();
+  void submitFileSelection(const Option* option);
+  void prepareFileSelectionResume();
+  void finishFileSelectionResume();
+  void applyTransportState(BtSnapshot::State state);
+  void setError(std::string message, bool recoverable);
   void prepareStart();
 
   friend class BtSession;
