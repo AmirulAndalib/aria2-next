@@ -16,11 +16,13 @@ function(aria2_import_dependency target header)
     NAMES "${header}"
     PATHS "${ARIA2_DEPENDENCY_ROOT}/include"
     NO_DEFAULT_PATH
+    NO_CMAKE_FIND_ROOT_PATH
     REQUIRED)
   find_library(${library_variable}
     NAMES ${DEPENDENCY_LIBRARIES}
     PATHS "${ARIA2_DEPENDENCY_ROOT}/lib"
     NO_DEFAULT_PATH
+    NO_CMAKE_FIND_ROOT_PATH
     REQUIRED)
 
   add_library(${target} UNKNOWN IMPORTED)
@@ -34,7 +36,7 @@ function(aria2_import_dependency target header)
 endfunction()
 
 aria2_import_dependency(aria2::zlib zlib.h
-  LIBRARIES z zlibstatic)
+  LIBRARIES z zs zlibstatic)
 aria2_import_dependency(aria2::expat expat.h
   LIBRARIES expat libexpat)
 aria2_import_dependency(aria2::sqlite sqlite3.h
@@ -50,7 +52,8 @@ unset(OpenSSL_DIR CACHE)
 set(OpenSSL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL")
 find_package(OpenSSL ${ARIA2_MIN_OPENSSL_VERSION} CONFIG REQUIRED
   PATHS "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL"
-  NO_DEFAULT_PATH)
+  NO_DEFAULT_PATH
+  NO_CMAKE_FIND_ROOT_PATH)
 
 if(WIN32)
   set_property(TARGET aria2::libssh2 PROPERTY
@@ -71,5 +74,6 @@ if(ARIA2_ENABLE_BITTORRENT)
   find_package(LibtorrentRasterbar ${ARIA2_MIN_LIBTORRENT_VERSION}
     CONFIG REQUIRED
     PATHS "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/LibtorrentRasterbar"
-    NO_DEFAULT_PATH)
+    NO_DEFAULT_PATH
+    NO_CMAKE_FIND_ROOT_PATH)
 endif()
