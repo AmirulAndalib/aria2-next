@@ -196,10 +196,12 @@ if(ARIA2_ENABLE_SSL AND WIN32 AND ARIA2_WITH_WINTLS)
   cmake_push_check_state(RESET)
   check_cxx_source_compiles("
 #define SECURITY_WIN32 1
+#define SCHANNEL_USE_BLACKLISTS 1
 #include <winsock2.h>
 #include <windows.h>
+#include <subauth.h>
 #include <security.h>
-#include <schnlsp.h>
+#include <schannel.h>
 int main() {
   SCH_CREDENTIALS credentials{};
   TLS_PARAMETERS tls_parameters{};

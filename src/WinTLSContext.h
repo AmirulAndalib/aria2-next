@@ -39,6 +39,9 @@
 #ifndef SECURITY_WIN32
 #  define SECURITY_WIN32 1
 #endif
+#ifndef SCHANNEL_USE_BLACKLISTS
+#  define SCHANNEL_USE_BLACKLISTS 1
+#endif
 
 #include "common.h"
 #include "config.h"
@@ -46,8 +49,9 @@
 #include <string>
 
 #include <windows.h>
+#include <subauth.h>
 #include <security.h>
-#include <schnlsp.h>
+#include <schannel.h>
 
 #include "TLSContext.h"
 #include "DlAbortEx.h"
