@@ -266,14 +266,15 @@ void UploadQueue::noteDownloaded(const std::string& userHash, uint64_t bytes)
 
 size_t UploadQueue::maintain(int64_t now, RequestGroupMan* rgman)
 {
-  constexpr int64_t WAIT_TIMEOUT = 3600;
-  constexpr int64_t SLOT_TIMEOUT = 3600;
-  constexpr uint64_t SLOT_BYTE_LIMIT = 10 * 1024 * 1024;
+  constexpr int64_t WAITING_PEER_RETENTION_SECONDS = 3600;
+  constexpr int64_t UPLOAD_SLOT_ROTATION_SECONDS = 3600;
+  constexpr uint64_t UPLOAD_SLOT_BYTE_LIMIT = 10 * 1024 * 1024;
   size_t changed = 0;
   for (auto& peer : peers_) {
     if (!peer.uploading ||
-        ((peer.uploadStartTime == 0 || now - peer.uploadStartTime < SLOT_TIMEOUT) &&
-         peer.sessionUploaded <= SLOT_BYTE_LIMIT)) {
+        ((peer.uploadStartTime == 0 ||
+          now - peer.uploadStartTime < UPLOAD_SLOT_ROTATION_SECONDS) &&
+         peer.sessionUploaded <= UPLOAD_SLOT_BYTE_LIMIT)) {
       continue;
     }
     peer.uploading = false;
@@ -286,7 +287,7 @@ size_t UploadQueue::maintain(int64_t now, RequestGroupMan* rgman)
   peers_.erase(
       std::remove_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
         return !peer.uploading && !peer.connected && peer.lastRequestTime != 0 &&
-               now - peer.lastRequestTime >= WAIT_TIMEOUT;
+               now - peer.lastRequestTime >= WAITING_PEER_RETENTION_SECONDS;
       }),
       peers_.end());
   changed += oldSize - peers_.size();

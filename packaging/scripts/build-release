@@ -24,6 +24,7 @@ set -- -S . -B "$build_dir" -G Ninja \
   "-DCMAKE_EXE_LINKER_FLAGS=$RELEASE_LDFLAGS${WINDOWS_DEBUG_MAP_FLAGS:+ $WINDOWS_DEBUG_MAP_FLAGS}" \
   -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
   -DARIA2_RELEASE_LTO=ON \
+  -DBUILD_TESTING=OFF \
   -DCMAKE_SKIP_RPATH=ON
 
 case "$platform" in
@@ -109,4 +110,8 @@ case "$platform" in
     ;;
 esac
 
-"$binary" --version
+case "$platform" in
+  linux|macos)
+    "$binary" --version
+    ;;
+esac

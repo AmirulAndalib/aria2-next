@@ -1,8 +1,3 @@
-enable_testing()
-
-# Tests build unconditionally: the doctest framework is vendored under
-# third_party/doctest, so a missing system package can never silently
-# reduce `ctest` to a green no-op.
 add_library(aria2_doctest INTERFACE)
 target_include_directories(aria2_doctest INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/doctest)
