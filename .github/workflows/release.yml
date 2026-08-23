@@ -168,13 +168,11 @@ jobs:
             verify_profile: windows-x86_64
             runtime_platform: windows-x86_64
             artifact: windows-x86_64.exe
-            toolchain: mingw
           - name: Windows ARM64
             architecture: aarch64
             verify_profile: windows-arm64
             runtime_platform: windows-arm64
             artifact: windows-arm64.exe
-            toolchain: llvm-mingw
     env:
       ARIA2_BUILD_PROFILE: ${{ needs.resolve-release.outputs.build_profile }}
       CMAKE_BUILD_TYPE: ${{ needs.resolve-release.outputs.cmake_build_type }}
@@ -182,6 +180,7 @@ jobs:
       TARGET_PROCESSOR: ${{ matrix.architecture }}
       RUNTIME_PLATFORM: ${{ matrix.runtime_platform }}
       WINDOWS_DEBUG_MAP_FLAGS: ${{ needs.resolve-release.outputs.windows_debug_map_flags }}
+      ARIA2_RELEASE_LTO: OFF
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -190,14 +189,9 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          packages="make cmake ninja-build perl curl tar binutils"
-          if [ "${{ matrix.toolchain }}" = mingw ]; then
-            packages="$packages gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
-          fi
-          sudo apt-get install -y --no-install-recommends $packages
+          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl curl tar binutils
 
       - name: Install LLVM-MinGW
-        if: matrix.toolchain == 'llvm-mingw'
         run: |
           . packaging/dependencies.env
           . packaging/scripts/common.sh
@@ -207,29 +201,16 @@ jobs:
 
       - name: Configure toolchain
         run: |
-          if [ "${{ matrix.toolchain }}" = mingw ]; then
-            prefix=x86_64-w64-mingw32
-            {
-              echo "CC=${prefix}-gcc-posix"
-              echo "CXX=${prefix}-g++-posix"
-              echo "RC=${prefix}-windres"
-              echo "AR=${prefix}-ar"
-              echo "RANLIB=${prefix}-ranlib"
-              echo "STRIP=${prefix}-strip"
-              echo "OBJDUMP=${prefix}-objdump"
-            } >> "$GITHUB_ENV"
-          else
-            prefix=aarch64-w64-mingw32
-            {
-              echo "CC=${prefix}-clang"
-              echo "CXX=${prefix}-clang++"
-              echo "RC=${prefix}-windres"
-              echo "AR=${prefix}-ar"
-              echo "RANLIB=${prefix}-ranlib"
-              echo "STRIP=${prefix}-strip"
-              echo "OBJDUMP=${prefix}-objdump"
-            } >> "$GITHUB_ENV"
-          fi
+          prefix=${{ matrix.architecture }}-w64-mingw32
+          {
+            echo "CC=${prefix}-clang"
+            echo "CXX=${prefix}-clang++"
+            echo "RC=${prefix}-windres"
+            echo "AR=${prefix}-ar"
+            echo "RANLIB=${prefix}-ranlib"
+            echo "STRIP=${prefix}-strip"
+            echo "OBJDUMP=${prefix}-objdump"
+          } >> "$GITHUB_ENV"
 
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools ${{ matrix.verify_profile }}

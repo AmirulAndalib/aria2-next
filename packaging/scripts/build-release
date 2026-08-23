@@ -11,6 +11,7 @@ build_dir=${BUILD_DIR:-build/release}
 build_type=${CMAKE_BUILD_TYPE:-Release}
 build_profile=${ARIA2_BUILD_PROFILE:-release}
 strip_binary=${STRIP_BINARY:-true}
+release_lto=${ARIA2_RELEASE_LTO:-ON}
 prefix="$PWD/$build_dir/dependencies"
 export PREFIX="$prefix"
 export ARIA2_BUILD_PROFILE="$build_profile"
@@ -23,7 +24,7 @@ set -- -S . -B "$build_dir" -G Ninja \
   "-DCMAKE_CXX_FLAGS=$RELEASE_CXXFLAGS" \
   "-DCMAKE_EXE_LINKER_FLAGS=$RELEASE_LDFLAGS${WINDOWS_DEBUG_MAP_FLAGS:+ $WINDOWS_DEBUG_MAP_FLAGS}" \
   -DARIA2_RELEASE_SIZE_OPTIMIZED=ON \
-  -DARIA2_RELEASE_LTO=ON \
+  "-DARIA2_RELEASE_LTO=$release_lto" \
   -DBUILD_TESTING=OFF \
   -DCMAKE_SKIP_RPATH=ON
 

@@ -398,6 +398,11 @@ static char* _strptime(const char* buf, const char* format, struct tm* timeptr,
         {
           const char* cp;
           char* zonestr;
+#ifdef __MINGW32__
+          char* const* zone_names = _tzname;
+#else
+          char* const* zone_names = tzname;
+#endif
 
           for (cp = buf; *cp && isupper((unsigned char)*cp); ++cp) { /*empty*/
           }
@@ -409,10 +414,10 @@ static char* _strptime(const char* buf, const char* format, struct tm* timeptr,
             if (0 == strcmp(zonestr, "GMT")) {
               *gmt = 1;
             }
-            else if (0 == strcmp(zonestr, tzname[0])) {
+            else if (0 == strcmp(zonestr, zone_names[0])) {
               timeptr->tm_isdst = 0;
             }
-            else if (0 == strcmp(zonestr, tzname[1])) {
+            else if (0 == strcmp(zonestr, zone_names[1])) {
               timeptr->tm_isdst = 1;
             }
             else {

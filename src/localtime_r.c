@@ -37,7 +37,9 @@
 #include <stdlib.h>
 
 #ifdef __MINGW32__
-#  define WIN32_LEAN_AND_MEAN
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
 #  include <windows.h>
 #endif // __MINGW32__
 
