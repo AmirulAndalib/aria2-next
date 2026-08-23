@@ -52,6 +52,7 @@
 #include "base64.h"
 #include "MessageDigest.h"
 #include "message_digest_helper.h"
+#include "message.h"
 #ifdef ENABLE_WEBSOCKET
 #  include "WebSocketResponseCommand.h"
 #endif // ENABLE_WEBSOCKET
@@ -254,10 +255,12 @@ bool HttpServerCommand::execute()
     }
   }
   catch (RecoverableException& e) {
-    A2_LOG_DEBUG_EX(fmt("CUID#%" PRId64
-                       " - Error occurred while reading HTTP request",
-                       getCuid()),
-                   e);
+    if (std::string(e.what()) != EX_EOF_FROM_PEER) {
+      A2_LOG_DEBUG_EX(fmt("CUID#%" PRId64
+                         " - Error occurred while reading HTTP request",
+                         getCuid()),
+                     e);
+    }
     return true;
   }
 }

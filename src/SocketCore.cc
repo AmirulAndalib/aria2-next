@@ -656,8 +656,8 @@ void SocketCore::closeConnection()
 #ifndef __MINGW32__
 #  define CHECK_FD(fd)                                                         \
     if (fd < 0 || FD_SETSIZE <= fd) {                                          \
-      logger_->warn("Detected file descriptor >= FD_SETSIZE or < 0. "          \
-                    "Download may slow down or fail.");                        \
+      A2_LOG_WARN("Detected file descriptor >= FD_SETSIZE or < 0. "            \
+                  "Download may slow down or fail.");                          \
       return false;                                                            \
     }
 #endif // !__MINGW32__
@@ -1607,10 +1607,7 @@ void checkAddrconfig()
                        NI_MAXHOST, 0, 0, NI_NUMERICHOST);
       if (rv == 0) {
         if (found) {
-          A2_LOG_DEBUG(fmt("Found configured address: %s", host));
-        }
-        else {
-          A2_LOG_DEBUG(fmt("Not considered: %s", host));
+          A2_LOG_TRACE(fmt("Configured address: %s", host));
         }
       }
     }
@@ -1668,10 +1665,7 @@ void checkAddrconfig()
                      NI_NUMERICHOST);
     if (rv == 0) {
       if (found) {
-        A2_LOG_DEBUG(fmt("Found configured address: %s", host));
-      }
-      else {
-        A2_LOG_DEBUG(fmt("Not considered: %s", host));
+        A2_LOG_TRACE(fmt("Configured address: %s", host));
       }
     }
   }

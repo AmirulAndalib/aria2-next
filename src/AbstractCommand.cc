@@ -209,10 +209,6 @@ bool AbstractCommand::shouldProcess() const
 
 bool AbstractCommand::execute()
 {
-  A2_LOG_TRACE(fmt("CUID#%" PRId64
-                   " - socket: read:%d, write:%d, hup:%d, err:%d",
-                   getCuid(), readEventEnabled(), writeEventEnabled(),
-                   hupEventEnabled(), errorEventEnabled()));
   try {
     if (requestGroup_->downloadFinished() || requestGroup_->isHaltRequested()) {
       return true;
@@ -378,8 +374,11 @@ bool AbstractCommand::execute()
     requestGroup_->setLastErrorCode(err.getErrorCode(), err.what());
     if (req_) {
       A2_LOG_ERROR_EX(
-          fmt(MSG_DOWNLOAD_ABORTED, getCuid(), req_->getUri().c_str()),
-          DL_ABORT_EX2(fmt("URI=%s", req_->getCurrentUri().c_str()), err));
+          fmt(MSG_DOWNLOAD_ABORTED, getCuid(),
+              logging::sanitizeUri(req_->getUri()).c_str()),
+          DL_ABORT_EX2(fmt("URI=%s",
+                           logging::sanitizeUri(req_->getCurrentUri()).c_str()),
+                       err));
       fileEntry_->addURIResult(req_->getUri(), err.getErrorCode());
       if (err.getErrorCode() == error_code::CANNOT_RESUME) {
         requestGroup_->increaseResumeFailureCount();
@@ -395,8 +394,11 @@ bool AbstractCommand::execute()
   catch (DlRetryEx& err) {
     assert(req_);
     A2_LOG_DEBUG_EX(
-        fmt(MSG_RESTARTING_DOWNLOAD, getCuid(), req_->getUri().c_str()),
-        DL_RETRY_EX2(fmt("URI=%s", req_->getCurrentUri().c_str()), err));
+        fmt(MSG_RESTARTING_DOWNLOAD, getCuid(),
+            logging::sanitizeUri(req_->getUri()).c_str()),
+        DL_RETRY_EX2(fmt("URI=%s",
+                         logging::sanitizeUri(req_->getCurrentUri()).c_str()),
+                     err));
     req_->addTryCount();
     req_->resetRedirectCount();
     req_->resetUri();
@@ -406,7 +408,9 @@ bool AbstractCommand::execute()
     if (isAbort) {
       A2_LOG_DEBUG(fmt(MSG_MAX_TRY, getCuid(), req_->getTryCount()));
       A2_LOG_ERROR_EX(
-          fmt(MSG_DOWNLOAD_ABORTED, getCuid(), req_->getUri().c_str()), err);
+          fmt(MSG_DOWNLOAD_ABORTED, getCuid(),
+              logging::sanitizeUri(req_->getUri()).c_str()),
+          err);
       fileEntry_->addURIResult(req_->getUri(), err.getErrorCode());
       requestGroup_->setLastErrorCode(err.getErrorCode(), err.what());
       if (err.getErrorCode() == error_code::CANNOT_RESUME) {
@@ -431,8 +435,11 @@ bool AbstractCommand::execute()
     requestGroup_->setLastErrorCode(err.getErrorCode(), err.what());
     if (req_) {
       A2_LOG_ERROR_EX(
-          fmt(MSG_DOWNLOAD_ABORTED, getCuid(), req_->getUri().c_str()),
-          DL_ABORT_EX2(fmt("URI=%s", req_->getCurrentUri().c_str()), err));
+          fmt(MSG_DOWNLOAD_ABORTED, getCuid(),
+              logging::sanitizeUri(req_->getUri()).c_str()),
+          DL_ABORT_EX2(fmt("URI=%s",
+                           logging::sanitizeUri(req_->getCurrentUri()).c_str()),
+                       err));
       fileEntry_->addURIResult(req_->getUri(), err.getErrorCode());
     }
     else {
@@ -481,7 +488,7 @@ bool AbstractCommand::prepareForRetry(time_t wait)
 
     fileEntry_->poolRequest(req_);
     A2_LOG_TRACE(fmt("CUID#%" PRId64 " - Pooling request URI=%s", getCuid(),
-                     req_->getUri().c_str()));
+                     logging::sanitizeUri(req_->getUri()).c_str()));
     if (getSegmentMan()) {
       getSegmentMan()->recognizeSegmentFor(fileEntry_);
     }

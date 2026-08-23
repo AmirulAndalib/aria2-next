@@ -338,7 +338,6 @@ void Piece::updateWrCache(WrDiskCache* diskCache, unsigned char* data,
     return;
   }
   assert(wrCache_);
-  A2_LOG_TRACE(fmt("updateWrCache entry=%p", wrCache_.get()));
   auto cell = new WrDiskCacheEntry::DataCell();
   cell->goff = goff;
   cell->data = data;

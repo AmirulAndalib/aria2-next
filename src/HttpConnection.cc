@@ -34,30 +34,18 @@
 /* copyright --> */
 #include "HttpConnection.h"
 
-#include <sstream>
-
-#include "util.h"
 #include "message.h"
-#include "prefs.h"
 #include "Log.h"
 #include "DlRetryEx.h"
 #include "DlAbortEx.h"
-#include "Request.h"
 #include "Segment.h"
 #include "HttpRequest.h"
 #include "HttpResponse.h"
-#include "HttpHeaderProcessor.h"
 #include "HttpHeader.h"
-#include "Log.h"
+#include "HttpHeaderProcessor.h"
 #include "SocketCore.h"
-#include "Option.h"
-#include "CookieStorage.h"
-#include "AuthConfigFactory.h"
-#include "AuthConfig.h"
-#include "a2functional.h"
 #include "fmt.h"
 #include "SocketRecvBuffer.h"
-#include "array_fun.h"
 
 namespace aria2 {
 
@@ -96,37 +84,11 @@ HttpConnection::HttpConnection(
 
 HttpConnection::~HttpConnection() = default;
 
-std::string HttpConnection::eraseConfidentialInfo(const std::string& request)
-{
-  std::istringstream istr(request);
-  std::string result;
-  std::string line;
-  while (getline(istr, line)) {
-    if (util::istartsWith(line, "Authorization: ")) {
-      result += "Authorization: <snip>\n";
-    }
-    else if (util::istartsWith(line, "Proxy-Authorization: ")) {
-      result += "Proxy-Authorization: <snip>\n";
-    }
-    else if (util::istartsWith(line, "Cookie: ")) {
-      result += "Cookie: <snip>\n";
-    }
-    else if (util::istartsWith(line, "Set-Cookie: ")) {
-      result += "Set-Cookie: <snip>\n";
-    }
-    else {
-      result += line;
-      result += "\n";
-    }
-  }
-  return result;
-}
-
 void HttpConnection::sendRequest(std::unique_ptr<HttpRequest> httpRequest,
                                  std::string request)
 {
-  A2_LOG_DEBUG(
-      fmt(MSG_SENDING_REQUEST, cuid_, eraseConfidentialInfo(request).c_str()));
+  A2_LOG_TRACE(fmt(MSG_SENDING_REQUEST, cuid_,
+                   logging::summarizeHttpMessage(request).c_str()));
   socketBuffer_.pushStr(std::move(request));
   socketBuffer_.send();
   outstandingHttpRequests_.push_back(
@@ -160,8 +122,9 @@ std::unique_ptr<HttpResponse> HttpConnection::receiveResponse()
   const auto& proc = outstandingHttpRequests_.front()->getHttpHeaderProcessor();
   if (proc->parse(socketRecvBuffer_->getBuffer(),
                   socketRecvBuffer_->getBufferLength())) {
-    A2_LOG_DEBUG(fmt(MSG_RECEIVE_RESPONSE, cuid_,
-                    eraseConfidentialInfo(proc->getHeaderString()).c_str()));
+    A2_LOG_TRACE(fmt(MSG_RECEIVE_RESPONSE, cuid_,
+                     logging::summarizeHttpMessage(proc->getHeaderString())
+                         .c_str()));
     auto result = proc->getResult();
     if (result->getStatusCode() / 100 == 1) {
       socketRecvBuffer_->drain(proc->getLastBytesProcessed());

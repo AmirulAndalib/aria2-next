@@ -316,7 +316,6 @@ void DownloadEngine::evictSocketPool()
   }
 
   std::multimap<std::string, SocketPoolEntry> newPool;
-  A2_LOG_TRACE("Scanning SocketPool and erasing timed out entry.");
   for (auto& elem : socketPool_) {
     if (!elem.second.isTimeout()) {
       newPool.insert(elem);

@@ -148,8 +148,6 @@ struct BtSession::Impl {
   std::array<uint64_t, lt::performance_alert::num_warnings>
       performanceWarnings{};
   std::string lastPerformanceWarning;
-  std::map<std::string, size_t> trackerErrorCounts;
-
   explicit Impl(const Option* option)
       : option(option),
         config(makeBtConfig(option)),
@@ -255,8 +253,8 @@ lt::session_params makeSessionParams(const Option* option,
     if (!hasDhtNodes(params)) {
       loadedState.clear();
     }
-    A2_LOG_INFO(fmt("Loaded BitTorrent session state from %s",
-                    option->get(PREF_BT_SESSION_STATE_FILE).c_str()));
+    A2_LOG_DEBUG(fmt("Loaded BitTorrent session state from %s",
+                     option->get(PREF_BT_SESSION_STATE_FILE).c_str()));
     return params;
   }
   catch (const std::exception& error) {
@@ -1257,38 +1255,23 @@ void BtSession::poll()
     }
 
     if (auto* tracker = lt::alert_cast<lt::tracker_error_alert>(alert)) {
-      const auto message = tracker->message();
-      const auto count = ++impl_->trackerErrorCounts[message];
-      if (count == 1 || count % 100 == 0) {
-        A2_LOG_DEBUG(fmt("%s [occurrences: %lu]", message.c_str(),
-                         static_cast<unsigned long>(count)));
+      if (tracker->times_in_row == 1 || tracker->times_in_row % 10 == 0) {
+        A2_LOG_DEBUG(fmt(
+            "BitTorrent tracker announce failed: url=%s operation=%s "
+            "error=%s consecutive=%d",
+            logging::sanitizeUri(tracker->tracker_url()).c_str(),
+            lt::operation_name(tracker->op),
+            logging::sanitizeText(tracker->error.message()).c_str(),
+            tracker->times_in_row));
       }
       continue;
     }
 
     if (auto* tracker = lt::alert_cast<lt::tracker_warning_alert>(alert)) {
-      A2_LOG_WARN(tracker->message());
-      continue;
-    }
-
-    if (auto* tracker = lt::alert_cast<lt::tracker_reply_alert>(alert)) {
-      A2_LOG_DEBUG(tracker->message());
-      continue;
-    }
-
-    if (auto* connected = lt::alert_cast<lt::peer_connect_alert>(alert)) {
-      A2_LOG_DEBUG(connected->message());
-      continue;
-    }
-
-    if (auto* disconnected =
-            lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
-      A2_LOG_DEBUG(disconnected->message());
-      continue;
-    }
-
-    if (auto* peerError = lt::alert_cast<lt::peer_error_alert>(alert)) {
-      A2_LOG_DEBUG(peerError->message());
+      A2_LOG_DEBUG(fmt("BitTorrent tracker warning: url=%s message=%s",
+                       logging::sanitizeUri(tracker->tracker_url()).c_str(),
+                       logging::sanitizeText(tracker->warning_message())
+                           .c_str()));
       continue;
     }
 
@@ -1346,8 +1329,11 @@ void BtSession::poll()
     }
 
     if (auto* mapped = lt::alert_cast<lt::portmap_error_alert>(alert)) {
-      impl_->portMappingError = mapped->error.message();
-      A2_LOG_WARN(mapped->message());
+      const auto error = mapped->error.message();
+      if (impl_->portMappingError != error) {
+        A2_LOG_WARN(fmt("BitTorrent port mapping failed: %s", error.c_str()));
+        impl_->portMappingError = error;
+      }
       continue;
     }
 
@@ -1385,7 +1371,7 @@ void BtSession::poll()
     }
 
     if (auto* banned = lt::alert_cast<lt::ip_ban_alert>(alert)) {
-      A2_LOG_INFO(banned->message());
+      A2_LOG_DEBUG(banned->message());
       continue;
     }
   }

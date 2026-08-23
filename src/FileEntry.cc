@@ -226,7 +226,8 @@ std::shared_ptr<Request> FileEntry::getRequest(
       req->resetTryCount();
       req->setResetTryCountAfterWake(false);
     }
-    A2_LOG_TRACE(fmt("Picked up from pool: %s", req->getUri().c_str()));
+    A2_LOG_TRACE(fmt("Picked up from pool: %s",
+                     logging::sanitizeUri(req->getUri()).c_str()));
   }
 
   inFlightRequests_.insert(req);
@@ -296,12 +297,14 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
     if (std::count(inFlightHosts.begin(), inFlightHosts.end(), host) >=
         maxConnectionPerServer_) {
       A2_LOG_TRACE(fmt("%s has already used %d times, not considered.",
-                       (*i).c_str(), maxConnectionPerServer_));
+                       logging::sanitizeUri(*i).c_str(),
+                       maxConnectionPerServer_));
       continue;
     }
     if (findSecond(usedHosts.begin(), usedHosts.end(), host) !=
         usedHosts.end()) {
-      A2_LOG_TRACE(fmt("%s is in usedHosts, not considered", (*i).c_str()));
+      A2_LOG_TRACE(fmt("%s is in usedHosts, not considered",
+                       logging::sanitizeUri(*i).c_str()));
       continue;
     }
     std::shared_ptr<ServerStat> ss = serverStatMan->find(host, protocol);
@@ -317,7 +320,8 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
     std::sort(fastCands.begin(), fastCands.end(), ServerStatFaster());
     auto fastestRequest = std::make_shared<Request>();
     const std::string& uri = fastCands.front().second;
-    A2_LOG_TRACE(fmt("Selected %s from fastCands", uri.c_str()));
+    A2_LOG_TRACE(fmt("Selected %s from fastCands",
+                     logging::sanitizeUri(uri).c_str()));
     // Candidate URIs where already parsed when populating fastCands.
     (void)fastestRequest->setUri(uri);
     fastestRequest->setReferer(base->getReferer());
@@ -432,7 +436,7 @@ void FileEntry::reuseUri(const std::vector<std::string>& ignore)
     for (std::vector<std::string>::const_iterator i = errorUris.begin(),
                                                   eoi = errorUris.end();
          i != eoi; ++i) {
-      A2_LOG_TRACE(fmt("error URI=%s", (*i).c_str()));
+      A2_LOG_TRACE(fmt("error URI=%s", logging::sanitizeUri(*i).c_str()));
     }
   }
   std::vector<std::string> reusableURIs;
@@ -459,7 +463,7 @@ void FileEntry::reuseUri(const std::vector<std::string>& ignore)
     for (std::vector<std::string>::const_iterator i = reusableURIs.begin(),
                                                   eoi = reusableURIs.end();
          i != eoi; ++i) {
-      A2_LOG_TRACE(fmt("URI=%s", (*i).c_str()));
+      A2_LOG_TRACE(fmt("URI=%s", logging::sanitizeUri(*i).c_str()));
     }
   }
   uris_.insert(uris_.end(), reusableURIs.begin(), reusableURIs.end());

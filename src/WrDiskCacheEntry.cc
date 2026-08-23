@@ -91,8 +91,6 @@ void WrDiskCacheEntry::clear() { deleteDataCells(); }
 
 bool WrDiskCacheEntry::cacheData(DataCell* dataCell)
 {
-  A2_LOG_TRACE(fmt("WrDiskCacheEntry cache goff=%" PRId64 ", len=%lu",
-                   dataCell->goff, static_cast<unsigned long>(dataCell->len)));
   if (set_.insert(dataCell).second) {
     size_ += dataCell->len;
     return true;

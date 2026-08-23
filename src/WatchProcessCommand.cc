@@ -82,7 +82,6 @@ void WatchProcessCommand::process()
 {
   // Check process pid_ is running. If it is not running, shutdown
   // aria2.
-  A2_LOG_TRACE(fmt("Checking proess %u", pid_));
   bool waiting = true;
 #ifdef _WIN32
   HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid_);

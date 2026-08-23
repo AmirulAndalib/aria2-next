@@ -37,11 +37,9 @@
 #include "DownloadEngine.h"
 #include "HttpServer.h"
 #include "Log.h"
-#include "HttpServerCommand.h"
 #include "RequestGroupMan.h"
 #include "RecoverableException.h"
 #include "wallclock.h"
-#include "util.h"
 #include "fmt.h"
 
 namespace aria2 {
@@ -113,8 +111,6 @@ bool AbstractHttpServerResponseCommand::execute()
     return true;
   }
   if (httpServer_->sendBufferIsEmpty()) {
-    A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - HttpServer: all response transmitted.",
-                    getCuid()));
     afterSend(httpServer_, e_);
     return true;
   }

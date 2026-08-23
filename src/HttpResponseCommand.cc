@@ -214,7 +214,8 @@ bool HttpResponseCommand::executeInternal()
         httpResponse->getMetalinKHttpEntries(entries, getOption());
         for (const auto& e : entries) {
           fe->addUri(e.uri);
-          A2_LOG_TRACE(fmt("Adding URI=%s", e.uri.c_str()));
+          A2_LOG_TRACE(
+              fmt("Adding URI=%s", logging::sanitizeUri(e.uri).c_str()));
         }
       }
     }

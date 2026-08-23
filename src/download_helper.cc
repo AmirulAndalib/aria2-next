@@ -494,6 +494,7 @@ createBtRequestGroup(std::shared_ptr<BtDownload> download,
   context->setFileFilter(std::move(selected));
 
   download->updateFilePaths(context, option.get());
+  download->updateSelection(context);
 
   group->setDownloadContext(context);
   group->setBtDownload(download);
@@ -722,10 +723,12 @@ public:
 #endif // ENABLE_METALINK
     else {
       if (throwOnError_) {
-        throw DL_ABORT_EX(fmt(MSG_UNRECOGNIZED_URI, normalizedUri.c_str()));
+        throw DL_ABORT_EX(fmt(MSG_UNRECOGNIZED_URI,
+                              logging::sanitizeUri(normalizedUri).c_str()));
       }
       else {
-        A2_LOG_ERROR(fmt(MSG_UNRECOGNIZED_URI, normalizedUri.c_str()));
+        A2_LOG_ERROR(fmt(MSG_UNRECOGNIZED_URI,
+                         logging::sanitizeUri(normalizedUri).c_str()));
       }
     }
   }

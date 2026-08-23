@@ -237,7 +237,7 @@ bool HttpServerBodyCommand::execute()
             addHttpServerResponseCommand(false);
             return true;
           }
-          A2_LOG_DEBUG(fmt("Executing RPC method %s", req.methodName.c_str()));
+          A2_LOG_TRACE(fmt("Executing RPC method %s", req.methodName.c_str()));
           auto method = rpc::getMethod(req.methodName);
           auto res = method->execute(std::move(req), e_);
           bool gzip = httpServer_->supportsGZip();

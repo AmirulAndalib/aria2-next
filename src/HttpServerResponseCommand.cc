@@ -33,13 +33,9 @@
  */
 /* copyright --> */
 #include "HttpServerResponseCommand.h"
-#include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "HttpServer.h"
-#include "Log.h"
 #include "HttpServerCommand.h"
-#include "RequestGroupMan.h"
-#include "fmt.h"
 
 namespace aria2 {
 
@@ -56,7 +52,6 @@ void HttpServerResponseCommand::afterSend(
     const std::shared_ptr<HttpServer>& httpServer, DownloadEngine* e)
 {
   if (httpServer->supportsPersistentConnection()) {
-    A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - Persist connection.", getCuid()));
     e->addCommand(make_unique<HttpServerCommand>(getCuid(), httpServer, e,
                                                  httpServer->getSocket()));
   }

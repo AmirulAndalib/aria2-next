@@ -160,8 +160,6 @@ ssize_t SocketBuffer::send()
     if (slen == 0 && !socket_->wantRead() && !socket_->wantWrite()) {
       throw DL_ABORT_EX(fmt(EX_SOCKET_SEND, "Connection closed."));
     }
-    // A2_LOG_INFO(fmt("num=%zu, amount=%d, bufq.size()=%zu, SEND=%d",
-    //                   num, amount, bufq_.size(), slen));
     totalslen += slen;
 
     if (firstlen > slen) {

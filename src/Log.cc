@@ -13,8 +13,10 @@
 #include "Log.h"
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <vector>
 
 #include <spdlog/logger.h>
@@ -98,15 +100,6 @@ spdlog::filename_t toSpdlogFilename(const std::string& path)
 #endif
 }
 
-std::string fromSpdlogFilename(const spdlog::filename_t& path)
-{
-#ifdef _WIN32
-  return wCharToUtf8(path);
-#else
-  return path;
-#endif
-}
-
 bool removeFile(const std::string& path)
 {
   File file(path);
@@ -121,20 +114,18 @@ bool truncateFile(const std::string& path)
 
 std::string nativeHistoryPath(const std::string& path, size_t index)
 {
-  return fromSpdlogFilename(
-      spdlog::sinks::rotating_file_sink_mt::calc_filename(
-          toSpdlogFilename(path), index));
+#ifdef _WIN32
+  return wCharToUtf8(spdlog::sinks::rotating_file_sink_mt::calc_filename(
+      toSpdlogFilename(path), index));
+#else
+  return spdlog::sinks::rotating_file_sink_mt::calc_filename(path, index);
+#endif
 }
 
-void reconcileLogFiles(const Settings& settings)
+void enforceLogBounds(const Settings& settings)
 {
   for (size_t i = 1; i <= MAX_FILES; ++i) {
     const auto native = nativeHistoryPath(settings.file, i);
-    const auto legacy = settings.file + "." + std::to_string(i);
-    if (legacy != native && !removeFile(legacy)) {
-      throw DL_ABORT_EX("Failed to remove legacy log file " + legacy);
-    }
-
     File history(native);
     if (history.exists() &&
         (i >= settings.maxFiles ||
@@ -156,9 +147,10 @@ void reconcileLogFiles(const Settings& settings)
 std::unique_ptr<spdlog::formatter> fileFormatter(size_t maxSize)
 {
   std::unique_ptr<spdlog::formatter> pattern(new spdlog::pattern_formatter(
-      "%Y-%m-%d %H:%M:%S.%f [%l] [%g:%#] %v"));
+      "%Y-%m-%d %H:%M:%S.%f [%l] [%s:%#] %v"));
   return std::unique_ptr<spdlog::formatter>(
-      new BoundedFormatter(std::move(pattern), maxSize));
+      new BoundedFormatter(std::move(pattern),
+                           std::min(maxSize, MAX_RECORD_SIZE)));
 }
 
 std::shared_ptr<spdlog::logger> makeLogger(const Settings& settings)
@@ -178,12 +170,12 @@ std::shared_ptr<spdlog::logger> makeLogger(const Settings& settings)
       sink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
     }
     sink->set_level(settings.fileLevel);
-    sink->set_pattern("%Y-%m-%d %H:%M:%S.%f [%l] [%g:%#] %v");
+    sink->set_formatter(fileFormatter(settings.maxFileSize));
     sinks.push_back(std::move(sink));
   }
   else {
     if (!settings.file.empty()) {
-      reconcileLogFiles(settings);
+      enforceLogBounds(settings);
       auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
           toSpdlogFilename(settings.file), settings.maxFileSize,
           settings.maxFiles - 1, false);
@@ -204,7 +196,7 @@ std::shared_ptr<spdlog::logger> makeLogger(const Settings& settings)
         sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>(colorMode);
       }
       sink->set_level(settings.consoleLevel);
-      sink->set_pattern("\n%m/%d %H:%M:%S [%^%l%$] %v");
+      sink->set_pattern("%m/%d %H:%M:%S [%^%l%$] %v");
       sinks.push_back(std::move(sink));
     }
   }
@@ -216,7 +208,7 @@ std::shared_ptr<spdlog::logger> makeLogger(const Settings& settings)
     level = std::min(level, sink->level());
   }
   logger->set_level(level);
-  logger->flush_on(spdlog::level::info);
+  logger->flush_on(spdlog::level::warn);
   return logger;
 }
 
@@ -247,6 +239,110 @@ Settings getSettings()
 spdlog::level::level_enum parseLevel(const std::string& level)
 {
   return spdlog::level::from_str(level);
+}
+
+std::string sanitizeText(const std::string& value)
+{
+  std::string result;
+  result.reserve(std::min(value.size(), MAX_RECORD_SIZE));
+  for (const unsigned char byte : value) {
+    if (result.size() >= MAX_RECORD_SIZE) {
+      result += "[truncated]";
+      break;
+    }
+    switch (byte) {
+    case '\r':
+      result += "\\r";
+      break;
+    case '\n':
+      result += "\\n";
+      break;
+    case '\t':
+      result += "\\t";
+      break;
+    default:
+      result.push_back(byte < 0x20 || byte == 0x7f ? '?' : byte);
+      break;
+    }
+  }
+  return result;
+}
+
+std::string sanitizeUri(const std::string& value)
+{
+  auto result = sanitizeText(value);
+  const auto fragment = result.find('#');
+  if (fragment != std::string::npos) {
+    result.erase(fragment);
+  }
+  const auto query = result.find('?');
+  if (query != std::string::npos) {
+    result.erase(query);
+    result += "?<redacted>";
+  }
+
+  const auto scheme = result.find("://");
+  if (scheme != std::string::npos) {
+    const auto authority = scheme + 3;
+    const auto path = result.find('/', authority);
+    const auto userInfo = result.find('@', authority);
+    if (userInfo != std::string::npos &&
+        (path == std::string::npos || userInfo < path)) {
+      result.erase(authority, userInfo - authority + 1);
+    }
+  }
+  return result;
+}
+
+std::string summarizeHttpMessage(const std::string& value)
+{
+  std::istringstream input(value);
+  std::string line;
+  std::string result;
+  bool first = true;
+  while (std::getline(input, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (first) {
+      first = false;
+      const auto firstSpace = line.find(' ');
+      const auto secondSpace = firstSpace == std::string::npos
+                                   ? std::string::npos
+                                   : line.find(' ', firstSpace + 1);
+      if (secondSpace != std::string::npos &&
+          line.compare(0, 5, "HTTP/") != 0) {
+        line.replace(firstSpace + 1, secondSpace - firstSpace - 1,
+                     sanitizeUri(line.substr(firstSpace + 1,
+                                             secondSpace - firstSpace - 1)));
+      }
+      result = sanitizeText(line);
+      continue;
+    }
+
+    const auto colon = line.find(':');
+    if (colon == std::string::npos) {
+      continue;
+    }
+    auto name = line.substr(0, colon);
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    if (name != "content-length" && name != "content-range" &&
+        name != "content-type" && name != "range" &&
+        name != "accept-ranges" && name != "location") {
+      continue;
+    }
+    auto content = line.substr(colon + 1);
+    const auto firstValue = content.find_first_not_of(" \t");
+    content = firstValue == std::string::npos ? std::string()
+                                              : content.substr(firstValue);
+    if (name == "location") {
+      content = sanitizeUri(content);
+    }
+    result += " | " + sanitizeText(line.substr(0, colon)) + "=" +
+              sanitizeText(content);
+  }
+  return result;
 }
 
 void configure(const Settings& settings)
@@ -295,8 +391,9 @@ bool enabled(spdlog::level::level_enum level)
 void write(spdlog::level::level_enum level, const char* sourceFile,
            int lineNum, const char* message)
 {
+  const auto safeMessage = sanitizeText(message ? message : "");
   logger()->log(spdlog::source_loc(sourceFile, lineNum, ""), level,
-                spdlog::string_view_t(message));
+                spdlog::string_view_t(safeMessage));
 }
 
 void write(spdlog::level::level_enum level, const char* sourceFile,
@@ -308,8 +405,11 @@ void write(spdlog::level::level_enum level, const char* sourceFile,
 void write(spdlog::level::level_enum level, const char* sourceFile,
            int lineNum, const char* message, const Exception& exception)
 {
+  const auto detail = level <= spdlog::level::debug
+                          ? exception.stackTrace()
+                          : std::string(exception.what());
   write(level, sourceFile, lineNum,
-        std::string(message) + "\n" + exception.stackTrace());
+        std::string(message ? message : "") + ": " + detail);
 }
 
 void write(spdlog::level::level_enum level, const char* sourceFile,

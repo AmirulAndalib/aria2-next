@@ -72,8 +72,8 @@ bool HttpListenCommand::execute()
       socket->setTcpNodelay(true);
       auto endpoint = socket->getPeerInfo();
 
-      A2_LOG_DEBUG(fmt("RPC: Accepted the connection from %s:%u.",
-                      endpoint.addr.c_str(), endpoint.port));
+      A2_LOG_TRACE(fmt("RPC accepted a connection from %s:%u",
+                       endpoint.addr.c_str(), endpoint.port));
 
       e_->setNoWait(true);
       e_->addCommand(

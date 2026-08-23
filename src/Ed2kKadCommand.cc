@@ -80,14 +80,6 @@ bool isKadProtocolDatagram(const std::string& datagram)
          header.payloadSize() + 2 == datagram.size();
 }
 
-bool isKnownEd2kUdpProtocol(uint8_t protocol)
-{
-  return protocol == ed2k::KAD_PROTOCOL ||
-         protocol == ed2k::KAD_PACKED_PROTOCOL ||
-         protocol == ed2k::PROTO_EDONKEY || protocol == ed2k::PROTO_EMULE ||
-         protocol == ed2k::PROTO_PACKED;
-}
-
 int64_t peerRetryWait(const DownloadEngine* e)
 {
   return std::max<int64_t>(1, e->getOption()->getAsInt(PREF_RETRY_WAIT));
@@ -178,20 +170,6 @@ uint32_t publicIpv4Value(const Ed2kAttribute* attrs)
 bool directKadTcpSourceType(uint8_t sourceType)
 {
   return sourceType == 0 || sourceType == 1 || sourceType == 4;
-}
-
-const char* kadSourceRoute(uint8_t sourceType)
-{
-  if (directKadTcpSourceType(sourceType)) {
-    return "tcp";
-  }
-  if (sourceType == 6) {
-    return "direct-callback";
-  }
-  if (sourceType == 3 || sourceType == 5) {
-    return "buddy-callback";
-  }
-  return "unsupported";
 }
 
 uint8_t localDirectCallbackOptions()
@@ -967,27 +945,8 @@ void Ed2kKadCommand::sendQueuedPackets()
 {
   while (!outbox_.empty()) {
     auto item = outbox_.front();
-    ed2k::PacketHeader header;
-    if (ed2k::readDatagramHeader(header, item.second.data(),
-                                  item.second.size()) &&
-        isKnownEd2kUdpProtocol(header.protocol)) {
-      A2_LOG_TRACE(fmt(
-          "Sending ED2K UDP packet to %s:%u protocol=0x%02x opcode=0x%02x payload=%lu.",
-          item.first.host.c_str(), item.first.port, header.protocol,
-          header.opcode, static_cast<unsigned long>(header.payloadSize())));
-    }
-    else {
-      A2_LOG_TRACE(fmt(
-          "Sending obfuscated ED2K Kad UDP packet to %s:%u payload=%lu.",
-          item.first.host.c_str(), item.first.port,
-          static_cast<unsigned long>(item.second.size())));
-    }
-    const auto sent = socket_->writeData(item.second.data(), item.second.size(),
-                                        item.first.host, item.first.port);
-    if (sent < 0) {
-      A2_LOG_TRACE(fmt("Failed to send ED2K UDP packet to %s:%u.",
-                       item.first.host.c_str(), item.first.port));
-    }
+    socket_->writeData(item.second.data(), item.second.size(), item.first.host,
+                       item.first.port);
     outbox_.pop_front();
   }
 }
@@ -1025,20 +984,12 @@ void Ed2kKadCommand::receivePackets()
       length = raw.size();
       data.fill(0);
       std::copy(raw.begin(), raw.end(), data.begin());
-      A2_LOG_TRACE(fmt("Received obfuscated ED2K peer UDP packet from "
-                       "%s:%u payload=%lu.",
-                       endpoint.host.c_str(), endpoint.port,
-                       static_cast<unsigned long>(length)));
     }
     else if (tryDecodeServerObfuscatedDatagram(serverDatagram, endpoint, raw)) {
       raw.swap(serverDatagram);
       length = raw.size();
       data.fill(0);
       std::copy(raw.begin(), raw.end(), data.begin());
-      A2_LOG_TRACE(fmt("Received obfuscated ED2K server UDP packet from "
-                       "%s:%u payload=%lu.",
-                       endpoint.host.c_str(), endpoint.port,
-                       static_cast<unsigned long>(length)));
     }
     else if (tryDecodeKadObfuscatedDatagram(parsed, endpoint, raw)) {
       raw.swap(parsed.datagram);
@@ -1046,12 +997,6 @@ void Ed2kKadCommand::receivePackets()
       length = raw.size();
       data.fill(0);
       std::copy(raw.begin(), raw.end(), data.begin());
-      A2_LOG_TRACE(
-          fmt("Received obfuscated ED2K Kad UDP packet from %s:%u payload=%lu receiverKey=%u senderKey=%u.",
-              endpoint.host.c_str(), endpoint.port,
-              static_cast<unsigned long>(length),
-              obfuscatedContext->receiverVerifyKey,
-              obfuscatedContext->senderVerifyKey));
     }
     ed2k::PacketHeader header;
     if (!ed2k::readDatagramHeader(
@@ -1064,10 +1009,6 @@ void Ed2kKadCommand::receivePackets()
         header.payloadSize() + 2 != static_cast<size_t>(length)) {
       continue;
     }
-    A2_LOG_TRACE(fmt(
-        "Received ED2K UDP packet from %s:%u protocol=0x%02x opcode=0x%02x payload=%lu.",
-        sender.addr.c_str(), sender.port, header.protocol, header.opcode,
-        static_cast<unsigned long>(header.payloadSize())));
     std::string payload(raw.data() + 2, raw.data() + length);
     if (header.protocol == ed2k::PROTO_PACKED ||
         header.protocol == ed2k::KAD_PACKED_PROTOCOL) {
@@ -1472,15 +1413,7 @@ void Ed2kKadCommand::handlePacket(
                        static_cast<unsigned long>(result.entries.size()),
                        static_cast<unsigned long>(sources.size())));
       for (const auto& source : sources) {
-        const bool added =
-            addEd2kKadSourcePeer(attrs, source, ed2k::PEER_SOURCE_KAD);
-        A2_LOG_TRACE(fmt("ED2K Kad source type=%u host=%s tcp=%u udp=%u "
-                         "crypt=%u route=%s added=%s.",
-                         source.sourceType, source.endpoint.host.c_str(),
-                         source.endpoint.port, source.udpPort,
-                         source.endpoint.cryptOptions,
-                         kadSourceRoute(source.sourceType),
-                         added ? "yes" : "no"));
+        addEd2kKadSourcePeer(attrs, source, ed2k::PEER_SOURCE_KAD);
       }
       schedulePendingEd2kPeers(requestGroup_, e_);
     }

@@ -28,6 +28,7 @@ class Exception;
 namespace logging {
 
 constexpr size_t MAX_FILES = 100;
+constexpr size_t MAX_RECORD_SIZE = 64 * 1024;
 
 struct Settings {
   Settings();
@@ -44,6 +45,9 @@ struct Settings {
 
 Settings getSettings();
 spdlog::level::level_enum parseLevel(const std::string& level);
+std::string sanitizeText(const std::string& value);
+std::string sanitizeUri(const std::string& value);
+std::string summarizeHttpMessage(const std::string& value);
 void configure(const Settings& settings);
 void flush();
 void shutdown();

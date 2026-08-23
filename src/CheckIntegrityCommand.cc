@@ -101,9 +101,6 @@ bool CheckIntegrityCommand::executeInternal()
 bool CheckIntegrityCommand::handleException(Exception& e)
 {
   A2_LOG_ERROR_EX(fmt(MSG_FILE_VALIDATION_FAILURE, getCuid()), e);
-  A2_LOG_ERROR(
-      fmt(MSG_DOWNLOAD_NOT_COMPLETE, getCuid(),
-          getRequestGroup()->getDownloadContext()->getBasePath().c_str()));
   return true;
 }
 

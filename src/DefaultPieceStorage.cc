@@ -158,8 +158,6 @@ std::shared_ptr<Piece> DefaultPieceStorage::getPiece(size_t index)
 void DefaultPieceStorage::addUsedPiece(const std::shared_ptr<Piece>& piece)
 {
   usedPieces_.insert(piece);
-  A2_LOG_TRACE(fmt("usedPieces_.size()=%lu",
-                   static_cast<unsigned long>(usedPieces_.size())));
 }
 
 std::shared_ptr<Piece> DefaultPieceStorage::findUsedPiece(size_t index) const

@@ -178,8 +178,10 @@ bool HttpServer::receiveRequest()
   if (headerProcessor_->parse(socketRecvBuffer_->getBuffer(),
                               socketRecvBuffer_->getBufferLength())) {
     lastRequestHeader_ = headerProcessor_->getResult();
-    A2_LOG_DEBUG(fmt("HTTP Server received request\n%s",
-                    headerProcessor_->getHeaderString().c_str()));
+    A2_LOG_TRACE(fmt("HTTP server received request: %s",
+                     logging::summarizeHttpMessage(
+                         headerProcessor_->getHeaderString())
+                         .c_str()));
     socketRecvBuffer_->drain(headerProcessor_->getLastBytesProcessed());
     bodyConsumed_ = 0;
     if (setupResponseRecv() < 0) {
@@ -288,7 +290,8 @@ void HttpServer::feedResponse(int status, const std::string& headers,
   }
   header += headers;
   header += "\r\n";
-  A2_LOG_TRACE(fmt("HTTP Server sends response:\n%s", header.c_str()));
+  A2_LOG_TRACE(fmt("HTTP server sends response: %s",
+                   logging::summarizeHttpMessage(header).c_str()));
   socketBuffer_.pushStr(std::move(header));
   socketBuffer_.pushStr(std::move(text));
 }
@@ -302,7 +305,8 @@ void HttpServer::feedUpgradeResponse(const std::string& protocol,
                            "%s"
                            "\r\n",
                            protocol.c_str(), headers.c_str());
-  A2_LOG_TRACE(fmt("HTTP Server sends upgrade response:\n%s", header.c_str()));
+  A2_LOG_TRACE(fmt("HTTP server sends upgrade response: %s",
+                   logging::summarizeHttpMessage(header).c_str()));
   socketBuffer_.pushStr(std::move(header));
 }
 

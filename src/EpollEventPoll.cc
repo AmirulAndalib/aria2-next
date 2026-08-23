@@ -249,14 +249,12 @@ bool EpollEventPoll::deleteEvents(sock_t socket,
     struct epoll_event epEvent = socketEntry.getEvents();
     r = epoll_ctl(epfd_, EPOLL_CTL_MOD, socketEntry.getSocket(), &epEvent);
     errNum = errno;
-    if (r == -1) {
-      A2_LOG_TRACE(fmt("Failed to delete socket event, but may be ignored:%s",
-                       util::safeStrerror(errNum).c_str()));
-    }
   }
   if (r == -1) {
-    A2_LOG_TRACE(fmt("Failed to delete socket event:%s",
-                     util::safeStrerror(errNum).c_str()));
+    if (errNum != EBADF && errNum != ENOENT) {
+      A2_LOG_DEBUG(fmt("Failed to delete epoll socket event: %s",
+                       util::safeStrerror(errNum).c_str()));
+    }
     return false;
   }
   else {

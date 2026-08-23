@@ -1131,12 +1131,6 @@ bool Ed2kCommand::execute()
 void Ed2kCommand::queuePacket(uint8_t protocol, uint8_t opcode,
                               const std::string& payload)
 {
-  A2_LOG_TRACE(fmt("CUID#%" PRId64
-                   " - Queue ED2K %s packet protocol=0x%02x opcode=0x%02x "
-                   "payload=%lu.",
-                   getCuid(), mode_ == Mode::SERVER ? "server" : "peer",
-                   protocol, opcode,
-                   static_cast<unsigned long>(payload.size())));
   outbox_.push_back(ed2k::createPacket(protocol, opcode, payload));
   outboxEncrypted_.push_back(false);
   outboxTransferData_.push_back(
@@ -1983,12 +1977,6 @@ bool Ed2kCommand::readHeader()
   if (currentHeader_.payloadSize() > 8_m) {
     throw DL_RETRY_EX("ED2K packet is too large.");
   }
-  A2_LOG_TRACE(fmt("CUID#%" PRId64
-                   " - Read ED2K %s packet protocol=0x%02x opcode=0x%02x "
-                   "payload=%lu.",
-                   getCuid(), mode_ == Mode::SERVER ? "server" : "peer",
-                   currentHeader_.protocol, currentHeader_.opcode,
-                   static_cast<unsigned long>(currentHeader_.payloadSize())));
   body_.assign(currentHeader_.payloadSize(), '\0');
   bodyRead_ = 0;
   headerRead_ = 0;
@@ -2696,10 +2684,6 @@ void Ed2kCommand::handlePeerPacket()
       throw DL_RETRY_EX("Bad ED2K part range.");
     }
     const auto data = body_.substr(metaLength);
-    A2_LOG_TRACE(fmt("CUID#%" PRId64
-                     " - Read ED2K part data begin=%" PRId64
-                     " end=%" PRId64 ".",
-                     getCuid(), begin, end));
     if (!remotePeerInfo_.userHash.empty()) {
       auto rgman = getDownloadEngine()->getRequestGroupMan().get();
       if (rgman && rgman->getEd2kUploadQueue()) {

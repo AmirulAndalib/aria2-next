@@ -49,7 +49,6 @@ namespace aria2 {
 class HttpRequest;
 class HttpResponse;
 class HttpHeaderProcessor;
-class Option;
 class Segment;
 class SocketCore;
 class SocketRecvBuffer;
@@ -87,7 +86,6 @@ private:
 
   HttpRequestEntries outstandingHttpRequests_;
 
-  std::string eraseConfidentialInfo(const std::string& request);
   void sendRequest(std::unique_ptr<HttpRequest> httpRequest,
                    std::string request);
 

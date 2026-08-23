@@ -198,7 +198,8 @@ void Metalink2RequestGroup::createRequestGroup(
   for (auto& entryGroup : entryGroups) {
     auto& metaurl = entryGroup.first;
     auto& mes = entryGroup.second;
-    A2_LOG_DEBUG(fmt("Processing metaurl group metaurl=%s", metaurl.c_str()));
+    A2_LOG_DEBUG(fmt("Processing metaurl group metaurl=%s",
+                     logging::sanitizeUri(metaurl).c_str()));
     auto option = util::copy(optionTemplate);
     auto rg = std::make_shared<RequestGroup>(GroupId::create(), option);
     std::shared_ptr<DownloadContext> dctx;
@@ -209,7 +210,8 @@ void Metalink2RequestGroup::createRequestGroup(
       A2_LOG_DEBUG(fmt(MSG_METALINK_QUEUEING, entry->getPath().c_str()));
       entry->reorderResourcesByPriority();
       for (auto& mr : entry->resources) {
-        A2_LOG_TRACE(fmt("priority=%d url=%s", mr->priority, mr->url.c_str()));
+        A2_LOG_TRACE(fmt("priority=%d url=%s", mr->priority,
+                         logging::sanitizeUri(mr->url).c_str()));
       }
       std::vector<std::string> uris;
       std::for_each(std::begin(entry->resources), std::end(entry->resources),

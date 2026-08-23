@@ -2553,6 +2553,7 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
   option_->put(PREF_TORRENT_FILE, A2_TEST_DIR "/test.torrent");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
+  option_->put(PREF_SELECT_FILE, "2");
   option_->put(PREF_BT_EXCLUDE_TRACKER, "http://tracker1");
   option_->put(PREF_BT_TRACKER,
                "udp://one.example:1/announce,udp://two.example:2/announce,"
@@ -2572,6 +2573,10 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
                group->getBtDownload()->snapshot().announceList.size());
     REQUIRE_EQ((size_t)2,
                group->getDownloadContext()->getFileEntries().size());
+    REQUIRE(!group->getDownloadContext()->getFileEntries()[0]->isRequested());
+    REQUIRE(group->getDownloadContext()->getFileEntries()[1]->isRequested());
+    REQUIRE(!group->getBtDownload()->snapshot().files[0].selected);
+    REQUIRE(group->getBtDownload()->snapshot().files[1].selected);
   }
   {
     std::ifstream input(A2_TEST_DIR "/test.torrent", std::ios::binary);

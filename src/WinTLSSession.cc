@@ -276,9 +276,6 @@ size_t WinTLSSession::getLeftTLSRecordSize() const
 
 int WinTLSSession::sendTLSRecord()
 {
-  A2_LOG_TRACE(fmt("WinTLS: TLS record %" PRIu64 " bytes left",
-                   static_cast<uint64_t>(getLeftTLSRecordSize())));
-
   while (getLeftTLSRecordSize()) {
     std::array<a2iovec, 3> iov;
     auto iovcnt = fillSendIOV(iov.data(), iov.size(), sendRecordBuffers_.data(),
@@ -332,9 +329,6 @@ ssize_t WinTLSSession::writeData(const void* data, size_t len)
     status_ = SEC_E_INVALID_HANDLE;
     return TLS_ERR_ERROR;
   }
-
-  A2_LOG_TRACE(fmt("WinTLS: Write request: %" PRIu64 " buffered: %" PRIu64,
-                   (uint64_t)len, (uint64_t)recordBytesSent_));
 
   auto rv = sendTLSRecord();
   if (rv != 0) {
@@ -401,12 +395,6 @@ ssize_t WinTLSSession::writeData(const void* data, size_t len)
       return TLS_ERR_ERROR;
     }
 
-    A2_LOG_TRACE(fmt("WinTLS: Write TLS record header: %" PRIu64
-                     " body: %" PRIu64 " trailer: %" PRIu64,
-                     static_cast<uint64_t>(sendRecordBuffers_[0].cbBuffer),
-                     static_cast<uint64_t>(sendRecordBuffers_[1].cbBuffer),
-                     static_cast<uint64_t>(sendRecordBuffers_[2].cbBuffer)));
-
     auto rv = sendTLSRecord();
     if (rv == TLS_ERR_WOULDBLOCK) {
       if (len == 0) {
@@ -425,22 +413,17 @@ ssize_t WinTLSSession::writeData(const void* data, size_t len)
     writeBuffered_ = 0;
   }
 
-  A2_LOG_TRACE(fmt("WinTLS: Write result: %" PRIu64, (uint64_t)len));
-
   return len;
 }
 
 ssize_t WinTLSSession::readData(void* data, size_t len)
 {
-  A2_LOG_TRACE(fmt("WinTLS: Read request: %" PRIu64 " buffered: %" PRIu64,
-                   (uint64_t)len, (uint64_t)readBuf_.size()));
   if (len == 0) {
     return 0;
   }
 
   // Can be filled from decBuffer entirely?
   if (decBuf_.size() >= len) {
-    A2_LOG_TRACE("WinTLS: Fulfilling req from buffer");
     memcpy(data, decBuf_.data(), len);
     decBuf_.eat(len);
     return len;

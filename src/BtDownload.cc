@@ -269,7 +269,7 @@ void BtDownload::configure(const Option* option)
         }
         if (unsupportedTracker(tracker)) {
           A2_LOG_DEBUG(fmt("Ignoring unsupported WebTorrent tracker: %s",
-                           tracker.c_str()));
+                           logging::sanitizeUri(tracker).c_str()));
           continue;
         }
         if (std::find(usableTrackers.begin(), usableTrackers.end(), tracker) ==
@@ -482,7 +482,7 @@ void BtDownload::initialize(RequestGroup* group)
   lt::error_code error;
   auto restored = lt::read_resume_data(resumeData, error);
   if (error) {
-    A2_LOG_INFO(fmt("Ignoring BitTorrent resume data %s: %s",
+    A2_LOG_WARN(fmt("Ignoring BitTorrent resume data %s: %s",
                     impl_->resumePath.c_str(), error.message().c_str()));
     return;
   }
@@ -490,7 +490,7 @@ void BtDownload::initialize(RequestGroup* group)
   if (!hashesMatch(impl_->params.info_hashes, restored.info_hashes) ||
       (restored.ti &&
        !hashesMatch(impl_->params.info_hashes, restored.ti->info_hashes()))) {
-    A2_LOG_INFO(
+    A2_LOG_WARN(
         fmt("Ignoring BitTorrent resume data with mismatched hashes: %s",
             impl_->resumePath.c_str()));
     return;

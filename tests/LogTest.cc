@@ -1,5 +1,7 @@
 #include "Log.h"
 
+#include <sstream>
+
 #include "a2doctest.h"
 
 #include "BufferedFile.h"
@@ -14,8 +16,11 @@ public:
   void tearDown();
 
   void testRotationKeepsStrictBounds();
-  void testStartupConvergesLegacyLogs();
+  void testStartupEnforcesNativeBounds();
   void testOversizedRecordIsBounded();
+  void testSanitizersProtectLogIntegrity();
+  void testSourceLocationIsPortable();
+  void testLevelFilteringAndReconfiguration();
 
 private:
   std::string path_;
@@ -24,11 +29,15 @@ private:
   logging::Settings settings(size_t maxSize, size_t maxFiles) const;
   void removeLogs();
   void writeFile(const std::string& path, size_t size);
+  std::string readFile(const std::string& path);
 };
 
 A2_TEST(LogTest, testRotationKeepsStrictBounds)
-A2_TEST(LogTest, testStartupConvergesLegacyLogs)
+A2_TEST(LogTest, testStartupEnforcesNativeBounds)
 A2_TEST(LogTest, testOversizedRecordIsBounded)
+A2_TEST(LogTest, testSanitizersProtectLogIntegrity)
+A2_TEST(LogTest, testSourceLocationIsPortable)
+A2_TEST(LogTest, testLevelFilteringAndReconfiguration)
 
 void LogTest::setUp()
 {
@@ -74,6 +83,15 @@ void LogTest::writeFile(const std::string& path, size_t size)
   REQUIRE_EQ(size, file.write(data.data(), data.size()));
 }
 
+std::string LogTest::readFile(const std::string& path)
+{
+  BufferedFile file(path.c_str(), BufferedFile::READ);
+  REQUIRE(file);
+  std::stringstream output;
+  file.transfer(output);
+  return output.str();
+}
+
 void LogTest::testRotationKeepsStrictBounds()
 {
   logging::configure(settings(128, 2));
@@ -91,12 +109,11 @@ void LogTest::testRotationKeepsStrictBounds()
   REQUIRE(File(path_).size() + File(history).size() <= 256);
 }
 
-void LogTest::testStartupConvergesLegacyLogs()
+void LogTest::testStartupEnforcesNativeBounds()
 {
   const std::string nativeHistory =
       A2_TEST_OUT_DIR "/aria2_LogTest.1.log";
   writeFile(path_, 256);
-  writeFile(path_ + ".1", 256);
   writeFile(nativeHistory, 256);
   writeFile(A2_TEST_OUT_DIR "/aria2_LogTest.2.log", 8);
 
@@ -105,7 +122,6 @@ void LogTest::testStartupConvergesLegacyLogs()
 
   REQUIRE(File(path_).exists());
   REQUIRE_EQ((int64_t)0, File(path_).size());
-  REQUIRE(!File(path_ + ".1").exists());
   REQUIRE(!File(nativeHistory).exists());
   REQUIRE(!File(A2_TEST_OUT_DIR "/aria2_LogTest.2.log").exists());
 }
@@ -119,6 +135,62 @@ void LogTest::testOversizedRecordIsBounded()
   REQUIRE(File(path_).exists());
   REQUIRE(File(path_).size() <= 96);
   REQUIRE(!File(A2_TEST_OUT_DIR "/aria2_LogTest.1.log").exists());
+}
+
+void LogTest::testSanitizersProtectLogIntegrity()
+{
+  REQUIRE_EQ(std::string("line1\\nline2\\t?"),
+             logging::sanitizeText("line1\nline2\t\x01"));
+  REQUIRE_EQ(std::string("https://example.com/file?<redacted>"),
+             logging::sanitizeUri(
+                 "https://user:password@example.com/file?token=secret#part"));
+
+  const auto summary = logging::summarizeHttpMessage(
+      "GET /jsonrpc?token=secret HTTP/1.1\r\n"
+      "Authorization: Basic secret\r\n"
+      "X-Private-Token: secret\r\n"
+      "Content-Length: 12\r\n");
+  REQUIRE(summary.find("GET /jsonrpc?<redacted> HTTP/1.1") !=
+          std::string::npos);
+  REQUIRE(summary.find("Content-Length=12") != std::string::npos);
+  REQUIRE(summary.find("secret") == std::string::npos);
+  REQUIRE(summary.find("Authorization") == std::string::npos);
+  REQUIRE(summary.find("X-Private-Token") == std::string::npos);
+}
+
+void LogTest::testSourceLocationIsPortable()
+{
+  logging::configure(settings(4096, 1));
+  A2_LOG_INFO("first line\nsecond line");
+  logging::flush();
+
+  const auto output = readFile(path_);
+  REQUIRE(output.find("LogTest.cc:") != std::string::npos);
+  REQUIRE(output.find(__FILE__) == std::string::npos);
+  REQUIRE(output.find("first line\\nsecond line") != std::string::npos);
+}
+
+void LogTest::testLevelFilteringAndReconfiguration()
+{
+  auto infoSettings = settings(4096, 1);
+  infoSettings.fileLevel = spdlog::level::info;
+  logging::configure(infoSettings);
+  A2_LOG_DEBUG("hidden debug record");
+  A2_LOG_INFO("visible info record");
+  logging::flush();
+
+  auto output = readFile(path_);
+  REQUIRE(output.find("hidden debug record") == std::string::npos);
+  REQUIRE(output.find("visible info record") != std::string::npos);
+
+  auto debugSettings = infoSettings;
+  debugSettings.fileLevel = spdlog::level::debug;
+  logging::configure(debugSettings);
+  A2_LOG_DEBUG("visible debug record");
+  logging::flush();
+
+  output = readFile(path_);
+  REQUIRE(output.find("visible debug record") != std::string::npos);
 }
 
 } // namespace aria2

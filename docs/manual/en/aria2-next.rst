@@ -1377,7 +1377,9 @@ Advanced Options
 .. option:: --console-log-level=<LEVEL>
 
   Set log level to output to console.  LEVEL is either ``trace``, ``debug``,
-  ``info``, ``warn`` or ``error``.  Default: ``info``
+  ``info``, ``warn`` or ``error``. Console output contains one record per line.
+  Default: ``info``
+
 .. option:: --content-disposition-default-utf8 [true|false]
 
   Handle quoted string in Content-Disposition header as UTF-8 instead
@@ -1633,7 +1635,13 @@ Advanced Options
 
   Set log level to output.
   LEVEL is either ``trace``, ``debug``, ``info``, ``warn`` or ``error``.
+  ``info`` reports download and service lifecycle events. ``warn`` reports
+  degraded operation that may require attention. ``error`` reports failed
+  operations. ``debug`` adds protocol decisions and retry context. ``trace``
+  adds bounded control-flow diagnostics without recording transfer payloads or
+  authentication data. URI credentials and query values are redacted.
   Default: ``trace``
+
 .. option:: --log-max-size=<SIZE>
 
   Set the maximum size of each log file. aria2-next rotates the active log
@@ -1644,9 +1652,9 @@ Advanced Options
 .. option:: --log-max-files=<N>
 
   Set the maximum number of log files, including the active file. Rotated
-  files place the number before the extension, such as ``aria2.1.log``. Old
-  suffix-style histories are removed when logging starts. The total log size
-  is bounded by ``log-max-size`` multiplied by ``log-max-files``.
+  files place the number before the extension, such as ``aria2.1.log``. The
+  total log size is bounded by ``log-max-size`` multiplied by
+  ``log-max-files``.
   Possible Values: ``1``-``100``
   Default: ``4``
 

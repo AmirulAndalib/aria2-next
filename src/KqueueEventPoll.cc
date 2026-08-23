@@ -236,8 +236,10 @@ bool KqueueEventPoll::deleteEvents(sock_t socket,
     socketEntries_.erase(i);
   }
   if (r == -1) {
-    A2_LOG_TRACE(fmt("Failed to delete socket event:%s",
-                     util::safeStrerror(errNum).c_str()));
+    if (errNum != EBADF && errNum != ENOENT) {
+      A2_LOG_DEBUG(fmt("Failed to delete kqueue socket event: %s",
+                       util::safeStrerror(errNum).c_str()));
+    }
     return false;
   }
   else {

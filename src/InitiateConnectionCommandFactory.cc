@@ -35,6 +35,7 @@
 #include "InitiateConnectionCommandFactory.h"
 #include "HttpInitiateConnectionCommand.h"
 #include "FtpInitiateConnectionCommand.h"
+#include "Log.h"
 #include "Request.h"
 #include "RequestGroup.h"
 #include "DownloadEngine.h"
@@ -77,7 +78,7 @@ InitiateConnectionCommandFactory::createInitiateConnectionCommand(
   ) {
     if (req->getFile().empty()) {
       throw DL_ABORT_EX(fmt("FTP/SFTP URI %s doesn't contain file path.",
-                            req->getUri().c_str()));
+                            logging::sanitizeUri(req->getUri()).c_str()));
     }
     return make_unique<FtpInitiateConnectionCommand>(cuid, req, fileEntry,
                                                      requestGroup, e);

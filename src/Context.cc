@@ -41,6 +41,7 @@
 #  include <sys/resource.h>
 #endif // HAVE_SYS_RESOURCE_H
 
+#include <algorithm>
 #include <numeric>
 #include <vector>
 #include <iostream>
@@ -178,14 +179,11 @@ Context::Context(bool standalone, int argc, char** argv, const KeyVals& options)
   logSettings.colorOutput = op->getAsBool(PREF_ENABLE_COLOR);
   logSettings.consoleToStderr = standalone && op->getAsBool(PREF_STDERR);
   logging::configure(logSettings);
-  A2_LOG_DEBUG("<<--- --- --- ---");
-  A2_LOG_DEBUG("  --- --- --- ---");
-  A2_LOG_DEBUG("  --- --- --- --->>");
-  A2_LOG_DEBUG(fmt("%s %s", PACKAGE, PACKAGE_VERSION));
-  A2_LOG_DEBUG(usedCompilerAndPlatform());
-  A2_LOG_DEBUG(getOperatingSystemInfo());
-  A2_LOG_DEBUG(usedLibs());
-  A2_LOG_DEBUG(MSG_LOGGING_STARTED);
+  auto compiler = usedCompilerAndPlatform();
+  std::replace(compiler.begin(), compiler.end(), '\n', ' ');
+  A2_LOG_DEBUG(fmt("%s %s | %s | %s | %s", PACKAGE, PACKAGE_VERSION,
+                   compiler.c_str(), getOperatingSystemInfo().c_str(),
+                   usedLibs().c_str()));
 
 #if defined(HAVE_SYS_RESOURCE_H) && defined(RLIMIT_NOFILE)
   rlimit r = {0, 0};

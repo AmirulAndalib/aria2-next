@@ -218,11 +218,9 @@ size_t MultiDiskAdaptor::tryCloseFile(size_t numClose)
 }
 
 void MultiDiskAdaptor::openIfNot(DiskWriterEntry* entry,
-                                 void (DiskWriterEntry::*open)())
+  void (DiskWriterEntry::*open)())
 {
   if (!entry->isOpen()) {
-    // A2_LOG_INFO(fmt("DiskWriterEntry: Cache MISS. offset=%s",
-    //        util::itos(entry->getFileEntry()->getOffset()).c_str()));
     auto& openedFileCounter = getOpenedFileCounter();
     if (openedFileCounter) {
       openedFileCounter->ensureMaxOpenFileLimit(1);
@@ -232,10 +230,6 @@ void MultiDiskAdaptor::openIfNot(DiskWriterEntry* entry,
       entry->enableSparse();
     }
     openedDiskWriterEntries_.push_back(entry);
-  }
-  else {
-    // A2_LOG_INFO(fmt("DiskWriterEntry: Cache HIT. offset=%s",
-    //        util::itos(entry->getFileEntry()->getOffset()).c_str()));
   }
 }
 
@@ -423,8 +417,6 @@ ssize_t MultiDiskAdaptor::readData(unsigned char* data, size_t len,
 void MultiDiskAdaptor::writeCache(const WrDiskCacheEntry* entry)
 {
   for (auto& d : entry->getDataSet()) {
-    A2_LOG_TRACE(fmt("Cache flush goff=%" PRId64 ", len=%lu", d->goff,
-                     static_cast<unsigned long>(d->len)));
     writeData(d->data + d->offset, d->len, d->goff);
   }
 }

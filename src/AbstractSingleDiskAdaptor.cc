@@ -113,8 +113,6 @@ void AbstractSingleDiskAdaptor::writeCache(const WrDiskCacheEntry* entry)
   };
 
   for (auto& d : entry->getDataSet()) {
-    A2_LOG_TRACE(fmt("Cache flush goff=%" PRId64 ", len=%lu", d->goff,
-                     static_cast<unsigned long>(d->len)));
     if (buffer.empty()) {
       offset = d->goff;
     }

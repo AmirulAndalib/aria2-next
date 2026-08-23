@@ -369,9 +369,7 @@ BtConfig makeBtConfig(const Option* option,
       lt::settings_pack::alert_mask,
       static_cast<int>(static_cast<unsigned int>(
           lt::alert_category::error | lt::alert_category::status |
-          lt::alert_category::storage | lt::alert_category::tracker |
-          lt::alert_category::peer | lt::alert_category::connect |
-          lt::alert_category::port_mapping |
+          lt::alert_category::storage | lt::alert_category::port_mapping |
           lt::alert_category::performance_warning |
           lt::alert_category::ip_block)));
   settings.set_int(lt::settings_pack::upload_rate_limit,
