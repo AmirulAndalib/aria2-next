@@ -122,7 +122,7 @@ public:
   void beginFileSelectionPause();
   void submitFileSelection(const Option* option);
   void prepareFileSelectionResume();
-  void finishFileSelectionResume();
+  bool completeFileSelectionResume(bool filePriorityUpdatePending);
   void applyTransportState(BtSnapshot::State state);
   void beginProgressVerification();
   void beginProgressRefresh();

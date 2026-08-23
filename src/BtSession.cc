@@ -871,6 +871,7 @@ void BtSession::resumeTorrent(BtDownload* download)
     download->impl_->handle.force_recheck();
   }
   download->impl_->handle.resume();
+  requestProgressRefresh(download);
 }
 
 void BtSession::refreshAutomaticRoute(bool reopenSockets)
@@ -956,17 +957,17 @@ BtSession::start(const std::shared_ptr<BtDownload>& download,
       download->impl_->handle.in_session()) {
     impl_->handles[download->impl_->handle] = download.get();
     download->impl_->handle.clear_error();
-    applyDownloadOptions(download, group->getOption().get());
+    const bool filePriorityUpdatePending =
+        applyDownloadOptions(download, group->getOption().get());
     if (!download->fileSelectionResuming() ||
-        group->getDownloadContext()->getFileEntries().empty()) {
-      download->finishFileSelectionResume();
+        download->completeFileSelectionResume(filePriorityUpdatePending)) {
       resumeTorrent(download.get());
     }
   }
   else {
     download->impl_->appliedFilePriorities =
         download->impl_->params.file_priorities;
-    download->finishFileSelectionResume();
+    download->completeFileSelectionResume(false);
     impl_->session->async_add_torrent(download->impl_->params);
   }
   return make_unique<BtDownloadCommand>(engine->newCUID(), download, this,
@@ -1020,6 +1021,7 @@ void BtSession::poll()
           download->impl_->initialRecheckStarted = true;
           download->impl_->handle.force_recheck();
         }
+        requestProgressRefresh(download);
       }
       continue;
     }
@@ -1029,15 +1031,6 @@ void BtSession::poll()
       const auto found = impl_->handles.find(handle);
       return found == impl_->handles.end() ? nullptr : found->second;
     };
-
-    if (auto* resumed = lt::alert_cast<lt::torrent_resumed_alert>(alert)) {
-      auto* download = findDownload(resumed->handle);
-      if (download && download->progressRefreshPending()) {
-        download->impl_->progressBoundaryPending = true;
-        requestProgressRefresh(download);
-      }
-      continue;
-    }
 
     if (auto* checked = lt::alert_cast<lt::torrent_checked_alert>(alert)) {
       auto* download = findDownload(checked->handle);
@@ -1236,8 +1229,8 @@ void BtSession::poll()
           download->setError(priorities->error.message(), true);
           impl_->transferStat.suspend(download->impl_->gid);
         }
-        else {
-          download->finishFileSelectionResume();
+        else if (download->completeFileSelectionResume(
+                     download->impl_->pendingFilePriorityUpdates != 0)) {
           resumeTorrent(download);
         }
       }
@@ -1680,11 +1673,11 @@ void BtSession::validateGlobalOptions(const Option* option) const
   makeBtConfig(option);
 }
 
-void BtSession::applyDownloadOptions(
+bool BtSession::applyDownloadOptions(
     const std::shared_ptr<BtDownload>& download, const Option* option)
 {
   if (!download) {
-    return;
+    return false;
   }
   const auto previousSavePath = download->impl_->params.save_path;
   const auto previousTrackerRevision = download->impl_->trackerRevision;
@@ -1698,7 +1691,7 @@ void BtSession::applyDownloadOptions(
     }
   }
   if (!handle.is_valid()) {
-    return;
+    return false;
   }
   handle.set_max_connections(download->impl_->params.max_connections);
   handle.set_max_uploads(download->impl_->params.max_uploads);
@@ -1727,12 +1720,15 @@ void BtSession::applyDownloadOptions(
       handle.force_reannounce(0, lt::torrent_handle::high_priority);
     }
   }
-  if (applySelection(handle, download->group(),
+  const bool filePriorityUpdatePending =
+      applySelection(handle, download->group(),
                      download->impl_->appliedFilePriorities,
-                     download->impl_->appliedPiecePriorities)) {
+                     download->impl_->appliedPiecePriorities);
+  if (filePriorityUpdatePending) {
     ++download->impl_->pendingFilePriorityUpdates;
   }
   requestResumeCheckpoint(download.get());
+  return filePriorityUpdatePending;
 }
 
 void BtSession::forceRecheck(const std::shared_ptr<BtDownload>& download)

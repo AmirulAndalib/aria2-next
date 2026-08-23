@@ -842,11 +842,14 @@ void BtDownload::prepareFileSelectionResume()
   snapshot_.state = BtSnapshot::State::Adding;
 }
 
-void BtDownload::finishFileSelectionResume()
+bool BtDownload::completeFileSelectionResume(bool filePriorityUpdatePending)
 {
-  if (fileSelectionState_ == FileSelectionState::Resuming) {
-    fileSelectionState_ = FileSelectionState::None;
+  if (fileSelectionState_ != FileSelectionState::Resuming ||
+      filePriorityUpdatePending) {
+    return false;
   }
+  fileSelectionState_ = FileSelectionState::None;
+  return true;
 }
 
 void BtDownload::applyTransportState(BtSnapshot::State state)

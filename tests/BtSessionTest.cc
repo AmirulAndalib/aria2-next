@@ -163,6 +163,11 @@ void BtSessionTest::testFileSelectionResumeState()
   awaiting->getBtDownload()->prepareFileSelectionResume();
   awaiting->setPauseRequested(false);
   REQUIRE(!awaitingOption->getAsBool(PREF_PAUSE_METADATA));
+  REQUIRE(awaiting->getBtDownload()->fileSelectionResuming());
+  REQUIRE(!awaiting->getBtDownload()->completeFileSelectionResume(true));
+  REQUIRE(awaiting->getBtDownload()->fileSelectionResuming());
+  REQUIRE(awaiting->getBtDownload()->completeFileSelectionResume(false));
+  REQUIRE(!awaiting->getBtDownload()->fileSelectionResuming());
   const auto selectedSession = serialize(
       awaiting, A2_TEST_OUT_DIR "/bt-selection/selected.session");
   REQUIRE(selectedSession.find(" pause=true\n") == std::string::npos);

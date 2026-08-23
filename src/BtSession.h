@@ -131,7 +131,7 @@ public:
                    BtDownload::StopReason reason);
   void validateGlobalOptions(const Option* option) const;
   void applyGlobalOptions(const Option* option);
-  void applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
+  bool applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
                             const Option* option);
   void forceRecheck(const std::shared_ptr<BtDownload>& download);
   void forceAnnounce(const std::shared_ptr<BtDownload>& download);
