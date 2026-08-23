@@ -487,33 +487,111 @@ void BtDownload::updateSelection(
           : 0;
 }
 
-void BtDownload::applyProgress(int64_t totalLength,
-                               int64_t completedLength)
+void BtDownload::resetPendingProgress()
 {
-  totalLength = std::max<int64_t>(0, totalLength);
-  completedLength = std::max<int64_t>(0, completedLength);
-  if (snapshot_.state == BtSnapshot::State::Checking) {
-    snapshot_.totalLength = std::max(snapshot_.totalLength, totalLength);
-    snapshot_.completedLength =
-        std::max(snapshot_.completedLength, completedLength);
+  pendingProgress_ = PendingProgress{};
+}
+
+void BtDownload::commitPendingProgress()
+{
+  if (!pendingProgress_.taskReady || !pendingProgress_.filesReady ||
+      pendingProgress_.files.size() != snapshot_.files.size()) {
     return;
   }
-  snapshot_.totalLength = totalLength;
-  snapshot_.completedLength = completedLength;
+
+  if (progressState_ == ProgressState::Resuming) {
+    if (pendingProgress_.totalLength < snapshot_.totalLength ||
+        pendingProgress_.completedLength < snapshot_.completedLength) {
+      return;
+    }
+    for (size_t i = 0; i < snapshot_.files.size(); ++i) {
+      if (pendingProgress_.files[i] <
+          snapshot_.files[i].completedLength) {
+        return;
+      }
+    }
+  }
+
+  for (size_t i = 0; i < snapshot_.files.size(); ++i) {
+    snapshot_.files[i].completedLength = std::clamp<int64_t>(
+        pendingProgress_.files[i], 0, snapshot_.files[i].length);
+  }
+  snapshot_.totalLength = pendingProgress_.totalLength;
+  snapshot_.completedLength = pendingProgress_.completedLength;
+  snapshot_.progressPpm = pendingProgress_.progressPpm;
+  progressState_ = ProgressState::Stable;
+  acceptingProgressRefresh_ = false;
+  resetPendingProgress();
+}
+
+void BtDownload::beginProgressVerification()
+{
+  progressState_ = ProgressState::Verifying;
+  acceptingProgressRefresh_ = false;
+  resetPendingProgress();
+}
+
+void BtDownload::beginProgressRefresh()
+{
+  if (progressState_ == ProgressState::Stable) {
+    return;
+  }
+  acceptingProgressRefresh_ = true;
+  resetPendingProgress();
+}
+
+bool BtDownload::progressRefreshPending() const
+{
+  return progressState_ != ProgressState::Stable;
+}
+
+void BtDownload::applyProgress(int64_t totalLength, int64_t completedLength,
+                               int progressPpm,
+                               BtSnapshot::State transportState)
+{
+  if (transportState == BtSnapshot::State::Checking) {
+    beginProgressVerification();
+    return;
+  }
+
+  totalLength = std::max<int64_t>(0, totalLength);
+  completedLength = std::max<int64_t>(0, completedLength);
+  progressPpm = std::clamp(progressPpm, 0, 1000000);
+  if (progressState_ == ProgressState::Stable) {
+    snapshot_.totalLength = totalLength;
+    snapshot_.completedLength = completedLength;
+    snapshot_.progressPpm = progressPpm;
+    return;
+  }
+  if (!acceptingProgressRefresh_) {
+    return;
+  }
+
+  pendingProgress_.totalLength = totalLength;
+  pendingProgress_.completedLength = completedLength;
+  pendingProgress_.progressPpm = progressPpm;
+  pendingProgress_.taskReady = true;
+  commitPendingProgress();
 }
 
 void BtDownload::applyFileProgress(
     const std::vector<int64_t>& completedLengths)
 {
+  if (progressState_ != ProgressState::Stable) {
+    if (!acceptingProgressRefresh_) {
+      return;
+    }
+    pendingProgress_.files = completedLengths;
+    pendingProgress_.filesReady = true;
+    commitPendingProgress();
+    return;
+  }
+
   const auto count = std::min(snapshot_.files.size(),
                               completedLengths.size());
   for (size_t i = 0; i < count; ++i) {
-    const auto completedLength =
-        std::max<int64_t>(0, completedLengths[i]);
-    snapshot_.files[i].completedLength =
-        snapshot_.state == BtSnapshot::State::Checking
-            ? std::max(snapshot_.files[i].completedLength, completedLength)
-            : completedLength;
+    snapshot_.files[i].completedLength = std::clamp<int64_t>(
+        completedLengths[i], 0, snapshot_.files[i].length);
   }
 }
 
@@ -568,6 +646,7 @@ void BtDownload::initialize(RequestGroup* group)
   restored.upload_limit = impl_->params.upload_limit;
   restored.download_limit = impl_->params.download_limit;
   impl_->params = std::move(restored);
+  beginProgressVerification();
   snapshot_.allTimeDownload =
       std::max<int64_t>(0, impl_->params.total_downloaded);
   snapshot_.allTimeUpload = std::max<int64_t>(0, impl_->params.total_uploaded);
@@ -808,6 +887,13 @@ void BtDownload::prepareStart()
   }
   if (fileSelectionState_ == FileSelectionState::Ready) {
     throw DL_ABORT_EX("BitTorrent file selection has not been resumed");
+  }
+  if (shutdownStage_ == ShutdownStage::Complete &&
+      (stopReason_ == StopReason::Pause ||
+       stopReason_ == StopReason::FileSelection)) {
+    progressState_ = ProgressState::Resuming;
+    acceptingProgressRefresh_ = false;
+    resetPendingProgress();
   }
   stopReason_ = StopReason::None;
   shutdownStage_ = ShutdownStage::Idle;

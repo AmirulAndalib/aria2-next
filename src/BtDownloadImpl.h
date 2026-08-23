@@ -13,11 +13,13 @@
 #ifndef D_BT_DOWNLOAD_IMPL_H
 #define D_BT_DOWNLOAD_IMPL_H
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include <libtorrent/add_torrent_params.hpp>
+#include <libtorrent/download_priority.hpp>
 #include <libtorrent/torrent_handle.hpp>
 
 #include "BtDownload.h"
@@ -55,6 +57,10 @@ struct BtDownload::Impl {
   bool checkpointPending = false;
   bool stopSavePending = false;
   bool initialRecheckStarted = false;
+  bool progressBoundaryPending = false;
+  std::size_t pendingFilePriorityUpdates = 0;
+  std::vector<libtorrent::download_priority_t> appliedFilePriorities;
+  std::vector<libtorrent::download_priority_t> appliedPiecePriorities;
   Timer lastResumeSave = Timer::zero();
   Timer lastTrackerUpdate = Timer::zero();
 };

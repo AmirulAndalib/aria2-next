@@ -108,6 +108,7 @@ public:
   void testSetBtPeerBlocklist();
   void testBtGlobalStat();
   void testBtFileSelectionGate();
+  void testBtResumeProgressAuthority();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
   void testChangePosition();
@@ -170,6 +171,7 @@ A2_TEST(RpcMethodTest, testGetBtSessionStatus)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
 A2_TEST(RpcMethodTest, testBtGlobalStat)
 A2_TEST(RpcMethodTest, testBtFileSelectionGate)
+A2_TEST(RpcMethodTest, testBtResumeProgressAuthority)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
 A2_TEST(RpcMethodTest, testChangePosition)
@@ -1640,6 +1642,88 @@ void RpcMethodTest::testBtFileSelectionGate()
   REQUIRE(!group->isPauseRequested());
   REQUIRE(download->fileSelectionResuming());
   REQUIRE(!taskOption->getAsBool(PREF_PAUSE_METADATA));
+}
+
+void RpcMethodTest::testBtResumeProgressAuthority()
+{
+  auto taskOption = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*taskOption);
+  taskOption->put(PREF_DIR, option_->get(PREF_DIR));
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOption);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->configure(taskOption.get());
+  download->populateDownloadContext(context, taskOption.get());
+  download->setGroup(group.get());
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+
+  auto& snapshot = download->mutableSnapshot();
+  REQUIRE_EQ((size_t)2, snapshot.files.size());
+  snapshot.files[0].completedLength = 200;
+  snapshot.files[1].completedLength = 50;
+  download->updateSelection(context);
+  snapshot.progressPpm = 650000;
+
+  download->requestStop(BtDownload::StopReason::Pause);
+  download->finishStopping();
+  group->setPauseRequested(true);
+  e_->getRequestGroupMan()->addReservedGroup(group);
+
+  const auto assertProgress = [&](int64_t completed,
+                                  const std::vector<int64_t>& files,
+                                  const std::string& progress) {
+    TellStatusRpcMethod tellStatus;
+    auto request = createReq(TellStatusRpcMethod::getMethodName());
+    request.params->append(GroupId::toHex(group->getGID()));
+    auto keys = List::g();
+    keys->append("completedLength");
+    keys->append("files");
+    keys->append("bittorrent");
+    request.params->append(std::move(keys));
+    auto response = tellStatus.execute(std::move(request), e_.get());
+    REQUIRE_EQ(0, response.code);
+    const auto task = downcast<Dict>(response.param);
+    REQUIRE_EQ(util::itos(completed), getString(task, "completedLength"));
+    const auto rpcFiles = downcast<List>(task->get("files"));
+    REQUIRE_EQ(files.size(), rpcFiles->size());
+    for (size_t i = 0; i < files.size(); ++i) {
+      REQUIRE_EQ(util::itos(files[i]),
+                 getString(downcast<Dict>(rpcFiles->get(i)),
+                           "completedLength"));
+    }
+    REQUIRE_EQ(progress,
+               getString(downcast<Dict>(task->get("bittorrent")),
+                         "progress"));
+  };
+
+  assertProgress(250, {200, 50}, "0.650000");
+  download->prepareStart();
+  group->setPauseRequested(false);
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Paused);
+  download->applyFileProgress({0, 0});
+  assertProgress(250, {200, 50}, "0.650000");
+
+  download->beginProgressRefresh();
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Downloading);
+  download->applyFileProgress({0, 0});
+  assertProgress(250, {200, 50}, "0.650000");
+
+  download->applyProgress(384, 300, 781250,
+                          BtSnapshot::State::Downloading);
+  download->applyFileProgress({220, 80});
+  assertProgress(300, {220, 80}, "0.781250");
+
+  download->beginProgressVerification();
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Checking);
+  download->applyFileProgress({0, 0});
+  assertProgress(300, {220, 80}, "0.781250");
+
+  download->beginProgressRefresh();
+  download->applyProgress(384, 120, 312500,
+                          BtSnapshot::State::Downloading);
+  download->applyFileProgress({100, 20});
+  assertProgress(120, {100, 20}, "0.312500");
 }
 #endif // ENABLE_BITTORRENT
 

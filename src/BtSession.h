@@ -112,6 +112,7 @@ private:
   void requestResumeCheckpoint(BtDownload* download, bool force = false);
   void finishResumeSave(BtDownload* download);
   void discardRemovedResume(BtDownload* download);
+  void requestProgressRefresh(BtDownload* download);
   void resumeTorrent(BtDownload* download);
   void refreshAutomaticRoute(bool reopenSockets);
 

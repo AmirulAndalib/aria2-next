@@ -681,14 +681,17 @@ std::vector<lt::download_priority_t> makeFilePriorities(RequestGroup* group)
   return priorities;
 }
 
-void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
+bool applySelection(
+    const lt::torrent_handle& handle, RequestGroup* group,
+    std::vector<lt::download_priority_t>& appliedFilePriorities,
+    std::vector<lt::download_priority_t>& appliedPiecePriorities)
 {
   if (!group) {
-    return;
+    return false;
   }
   group->getBtDownload()->updateSelection(group->getDownloadContext());
   if (!handle.is_valid()) {
-    return;
+    return false;
   }
   auto priorities = makeFilePriorities(group);
   const auto info = handle.torrent_file();
@@ -711,10 +714,11 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
     }
     ++index;
   }
-  if (!priorities.empty()) {
+  const bool filePrioritiesChanged = priorities != appliedFilePriorities;
+  if (filePrioritiesChanged && !priorities.empty()) {
     handle.prioritize_files(priorities);
+    appliedFilePriorities = priorities;
   }
-  group->getBtDownload()->updateSelection(group->getDownloadContext());
   auto& snapshotFiles = group->getBtDownload()->mutableSnapshot().files;
   const auto snapshotCount = std::min(snapshotFiles.size(), priorities.size());
   for (size_t i = 0; i < snapshotCount; ++i) {
@@ -723,7 +727,7 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
   }
 
   if (!info) {
-    return;
+    return filePrioritiesChanged;
   }
   const bool prioritizeBoundaries =
       group->getOption()->getAsBool(PREF_BT_FIRST_LAST_PIECE_FIRST);
@@ -764,7 +768,11 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
     }
     ++index;
   }
-  handle.prioritize_pieces(piecePriorities);
+  if (piecePriorities != appliedPiecePriorities) {
+    handle.prioritize_pieces(piecePriorities);
+    appliedPiecePriorities = std::move(piecePriorities);
+  }
+  return filePrioritiesChanged;
 }
 
 void updateDownloadContext(BtDownload* download, RequestGroup* group)
@@ -829,6 +837,27 @@ void BtSession::discardRemovedResume(BtDownload* download)
     return;
   }
   File(download->impl_->resumePath).remove();
+}
+
+void BtSession::requestProgressRefresh(BtDownload* download)
+{
+  if (!download || !download->progressRefreshPending() ||
+      !download->impl_->handle.is_valid() ||
+      !download->impl_->handle.in_session()) {
+    return;
+  }
+  if (download->impl_->pendingFilePriorityUpdates > 0) {
+    download->impl_->progressBoundaryPending = true;
+    return;
+  }
+
+  download->impl_->progressBoundaryPending = false;
+  download->beginProgressRefresh();
+  impl_->session->post_torrent_updates(
+      lt::torrent_handle::query_name |
+      lt::torrent_handle::query_save_path);
+  download->impl_->handle.post_file_progress(
+      lt::torrent_handle::piece_granularity);
 }
 
 void BtSession::resumeTorrent(BtDownload* download)
@@ -909,8 +938,14 @@ BtSession::start(const std::shared_ptr<BtDownload>& download,
   download->configure(group->getOption().get());
   download->impl_->params.userdata = download.get();
 
-  if (download->impl_->params.ti) {
+  if (download->impl_->params.ti &&
+      (download->snapshot().files.empty() ||
+       group->getDownloadContext()->getFileEntries().size() !=
+           static_cast<size_t>(
+               download->impl_->params.ti->layout().num_files()))) {
     updateDownloadContext(download.get(), group);
+  }
+  if (download->impl_->params.ti) {
     download->impl_->params.file_priorities = makeFilePriorities(group);
   }
 
@@ -929,6 +964,8 @@ BtSession::start(const std::shared_ptr<BtDownload>& download,
     }
   }
   else {
+    download->impl_->appliedFilePriorities =
+        download->impl_->params.file_priorities;
     download->finishFileSelectionResume();
     impl_->session->async_add_torrent(download->impl_->params);
   }
@@ -973,7 +1010,11 @@ void BtSession::poll()
                     download->stopReason());
       }
       else {
-        applySelection(download->impl_->handle, download->group());
+        if (applySelection(download->impl_->handle, download->group(),
+                           download->impl_->appliedFilePriorities,
+                           download->impl_->appliedPiecePriorities)) {
+          ++download->impl_->pendingFilePriorityUpdates;
+        }
         if (download->group()->getOption()->getAsBool(PREF_CHECK_INTEGRITY) &&
             !download->impl_->initialRecheckStarted) {
           download->impl_->initialRecheckStarted = true;
@@ -985,9 +1026,57 @@ void BtSession::poll()
 
     auto findDownload =
         [this](const lt::torrent_handle& handle) -> BtDownload* {
-      auto found = impl_->handles.find(handle);
+      const auto found = impl_->handles.find(handle);
       return found == impl_->handles.end() ? nullptr : found->second;
     };
+
+    if (auto* resumed = lt::alert_cast<lt::torrent_resumed_alert>(alert)) {
+      auto* download = findDownload(resumed->handle);
+      if (download && download->progressRefreshPending()) {
+        download->impl_->progressBoundaryPending = true;
+        requestProgressRefresh(download);
+      }
+      continue;
+    }
+
+    if (auto* checked = lt::alert_cast<lt::torrent_checked_alert>(alert)) {
+      auto* download = findDownload(checked->handle);
+      if (download && download->progressRefreshPending()) {
+        download->impl_->progressBoundaryPending = true;
+        requestProgressRefresh(download);
+      }
+      continue;
+    }
+
+    if (auto* rejected =
+            lt::alert_cast<lt::fastresume_rejected_alert>(alert)) {
+      auto* download = findDownload(rejected->handle);
+      if (download) {
+        download->beginProgressVerification();
+      }
+      A2_LOG_WARN(rejected->message());
+      continue;
+    }
+
+    if (auto* failed = lt::alert_cast<lt::hash_failed_alert>(alert)) {
+      auto* download = findDownload(failed->handle);
+      if (download && download->progressRefreshPending()) {
+        download->beginProgressVerification();
+        download->impl_->progressBoundaryPending = true;
+        requestProgressRefresh(download);
+      }
+      continue;
+    }
+
+    if (auto* changed = lt::alert_cast<lt::state_changed_alert>(alert)) {
+      auto* download = findDownload(changed->handle);
+      if (download &&
+          (changed->state == lt::torrent_status::checking_files ||
+           changed->state == lt::torrent_status::checking_resume_data)) {
+        download->beginProgressVerification();
+      }
+      continue;
+    }
 
     if (auto* stats = lt::alert_cast<lt::session_stats_alert>(alert)) {
       const auto counters = stats->counters();
@@ -1038,16 +1127,18 @@ void BtSession::poll()
           continue;
         }
         auto& snapshot = download->snapshot_;
+        const auto transportState = translateState(status);
         if (status.errc && !download->failed()) {
           download->setError(status.errc.message(), false);
         }
         else {
-          download->applyTransportState(translateState(status));
+          download->applyTransportState(transportState);
+          download->applyProgress(status.total_wanted,
+                                  status.total_wanted_done,
+                                  status.progress_ppm, transportState);
         }
         snapshot.name = status.name.empty() ? snapshot.name : status.name;
         snapshot.currentTracker = status.current_tracker;
-        download->applyProgress(status.total_wanted,
-                                status.total_wanted_done);
         snapshot.allTimeDownload = status.all_time_download;
         snapshot.allTimeUpload = status.all_time_upload;
         snapshot.failedBytes = status.total_failed_bytes;
@@ -1061,7 +1152,6 @@ void BtSession::poll()
         snapshot.uploadSpeed = transferring ? status.upload_payload_rate : 0;
         snapshot.numComplete = status.num_complete;
         snapshot.numIncomplete = status.num_incomplete;
-        snapshot.progressPpm = status.progress_ppm;
         if (!status.pieces.empty()) {
           snapshot.bitfield = bitfield(status.pieces);
         }
@@ -1138,6 +1228,9 @@ void BtSession::poll()
 
     if (auto* priorities = lt::alert_cast<lt::file_prio_alert>(alert)) {
       auto* download = findDownload(priorities->handle);
+      if (download && download->impl_->pendingFilePriorityUpdates > 0) {
+        --download->impl_->pendingFilePriorityUpdates;
+      }
       if (download && download->fileSelectionResuming()) {
         if (priorities->error) {
           download->setError(priorities->error.message(), true);
@@ -1147,6 +1240,10 @@ void BtSession::poll()
           download->finishFileSelectionResume();
           resumeTorrent(download);
         }
+      }
+      if (download && download->impl_->progressBoundaryPending &&
+          download->impl_->pendingFilePriorityUpdates == 0) {
+        requestProgressRefresh(download);
       }
       continue;
     }
@@ -1630,7 +1727,11 @@ void BtSession::applyDownloadOptions(
       handle.force_reannounce(0, lt::torrent_handle::high_priority);
     }
   }
-  applySelection(handle, download->group());
+  if (applySelection(handle, download->group(),
+                     download->impl_->appliedFilePriorities,
+                     download->impl_->appliedPiecePriorities)) {
+    ++download->impl_->pendingFilePriorityUpdates;
+  }
   requestResumeCheckpoint(download.get());
 }
 
@@ -1640,6 +1741,7 @@ void BtSession::forceRecheck(const std::shared_ptr<BtDownload>& download)
       !download->impl_->handle.in_session()) {
     throw DL_ABORT_EX("BitTorrent task is not present in the session");
   }
+  download->beginProgressVerification();
   download->applyTransportState(BtSnapshot::State::Checking);
   download->impl_->handle.force_recheck();
 }
