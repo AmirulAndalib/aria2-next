@@ -150,10 +150,15 @@ void BtSessionTest::testFileSelectionResumeState()
   REQUIRE(awaitingSession.find(" pause-metadata=true\n") != std::string::npos);
 
   awaitingOption->put(PREF_SELECT_FILE, "2");
+  const auto selectedLength =
+      awaiting->getBtDownload()->snapshot().files[1].length;
   auto selected = util::parseIntSegments("2");
   selected.normalize();
   awaiting->getDownloadContext()->setFileFilter(std::move(selected));
   awaiting->getBtDownload()->updateSelection(awaiting->getDownloadContext());
+  REQUIRE_EQ(selectedLength, awaiting->getBtDownload()->snapshot().totalLength);
+  REQUIRE_EQ((int64_t)0,
+             awaiting->getBtDownload()->snapshot().completedLength);
   awaiting->getBtDownload()->submitFileSelection(awaitingOption.get());
   awaiting->getBtDownload()->prepareFileSelectionResume();
   awaiting->setPauseRequested(false);

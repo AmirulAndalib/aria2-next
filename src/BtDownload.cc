@@ -457,10 +457,34 @@ void BtDownload::updateSelection(
 {
   const auto& files = context->getFileEntries();
   const auto count = std::min(files.size(), snapshot_.files.size());
+  int64_t selectedLength = 0;
+  int64_t selectedCompletedLength = 0;
+  const auto addLength = [](int64_t current, int64_t value) {
+    value = std::max<int64_t>(0, value);
+    return current > std::numeric_limits<int64_t>::max() - value
+               ? std::numeric_limits<int64_t>::max()
+               : current + value;
+  };
   for (size_t i = 0; i < count; ++i) {
     snapshot_.files[i].selected = files[i]->isRequested();
     snapshot_.files[i].path = files[i]->getPath();
+    if (snapshot_.files[i].selected) {
+      selectedLength = addLength(selectedLength, snapshot_.files[i].length);
+      selectedCompletedLength =
+          addLength(selectedCompletedLength,
+                    std::min(snapshot_.files[i].completedLength,
+                             snapshot_.files[i].length));
+    }
   }
+  snapshot_.totalLength = selectedLength;
+  snapshot_.completedLength = selectedCompletedLength;
+  snapshot_.progressPpm =
+      selectedLength > 0
+          ? static_cast<int>(std::min<long double>(
+                1000000.0L,
+                static_cast<long double>(selectedCompletedLength) *
+                    1000000.0L / selectedLength))
+          : 0;
 }
 
 void BtDownload::initialize(RequestGroup* group)
