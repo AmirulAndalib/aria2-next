@@ -209,6 +209,7 @@ int main() {
   tls_parameters.grbitDisabledProtocols =
     SP_PROT_TLS1_0_CLIENT | SP_PROT_TLS1_1_CLIENT |
     SP_PROT_TLS1_2_CLIENT;
+  static_cast<void>(SP_PROT_TLS1_3_CLIENT | SP_PROT_TLS1_3_SERVER);
   return 0;
 }" ARIA2_WINTLS_REQUIRED_FEATURES)
   cmake_pop_check_state()
