@@ -36,6 +36,10 @@
 #ifndef D_WIN_TLS_CONTEXT_H
 #define D_WIN_TLS_CONTEXT_H
 
+#ifndef SECURITY_WIN32
+#  define SECURITY_WIN32 1
+#endif
+
 #include "common.h"
 #include "config.h"
 
@@ -61,12 +65,6 @@ struct cred_deleter {
   }
 };
 typedef std::unique_ptr<CredHandle, cred_deleter> CredPtr;
-
-#if defined(HAVE_SCH_CREDENTIALS)
-typedef SCH_CREDENTIALS Credentials;
-#else  // !HAVE_SCH_CREDENTIALS
-typedef SCHANNEL_CRED Credentials;
-#endif // !HAVE_SCH_CREDENTIALS
 } // namespace wintls
 
 class WinTLSContext : public TLSContext {
@@ -90,10 +88,8 @@ public:
 
 private:
   TLSSessionSide side_;
-  wintls::Credentials credentials_;
-#if defined(HAVE_SCH_CREDENTIALS)
-  TLS_PARAMETERS tlsParams_;
-#endif // HAVE_SCH_CREDENTIALS
+  SCH_CREDENTIALS credentials_;
+  TLS_PARAMETERS tlsParameters_;
   HCERTSTORE store_;
   wintls::CredPtr cred_;
 

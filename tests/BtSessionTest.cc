@@ -34,6 +34,7 @@ public:
   void testSessionStateRoundTrip();
   void testTransferStatAggregation();
   void testFileSelectionResumeState();
+  void testCheckingProgressStability();
   void testDesktopSettings();
   void testTrackerOwnership();
   void testResumeStore();
@@ -42,6 +43,7 @@ public:
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
 A2_TEST(BtSessionTest, testTransferStatAggregation)
 A2_TEST(BtSessionTest, testFileSelectionResumeState)
+A2_TEST(BtSessionTest, testCheckingProgressStability)
 A2_TEST(BtSessionTest, testDesktopSettings)
 A2_TEST(BtSessionTest, testTrackerOwnership)
 A2_TEST(BtSessionTest, testResumeStore)
@@ -178,6 +180,34 @@ void BtSessionTest::testFileSelectionResumeState()
   REQUIRE(restored->getBtDownload()->snapshot().files[1].selected);
 
   File(resumePath).remove();
+}
+
+void BtSessionTest::testCheckingProgressStability()
+{
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto& snapshot = download->mutableSnapshot();
+  snapshot.totalLength = 1000;
+  snapshot.completedLength = 600;
+  snapshot.files.resize(1);
+  snapshot.files[0].length = 1000;
+  snapshot.files[0].completedLength = 600;
+
+  download->applyTransportState(BtSnapshot::State::Checking);
+  download->applyProgress(1000, 0);
+  download->applyFileProgress({0});
+  REQUIRE_EQ((int64_t)600, snapshot.completedLength);
+  REQUIRE_EQ((int64_t)600, snapshot.files[0].completedLength);
+
+  download->applyProgress(1000, 750);
+  download->applyFileProgress({750});
+  REQUIRE_EQ((int64_t)750, snapshot.completedLength);
+  REQUIRE_EQ((int64_t)750, snapshot.files[0].completedLength);
+
+  download->applyTransportState(BtSnapshot::State::Downloading);
+  download->applyProgress(1000, 450);
+  download->applyFileProgress({450});
+  REQUIRE_EQ((int64_t)450, snapshot.completedLength);
+  REQUIRE_EQ((int64_t)450, snapshot.files[0].completedLength);
 }
 
 void BtSessionTest::testResumeStore()

@@ -195,19 +195,27 @@ endif()
 if(ARIA2_ENABLE_SSL AND WIN32 AND ARIA2_WITH_WINTLS)
   cmake_push_check_state(RESET)
   check_cxx_source_compiles("
+#define SECURITY_WIN32 1
 #include <winsock2.h>
 #include <windows.h>
 #include <security.h>
 #include <schnlsp.h>
 int main() {
-  SCH_CREDENTIALS credentials;
-  TLS_PARAMETERS tls_parameters;
+  SCH_CREDENTIALS credentials{};
+  TLS_PARAMETERS tls_parameters{};
   credentials.dwVersion = SCH_CREDENTIALS_VERSION;
   credentials.cTlsParameters = 1;
   credentials.pTlsParameters = &tls_parameters;
+  tls_parameters.grbitDisabledProtocols =
+    SP_PROT_TLS1_0_CLIENT | SP_PROT_TLS1_1_CLIENT |
+    SP_PROT_TLS1_2_CLIENT;
   return 0;
-}" HAVE_SCH_CREDENTIALS)
+}" ARIA2_WINTLS_REQUIRED_FEATURES)
   cmake_pop_check_state()
+  if(NOT ARIA2_WINTLS_REQUIRED_FEATURES)
+    message(FATAL_ERROR
+      "WinTLS requires the modern SCH_CREDENTIALS and TLS 1.3 API")
+  endif()
   set(HAVE_WINTLS 1)
   set(ENABLE_SSL 1)
 elseif(ARIA2_ENABLE_SSL AND ARIA2_WITH_OPENSSL)

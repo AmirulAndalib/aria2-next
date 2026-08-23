@@ -127,9 +127,6 @@
 /* Define to 1 if you have the <pwd.h> header file. */
 #cmakedefine HAVE_PWD_H @HAVE_PWD_H@
 
-/* Define to 1 if SCH_CREDENTIALS and TLS_PARAMETERS are available. */
-#cmakedefine HAVE_SCH_CREDENTIALS @HAVE_SCH_CREDENTIALS@
-
 /* Define to 1 if you have the <share.h> header file. */
 #cmakedefine HAVE_SHARE_H @HAVE_SHARE_H@
 

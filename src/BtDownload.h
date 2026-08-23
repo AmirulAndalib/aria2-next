@@ -109,6 +109,8 @@ public:
   void prepareFileSelectionResume();
   void finishFileSelectionResume();
   void applyTransportState(BtSnapshot::State state);
+  void applyProgress(int64_t totalLength, int64_t completedLength);
+  void applyFileProgress(const std::vector<int64_t>& completedLengths);
   void setError(std::string message, bool recoverable);
   void prepareStart();
 

@@ -487,6 +487,36 @@ void BtDownload::updateSelection(
           : 0;
 }
 
+void BtDownload::applyProgress(int64_t totalLength,
+                               int64_t completedLength)
+{
+  totalLength = std::max<int64_t>(0, totalLength);
+  completedLength = std::max<int64_t>(0, completedLength);
+  if (snapshot_.state == BtSnapshot::State::Checking) {
+    snapshot_.totalLength = std::max(snapshot_.totalLength, totalLength);
+    snapshot_.completedLength =
+        std::max(snapshot_.completedLength, completedLength);
+    return;
+  }
+  snapshot_.totalLength = totalLength;
+  snapshot_.completedLength = completedLength;
+}
+
+void BtDownload::applyFileProgress(
+    const std::vector<int64_t>& completedLengths)
+{
+  const auto count = std::min(snapshot_.files.size(),
+                              completedLengths.size());
+  for (size_t i = 0; i < count; ++i) {
+    const auto completedLength =
+        std::max<int64_t>(0, completedLengths[i]);
+    snapshot_.files[i].completedLength =
+        snapshot_.state == BtSnapshot::State::Checking
+            ? std::max(snapshot_.files[i].completedLength, completedLength)
+            : completedLength;
+  }
+}
+
 void BtDownload::initialize(RequestGroup* group)
 {
   group_ = group;

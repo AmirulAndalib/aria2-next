@@ -44,65 +44,28 @@
 #include "message.h"
 #include "util.h"
 
-#ifndef SP_PROT_TLS1_1_CLIENT
-#  define SP_PROT_TLS1_1_CLIENT 0x00000200
-#endif
-#ifndef SP_PROT_TLS1_1_SERVER
-#  define SP_PROT_TLS1_1_SERVER 0x00000100
-#endif
-#ifndef SP_PROT_TLS1_2_CLIENT
-#  define SP_PROT_TLS1_2_CLIENT 0x00000800
-#endif
-#ifndef SP_PROT_TLS1_2_SERVER
-#  define SP_PROT_TLS1_2_SERVER 0x00000400
-#endif
-#ifndef SCH_USE_STRONG_CRYPTO
-#  define SCH_USE_STRONG_CRYPTO 0x00400000
-#endif
-
-#define WEAK_CIPHER_BITS 56
-#define STRONG_CIPHER_BITS 128
-
 namespace aria2 {
 
 WinTLSContext::WinTLSContext(TLSSessionSide side, TLSVersion ver)
     : side_(side), store_(0)
 {
   memset(&credentials_, 0, sizeof(credentials_));
-#if defined(HAVE_SCH_CREDENTIALS)
-  memset(&tlsParams_, 0, sizeof(tlsParams_));
+  memset(&tlsParameters_, 0, sizeof(tlsParameters_));
   credentials_.dwVersion = SCH_CREDENTIALS_VERSION;
   credentials_.cTlsParameters = 1;
-  credentials_.pTlsParameters = &tlsParams_;
-  tlsParams_.grbitDisabledProtocols = 0;
-#else  // !HAVE_SCH_CREDENTIALS
-  credentials_.dwVersion = SCHANNEL_CRED_VERSION;
-  credentials_.grbitEnabledProtocols = 0;
-#endif // !HAVE_SCH_CREDENTIALS
+  credentials_.pTlsParameters = &tlsParameters_;
+  tlsParameters_.grbitDisabledProtocols =
+      side_ == TLS_CLIENT ? SP_PROT_TLS1_0_CLIENT : SP_PROT_TLS1_0_SERVER;
   if (side_ == TLS_CLIENT) {
     switch (ver) {
     case TLS_PROTO_TLS11:
-#if defined(HAVE_SCH_CREDENTIALS)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_1_CLIENT;
-#else  // !HAVE_SCH_CREDENTIALS
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_1_CLIENT;
-#endif // !HAVE_SCH_CREDENTIALS
-    // fall through
+      break;
     case TLS_PROTO_TLS12:
-#if defined(HAVE_SCH_CREDENTIALS)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_2_CLIENT;
-#else  // !HAVE_SCH_CREDENTIALS
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_2_CLIENT;
-#endif // !HAVE_SCH_CREDENTIALS
-    // fall through
+      tlsParameters_.grbitDisabledProtocols |= SP_PROT_TLS1_1_CLIENT;
+      break;
     case TLS_PROTO_TLS13:
-#if defined(HAVE_SCH_CREDENTIALS) && defined(SP_PROT_TLS1_3_CLIENT)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_3_CLIENT;
-#elif defined(SP_PROT_TLS1_3_CLIENT)
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_3_CLIENT;
-#else  // !SP_PROT_TLS1_3_CLIENT
-      throw DL_ABORT_EX("WinTLS backend does not support TLSv1.3");
-#endif // !SP_PROT_TLS1_3_CLIENT
+      tlsParameters_.grbitDisabledProtocols |=
+          SP_PROT_TLS1_1_CLIENT | SP_PROT_TLS1_2_CLIENT;
       break;
     default:
       assert(0);
@@ -112,41 +75,19 @@ WinTLSContext::WinTLSContext(TLSSessionSide side, TLSVersion ver)
   else {
     switch (ver) {
     case TLS_PROTO_TLS11:
-#if defined(HAVE_SCH_CREDENTIALS)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_1_SERVER;
-#else  // !HAVE_SCH_CREDENTIALS
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_1_SERVER;
-#endif // !HAVE_SCH_CREDENTIALS
-    // fall through
+      break;
     case TLS_PROTO_TLS12:
-#if defined(HAVE_SCH_CREDENTIALS)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_2_SERVER;
-#else  // !HAVE_SCH_CREDENTIALS
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_2_SERVER;
-#endif // !HAVE_SCH_CREDENTIALS
-    // fall through
+      tlsParameters_.grbitDisabledProtocols |= SP_PROT_TLS1_1_SERVER;
+      break;
     case TLS_PROTO_TLS13:
-#if defined(HAVE_SCH_CREDENTIALS) && defined(SP_PROT_TLS1_3_SERVER)
-      tlsParams_.grbitDisabledProtocols &= ~SP_PROT_TLS1_3_SERVER;
-#elif defined(SP_PROT_TLS1_3_SERVER)
-      credentials_.grbitEnabledProtocols |= SP_PROT_TLS1_3_SERVER;
-#else  // !SP_PROT_TLS1_3_SERVER
-      throw DL_ABORT_EX("WinTLS backend does not support TLSv1.3");
-#endif // !SP_PROT_TLS1_3_SERVER
+      tlsParameters_.grbitDisabledProtocols |=
+          SP_PROT_TLS1_1_SERVER | SP_PROT_TLS1_2_SERVER;
       break;
     default:
       assert(0);
       abort();
     }
   }
-
-  // Strong protocol versions: Use a minimum strength, which might be later
-  // refined using SCH_USE_STRONG_CRYPTO in the flags.
-#if defined(HAVE_SCH_CREDENTIALS)
-  credentials_.dwFlags |= SCH_USE_STRONG_CRYPTO;
-#else  // !HAVE_SCH_CREDENTIALS
-  credentials_.dwMinimumCipherStrength = STRONG_CIPHER_BITS;
-#endif // !HAVE_SCH_CREDENTIALS
 
   setVerifyPeer(side_ == TLS_CLIENT);
 }
@@ -170,16 +111,7 @@ void WinTLSContext::setVerifyPeer(bool verify)
 
   // Never automatically push any client or server certs. We'll do cert setup
   // ourselves.
-  credentials_.dwFlags = SCH_CRED_NO_DEFAULT_CREDS;
-
-#if !defined(HAVE_SCH_CREDENTIALS)
-  if (credentials_.dwMinimumCipherStrength > WEAK_CIPHER_BITS) {
-    // Enable strong crypto if we already set a minimum cipher streams.
-    // This might actually require even stronger algorithms, which is a good
-    // thing.
-    credentials_.dwFlags |= SCH_USE_STRONG_CRYPTO;
-  }
-#endif // !HAVE_SCH_CREDENTIALS
+  credentials_.dwFlags = SCH_CRED_NO_DEFAULT_CREDS | SCH_USE_STRONG_CRYPTO;
 
   if (side_ != TLS_CLIENT || !verify) {
     // No verification for servers and if user explicitly requested it
@@ -220,7 +152,7 @@ CredHandle* WinTLSContext::getCredHandle()
     credentials_.paCred = nullptr;
   }
   SECURITY_STATUS status = ::AcquireCredentialsHandleW(
-      nullptr, (SEC_WCHAR*)UNISP_NAME_W,
+      nullptr, const_cast<SEC_WCHAR*>(UNISP_NAME_W),
       side_ == TLS_CLIENT ? SECPKG_CRED_OUTBOUND : SECPKG_CRED_INBOUND, nullptr,
       &credentials_, nullptr, nullptr, cred_.get(), &ts);
   if (ctx) {

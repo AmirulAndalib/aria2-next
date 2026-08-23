@@ -1046,8 +1046,8 @@ void BtSession::poll()
         }
         snapshot.name = status.name.empty() ? snapshot.name : status.name;
         snapshot.currentTracker = status.current_tracker;
-        snapshot.totalLength = status.total_wanted;
-        snapshot.completedLength = status.total_wanted_done;
+        download->applyProgress(status.total_wanted,
+                                status.total_wanted_done);
         snapshot.allTimeDownload = status.all_time_download;
         snapshot.allTimeUpload = status.all_time_upload;
         snapshot.failedBytes = status.total_failed_bytes;
@@ -1126,13 +1126,12 @@ void BtSession::poll()
     if (auto* progress = lt::alert_cast<lt::file_progress_alert>(alert)) {
       auto* download = findDownload(progress->handle);
       if (download) {
-        const auto count =
-            std::min(download->snapshot_.files.size(),
-                     static_cast<size_t>(progress->files.size()));
-        for (size_t i = 0; i < count; ++i) {
-          download->snapshot_.files[i].completedLength =
-              progress->files[lt::file_index_t{static_cast<int>(i)}];
+        std::vector<int64_t> completedLengths;
+        completedLengths.reserve(progress->files.size());
+        for (const auto completedLength : progress->files) {
+          completedLengths.push_back(completedLength);
         }
+        download->applyFileProgress(completedLengths);
       }
       continue;
     }
