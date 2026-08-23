@@ -18,11 +18,13 @@ aria2 is remarkable open source software. For over a decade it has been one of t
 
 But upstream development has slowed dramatically in recent years. Dependencies grew stale, builds broke on modern platforms, and a backlog of bugs went unaddressed. We picked up the baton: migrated the codebase to a modern build framework, triaged and fixed a substantial number of upstream issues, and introduced ED2K protocol support for the first time. A full audit trail is preserved in [`docs/maintenance/upstream-issue-review/matrix.csv`](docs/maintenance/upstream-issue-review/matrix.csv).
 
-Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, FTP, SFTP, Metalink, ED2K, RPC, and libaria2 remain in the aria2 codebase. BitTorrent is implemented by libtorrent-rasterbar 2.1 instead of aria2's former peer-wire, tracker, DHT, encryption, and disk pipeline. Obsolete BitTorrent-only options were removed rather than emulated.
+Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, FTP, SFTP, Metalink, ED2K, RPC, and libaria2 remain in the aria2 codebase. BitTorrent is implemented by libtorrent-rasterbar 2.1 instead of aria2's former peer-wire, tracker, DHT, encryption, and disk pipeline. The canonical option model contains only maintained settings. A removable input adapter normalizes retired aria2 option names and values without restoring removed implementations or persisting legacy settings.
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID pauses with a complete file list before any payload is requested.
 
 The BitTorrent session persists native IPv4 and IPv6 DHT routing state, keeps paused torrents inside libtorrent for fast recovery, checkpoints fast-resume data while running, preserves native tracker tiers, and isolates private torrents from global tracker injection. TCP, uTP, PEX, Local Peer Discovery, UPnP/NAT-PMP, transport encryption, v1/v2 torrents, sparse or allocated storage, sequential mode, and HTTP/SOCKS proxying use native libtorrent facilities.
+
+Advanced native controls cover request and disk queues, disk I/O policy, peer turnover, TCP/uTP balancing, upload scheduling, file priorities, web seeds, manual peers, and resume checkpoints. Runtime diagnostics report peer discovery, tracker, DHT, transport, disk queue, protocol overhead, and aggregated performance-warning state through JSON-RPC.
 
 ## Native ED2K/eMule Support
 
@@ -33,10 +35,10 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 | Surface | Current contract |
 | --- | --- |
 | Executable | `aria2-next` |
-| CLI | Maintained aria2 options plus native ED2K and libtorrent-backed BitTorrent |
-| Configuration | aria2 key-value configuration format |
+| CLI | Maintained aria2 options plus normalized legacy input |
+| Configuration | aria2 key-value format with legacy input normalization |
 | Sessions | aria2 input/session files and libtorrent resume data |
-| RPC | Maintained aria2 JSON-RPC methods plus BitTorrent endpoint and blocklist methods |
+| RPC | Maintained aria2 JSON-RPC methods, legacy input normalization, and native endpoint and blocklist methods |
 | Library | public libaria2 headers under `src/includes/aria2/` |
 
 Motrix Next embeds this engine, and release artifacts are standalone binaries.

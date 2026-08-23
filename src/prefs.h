@@ -468,6 +468,56 @@ extern PrefPtr PREF_BT_IO_THREADS;
 // values: 1*digit
 extern PrefPtr PREF_BT_HASHING_THREADS;
 // values: 1*digit
+extern PrefPtr PREF_BT_CONNECTION_SPEED;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_OUT_REQUEST_QUEUE;
+// values: 1*digit
+extern PrefPtr PREF_BT_MAX_IN_REQUEST_QUEUE;
+// values: 1*digit
+extern PrefPtr PREF_BT_DISK_QUEUE_SIZE;
+// values: default | pread | mmap | posix
+extern PrefPtr PREF_BT_DISK_IO;
+// values: enabled | disabled
+extern PrefPtr PREF_BT_DISK_READ_CACHE;
+// values: enabled | disabled | write-through
+extern PrefPtr PREF_BT_DISK_WRITE_CACHE;
+// values: 1*digit
+extern PrefPtr PREF_BT_CHECKING_MEMORY;
+// values: true | false
+extern PrefPtr PREF_BT_PIECE_EXTENT_AFFINITY;
+// values: 1*digit
+extern PrefPtr PREF_BT_PEER_TURNOVER;
+// values: 1*digit
+extern PrefPtr PREF_BT_PEER_TURNOVER_CUTOFF;
+// values: 1*digit
+extern PrefPtr PREF_BT_PEER_TURNOVER_INTERVAL;
+// values: prefer-tcp | peer-proportional
+extern PrefPtr PREF_BT_MIXED_MODE;
+// values: fixed | rate-based
+extern PrefPtr PREF_BT_UPLOAD_SLOT_ALGORITHM;
+// values: round-robin | fastest-upload | anti-leech
+extern PrefPtr PREF_BT_SEED_CHOKING_ALGORITHM;
+// values: 1*digit
+extern PrefPtr PREF_BT_SEND_BUFFER_LOW_WATERMARK;
+// values: 1*digit
+extern PrefPtr PREF_BT_SEND_BUFFER_WATERMARK;
+// values: 1*digit
+extern PrefPtr PREF_BT_SEND_BUFFER_WATERMARK_FACTOR;
+// values: true | false
+extern PrefPtr PREF_BT_SEEDING_OUTGOING_CONNECTIONS;
+// values: true | false
+extern PrefPtr PREF_BT_RATE_LIMIT_OVERHEAD;
+// values: 1*digit
+extern PrefPtr PREF_BT_STOP_TRACKER_TIMEOUT;
+// values: peers | peers-and-trackers | all
+extern PrefPtr PREF_BT_BLOCKLIST_SCOPE;
+// values: 1*digit
+extern PrefPtr PREF_BT_RESUME_SAVE_INTERVAL;
+// values: true | false
+extern PrefPtr PREF_BT_UPLOAD_SUGGESTIONS;
+// values: INDEX=off|normal|high|top[,INDEX=...]
+extern PrefPtr PREF_BT_FILE_PRIORITY;
+// values: 1*digit
 extern PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES;
 // values: true | false
 extern PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS;

@@ -308,6 +308,8 @@ set(ARIA2_SOURCES_BASE
   src/JsonDiskWriter.h
   src/JsonParser.cc
   src/JsonParser.h
+  src/LegacyOptionAdapter.cc
+  src/LegacyOptionAdapter.h
   src/Lock.h
   src/Log.cc
   src/Log.h

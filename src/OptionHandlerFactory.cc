@@ -1651,6 +1651,231 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   }
   {
     OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_CONNECTION_SPEED, TEXT_BT_CONNECTION_SPEED, "30", 0, 10000));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_MAX_OUT_REQUEST_QUEUE, TEXT_BT_MAX_OUT_REQUEST_QUEUE, "500", 1,
+        UINT16_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_MAX_IN_REQUEST_QUEUE, TEXT_BT_MAX_IN_REQUEST_QUEUE, "2000", 1,
+        INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new UnitNumberOptionHandler(
+        PREF_BT_DISK_QUEUE_SIZE, TEXT_BT_DISK_QUEUE_SIZE, "100M", 16_k,
+        INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_DISK_IO, TEXT_BT_DISK_IO, "default",
+        {"default", "pread", "mmap", "posix"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_DISK_READ_CACHE, TEXT_BT_DISK_READ_CACHE, "enabled",
+        {"enabled", "disabled"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_DISK_WRITE_CACHE, TEXT_BT_DISK_WRITE_CACHE, "enabled",
+        {"enabled", "disabled", "write-through"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new UnitNumberOptionHandler(
+        PREF_BT_CHECKING_MEMORY, TEXT_BT_CHECKING_MEMORY, "32M", 16_k,
+        INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_BT_PIECE_EXTENT_AFFINITY, TEXT_BT_PIECE_EXTENT_AFFINITY,
+        A2_V_FALSE, OptionHandler::OPT_ARG));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_PEER_TURNOVER, TEXT_BT_PEER_TURNOVER, "4", 0, 100));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_PEER_TURNOVER_CUTOFF, TEXT_BT_PEER_TURNOVER_CUTOFF, "90", 0,
+        100));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_PEER_TURNOVER_INTERVAL, TEXT_BT_PEER_TURNOVER_INTERVAL, "300",
+        30, 3600));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_MIXED_MODE, TEXT_BT_MIXED_MODE, "prefer-tcp",
+        {"prefer-tcp", "peer-proportional"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_UPLOAD_SLOT_ALGORITHM, TEXT_BT_UPLOAD_SLOT_ALGORITHM, "fixed",
+        {"fixed", "rate-based"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_SEED_CHOKING_ALGORITHM, TEXT_BT_SEED_CHOKING_ALGORITHM,
+        "fastest-upload", {"round-robin", "fastest-upload", "anti-leech"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new UnitNumberOptionHandler(
+        PREF_BT_SEND_BUFFER_LOW_WATERMARK, TEXT_BT_SEND_BUFFER_LOW_WATERMARK,
+        "10K", 1_k, INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new UnitNumberOptionHandler(
+        PREF_BT_SEND_BUFFER_WATERMARK, TEXT_BT_SEND_BUFFER_WATERMARK, "500K",
+        16_k, INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_SEND_BUFFER_WATERMARK_FACTOR,
+        TEXT_BT_SEND_BUFFER_WATERMARK_FACTOR, "50", 1, 1000));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_BT_SEEDING_OUTGOING_CONNECTIONS,
+        TEXT_BT_SEEDING_OUTGOING_CONNECTIONS, A2_V_TRUE,
+        OptionHandler::OPT_ARG));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_BT_RATE_LIMIT_OVERHEAD, TEXT_BT_RATE_LIMIT_OVERHEAD, A2_V_FALSE,
+        OptionHandler::OPT_ARG));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_STOP_TRACKER_TIMEOUT, TEXT_BT_STOP_TRACKER_TIMEOUT, "2", 0,
+        600));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new ParameterOptionHandler(
+        PREF_BT_BLOCKLIST_SCOPE, TEXT_BT_BLOCKLIST_SCOPE, "peers",
+        {"peers", "peers-and-trackers", "all"}));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_BT_RESUME_SAVE_INTERVAL, TEXT_BT_RESUME_SAVE_INTERVAL, "60", 0,
+        INT32_MAX));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_BT_UPLOAD_SUGGESTIONS, TEXT_BT_UPLOAD_SUGGESTIONS, A2_V_FALSE,
+        OptionHandler::OPT_ARG));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new DefaultOptionHandler(
+        PREF_BT_FILE_PRIORITY, TEXT_BT_FILE_PRIORITY, NO_DEFAULT_VALUE,
+        "INDEX=off|normal|high|top,..."));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setInitialOption(true);
+    op->setChangeOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new NumberOptionHandler(
         PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES,
         TEXT_BT_MAX_CONCURRENT_HTTP_ANNOUNCES, "50", 1));
     op->addTag(TAG_ADVANCED);

@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "BtDownload.h"
@@ -31,9 +32,11 @@ class Option;
 class RequestGroup;
 
 struct BtSessionStatus {
+  std::vector<std::pair<std::string, uint64_t>> performanceWarnings;
   std::vector<std::string> listenEndpoints;
   std::string externalAddress;
   std::string portMappingError;
+  std::string lastPerformanceWarning;
   uint16_t listenPort = 0;
   uint16_t announcePort = 0;
   uint16_t mappedTcpPort = 0;
@@ -55,6 +58,16 @@ struct BtSessionStatus {
   uint64_t payloadUploaded = 0;
   uint64_t trackerDownloaded = 0;
   uint64_t trackerUploaded = 0;
+  uint64_t ipOverheadDownloaded = 0;
+  uint64_t ipOverheadUploaded = 0;
+  uint64_t dhtDownloaded = 0;
+  uint64_t dhtUploaded = 0;
+  uint64_t diskBlocksInUse = 0;
+  uint64_t queuedDiskJobs = 0;
+  uint64_t averageDiskJobTime = 0;
+  uint64_t diskRequestLatency = 0;
+  size_t diskReadWaitingPeers = 0;
+  size_t diskWriteWaitingPeers = 0;
   bool dhtStateHealthy = false;
 };
 
@@ -93,8 +106,14 @@ public:
   void applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
                             const Option* option);
   void forceRecheck(const std::shared_ptr<BtDownload>& download);
+  void forceAnnounce(const std::shared_ptr<BtDownload>& download);
   void replaceTrackers(const std::shared_ptr<BtDownload>& download,
                        const std::vector<BtTrackerConfig>& trackers);
+  void replaceWebSeeds(const std::shared_ptr<BtDownload>& download,
+                       const std::vector<std::string>& webSeeds);
+  std::pair<size_t, size_t>
+  addPeers(const std::shared_ptr<BtDownload>& download,
+           const std::vector<std::string>& peers);
   void discard(const std::shared_ptr<BtDownload>& download);
   void remove(a2_gid_t gid);
 

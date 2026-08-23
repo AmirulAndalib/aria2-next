@@ -311,6 +311,15 @@ public:
   static const char* getMethodName() { return "aria2.forceBtRecheck"; }
 };
 
+class ForceBtAnnounceRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.forceBtAnnounce"; }
+};
+
 class ReplaceBtTrackersRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
@@ -318,6 +327,24 @@ protected:
 
 public:
   static const char* getMethodName() { return "aria2.replaceBtTrackers"; }
+};
+
+class ReplaceBtWebSeedsRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.replaceBtWebSeeds"; }
+};
+
+class AddBtPeersRpcMethod : public RpcMethod {
+protected:
+  virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                             DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.addBtPeers"; }
 };
 
 class SetBtPeerBlocklistRpcMethod : public RpcMethod {

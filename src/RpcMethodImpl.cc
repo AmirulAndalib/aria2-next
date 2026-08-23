@@ -45,6 +45,7 @@
 #include "Option.h"
 #include "OptionParser.h"
 #include "OptionHandler.h"
+#include "LegacyOptionAdapter.h"
 #include "DownloadEngine.h"
 #include "RequestGroup.h"
 #include "download_helper.h"
@@ -135,6 +136,7 @@ const char KEY_SEEDER[] = "seeder";
 const char KEY_INDEX[] = "index";
 const char KEY_PATH[] = "path";
 const char KEY_SELECTED[] = "selected";
+const char KEY_PRIORITY[] = "priority";
 const char KEY_LENGTH[] = "length";
 const char KEY_URI[] = "uri";
 const char KEY_CURRENT_URI[] = "currentUri";
@@ -144,7 +146,7 @@ const char KEY_RPC_VERSION[] = "rpcVersion";
 const char KEY_ENABLED_FEATURES[] = "enabledFeatures";
 
 const char PRODUCT_NAME[] = "aria2-next";
-const char RPC_VERSION[] = "1.0.0";
+const char RPC_VERSION[] = "1.1.0";
 const char KEY_METHOD_NAME[] = "methodName";
 const char KEY_PARAMS[] = "params";
 const char KEY_SESSION_ID[] = "sessionId";
@@ -742,6 +744,11 @@ void createBtFileEntry(List* files, const BtSnapshot& snapshot)
     entry->put(KEY_SELECTED, file.selected ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_LENGTH, util::itos(file.length));
     entry->put(KEY_COMPLETED_LENGTH, util::itos(file.completedLength));
+    const char* priority = file.priority == 0   ? "off"
+                           : file.priority == 6 ? "high"
+                           : file.priority == 7 ? "top"
+                                                : "normal";
+    entry->put(KEY_PRIORITY, priority);
     entry->put(KEY_URIS, List::g());
     files->append(std::move(entry));
   }
@@ -1037,6 +1044,11 @@ void gatherBitTorrentMetadata(Dict* btDict, const BtSnapshot& snapshot,
     announceList->append(std::move(outputTier));
   }
   btDict->put(KEY_ANNOUNCE_LIST, std::move(announceList));
+  auto webSeeds = List::g();
+  for (const auto& webSeed : snapshot.webSeeds) {
+    webSeeds->append(webSeed);
+  }
+  btDict->put("webSeeds", std::move(webSeeds));
   btDict->put(KEY_PRIVATE_TORRENT,
               snapshot.privateTorrent ? VLB_TRUE : VLB_FALSE);
   btDict->put("state", btStateName(snapshot.state));
@@ -1053,6 +1065,8 @@ void gatherBitTorrentMetadata(Dict* btDict, const BtSnapshot& snapshot,
   btDict->put("connectingPeers", util::itos(snapshot.connectingPeers));
   btDict->put("handshakingPeers", util::itos(snapshot.handshakingPeers));
   btDict->put("numSeeds", util::itos(snapshot.numSeeds));
+  btDict->put("numComplete", util::itos(snapshot.numComplete));
+  btDict->put("numIncomplete", util::itos(snapshot.numIncomplete));
   btDict->put("progress", fmt("%.6f", snapshot.progressPpm / 1000000.0));
   if (snapshot.availabilityPpm >= 0) {
     btDict->put("availability",
@@ -1443,6 +1457,14 @@ ForceBtRecheckRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 }
 
 std::unique_ptr<ValueBase>
+ForceBtAnnounceRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  e->getBtSession()->forceAnnounce(download);
+  return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
 ReplaceBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
   const auto download = requireBtDownload(req, e);
@@ -1464,6 +1486,51 @@ ReplaceBtTrackersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   }
   e->getBtSession()->replaceTrackers(download, trackers);
   return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
+ReplaceBtWebSeedsRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  const List* webSeedsParam = checkRequiredParam<List>(req, 1);
+  std::vector<std::string> webSeeds;
+  webSeeds.reserve(webSeedsParam->size());
+  size_t index = 0;
+  for (const auto& value : *webSeedsParam) {
+    const auto webSeed = downcast<String>(value);
+    if (!webSeed) {
+      throw DL_ABORT_EX(fmt("The web seed at index %lu has wrong type.",
+                            static_cast<unsigned long>(index)));
+    }
+    webSeeds.push_back(webSeed->s());
+    ++index;
+  }
+  e->getBtSession()->replaceWebSeeds(download, webSeeds);
+  return createGIDResponse(download->group()->getGID());
+}
+
+std::unique_ptr<ValueBase>
+AddBtPeersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+{
+  const auto download = requireBtDownload(req, e);
+  const List* peersParam = checkRequiredParam<List>(req, 1);
+  std::vector<std::string> peers;
+  peers.reserve(peersParam->size());
+  size_t index = 0;
+  for (const auto& value : *peersParam) {
+    const auto peer = downcast<String>(value);
+    if (!peer) {
+      throw DL_ABORT_EX(fmt("The peer at index %lu has wrong type.",
+                            static_cast<unsigned long>(index)));
+    }
+    peers.push_back(peer->s());
+    ++index;
+  }
+  const auto result = e->getBtSession()->addPeers(download, peers);
+  auto response = Dict::g();
+  response->put("added", Integer::g(result.first));
+  response->put("failed", Integer::g(result.second));
+  return response;
 }
 
 std::unique_ptr<ValueBase>
@@ -1521,6 +1588,28 @@ GetBtSessionStatusRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   result->put("payloadUploaded", util::uitos(status.payloadUploaded));
   result->put("trackerDownloaded", util::uitos(status.trackerDownloaded));
   result->put("trackerUploaded", util::uitos(status.trackerUploaded));
+  result->put("ipOverheadDownloaded",
+              util::uitos(status.ipOverheadDownloaded));
+  result->put("ipOverheadUploaded", util::uitos(status.ipOverheadUploaded));
+  result->put("dhtDownloaded", util::uitos(status.dhtDownloaded));
+  result->put("dhtUploaded", util::uitos(status.dhtUploaded));
+  result->put("diskBlocksInUse", util::uitos(status.diskBlocksInUse));
+  result->put("queuedDiskJobs", util::uitos(status.queuedDiskJobs));
+  result->put("averageDiskJobTime",
+              util::uitos(status.averageDiskJobTime));
+  result->put("diskRequestLatency", util::uitos(status.diskRequestLatency));
+  result->put("diskReadWaitingPeers",
+              util::uitos(status.diskReadWaitingPeers));
+  result->put("diskWriteWaitingPeers",
+              util::uitos(status.diskWriteWaitingPeers));
+  if (!status.lastPerformanceWarning.empty()) {
+    result->put("lastPerformanceWarning", status.lastPerformanceWarning);
+  }
+  auto performanceWarnings = Dict::g();
+  for (const auto& warning : status.performanceWarnings) {
+    performanceWarnings->put(warning.first, util::uitos(warning.second));
+  }
+  result->put("performanceWarnings", std::move(performanceWarnings));
   result->put("dhtStateHealthy",
               status.dhtStateHealthy ? VLB_TRUE : VLB_FALSE);
   if (!status.portMappingError.empty()) {
@@ -1723,6 +1812,9 @@ void pushRequestOption(Dict* dict, const std::shared_ptr<Option>& option,
       dict->put(pref->k, option->get(pref));
     }
   }
+  for (const auto& item : projectLegacyOptions(option.get())) {
+    dict->put(item.first, item.second);
+  }
 }
 } // namespace
 
@@ -1761,6 +1853,9 @@ GetGlobalOptionRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     if (h) {
       result->put(pref->k, e->getOption()->get(pref));
     }
+  }
+  for (const auto& item : projectLegacyOptions(e->getOption())) {
+    result->put(item.first, item.second);
   }
   return std::move(result);
 }

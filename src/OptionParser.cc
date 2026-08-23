@@ -48,6 +48,7 @@
 #include "a2functional.h"
 #include "array_fun.h"
 #include "OptionHandlerFactory.h"
+#include "LegacyOptionAdapter.h"
 #include "DlAbortEx.h"
 #include "error_code.h"
 #include "UnknownOptionException.h"
@@ -156,6 +157,19 @@ void OptionParser::parseArg(std::ostream& out,
                             std::vector<std::string>& nonopts, int argc,
                             char* argv[]) const
 {
+  const int originalArgc = argc;
+  char** originalArgv = argv;
+  auto adapted =
+      adaptLegacyCommandLine(argc, argv, LegacyOptionSource::CommandLine);
+  std::vector<char*> adaptedArgv;
+  if (!adapted.empty()) {
+    adaptedArgv.reserve(adapted.size());
+    for (auto& argument : adapted) {
+      adaptedArgv.push_back(argument.data());
+    }
+    argc = static_cast<int>(adaptedArgv.size());
+    argv = adaptedArgv.data();
+  }
   size_t numPublicOption =
       countPublicOption(handlers_.begin(), handlers_.end());
   int lopt;
@@ -231,14 +245,52 @@ void OptionParser::parseArg(std::ostream& out,
     }
     out << "\n";
   }
+  if (!adapted.empty()) {
+    for (int index = 1; index < originalArgc; ++index) {
+      char* argument = originalArgv[index];
+      if (strcmp(argument, "--") == 0) {
+        break;
+      }
+      if (argument[0] == '-' && argument[1] == '-') {
+        char* equals = strchr(argument + 2, '=');
+        const std::string name(argument + 2,
+                               equals ? equals : argument + strlen(argument));
+        const auto handler = find(option::k2p(name));
+        if (!handler || !handler->getEraseAfterParse()) {
+          continue;
+        }
+        char* value = equals ? equals + 1
+                             : index + 1 < originalArgc
+                                   ? originalArgv[++index]
+                                   : nullptr;
+        if (value) {
+          std::fill(value, value + strlen(value), '*');
+        }
+      }
+      else if (argument[0] == '-' && argument[1] != '\0') {
+        const auto handler = findByShortName(argument[1]);
+        if (!handler || !handler->getEraseAfterParse()) {
+          continue;
+        }
+        char* value = argument[2] != '\0'
+                          ? argument + 2
+                          : index + 1 < originalArgc ? originalArgv[++index]
+                                                     : nullptr;
+        if (value) {
+          std::fill(value, value + strlen(value), '*');
+        }
+      }
+    }
+  }
   std::copy(argv + optind, argv + argc, std::back_inserter(nonopts));
 }
 
 namespace {
 template <typename FindHandler>
 void parseStreamOption(Option& option, std::istream& is,
-                       FindHandler findHandler)
+                       FindHandler findHandler, LegacyOptionSource source)
 {
+  KeyVals options;
   std::string line;
   while (getline(is, line)) {
     if (line.empty() || line[0] == '#') {
@@ -248,13 +300,18 @@ void parseStreamOption(Option& option, std::istream& is,
     if (nv.first.first == nv.first.second) {
       continue;
     }
-    PrefPtr pref = option::k2p(std::string(nv.first.first, nv.first.second));
+    auto name = util::strip(std::string(nv.first.first, nv.first.second));
+    auto value = std::string(nv.second.first, nv.second.second);
+    options.emplace_back(std::move(name), std::move(value));
+  }
+  for (const auto& item : adaptLegacyOptions(options, source)) {
+    PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = findHandler(pref);
     if (handler) {
-      handler->parse(option, std::string(nv.second.first, nv.second.second));
+      handler->parse(option, item.second);
     }
     else {
-      A2_LOG_WARN(fmt("Unknown option: %s", line.c_str()));
+      A2_LOG_WARN(fmt("Unknown option: %s", item.first.c_str()));
     }
   }
 }
@@ -262,20 +319,22 @@ void parseStreamOption(Option& option, std::istream& is,
 
 void OptionParser::parse(Option& option, std::istream& is) const
 {
-  parseStreamOption(option, is,
-                    [this](PrefPtr pref) { return find(pref); });
+  parseStreamOption(
+      option, is, [this](PrefPtr pref) { return find(pref); },
+      LegacyOptionSource::Configuration);
 }
 
 void OptionParser::parseInternal(Option& option, std::istream& is) const
 {
-  parseStreamOption(option, is, [this](PrefPtr pref) {
-    return findByIdInternal(pref->i);
-  });
+  parseStreamOption(
+      option, is, [this](PrefPtr pref) { return findByIdInternal(pref->i); },
+      LegacyOptionSource::Session);
 }
 
 void OptionParser::parse(Option& option, const KeyVals& options) const
 {
-  for (const auto& o : options) {
+  for (const auto& o :
+       adaptLegacyOptions(options, LegacyOptionSource::Library)) {
     auto pref = option::k2p(o.first);
     const OptionHandler* handler = find(pref);
     if (handler) {

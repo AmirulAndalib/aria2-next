@@ -113,6 +113,52 @@ Basic Options
    ``#all``
    Default: ``#basic``
 
+Legacy Input Compatibility
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+aria2-next keeps one canonical option model. Retired aria2 option names and
+values are accepted by the command line, configuration files, session input
+files, JSON-RPC option dictionaries, and libaria2 ``KeyVals``. They are
+normalized before ordinary option validation and are never written to help
+output, completion files, saved sessions, or internal runtime state.
+
+Exact aliases are converted to their canonical replacement. Options whose old
+scope cannot be represented by libtorrent use the closest safe canonical
+setting and emit a warning. Options already owned by a native libtorrent policy
+are accepted without changing that policy and emit a warning. Invalid values
+still produce the normal option error; RPC errors never terminate the engine.
+
+The adapter applies these conversions:
+
+=============================== =============================================
+Retired input                   Effective handling
+=============================== =============================================
+``bt-detach-seed-only``         ``detach-share-only``
+Legacy encryption trio         ``bt-encryption``
+``bt-lpd-interface``            ``bt-interface``
+``bt-metadata-only``            ``pause-metadata`` on the same GID
+``bt-prioritize-piece``         ``bt-first-last-piece-first``
+Legacy tracker timeouts         Native completion and receive timeouts
+Legacy DHT entry points         ``bt-dht-bootstrap-nodes``
+Legacy DHT addresses            ``bt-interface``
+``dht-listen-port``             Unified ``listen-port``
+``enable-dht6``                 Unified ``enable-dht`` policy
+``enable-async-dns6``           Accepted; address families are automatic
+Log level ``notice``            ``info``
+``bt-encryption=enabled``       ``bt-encryption=preferred``
+=============================== =============================================
+
+Native libtorrent policy absorbs saved-metadata loading, peer-speed thresholds,
+request and peer timeouts, fixed tracker intervals, split DHT state files, DHT
+message timeouts, and peer identity tuning. The former hook-after-check,
+hash-check seed, unselected-file cleanup, metadata export, and zero-speed stop
+settings have no maintained equivalent. All of these inputs remain non-fatal
+and are reported once per input surface.
+
+The removed ``rpc-user`` and ``rpc-passwd`` options cannot be translated to
+token authentication. Non-empty values produce a migration error that requires
+``rpc-secret``; credentials are never logged or retained.
+
 HTTP/FTP/SFTP Options
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -808,6 +854,125 @@ BitTorrent Specific Options
   Set the number of additional threads used for complete torrent rechecks.
   Download-time hashing remains part of the regular I/O pool. Default: ``1``
 
+.. option:: --bt-connection-speed=<NUM>
+
+  Set the number of outgoing peer connection attempts per second. ``0``
+  disables outgoing peer connections. Default: ``30``
+
+.. option:: --bt-max-out-request-queue=<NUM>
+
+  Set the maximum number of outstanding block requests sent to one peer.
+  libtorrent still computes the active queue from peer throughput and latency;
+  this option only sets its upper bound. Default: ``500``
+
+.. option:: --bt-max-in-request-queue=<NUM>
+
+  Set the maximum number of outstanding block requests accepted from one peer.
+  Default: ``2000``
+
+.. option:: --bt-disk-queue-size=<SIZE>
+
+  Set the maximum number of downloaded bytes waiting for native disk I/O.
+  Reaching this limit applies network backpressure. Default: ``100M``
+
+.. option:: --bt-disk-io=default|pread|mmap|posix
+
+  Select the native libtorrent disk I/O implementation. ``default`` lets
+  libtorrent choose the maintained platform implementation. This option is
+  applied when the BitTorrent session starts and cannot be changed at runtime.
+  Default: ``default``
+
+.. option:: --bt-disk-read-cache=enabled|disabled
+
+  Control use of the operating-system file cache for BitTorrent reads.
+  Default: ``enabled``
+
+.. option:: --bt-disk-write-cache=enabled|disabled|write-through
+
+  Control use of the operating-system file cache for BitTorrent writes.
+  ``write-through`` flushes completed validated pieces. Default: ``enabled``
+
+.. option:: --bt-checking-memory=<SIZE>
+
+  Limit memory held by outstanding torrent checking jobs. Default: ``32M``
+
+.. option:: --bt-piece-extent-affinity [true|false]
+
+  Prefer adjacent four-megabyte piece extents to improve disk locality for
+  torrents with small pieces. Default: ``false``
+
+.. option:: --bt-peer-turnover=<PERCENT>
+
+  Replace this percentage of connected peers during a turnover pass when the
+  peer limit is saturated. Default: ``4``
+
+.. option:: --bt-peer-turnover-cutoff=<PERCENT>
+
+  Start peer turnover after this percentage of the peer limit is reached.
+  Default: ``90``
+
+.. option:: --bt-peer-turnover-interval=<SEC>
+
+  Set the interval between peer turnover passes. Default: ``300``
+
+.. option:: --bt-mixed-mode=prefer-tcp|peer-proportional
+
+  Select bandwidth handling when TCP and uTP are both enabled. ``prefer-tcp``
+  leaves TCP unthrottled. ``peer-proportional`` balances TCP against the share
+  of uTP peers. Default: ``prefer-tcp``
+
+.. option:: --bt-upload-slot-algorithm=fixed|rate-based
+
+  Select fixed upload slots or libtorrent's upload-rate-based slot count.
+  Default: ``fixed``
+
+.. option:: --bt-seed-choking-algorithm=round-robin|fastest-upload|anti-leech
+
+  Select how unchoked peers are rotated while seeding. Default:
+  ``fastest-upload``
+
+.. option:: --bt-send-buffer-low-watermark=<SIZE>
+
+  Set the initial per-peer send buffer target. Default: ``10K``
+
+.. option:: --bt-send-buffer-watermark=<SIZE>
+
+  Set the maximum per-peer send buffer target. Default: ``500K``
+
+.. option:: --bt-send-buffer-watermark-factor=<PERCENT>
+
+  Scale the per-peer send buffer from the current upload rate. Default: ``50``
+
+.. option:: --bt-seeding-outgoing-connections [true|false]
+
+  Allow outgoing peer connections while seeding. Default: ``true``
+
+.. option:: --bt-rate-limit-overhead [true|false]
+
+  Include estimated TCP/IP overhead in BitTorrent rate limits. Default:
+  ``false``
+
+.. option:: --bt-stop-tracker-timeout=<SEC>
+
+  Wait this many seconds for stopped Tracker announces during shutdown. ``0``
+  disables stopped announces. Default: ``2``
+
+.. option:: --bt-blocklist-scope=peers|peers-and-trackers|all
+
+  Select where :option:`--bt-peer-blocklist` applies. ``all`` also filters DHT
+  nodes. Default: ``peers``
+
+.. option:: --bt-resume-save-interval=<MIN>
+
+  Save changed native per-torrent fast-resume data at this interval. ``0``
+  disables periodic saves; pause, stop, metadata and configuration changes still
+  save immediately. Default: ``60``
+
+.. option:: --bt-upload-suggestions [true|false]
+
+  Suggest recently read pieces to peers that support piece suggestions.
+  Default: ``false``
+
 .. option:: --bt-max-connections=<NUM>
 
   Set the session-wide maximum number of BitTorrent peer connections.
@@ -833,6 +998,14 @@ BitTorrent Specific Options
   Give maximum priority to the first and last one percent of every selected
   file. This is useful for file inspection without replacing the native
   rarest-first picker for the rest of the torrent. Default: ``false``
+
+.. option:: --bt-file-priority=<INDEX>=<LEVEL>[,...]
+
+  Set per-file download priorities. ``LEVEL`` is ``off``, ``normal``, ``high``,
+  or ``top``. File indexes are one-based and available from
+  :func:`aria2.getFiles`. Listed priorities override :option:`--select-file`;
+  unlisted files keep their selection state. This option can be changed through
+  :func:`aria2.changeOption` after magnet metadata becomes available.
 
 .. option:: --bt-super-seeding [true|false]
 
@@ -862,6 +1035,7 @@ BitTorrent Specific Options
   Empty lines and lines beginning with ``#`` are ignored. This option can be
   changed through :func:`aria2.changeGlobalOption` to reload the file while
   aria2 is running. Setting it to an empty string clears the active blocklist.
+  See :option:`--bt-blocklist-scope` for Tracker and DHT filtering.
 
 .. option:: --bt-port-mapping [true|false]
 
@@ -3249,6 +3423,21 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   accepted. Duplicate URLs are removed while input order and explicit tiers
   are preserved. The native fast-resume state is updated after the change.
 
+.. function:: aria2.forceBtAnnounce([secret], gid)
+
+  Request immediate native Tracker, DHT, and Local Peer Discovery announces for
+  the BitTorrent task. Tracker minimum announce intervals remain enforced.
+
+.. function:: aria2.replaceBtWebSeeds([secret], gid, webSeeds)
+
+  Atomically replace the task's HTTP and HTTPS web-seed URLs. Duplicate URLs are
+  removed and the native fast-resume state is updated.
+
+.. function:: aria2.addBtPeers([secret], gid, peers)
+
+  Connect the task to numeric ``IP:PORT`` or ``[IPv6]:PORT`` endpoints. The
+  response contains integer ``added`` and ``failed`` counts.
+
 .. function:: aria2.getBtSessionStatus([secret])
 
   Return current session-wide BitTorrent transport and endpoint status. Values
@@ -3300,6 +3489,28 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   ``trackerDownloaded``, ``trackerUploaded``
     Cumulative tracker traffic bytes for the session.
+
+  ``ipOverheadDownloaded``, ``ipOverheadUploaded``
+    Cumulative estimated IP protocol overhead.
+
+  ``dhtDownloaded``, ``dhtUploaded``
+    Cumulative DHT traffic bytes.
+
+  ``diskBlocksInUse``, ``queuedDiskJobs``
+    Native disk buffers and queued disk operations.
+
+  ``averageDiskJobTime``, ``diskRequestLatency``
+    Cumulative average disk operation time and current request latency in
+    microseconds.
+
+  ``diskReadWaitingPeers``, ``diskWriteWaitingPeers``
+    Peers waiting for disk reads or writes.
+
+  ``performanceWarnings``
+    A struct mapping native libtorrent warning names to cumulative counts.
+
+  ``lastPerformanceWarning``
+    The most recently observed warning message, when present.
 
   ``dhtStateHealthy``
     ``true`` when the current routing table or the persisted last-known-good DHT
@@ -3810,7 +4021,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
                                       'Metalink',
                                       'XML-RPC'],
                  'product': 'aria2-next',
-                 'rpcVersion': '1.0.0',
+                 'rpcVersion': '1.1.0',
                  'version': '2.5.2'}}
 
   **XML-RPC Example**
@@ -3831,7 +4042,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
                          'Metalink',
                          'XML-RPC'],
      'product': 'aria2-next',
-     'rpcVersion': '1.0.0',
+     'rpcVersion': '1.1.0',
      'version': '2.5.2'}
 
 .. function:: aria2.getSessionInfo([secret])

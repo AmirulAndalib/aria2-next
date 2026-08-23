@@ -71,11 +71,11 @@ void BtSessionTest::testDesktopSettings()
   REQUIRE(!settings.get_bool(libtorrent::settings_pack::prefer_rc4));
   REQUIRE_EQ(20,
              settings.get_int(libtorrent::settings_pack::unchoke_slots_limit));
-  REQUIRE_EQ(10,
+  REQUIRE_EQ(15,
              settings.get_int(libtorrent::settings_pack::peer_connect_timeout));
-  REQUIRE_EQ(3,
+  REQUIRE_EQ(10,
              settings.get_int(libtorrent::settings_pack::handshake_timeout));
-  REQUIRE_EQ(1, settings.get_int(
+  REQUIRE_EQ(60, settings.get_int(
                     libtorrent::settings_pack::min_reconnect_time));
   REQUIRE(!settings.has_val(libtorrent::settings_pack::request_queue_time));
   REQUIRE_EQ(3,
@@ -84,6 +84,21 @@ void BtSessionTest::testDesktopSettings()
              settings.get_int(libtorrent::settings_pack::request_queue_time));
   REQUIRE_EQ(500, settings.get_int(
                        libtorrent::settings_pack::max_out_request_queue));
+  REQUIRE_EQ(2000, settings.get_int(
+                        libtorrent::settings_pack::max_allowed_in_request_queue));
+  REQUIRE_EQ(30,
+             settings.get_int(libtorrent::settings_pack::connection_speed));
+  REQUIRE_EQ(100 * 1024 * 1024,
+             settings.get_int(
+                 libtorrent::settings_pack::max_queued_disk_bytes));
+  REQUIRE_EQ(2048,
+             settings.get_int(libtorrent::settings_pack::checking_mem_usage));
+  REQUIRE_EQ(libtorrent::settings_pack::fastest_upload,
+             settings.get_int(
+                 libtorrent::settings_pack::seed_choking_algorithm));
+  REQUIRE(!settings.get_bool(
+      libtorrent::settings_pack::apply_ip_filter_to_trackers));
+  REQUIRE(!settings.get_bool(libtorrent::settings_pack::apply_filter_to_dht));
   REQUIRE_EQ(20, settings.get_int(
                     libtorrent::settings_pack::whole_pieces_threshold));
   REQUIRE_EQ(50, settings.get_int(
@@ -96,6 +111,25 @@ void BtSessionTest::testDesktopSettings()
   REQUIRE_EQ(std::string("en0:0"), config.listenInterfaces);
   REQUIRE_EQ(std::string("en0"), config.outgoingInterfaces);
   REQUIRE(!config.automaticRoute);
+
+  option.put(PREF_BT_MAX_OUT_REQUEST_QUEUE, "1500");
+  option.put(PREF_BT_DISK_WRITE_CACHE, "write-through");
+  option.put(PREF_BT_BLOCKLIST_SCOPE, "all");
+  const auto tuned = makeBtConfig(&option).settings;
+  REQUIRE_EQ(1500, tuned.get_int(
+                       libtorrent::settings_pack::max_out_request_queue));
+  REQUIRE_EQ(libtorrent::settings_pack::write_through,
+             tuned.get_int(libtorrent::settings_pack::disk_io_write_mode));
+  REQUIRE(tuned.get_bool(
+      libtorrent::settings_pack::apply_ip_filter_to_trackers));
+  REQUIRE(tuned.get_bool(libtorrent::settings_pack::apply_filter_to_dht));
+
+  std::vector<libtorrent::download_priority_t> priorities(
+      2, libtorrent::default_priority);
+  applyBtFilePrioritySpec(priorities, "1=off,2=top");
+  REQUIRE_EQ(libtorrent::dont_download, priorities[0]);
+  REQUIRE_EQ(libtorrent::top_priority, priorities[1]);
+  REQUIRE_THROWS(applyBtFilePrioritySpec(priorities, "3=normal"));
 
   option.put(PREF_BT_ENCRYPTION, V_REQUIRED);
   const auto required = makeBtConfig(&option).settings;

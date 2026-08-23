@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include <libtorrent/download_priority.hpp>
+#include <libtorrent/session_params.hpp>
 #include <libtorrent/settings_pack.hpp>
 
 namespace aria2 {
@@ -43,6 +45,11 @@ std::vector<std::string> detectBtRouteAddresses(const Option* option);
 BtConfig makeBtConfig(const Option* option);
 BtConfig makeBtConfig(const Option* option,
                       const std::vector<std::string>& routeAddresses);
+void configureBtDiskIo(libtorrent::session_params& params,
+                       const Option* option);
+void applyBtFilePrioritySpec(
+    std::vector<libtorrent::download_priority_t>& priorities,
+    const std::string& specification);
 
 } // namespace aria2
 

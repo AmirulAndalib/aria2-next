@@ -13,6 +13,7 @@
 #include "BtSession.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -22,6 +23,7 @@
 
 #include <libtorrent/alert.hpp>
 #include <libtorrent/alert_types.hpp>
+#include <libtorrent/address.hpp>
 #include <libtorrent/announce_entry.hpp>
 #include <libtorrent/download_priority.hpp>
 #include <libtorrent/error_code.hpp>
@@ -53,6 +55,7 @@
 #include "fmt.h"
 #include "prefs.h"
 #include "util.h"
+#include "uri.h"
 #include "wallclock.h"
 
 namespace aria2 {
@@ -72,6 +75,19 @@ struct BtSession::Impl {
     int payloadUploaded = -1;
     int trackerDownloaded = -1;
     int trackerUploaded = -1;
+    int ipOverheadDownloaded = -1;
+    int ipOverheadUploaded = -1;
+    int dhtDownloaded = -1;
+    int dhtUploaded = -1;
+    int diskBlocksInUse = -1;
+    int queuedDiskJobs = -1;
+    int diskWriteJobs = -1;
+    int diskReadJobs = -1;
+    int diskHashJobs = -1;
+    int diskJobTime = -1;
+    int diskRequestLatency = -1;
+    int diskReadWaitingPeers = -1;
+    int diskWriteWaitingPeers = -1;
     int dhtNodes = -1;
     int dhtReplacements = -1;
   } metrics;
@@ -119,6 +135,19 @@ struct BtSession::Impl {
   uint64_t payloadUploaded = 0;
   uint64_t trackerDownloaded = 0;
   uint64_t trackerUploaded = 0;
+  uint64_t ipOverheadDownloaded = 0;
+  uint64_t ipOverheadUploaded = 0;
+  uint64_t dhtDownloaded = 0;
+  uint64_t dhtUploaded = 0;
+  uint64_t diskBlocksInUse = 0;
+  uint64_t queuedDiskJobs = 0;
+  uint64_t averageDiskJobTime = 0;
+  uint64_t diskRequestLatency = 0;
+  size_t diskReadWaitingPeers = 0;
+  size_t diskWriteWaitingPeers = 0;
+  std::array<uint64_t, lt::performance_alert::num_warnings>
+      performanceWarnings{};
+  std::string lastPerformanceWarning;
   std::map<std::string, size_t> trackerErrorCounts;
 
   explicit Impl(const Option* option)
@@ -139,6 +168,23 @@ struct BtSession::Impl {
     metrics.payloadUploaded = lt::find_metric_idx("net.sent_payload_bytes");
     metrics.trackerDownloaded = lt::find_metric_idx("net.recv_tracker_bytes");
     metrics.trackerUploaded = lt::find_metric_idx("net.sent_tracker_bytes");
+    metrics.ipOverheadDownloaded =
+        lt::find_metric_idx("net.recv_ip_overhead_bytes");
+    metrics.ipOverheadUploaded =
+        lt::find_metric_idx("net.sent_ip_overhead_bytes");
+    metrics.dhtDownloaded = lt::find_metric_idx("dht.dht_bytes_in");
+    metrics.dhtUploaded = lt::find_metric_idx("dht.dht_bytes_out");
+    metrics.diskBlocksInUse = lt::find_metric_idx("disk.disk_blocks_in_use");
+    metrics.queuedDiskJobs = lt::find_metric_idx("disk.queued_disk_jobs");
+    metrics.diskWriteJobs = lt::find_metric_idx("disk.num_write_ops");
+    metrics.diskReadJobs = lt::find_metric_idx("disk.num_read_ops");
+    metrics.diskHashJobs = lt::find_metric_idx("disk.num_blocks_hashed");
+    metrics.diskJobTime = lt::find_metric_idx("disk.disk_job_time");
+    metrics.diskRequestLatency = lt::find_metric_idx("disk.request_latency");
+    metrics.diskReadWaitingPeers =
+        lt::find_metric_idx("peer.num_peers_up_disk");
+    metrics.diskWriteWaitingPeers =
+        lt::find_metric_idx("peer.num_peers_down_disk");
     metrics.dhtNodes = lt::find_metric_idx("dht.dht_nodes");
     metrics.dhtReplacements = lt::find_metric_idx("dht.dht_node_cache");
   }
@@ -522,6 +568,30 @@ lt::ip_filter makeIpFilter(const BtPeerBlocklist& blocklist)
   return filter;
 }
 
+std::vector<lt::download_priority_t> makeFilePriorities(RequestGroup* group)
+{
+  std::vector<lt::download_priority_t> priorities;
+  if (!group) {
+    return priorities;
+  }
+  const auto& files = group->getDownloadContext()->getFileEntries();
+  priorities.reserve(files.size());
+  for (const auto& file : files) {
+    priorities.push_back(file->isRequested() ? lt::default_priority
+                                             : lt::dont_download);
+  }
+
+  const auto& specification = group->getOption()->get(PREF_BT_FILE_PRIORITY);
+  if (specification.empty()) {
+    return priorities;
+  }
+  applyBtFilePrioritySpec(priorities, specification);
+  for (size_t i = 0; i < priorities.size(); ++i) {
+    files[i]->setRequested(priorities[i] != lt::dont_download);
+  }
+  return priorities;
+}
+
 void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
 {
   if (!group) {
@@ -531,13 +601,11 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
   if (!handle.is_valid()) {
     return;
   }
-  std::vector<lt::download_priority_t> priorities;
+  auto priorities = makeFilePriorities(group);
   const auto info = handle.torrent_file();
   const auto& savePath = group->getOption()->get(PREF_DIR);
   size_t index = 0;
   for (const auto& file : group->getDownloadContext()->getFileEntries()) {
-    priorities.push_back(file->isRequested() ? lt::default_priority
-                                             : lt::dont_download);
     if (info && index < static_cast<size_t>(info->layout().num_files())) {
       auto storagePath = file->getPath();
       if (!savePath.empty() && storagePath.size() > savePath.size() &&
@@ -556,6 +624,13 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
   }
   if (!priorities.empty()) {
     handle.prioritize_files(priorities);
+  }
+  group->getBtDownload()->updateSelection(group->getDownloadContext());
+  auto& snapshotFiles = group->getBtDownload()->mutableSnapshot().files;
+  const auto snapshotCount = std::min(snapshotFiles.size(), priorities.size());
+  for (size_t i = 0; i < snapshotCount; ++i) {
+    snapshotFiles[i].priority =
+        static_cast<int>(static_cast<uint8_t>(priorities[i]));
   }
 
   if (!info) {
@@ -583,7 +658,7 @@ void applySelection(const lt::torrent_handle& handle, RequestGroup* group)
     const auto last = info->map_file(nativeIndex, fileSize - 1, 1).piece;
     for (int piece = static_cast<int>(first); piece <= static_cast<int>(last);
          ++piece) {
-      piecePriorities[static_cast<size_t>(piece)] = lt::default_priority;
+      piecePriorities[static_cast<size_t>(piece)] = priorities[index];
     }
     const auto boundaryPieces = std::max<int64_t>(
         1, static_cast<int64_t>(std::ceil(static_cast<long double>(fileSize) *
@@ -628,10 +703,17 @@ void BtSession::requestResumeCheckpoint(BtDownload* download, bool force)
     download->impl_->checkpointPending = true;
     return;
   }
-  if (!force && !download->impl_->lastResumeSave.isZero() &&
-      download->impl_->lastResumeSave.difference(global::wallclock()) <
-          std::chrono::minutes(60)) {
-    return;
+  if (!force) {
+    const auto interval =
+        impl_->option->getAsInt(PREF_BT_RESUME_SAVE_INTERVAL);
+    if (interval == 0) {
+      return;
+    }
+    if (!download->impl_->lastResumeSave.isZero() &&
+        download->impl_->lastResumeSave.difference(global::wallclock()) <
+            std::chrono::minutes(interval)) {
+      return;
+    }
   }
   download->impl_->resumeSaveOutstanding = true;
   download->impl_->handle.save_resume_data(
@@ -675,9 +757,21 @@ void BtSession::resumeTorrent(BtDownload* download)
 
 void BtSession::refreshAutomaticRoute(bool reopenSockets)
 {
+  auto announce = [this]() {
+    for (const auto& entry : impl_->downloads) {
+      const auto& handle = entry.second->impl_->handle;
+      if (!handle.is_valid() || !handle.in_session()) {
+        continue;
+      }
+      handle.force_reannounce();
+      handle.force_dht_announce();
+      handle.force_lsd_announce();
+    }
+  };
   if (!impl_->config.automaticRoute) {
     if (reopenSockets) {
       impl_->session->reopen_network_sockets();
+      announce();
     }
     return;
   }
@@ -691,9 +785,11 @@ void BtSession::refreshAutomaticRoute(bool reopenSockets)
     impl_->listenPort = 0;
     A2_LOG_INFO(fmt("BitTorrent route addresses changed: %s",
                     impl_->config.listenInterfaces.c_str()));
+    announce();
   }
   else if (reopenSockets) {
     impl_->session->reopen_network_sockets();
+    announce();
   }
 }
 
@@ -701,6 +797,7 @@ BtSession::BtSession(const Option* option) : impl_(make_unique<Impl>(option))
 {
   auto params =
       makeSessionParams(option, impl_->config, impl_->lastSessionState);
+  configureBtDiskIo(params, option);
   impl_->session = make_unique<lt::session>(std::move(params));
   impl_->session->set_alert_notify(
       [impl = impl_.get()]() { impl->alertsPending.store(true); });
@@ -724,11 +821,7 @@ BtSession::start(const std::shared_ptr<BtDownload>& download,
 
   if (download->impl_->params.ti) {
     updateDownloadContext(download.get(), group);
-    download->impl_->params.file_priorities.clear();
-    for (const auto& file : group->getDownloadContext()->getFileEntries()) {
-      download->impl_->params.file_priorities.push_back(
-          file->isRequested() ? lt::default_priority : lt::dont_download);
-    }
+    download->impl_->params.file_priorities = makeFilePriorities(group);
   }
 
   impl_->downloads[group->getGID()] = download;
@@ -827,6 +920,22 @@ void BtSession::poll()
       impl_->payloadUploaded = value(impl_->metrics.payloadUploaded);
       impl_->trackerDownloaded = value(impl_->metrics.trackerDownloaded);
       impl_->trackerUploaded = value(impl_->metrics.trackerUploaded);
+      impl_->ipOverheadDownloaded =
+          value(impl_->metrics.ipOverheadDownloaded);
+      impl_->ipOverheadUploaded = value(impl_->metrics.ipOverheadUploaded);
+      impl_->dhtDownloaded = value(impl_->metrics.dhtDownloaded);
+      impl_->dhtUploaded = value(impl_->metrics.dhtUploaded);
+      impl_->diskBlocksInUse = value(impl_->metrics.diskBlocksInUse);
+      impl_->queuedDiskJobs = value(impl_->metrics.queuedDiskJobs);
+      const auto diskJobs = value(impl_->metrics.diskWriteJobs) +
+                            value(impl_->metrics.diskReadJobs) +
+                            value(impl_->metrics.diskHashJobs);
+      impl_->averageDiskJobTime =
+          diskJobs == 0 ? 0 : value(impl_->metrics.diskJobTime) / diskJobs;
+      impl_->diskRequestLatency = value(impl_->metrics.diskRequestLatency);
+      impl_->diskReadWaitingPeers = value(impl_->metrics.diskReadWaitingPeers);
+      impl_->diskWriteWaitingPeers =
+          value(impl_->metrics.diskWriteWaitingPeers);
       impl_->dhtNodes = value(impl_->metrics.dhtNodes);
       impl_->dhtReplacements = value(impl_->metrics.dhtReplacements);
       continue;
@@ -968,7 +1077,16 @@ void BtSession::poll()
           }
           updateDownloadContext(download, download->group());
           auto managed = impl_->downloads.at(download->group()->getGID());
-          applyDownloadOptions(managed, download->group()->getOption().get());
+          try {
+            applyDownloadOptions(managed,
+                                 download->group()->getOption().get());
+          }
+          catch (RecoverableException& error) {
+            download->snapshot_.state = BtSnapshot::State::Error;
+            download->snapshot_.errorMessage = error.what();
+            requestStop(managed, BtDownload::StopReason::Stop);
+            continue;
+          }
           if (pauseForSelection) {
             download->group()->setHaltRequested(true, RequestGroup::NONE);
             download->group()->setPauseRequested(true);
@@ -1256,7 +1374,13 @@ void BtSession::poll()
     }
 
     if (auto* warning = lt::alert_cast<lt::performance_alert>(alert)) {
-      A2_LOG_WARN(warning->message());
+      const auto code = static_cast<size_t>(warning->warning_code);
+      if (code < impl_->performanceWarnings.size()) {
+        if (impl_->performanceWarnings[code]++ == 0) {
+          A2_LOG_WARN(warning->message());
+        }
+      }
+      impl_->lastPerformanceWarning = warning->message();
       continue;
     }
 
@@ -1426,6 +1550,17 @@ void BtSession::forceRecheck(const std::shared_ptr<BtDownload>& download)
   download->impl_->handle.force_recheck();
 }
 
+void BtSession::forceAnnounce(const std::shared_ptr<BtDownload>& download)
+{
+  if (!download || !download->impl_->handle.is_valid() ||
+      !download->impl_->handle.in_session()) {
+    throw DL_ABORT_EX("BitTorrent task is not present in the session");
+  }
+  download->impl_->handle.force_reannounce();
+  download->impl_->handle.force_dht_announce();
+  download->impl_->handle.force_lsd_announce();
+}
+
 void BtSession::replaceTrackers(const std::shared_ptr<BtDownload>& download,
                                 const std::vector<BtTrackerConfig>& trackers)
 {
@@ -1458,6 +1593,109 @@ void BtSession::replaceTrackers(const std::shared_ptr<BtDownload>& download,
   download->impl_->trackerOverride = true;
   applyDownloadOptions(download, download->group()->getOption().get());
   requestResumeCheckpoint(download.get(), true);
+}
+
+void BtSession::replaceWebSeeds(const std::shared_ptr<BtDownload>& download,
+                                const std::vector<std::string>& webSeeds)
+{
+  if (!download || !download->impl_->handle.is_valid() ||
+      !download->impl_->handle.in_session()) {
+    throw DL_ABORT_EX("BitTorrent task is not present in the session");
+  }
+  std::vector<std::string> normalized;
+  normalized.reserve(webSeeds.size());
+  for (const auto& webSeed : webSeeds) {
+    uri::UriStruct parsed;
+    if (!uri::parse(parsed, webSeed) || parsed.host.empty() ||
+        (parsed.protocol != "http" && parsed.protocol != "https")) {
+      throw DL_ABORT_EX("BitTorrent web seeds must use HTTP or HTTPS");
+    }
+    if (std::find(normalized.begin(), normalized.end(), webSeed) ==
+        normalized.end()) {
+      normalized.push_back(webSeed);
+    }
+  }
+
+  const auto current = download->impl_->handle.url_seeds();
+  try {
+    for (const auto& webSeed : current) {
+      if (std::find(normalized.begin(), normalized.end(), webSeed) ==
+          normalized.end()) {
+        download->impl_->handle.remove_url_seed(webSeed);
+      }
+    }
+    for (const auto& webSeed : normalized) {
+      if (current.find(webSeed) == current.end()) {
+        download->impl_->handle.add_url_seed(webSeed);
+      }
+    }
+  }
+  catch (const std::exception& error) {
+    const auto partial = download->impl_->handle.url_seeds();
+    for (const auto& webSeed : partial) {
+      if (current.find(webSeed) == current.end()) {
+        download->impl_->handle.remove_url_seed(webSeed);
+      }
+    }
+    for (const auto& webSeed : current) {
+      if (partial.find(webSeed) == partial.end()) {
+        download->impl_->handle.add_url_seed(webSeed);
+      }
+    }
+    throw DL_ABORT_EX("Unable to replace BitTorrent web seeds: " +
+                      std::string(error.what()));
+  }
+  download->impl_->params.url_seeds = normalized;
+  download->snapshot_.webSeeds = normalized;
+  requestResumeCheckpoint(download.get(), true);
+}
+
+std::pair<size_t, size_t>
+BtSession::addPeers(const std::shared_ptr<BtDownload>& download,
+                    const std::vector<std::string>& peers)
+{
+  if (!download || !download->impl_->handle.is_valid() ||
+      !download->impl_->handle.in_session()) {
+    throw DL_ABORT_EX("BitTorrent task is not present in the session");
+  }
+  size_t added = 0;
+  size_t failed = 0;
+  for (const auto& peer : peers) {
+    std::string host;
+    std::string portText;
+    if (!peer.empty() && peer.front() == '[') {
+      const auto closing = peer.find(']');
+      if (closing != std::string::npos && closing + 1 < peer.size() &&
+          peer[closing + 1] == ':') {
+        host = peer.substr(1, closing - 1);
+        portText = peer.substr(closing + 2);
+      }
+    }
+    else {
+      const auto separator = peer.rfind(':');
+      if (separator != std::string::npos) {
+        host = peer.substr(0, separator);
+        portText = peer.substr(separator + 1);
+      }
+    }
+    int32_t port = 0;
+    lt::error_code error;
+    const auto address = lt::make_address(host, error);
+    if (host.empty() || error || !util::parseIntNoThrow(port, portText) ||
+        port < 1 || port > UINT16_MAX) {
+      ++failed;
+      continue;
+    }
+    try {
+      download->impl_->handle.connect_peer(
+          lt::tcp::endpoint(address, static_cast<uint16_t>(port)));
+      ++added;
+    }
+    catch (const std::exception&) {
+      ++failed;
+    }
+  }
+  return {added, failed};
 }
 
 void BtSession::discard(const std::shared_ptr<BtDownload>& download)
@@ -1535,6 +1773,26 @@ BtSessionStatus BtSession::status() const
   result.payloadUploaded = impl_->payloadUploaded;
   result.trackerDownloaded = impl_->trackerDownloaded;
   result.trackerUploaded = impl_->trackerUploaded;
+  result.ipOverheadDownloaded = impl_->ipOverheadDownloaded;
+  result.ipOverheadUploaded = impl_->ipOverheadUploaded;
+  result.dhtDownloaded = impl_->dhtDownloaded;
+  result.dhtUploaded = impl_->dhtUploaded;
+  result.diskBlocksInUse = impl_->diskBlocksInUse;
+  result.queuedDiskJobs = impl_->queuedDiskJobs;
+  result.averageDiskJobTime = impl_->averageDiskJobTime;
+  result.diskRequestLatency = impl_->diskRequestLatency;
+  result.diskReadWaitingPeers = impl_->diskReadWaitingPeers;
+  result.diskWriteWaitingPeers = impl_->diskWriteWaitingPeers;
+  result.lastPerformanceWarning = impl_->lastPerformanceWarning;
+  for (size_t i = 0; i < impl_->performanceWarnings.size(); ++i) {
+    if (impl_->performanceWarnings[i] == 0) {
+      continue;
+    }
+    result.performanceWarnings.emplace_back(
+        lt::performance_warning_str(
+            static_cast<lt::performance_alert::performance_warning_t>(i)),
+        impl_->performanceWarnings[i]);
+  }
   result.dhtStateHealthy = impl_->dhtNodes > 0 ||
                            !impl_->lastSessionState.empty();
   return result;

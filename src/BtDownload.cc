@@ -178,6 +178,7 @@ BtDownload::BtDownload(std::unique_ptr<Impl> impl, Source source)
   assignHashes(&attrs, snapshot_, impl_->params.info_hashes);
   snapshot_.name = impl_->params.name;
   snapshot_.announceList = announceList(impl_->params);
+  snapshot_.webSeeds = impl_->params.url_seeds;
   snapshot_.magnetLink = lt::make_magnet_uri(impl_->params);
   snapshot_.hasMetadata = static_cast<bool>(impl_->params.ti);
   snapshot_.state = snapshot_.hasMetadata
@@ -313,6 +314,7 @@ void BtDownload::configure(const Option* option)
   impl_->effectiveTrackers = std::move(effectiveTrackers);
   snapshot_.announceList = announceList(impl_->params);
   snapshot_.magnetLink = lt::make_magnet_uri(impl_->params);
+  snapshot_.webSeeds = impl_->params.url_seeds;
   if (group_ && group_->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
     static_cast<BtMetadata*>(
         group_->getDownloadContext()->getAttribute(CTX_ATTR_BT).get())
@@ -423,7 +425,7 @@ void BtDownload::populateDownloadContext(
   snapshot_.files.clear();
   for (const auto& entry : entries) {
     snapshot_.files.push_back(
-        {entry->getPath(), entry->getLength(), 0, entry->isRequested()});
+        {entry->getPath(), entry->getLength(), 0, 1, entry->isRequested()});
   }
   context->setAttribute(CTX_ATTR_BT, std::move(attrs));
   context->setAcceptMetalink(false);

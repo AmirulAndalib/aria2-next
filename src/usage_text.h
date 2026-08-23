@@ -351,6 +351,56 @@
   _(" --bt-io-threads=NUM          Set native libtorrent disk I/O threads.")
 #define TEXT_BT_HASHING_THREADS                                          \
   _(" --bt-hashing-threads=NUM     Set native libtorrent recheck threads.")
+#define TEXT_BT_CONNECTION_SPEED                                         \
+  _(" --bt-connection-speed=NUM    Set outgoing BitTorrent connection attempts per second.")
+#define TEXT_BT_MAX_OUT_REQUEST_QUEUE                                    \
+  _(" --bt-max-out-request-queue=NUM Limit outstanding block requests sent to each peer.")
+#define TEXT_BT_MAX_IN_REQUEST_QUEUE                                     \
+  _(" --bt-max-in-request-queue=NUM Limit outstanding block requests accepted from each peer.")
+#define TEXT_BT_DISK_QUEUE_SIZE                                          \
+  _(" --bt-disk-queue-size=SIZE    Limit bytes waiting for native disk I/O.")
+#define TEXT_BT_DISK_IO                                                  \
+  _(" --bt-disk-io=MODE           Select default, pread, mmap, or posix disk I/O.")
+#define TEXT_BT_DISK_READ_CACHE                                          \
+  _(" --bt-disk-read-cache=MODE   Enable or disable the operating-system read cache.")
+#define TEXT_BT_DISK_WRITE_CACHE                                         \
+  _(" --bt-disk-write-cache=MODE  Select enabled, disabled, or write-through writes.")
+#define TEXT_BT_CHECKING_MEMORY                                          \
+  _(" --bt-checking-memory=SIZE   Limit memory used by torrent checking jobs.")
+#define TEXT_BT_PIECE_EXTENT_AFFINITY                                   \
+  _(" --bt-piece-extent-affinity[=true|false] Prefer adjacent piece extents.")
+#define TEXT_BT_PEER_TURNOVER                                            \
+  _(" --bt-peer-turnover=PERCENT  Replace this percentage of peers at the connection limit.")
+#define TEXT_BT_PEER_TURNOVER_CUTOFF                                     \
+  _(" --bt-peer-turnover-cutoff=PERCENT Set the peer-limit threshold for turnover.")
+#define TEXT_BT_PEER_TURNOVER_INTERVAL                                   \
+  _(" --bt-peer-turnover-interval=SEC Set the peer turnover interval.")
+#define TEXT_BT_MIXED_MODE                                               \
+  _(" --bt-mixed-mode=MODE        Select prefer-tcp or peer-proportional mixed transport.")
+#define TEXT_BT_UPLOAD_SLOT_ALGORITHM                                    \
+  _(" --bt-upload-slot-algorithm=MODE Select fixed or rate-based upload slots.")
+#define TEXT_BT_SEED_CHOKING_ALGORITHM                                   \
+  _(" --bt-seed-choking-algorithm=MODE Select the seed peer rotation policy.")
+#define TEXT_BT_SEND_BUFFER_LOW_WATERMARK                                \
+  _(" --bt-send-buffer-low-watermark=SIZE Set the initial per-peer send buffer target.")
+#define TEXT_BT_SEND_BUFFER_WATERMARK                                    \
+  _(" --bt-send-buffer-watermark=SIZE Set the maximum per-peer send buffer target.")
+#define TEXT_BT_SEND_BUFFER_WATERMARK_FACTOR                             \
+  _(" --bt-send-buffer-watermark-factor=PERCENT Scale send buffers from upload rate.")
+#define TEXT_BT_SEEDING_OUTGOING_CONNECTIONS                             \
+  _(" --bt-seeding-outgoing-connections[=true|false] Connect to peers while seeding.")
+#define TEXT_BT_RATE_LIMIT_OVERHEAD                                      \
+  _(" --bt-rate-limit-overhead[=true|false] Include protocol overhead in rate limits.")
+#define TEXT_BT_STOP_TRACKER_TIMEOUT                                     \
+  _(" --bt-stop-tracker-timeout=SEC Wait for stopped tracker announces on shutdown.")
+#define TEXT_BT_BLOCKLIST_SCOPE                                          \
+  _(" --bt-blocklist-scope=MODE  Apply the peer blocklist to peers, trackers, or DHT.")
+#define TEXT_BT_RESUME_SAVE_INTERVAL                                     \
+  _(" --bt-resume-save-interval=MIN Save native fast-resume data periodically.")
+#define TEXT_BT_UPLOAD_SUGGESTIONS                                       \
+  _(" --bt-upload-suggestions[=true|false] Suggest recently read pieces to peers.")
+#define TEXT_BT_FILE_PRIORITY                                            \
+  _(" --bt-file-priority=SPEC     Set INDEX=off|normal|high|top file priorities.")
 #define TEXT_BT_MAX_CONCURRENT_HTTP_ANNOUNCES                            \
   _(" --bt-max-concurrent-http-announces=NUM Limit parallel HTTP tracker announces.")
 #define TEXT_BT_ANNOUNCE_ALL_TIERS                                       \

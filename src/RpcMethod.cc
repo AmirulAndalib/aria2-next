@@ -40,6 +40,7 @@
 #include "OptionParser.h"
 #include "OptionHandler.h"
 #include "Option.h"
+#include "LegacyOptionAdapter.h"
 #include "array_fun.h"
 #include "download_helper.h"
 #include "RpcRequest.h"
@@ -122,32 +123,49 @@ bool getOptionValueString(std::string& dest, const ValueBase* value)
   return false;
 }
 
-template <typename InputIterator, typename Pred>
-void gatherOption(InputIterator first, InputIterator last, Pred pred,
-                  Option* option,
+KeyVals collectScalarOptions(const Dict* options)
+{
+  KeyVals result;
+  if (!options) {
+    return result;
+  }
+  for (const auto& item : *options) {
+    std::string value;
+    if (getOptionValueString(value, item.second.get())) {
+      result.emplace_back(item.first, std::move(value));
+    }
+  }
+  return result;
+}
+
+template <typename Pred>
+void gatherOption(const Dict* options, Pred pred, Option* option,
                   const std::shared_ptr<OptionParser>& optionParser)
 {
-  for (; first != last; ++first) {
-    const std::string& optionName = (*first).first;
-    PrefPtr pref = option::k2p(optionName);
+  if (!options) {
+    return;
+  }
+  for (const auto& item : adaptLegacyOptions(collectScalarOptions(options),
+                                               LegacyOptionSource::Rpc)) {
+    PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
     if (!handler || !pred(handler)) {
-      // Just ignore the unacceptable options in this context.
       continue;
     }
-    std::string opval;
-    if (getOptionValueString(opval, (*first).second.get())) {
-      handler->parse(*option, opval);
+    handler->parse(*option, item.second);
+  }
+  for (const auto& item : *options) {
+    PrefPtr pref = option::k2p(item.first);
+    const OptionHandler* handler = optionParser->find(pref);
+    if (!handler || !pred(handler) || !handler->getCumulative()) {
+      continue;
     }
-    else if (handler->getCumulative()) {
-      // header and index-out option can take array as value
-      const List* oplist = downcast<List>((*first).second);
-      if (oplist) {
-        for (auto& elem : *oplist) {
-          const String* opval = downcast<String>(elem);
-          if (opval) {
-            handler->parse(*option, opval->s());
-          }
+    const auto values = downcast<List>(item.second);
+    if (values) {
+      for (const auto& element : *values) {
+        const auto value = downcast<String>(element);
+        if (value) {
+          handler->parse(*option, value->s());
         }
       }
     }
@@ -158,9 +176,8 @@ void gatherOption(InputIterator first, InputIterator last, Pred pred,
 void RpcMethod::gatherRequestOption(Option* option, const Dict* optionsDict)
 {
   if (optionsDict) {
-    gatherOption(optionsDict->begin(), optionsDict->end(),
-                 std::mem_fn(&OptionHandler::getInitialOption), option,
-                 optionParser_);
+    gatherOption(optionsDict, std::mem_fn(&OptionHandler::getInitialOption),
+                 option, optionParser_);
   }
 }
 
@@ -171,15 +188,12 @@ void RpcMethod::gatherChangeableOption(Option* option, Option* pendingOption,
     return;
   }
 
-  auto first = optionsDict->begin();
-  auto last = optionsDict->end();
-
-  for (; first != last; ++first) {
-    const auto& optionName = (*first).first;
-    auto pref = option::k2p(optionName);
+  const auto scalarOptions = adaptLegacyOptions(
+      collectScalarOptions(optionsDict), LegacyOptionSource::Rpc);
+  for (const auto& item : scalarOptions) {
+    auto pref = option::k2p(item.first);
     auto handler = optionParser_->find(pref);
     if (!handler) {
-      // Just ignore the unacceptable options in this context.
       continue;
     }
 
@@ -195,19 +209,23 @@ void RpcMethod::gatherChangeableOption(Option* option, Option* pendingOption,
       continue;
     }
 
-    std::string opval;
-    if (getOptionValueString(opval, (*first).second.get())) {
-      handler->parse(*dst, opval);
+    handler->parse(*dst, item.second);
+  }
+  for (const auto& item : *optionsDict) {
+    auto pref = option::k2p(item.first);
+    auto handler = optionParser_->find(pref);
+    if (!handler || !handler->getCumulative()) {
+      continue;
     }
-    else if (handler->getCumulative()) {
-      // header and index-out option can take array as value
-      const auto oplist = downcast<List>((*first).second);
-      if (oplist) {
-        for (auto& elem : *oplist) {
-          const auto opval = downcast<String>(elem);
-          if (opval) {
-            handler->parse(*dst, opval->s());
-          }
+    Option* dst = handler->getChangeOption()              ? option
+                  : handler->getChangeOptionForReserved() ? pendingOption
+                                                          : nullptr;
+    const auto values = downcast<List>(item.second);
+    if (dst && values) {
+      for (const auto& element : *values) {
+        const auto value = downcast<String>(element);
+        if (value) {
+          handler->parse(*dst, value->s());
         }
       }
     }
@@ -218,7 +236,7 @@ void RpcMethod::gatherChangeableOptionForReserved(Option* option,
                                                   const Dict* optionsDict)
 {
   if (optionsDict) {
-    gatherOption(optionsDict->begin(), optionsDict->end(),
+    gatherOption(optionsDict,
                  std::mem_fn(&OptionHandler::getChangeOptionForReserved),
                  option, optionParser_);
   }
@@ -228,7 +246,7 @@ void RpcMethod::gatherChangeableGlobalOption(Option* option,
                                              const Dict* optionsDict)
 {
   if (optionsDict) {
-    gatherOption(optionsDict->begin(), optionsDict->end(),
+    gatherOption(optionsDict,
                  std::mem_fn(&OptionHandler::getChangeGlobalOption), option,
                  optionParser_);
   }

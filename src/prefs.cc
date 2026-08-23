@@ -515,6 +515,41 @@ PrefPtr PREF_BT_PORT_MAPPING = makePref("bt-port-mapping");
 PrefPtr PREF_BT_MAX_OPEN_FILES = makePref("bt-max-open-files");
 PrefPtr PREF_BT_IO_THREADS = makePref("bt-io-threads");
 PrefPtr PREF_BT_HASHING_THREADS = makePref("bt-hashing-threads");
+PrefPtr PREF_BT_CONNECTION_SPEED = makePref("bt-connection-speed");
+PrefPtr PREF_BT_MAX_OUT_REQUEST_QUEUE =
+    makePref("bt-max-out-request-queue");
+PrefPtr PREF_BT_MAX_IN_REQUEST_QUEUE = makePref("bt-max-in-request-queue");
+PrefPtr PREF_BT_DISK_QUEUE_SIZE = makePref("bt-disk-queue-size");
+PrefPtr PREF_BT_DISK_IO = makePref("bt-disk-io");
+PrefPtr PREF_BT_DISK_READ_CACHE = makePref("bt-disk-read-cache");
+PrefPtr PREF_BT_DISK_WRITE_CACHE = makePref("bt-disk-write-cache");
+PrefPtr PREF_BT_CHECKING_MEMORY = makePref("bt-checking-memory");
+PrefPtr PREF_BT_PIECE_EXTENT_AFFINITY =
+    makePref("bt-piece-extent-affinity");
+PrefPtr PREF_BT_PEER_TURNOVER = makePref("bt-peer-turnover");
+PrefPtr PREF_BT_PEER_TURNOVER_CUTOFF =
+    makePref("bt-peer-turnover-cutoff");
+PrefPtr PREF_BT_PEER_TURNOVER_INTERVAL =
+    makePref("bt-peer-turnover-interval");
+PrefPtr PREF_BT_MIXED_MODE = makePref("bt-mixed-mode");
+PrefPtr PREF_BT_UPLOAD_SLOT_ALGORITHM =
+    makePref("bt-upload-slot-algorithm");
+PrefPtr PREF_BT_SEED_CHOKING_ALGORITHM =
+    makePref("bt-seed-choking-algorithm");
+PrefPtr PREF_BT_SEND_BUFFER_LOW_WATERMARK =
+    makePref("bt-send-buffer-low-watermark");
+PrefPtr PREF_BT_SEND_BUFFER_WATERMARK =
+    makePref("bt-send-buffer-watermark");
+PrefPtr PREF_BT_SEND_BUFFER_WATERMARK_FACTOR =
+    makePref("bt-send-buffer-watermark-factor");
+PrefPtr PREF_BT_SEEDING_OUTGOING_CONNECTIONS =
+    makePref("bt-seeding-outgoing-connections");
+PrefPtr PREF_BT_RATE_LIMIT_OVERHEAD = makePref("bt-rate-limit-overhead");
+PrefPtr PREF_BT_STOP_TRACKER_TIMEOUT = makePref("bt-stop-tracker-timeout");
+PrefPtr PREF_BT_BLOCKLIST_SCOPE = makePref("bt-blocklist-scope");
+PrefPtr PREF_BT_RESUME_SAVE_INTERVAL = makePref("bt-resume-save-interval");
+PrefPtr PREF_BT_UPLOAD_SUGGESTIONS = makePref("bt-upload-suggestions");
+PrefPtr PREF_BT_FILE_PRIORITY = makePref("bt-file-priority");
 PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES =
     makePref("bt-max-concurrent-http-announces");
 PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS = makePref("bt-announce-all-tiers");

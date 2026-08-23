@@ -647,6 +647,9 @@ void RpcMethodTest::testGetOption()
 {
   auto group = std::make_shared<RequestGroup>(GroupId::create(), option_);
   group->getOption()->put(PREF_DIR, "alpha");
+#ifdef ENABLE_BITTORRENT
+  group->getOption()->put(PREF_BT_ENCRYPTION, V_REQUIRED);
+#endif
   e_->getRequestGroupMan()->addReservedGroup(group);
   auto dr = createDownloadResult(error_code::FINISHED, "http://host/fin");
   dr->option->put(PREF_DIR, "bravo");
@@ -660,6 +663,10 @@ void RpcMethodTest::testGetOption()
   const Dict* resopt = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("alpha"),
              downcast<String>(resopt->get(PREF_DIR->k))->s());
+#ifdef ENABLE_BITTORRENT
+  REQUIRE_EQ(std::string("true"),
+             downcast<String>(resopt->get("bt-require-crypto"))->s());
+#endif
 
   req = createReq(GetOptionRpcMethod::getMethodName());
   req.params->append(dr->gid->toHex());
@@ -751,6 +758,8 @@ void RpcMethodTest::testChangeGlobalOption()
   opt->put(PREF_MAX_OVERALL_DOWNLOAD_LIMIT->k, "100K");
 #ifdef ENABLE_BITTORRENT
   opt->put(PREF_MAX_OVERALL_UPLOAD_LIMIT->k, "50K");
+  opt->put(PREF_BT_ENCRYPTION->k, "enabled");
+  opt->put("bt-tracker-timeout", "19");
 #endif // ENABLE_BITTORRENT
   req.params->append(std::move(opt));
   auto res = m.execute(std::move(req), e_.get());
@@ -765,6 +774,9 @@ void RpcMethodTest::testChangeGlobalOption()
              e_->getRequestGroupMan()->getMaxOverallUploadSpeedLimit());
   REQUIRE_EQ(std::string("51200"),
              e_->getOption()->get(PREF_MAX_OVERALL_UPLOAD_LIMIT));
+  REQUIRE_EQ(V_PREFERRED, e_->getOption()->get(PREF_BT_ENCRYPTION));
+  REQUIRE_EQ(std::string("19"),
+             e_->getOption()->get(PREF_BT_TRACKER_RECEIVE_TIMEOUT));
 #endif // ENABLE_BITTORRENT
 }
 
@@ -1046,7 +1058,7 @@ void RpcMethodTest::testGetVersion()
   const Dict* resParams = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("aria2-next"), getString(resParams, "product"));
   REQUIRE_EQ(std::string(PACKAGE_VERSION), getString(resParams, "version"));
-  REQUIRE_EQ(std::string("1.0.0"), getString(resParams, "rpcVersion"));
+  REQUIRE_EQ(std::string("1.1.0"), getString(resParams, "rpcVersion"));
   const List* featureList = downcast<List>(resParams->get("enabledFeatures"));
   std::string features;
   for (auto i = featureList->begin(); i != featureList->end(); ++i) {

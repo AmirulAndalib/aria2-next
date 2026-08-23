@@ -25,6 +25,7 @@ struct BtFileSnapshot {
   std::string path;
   int64_t length = 0;
   int64_t completedLength = 0;
+  int priority = 1;
   bool selected = true;
 };
 
@@ -110,6 +111,7 @@ struct BtSnapshot {
   std::string currentTracker;
   std::string errorMessage;
   std::string bitfield;
+  std::vector<std::string> webSeeds;
   std::vector<std::vector<std::string>> announceList;
   std::vector<BtFileSnapshot> files;
   std::vector<BtPeerSnapshot> peers;

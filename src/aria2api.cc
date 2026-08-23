@@ -41,6 +41,7 @@
 #include "DownloadEngine.h"
 #include "OptionParser.h"
 #include "Option.h"
+#include "LegacyOptionAdapter.h"
 #include "DlAbortEx.h"
 #include "fmt.h"
 #include "OptionHandler.h"
@@ -196,15 +197,15 @@ void apiGatherOption(InputIterator first, InputIterator last, Pred pred,
                      Option* option,
                      const std::shared_ptr<OptionParser>& optionParser)
 {
-  for (; first != last; ++first) {
-    const std::string& optionName = (*first).first;
-    PrefPtr pref = option::k2p(optionName);
+  KeyVals raw(first, last);
+  for (const auto& item :
+       adaptLegacyOptions(raw, LegacyOptionSource::Library)) {
+    PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
     if (!handler || !pred(handler)) {
-      // Just ignore the unacceptable options in this context.
       continue;
     }
-    handler->parse(*option, (*first).second);
+    handler->parse(*option, item.second);
   }
 }
 } // namespace
@@ -484,6 +485,10 @@ const std::string& getGlobalOption(Session* session, const std::string& name)
   if (OptionParser::getInstance()->find(pref)) {
     return e->getOption()->get(pref);
   }
+  static thread_local std::string projected;
+  if (projectLegacyOption(e->getOption(), name, projected)) {
+    return projected;
+  }
   else {
     return "";
   }
@@ -502,6 +507,8 @@ KeyVals getGlobalOptions(Session* session)
       options.push_back(KeyVals::value_type(pref->k, option->get(pref)));
     }
   }
+  const auto projected = projectLegacyOptions(option);
+  options.insert(options.end(), projected.begin(), projected.end());
   return options;
 }
 
@@ -683,6 +690,10 @@ const std::string& getRequestOption(const std::shared_ptr<Option>& option,
   if (OptionParser::getInstance()->find(pref)) {
     return option->get(pref);
   }
+  static thread_local std::string projected;
+  if (projectLegacyOption(option.get(), name, projected)) {
+    return projected;
+  }
   else {
     return "";
   }
@@ -695,6 +706,8 @@ KeyVals getRequestOptions(const std::shared_ptr<Option>& option)
   KeyVals res;
   pushRequestOption(std::back_inserter(res), option,
                     OptionParser::getInstance());
+  const auto projected = projectLegacyOptions(option.get());
+  res.insert(res.end(), projected.begin(), projected.end());
   return res;
 }
 } // namespace
