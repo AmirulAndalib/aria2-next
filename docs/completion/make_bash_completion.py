@@ -87,9 +87,7 @@ _aria2_next()
     case $prev in
 """)
     # Complete pre-defined option arguments
-    for long_opt in ['--ftp-type',
-                     '--proxy-method',
-                     '--metalink-preferred-protocol',
+    for long_opt in ['--metalink-preferred-protocol',
                      '--bt-encryption',
                      '--bt-transport',
                      '--bt-disk-io',
@@ -102,7 +100,6 @@ _aria2_next()
                      '--follow-metalink',
                      '--file-allocation',
                      '--log-level',
-                     '--uri-selector',
                      '--event-poll',
                      '--follow-torrent',
                      '--stream-piece-selector',

@@ -78,40 +78,28 @@
     "                              previously defined proxy, use \"\".\n" \
     "                              See also the --all-proxy option.\n"     \
     "                              This affects all https downloads.")
-#define TEXT_FTP_PROXY                                                  \
-  _(" --ftp-proxy=PROXY            Use a proxy server for FTP. To override a \n" \
-    "                              previously defined proxy, use \"\".\n" \
-    "                              See also the --all-proxy option.\n"     \
-    "                              This affects all ftp downloads.")
 #define TEXT_ALL_PROXY                                                  \
   _(" --all-proxy=PROXY            Use a proxy server for all protocols. To override\n" \
     "                              a previously defined proxy, use \"\".\n" \
     "                              You also can override this setting and specify a\n" \
     "                              proxy server for a particular protocol using the\n" \
-    "                              --http-proxy, --https-proxy and --ftp-proxy\n" \
+    "                              --http-proxy and --https-proxy\n" \
     "                              options.\n"                          \
     "                              This affects all downloads.")
 #define TEXT_HTTP_USER                                                  \
   _(" --http-user=USER             Set HTTP user. This affects all URLs.")
 #define TEXT_HTTP_PASSWD                                                \
   _(" --http-passwd=PASSWD         Set HTTP password. This affects all URLs.")
-#define TEXT_PROXY_METHOD                                               \
-  _(" --proxy-method=METHOD        Set the method to use in proxy request.")
 #define TEXT_REFERER                                                    \
   _(" --referer=REFERER            Set an http referrer (Referer). This affects\n" \
     "                              all http/https downloads. If \"*\" is given,\n" \
     "                              the download URI is also used as the referrer.\n" \
     "                              This may be useful when used together with\n" \
     "                              the -P option.")
-#define TEXT_FTP_USER                                                   \
-  _(" --ftp-user=USER              Set FTP user. This affects all URLs.")
-#define TEXT_FTP_PASSWD                                                 \
-  _(" --ftp-passwd=PASSWD          Set FTP password. This affects all URLs.")
-#define TEXT_FTP_TYPE                                           \
-  _(" --ftp-type=TYPE              Set FTP transfer type.")
-#define TEXT_FTP_PASV                                                   \
-  _(" -p, --ftp-pasv[=true|false]  Use the passive mode in FTP. If false is given,\n" \
-    "                              the active mode will be used.")
+#define TEXT_SFTP_USER                                                  \
+  _(" --sftp-user=USER             Set the SFTP user.")
+#define TEXT_SFTP_PASSWD                                                \
+  _(" --sftp-passwd=PASSWD         Set the SFTP password.")
 #define TEXT_LOWEST_SPEED_LIMIT                                         \
   _(" --lowest-speed-limit=SPEED   Close connection if download speed is lower than\n" \
     "                              or equal to this value(bytes per sec).\n" \
@@ -163,22 +151,16 @@
     "                              allocating files.\n"                 \
     "                              Turn off if you encounter any error")
 #define TEXT_ALLOW_OVERWRITE                                            \
-  _(" --allow-overwrite[=true|false] Restart download from scratch if the\n" \
-    "                              corresponding control file doesn't exist.  See\n" \
+  _(" --allow-overwrite[=true|false] Replace an existing output file when no valid\n" \
+    "                              persisted transfer state is available. See\n" \
     "                              also --auto-file-renaming option.")
-#define TEXT_ALLOW_PIECE_LENGTH_CHANGE                                  \
-  _(" --allow-piece-length-change[=true|false] If false is given, aria2 aborts\n" \
-    "                              download when a piece length is different from\n" \
-    "                              one in a control file. If true is given, you can\n" \
-    "                              proceed but some download progress will be lost.")
 #define TEXT_FORCE_SEQUENTIAL                                           \
   _(" -Z, --force-sequential[=true|false] Fetch URIs in the command-line sequentially\n" \
     "                              and download each URI in a separate session, like\n" \
     "                              the usual command-line download utilities.")
 #define TEXT_AUTO_FILE_RENAMING                                         \
   _(" --auto-file-renaming[=true|false] Rename file name if the same file already\n" \
-    "                              exists. This option works only in http(s)/ftp\n" \
-    "                              download.\n"                         \
+    "                              exists for stream downloads.\n"     \
     "                              The new file name has a dot and a number(1..9999)\n" \
     "                              appended after the name, but before the file\n" \
     "                              extension, if any.")
@@ -195,13 +177,11 @@
     "                              required.")
 #define TEXT_ENABLE_HTTP_KEEP_ALIVE                                     \
   _(" --enable-http-keep-alive[=true|false] Enable HTTP/1.1 persistent connection.")
-#define TEXT_ENABLE_HTTP_PIPELINING                                     \
-  _(" --enable-http-pipelining[=true|false] Enable HTTP/1.1 pipelining.")
 #define TEXT_CHECK_INTEGRITY                                            \
   _(" -V, --check-integrity[=true|false] Check file integrity by validating piece\n" \
     "                              hashes or a hash of entire file. This option has\n" \
     "                              effect only in BitTorrent, Metalink downloads\n" \
-    "                              with checksums or HTTP(S)/FTP downloads with\n" \
+    "                              with checksums or HTTP(S)/SFTP downloads with\n" \
     "                              --checksum option. If piece hashes are provided,\n" \
     "                              this option can detect damaged portions of a file\n" \
     "                              and re-download them. If a hash of entire file is\n" \
@@ -221,7 +201,7 @@
     "                              started by a web browser or another program\n" \
     "                              which downloads files sequentially from the\n" \
     "                              beginning. Currently this option is only\n" \
-    "                              applicable to http(s)/ftp downloads.")
+    "                              applicable to HTTP(S)/SFTP downloads.")
 #define TEXT_USER_AGENT                                                 \
   _(" -U, --user-agent=USER_AGENT  Set user agent for http(s) downloads.")
 #define TEXT_NO_NETRC                                           \
@@ -240,7 +220,7 @@
     "                              for details. See also --deferred-input option.")
 #define TEXT_MAX_CONCURRENT_DOWNLOADS                                   \
   _(" -j, --max-concurrent-downloads=N Set maximum number of parallel downloads for\n" \
-    "                              every static (HTTP/FTP) URL, torrent and metalink.\n" \
+    "                              every static HTTP(S)/SFTP URL, torrent and metalink.\n" \
     "                              See also --split and --optimize-concurrent-downloads options.")
 #define TEXT_OPTIMIZE_CONCURRENT_DOWNLOADS\
   _(" --optimize-concurrent-downloads[=true|false|A:B] Optimizes the number of\n" \
@@ -494,8 +474,6 @@
   _(" -q, --quiet[=true|false]     Make aria2 quiet(no console output).")
 #define TEXT_ASYNC_DNS                                          \
   _(" --async-dns[=true|false]     Enable asynchronous DNS.")
-#define TEXT_FTP_REUSE_CONNECTION                                       \
-  _(" --ftp-reuse-connection[=true|false] Reuse connection in FTP.")
 #define TEXT_SUMMARY_INTERVAL                                           \
   _(" --summary-interval=SEC       Set interval to output download progress summary.\n" \
     "                              Setting 0 suppresses the output.")
@@ -509,54 +487,22 @@
     "                              the active file.")
 #define TEXT_REMOTE_TIME                                                \
   _(" -R, --remote-time[=true|false] Retrieve timestamp of the remote file from the\n" \
-    "                              remote HTTP/FTP server and if it is available,\n" \
+    "                              remote HTTP/SFTP server and if it is available,\n" \
     "                              apply it to the local file.")
 #define TEXT_CONNECT_TIMEOUT                                            \
   _(" --connect-timeout=SEC        Set the connect timeout in seconds to establish\n" \
-    "                              connection to HTTP/FTP/proxy server. After the\n" \
+    "                              connection to HTTP/SFTP/proxy server. After the\n" \
     "                              connection is established, this option makes no\n" \
     "                              effect and --timeout option is used instead.")
 #define TEXT_MAX_FILE_NOT_FOUND                                         \
   _(" --max-file-not-found=NUM     If aria2 receives `file not found' status from the\n" \
-    "                              remote HTTP/FTP servers NUM times without getting\n" \
+    "                              remote HTTP/SFTP servers NUM times without getting\n" \
     "                              a single byte, then force the download to fail.\n" \
     "                              Specify 0 to disable this option.\n" \
     "                              This options is effective only when using\n" \
-    "                              HTTP/FTP servers. The number of retry attempt is\n" \
+    "                              HTTP/SFTP servers. The number of retry attempt is\n" \
     "                              counted toward --max-tries, so it should be\n" \
     "                              configured too.")
-#define TEXT_URI_SELECTOR                                               \
-  _(" --uri-selector=SELECTOR      Specify URI selection algorithm.\n"  \
-    "                              If 'inorder' is given, URI is tried in the order\n" \
-    "                              appeared in the URI list.\n"         \
-    "                              If 'feedback' is given, aria2 uses download speed\n" \
-    "                              observed in the previous downloads and choose\n" \
-    "                              fastest server in the URI list. This also\n" \
-    "                              effectively skips dead mirrors. The observed\n" \
-    "                              download speed is a part of performance profile\n" \
-    "                              of servers mentioned in --server-stat-of and\n" \
-    "                              --server-stat-if options.\n"         \
-    "                              If 'adaptive' is given, selects one of the best\n" \
-    "                              mirrors for the first and reserved connections.\n" \
-    "                              For supplementary ones, it returns mirrors which\n" \
-    "                              has not been tested yet, and if each of them has\n" \
-    "                              already been tested, returns mirrors which has to\n" \
-    "                              be tested again. Otherwise, it doesn't select\n" \
-    "                              anymore mirrors. Like 'feedback', it uses a\n" \
-    "                              performance profile of servers.")
-#define TEXT_SERVER_STAT_OF                                             \
-  _(" --server-stat-of=FILE        Specify the filename to which performance profile\n" \
-    "                              of the servers is saved. You can load saved data\n" \
-    "                              using --server-stat-if option.")
-#define TEXT_SERVER_STAT_IF                                             \
-  _(" --server-stat-if=FILE        Specify the filename to load performance profile\n" \
-    "                              of the servers. The loaded data will be used in\n" \
-    "                              some URI selector such as 'feedback'.\n" \
-    "                              See also --uri-selector option")
-#define TEXT_SERVER_STAT_TIMEOUT                                        \
-  _(" --server-stat-timeout=SEC    Specifies timeout in seconds to invalidate\n" \
-    "                              performance profile of the servers since the last\n" \
-    "                              contact to them.")
 #define TEXT_ED2K_SERVER                                                \
   _(" --ed2k-server=HOST:PORT[,..] Use ED2K servers to discover file sources.")
 #define TEXT_ED2K_SERVER_LIST                                           \
@@ -573,11 +519,8 @@
   _(" --ed2k-preview-priority[=true|false] Prioritize first and last ED2K parts. (default: false)")
 #define TEXT_STATE_DIR                                                  \
   _(" --state-dir=DIR             Store persistent engine state under DIR.")
-#define TEXT_AUTO_SAVE_INTERVAL                                         \
-  _(" --auto-save-interval=SEC     Save a control file(*.aria2) every SEC seconds.\n" \
-    "                              If 0 is given, a control file is not saved during\n" \
-    "                              download. aria2 saves a control file when it stops\n" \
-    "                              regardless of the value.")
+#define TEXT_STATE_SAVE_INTERVAL                                        \
+  _(" --state-save-interval=SEC    Checkpoint persistent engine state every SEC seconds.")
 #define TEXT_CERTIFICATE                                                \
   _(" --certificate=FILE           Use the client certificate in FILE.\n" \
     "                              The certificate must be in PEM format.\n" \
@@ -600,17 +543,6 @@
   _(" --no-proxy=DOMAINS           Specify comma separated hostnames, domains or\n" \
     "                              network address with or without CIDR block where\n" \
     "                              proxy should not be used.")
-#define TEXT_USE_HEAD                                                   \
-  _(" --use-head[=true|false]      Use HEAD method for the first request to the HTTP\n" \
-    "                              server.")
-#define TEXT_NO_WANT_DIGEST_HEADER                                      \
-  _(" --no-want-digest-header[=true|false] Whether to disable Want-Digest header \n" \
-    "                              when doing requests.")
-#define TEXT_CONTENT_DISPOSITION_DEFAULT_UTF8                          \
-  _(" --content-disposition-default-utf8[=true|false] Handle quoted string in\n" \
-    "                              Content-Disposition header as UTF-8 instead of\n" \
-    "                              ISO-8859-1, for example, the filename parameter,\n" \
-    "                              but not the extended version filename*.")
 #define TEXT_EVENT_POLL                                                 \
   _(" --event-poll=POLL            Specify the method for polling events.")
 #define TEXT_BT_EXTERNAL_IP                                             \
@@ -619,14 +551,6 @@
 #define TEXT_BT_EXTERNAL_PORT                                           \
   _(" --bt-external-port=PORT      Specify the external TCP port announced to\n" \
     "                              trackers, DHT, and supported peers.")
-#define TEXT_HTTP_AUTH_CHALLENGE                                        \
-  _(" --http-auth-challenge[=true|false] Send HTTP authorization header only when it\n" \
-    "                              is requested by the server. If false is set, then\n" \
-    "                              authorization header is always sent to the server.\n" \
-    "                              There is an exception: if username and password\n" \
-    "                              are embedded in URI, authorization header is\n" \
-    "                              always sent to the server regardless of this\n" \
-    "                              option.")
 #define TEXT_INDEX_OUT                                                  \
   _(" -O, --index-out=INDEX=PATH   Set file path for file with index=INDEX. You can\n" \
     "                              find the file index using the --show-files option.\n" \
@@ -636,7 +560,7 @@
 #define TEXT_DRY_RUN                                                    \
   _(" --dry-run[=true|false]       If true is given, aria2 just checks whether the\n" \
     "                              remote file is available and doesn't download\n" \
-    "                              data. This option has effect on HTTP/FTP download.\n" \
+    "                              data. This option has effect on HTTP downloads.\n" \
     "                              BitTorrent downloads are canceled if true is\n" \
     "                              specified.")
 #define TEXT_ON_DOWNLOAD_COMPLETE                                       \
@@ -694,9 +618,6 @@
     "                              (e.g., 1.2Ki, 3.4Mi) in the console readout.")
 #define TEXT_BT_ENABLE_LPD                      \
   _(" --bt-enable-lpd[=true|false] Enable Local Peer Discovery.")
-#define TEXT_REUSE_URI                          \
-  _(" --reuse-uri[=true|false]     Reuse already used URIs if no unused URIs are\n" \
-    "                              left.")
 #define TEXT_ALL_PROXY_USER                                             \
   _(" --all-proxy-user=USER        Set user for --all-proxy.")
 #define TEXT_ALL_PROXY_PASSWD                                           \
@@ -709,15 +630,6 @@
   _(" --https-proxy-user=USER      Set user for --https-proxy.")
 #define TEXT_HTTPS_PROXY_PASSWD                                         \
   _(" --https-proxy-passwd=PASSWD  Set password for --https-proxy.")
-#define TEXT_FTP_PROXY_USER                                             \
-  _(" --ftp-proxy-user=USER        Set user for --ftp-proxy.")
-#define TEXT_FTP_PROXY_PASSWD                                           \
-  _(" --ftp-proxy-passwd=PASSWD    Set password for --ftp-proxy.")
-#define TEXT_REMOVE_CONTROL_FILE                \
-  _(" --remove-control-file[=true|false] Remove control file before download. Using\n" \
-    "                              with --allow-overwrite=true, download always\n" \
-    "                              starts from scratch. This will be useful for\n" \
-    "                              users behind proxy server which disables resume.")
 #define TEXT_ALWAYS_RESUME                      \
   _(" --always-resume[=true|false] Always resume download. If true is given, aria2\n" \
     "                              always tries to resume download and if resume is\n" \
@@ -771,10 +683,6 @@
     "                              Decimal values are allowed. You can append K or\n" \
     "                              M(1K = 1024, 1M = 1024K). Fractional bytes are\n" \
     "                              rounded down.")
-#define TEXT_CONDITIONAL_GET                    \
-  _(" --conditional-get[=true|false] Download file only when the local file is older\n" \
-    "                              than remote file. Currently, this function has\n" \
-    "                              many limitations. See man page for details.")
 #define TEXT_ON_BT_DOWNLOAD_COMPLETE            \
   _(" --on-bt-download-complete=COMMAND For BitTorrent, a command specified in\n" \
     "                              --on-download-complete is called after download\n" \
@@ -850,7 +758,7 @@
     "                              to a directory, URI must end with '/'.")
 #define TEXT_STREAM_PIECE_SELECTOR              \
   _(" --stream-piece-selector=SELECTOR Specify piece selection algorithm\n" \
-    "                              used in HTTP/FTP download. Piece means fixed\n" \
+    "                              used in ED2K downloads. Piece means fixed\n" \
     "                              length segment which is downloaded in parallel\n" \
     "                              in segmented download. If 'default' is given,\n" \
     "                              aria2 selects piece so that it reduces the\n" \
@@ -861,8 +769,6 @@
     "                              If 'inorder' is given, aria2 selects piece which\n" \
     "                              has minimum index. Index=0 means first of the\n" \
     "                              file. This will be useful to view movie while\n" \
-    "                              downloading it. --enable-http-pipelining option\n" \
-    "                              may be useful to reduce reconnection overhead.\n" \
     "                              Please note that aria2 honors\n"     \
     "                              --min-split-size option, so it will be necessary\n" \
     "                              to specify a reasonable value to\n"  \
@@ -911,10 +817,10 @@
     "                              For example, setting sha-1 digest looks like\n" \
     "                              this:\n"                             \
     "                              sha-1=0192ba11326fe2298c8cb4de616f4d4140213838\n" \
-    "                              This option applies only to HTTP(S)/FTP\n" \
+    "                              This option applies only to HTTP(S)/SFTP\n" \
     "                              downloads.")
 #define TEXT_PIECE_LENGTH                       \
-  _(" --piece-length=LENGTH        Set a piece length for HTTP/FTP downloads. This\n" \
+  _(" --piece-length=LENGTH        Set a piece length for segmented downloads. This\n" \
     "                              is the boundary when aria2 splits a file. All\n" \
     "                              splits occur at multiple of this length. This\n" \
     "                              option will be ignored in BitTorrent downloads.\n" \
@@ -969,15 +875,12 @@
 #define TEXT_FORCE_SAVE                         \
   _(" --force-save[=true|false]    Save download with --save-session option even\n" \
     "                              if the download is completed or removed. This\n" \
-    "                              option also saves control file in that\n" \
-    "                              situations. This may be useful to save\n" \
+    "                              may be useful to save\n" \
     "                              BitTorrent seeding which is recognized as\n" \
     "                              completed state.")
 #define TEXT_SAVE_NOT_FOUND                         \
   _(" --save-not-found[=true|false] Save download with --save-session option even\n" \
-    "                              if the file was not found on the server. This\n" \
-    "                              option also saves control file in that\n" \
-    "                              situations.")
+    "                              if the file was not found on the server.")
 #define TEXT_DISK_CACHE                         \
   _(" --disk-cache=SIZE            Enable disk cache. If SIZE is 0, the disk cache\n" \
     "                              is disabled. This feature caches the downloaded\n" \
@@ -1057,16 +960,9 @@
     "                              recognized as active download in RPC method.")
 #define TEXT_MIN_TLS_VERSION                                            \
   _(" --min-tls-version=VERSION    Specify minimum SSL/TLS version to enable.")
-#define TEXT_SSH_HOST_KEY_MD                                            \
-  _(" --ssh-host-key-md=TYPE=DIGEST\n"                                  \
-    "                              Set checksum for SSH host public key. TYPE is\n" \
-    "                              hash type. The supported hash type is sha-1 or\n" \
-    "                              md5. DIGEST is hex digest. For example:\n" \
-    "                              sha-1=b030503d4de4539dc7885e6f0f5e256704edf4c3\n" \
-    "                              This option can be used to validate server's\n" \
-    "                              public key when SFTP is used. If this option is\n" \
-    "                              not set, which is default, no validation takes\n" \
-    "                              place.")
+#define TEXT_SSH_HOST_KEY_SHA256                                       \
+  _(" --ssh-host-key-sha256=DIGEST Validate the SFTP server host key with its\n" \
+    "                              SHA-256 Base64 digest.")
 #define TEXT_SOCKET_RECV_BUFFER_SIZE                                    \
   _(" --socket-recv-buffer-size=SIZE\n"                                 \
     "                              Set the maximum socket receive buffer in bytes.\n" \

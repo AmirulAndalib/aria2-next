@@ -108,14 +108,8 @@
 
 #define MSG_UNRECOGNIZED_URI _("Unrecognized URI or unsupported protocol: %s")
 #define MSG_TRACKER_WARNING_MESSAGE _("Tracker returned warning message: %s")
-#define MSG_SEGMENT_FILE_EXISTS _("The segment file %s exists.")
-#define MSG_SEGMENT_FILE_DOES_NOT_EXIST _("The segment file %s does not exist.")
-#define MSG_SAVING_SEGMENT_FILE _("Saving the segment file %s")
-#define MSG_SAVED_SEGMENT_FILE _("The segment file was saved successfully.")
-#define MSG_LOADING_SEGMENT_FILE _("Loading the segment file %s.")
-#define MSG_LOADED_SEGMENT_FILE _("The segment file was loaded successfully.")
 #define MSG_NO_URL_TO_DOWNLOAD _("No URI to download. Download aborted.")
-#define MSG_FILE_ALREADY_EXISTS _("File %s exists, but a control file(*.aria2) does not exist. Download was canceled in order to prevent your file from being truncated to 0. If you are sure to download the file all over again, then delete it or add --allow-overwrite=true option and restart aria2.")
+#define MSG_FILE_ALREADY_EXISTS _("File %s already exists. Enable overwrite, continue the transfer, or choose another output path.")
 #define MSG_ALLOCATING_FILE _("Allocating file %s, %s bytes")
 #define MSG_FILE_NOT_FOUND _("File not found")
 #define MSG_NOT_DIRECTORY _("Not a directory")
@@ -151,7 +145,6 @@
 #define MSG_FILE_RENAMED _("File already exists. Renamed to %s.")
 #define MSG_CANNOT_PARSE_METALINK _("Cannot parse metalink XML file. XML may be malformed.")
 #define MSG_TOO_SMALL_PAYLOAD_SIZE _("Too small payload size for %s, size=%lu.")
-#define MSG_REMOVED_DEFUNCT_CONTROL_FILE _("Removed the defunct control file %s because the download file %s doesn't exist.")
 #define MSG_SHARE_RATIO_REPORT _("Your share ratio was %.1f, uploaded/downloaded=%sB/%sB")
 #define MSG_MISSING_BT_INFO _("Missing %s in torrent metainfo.")
 #define MSG_NEGATIVE_LENGTH_BT_INFO _("%s does not allow negative integer %" PRId64 "")
@@ -248,8 +241,6 @@
 #define EX_FILE_OFFSET_OUT_OF_RANGE "The offset is out of range, offset=%" PRId64 ""
 #define EX_NOT_DIRECTORY _("%s is not a directory.")
 #define EX_MAKE_DIR _("Failed to make the directory %s, cause: %s")
-#define EX_SEGMENT_FILE_WRITE "Failed to write into the segment file %s"
-#define EX_SEGMENT_FILE_READ "Failed to read from the segment file %s"
 
 #define EX_SOCKET_OPEN _("Failed to open a socket, cause: %s")
 #define EX_SOCKET_SET_OPT _("Failed to set a socket option, cause: %s")
@@ -281,7 +272,6 @@
 #define EX_DROP_INACTIVE_CONNECTION \
   _("Drop connection because no request/piece messages were exchanged in a" \
     " certain period(%ld seconds).")
-#define EX_INFOHASH_MISMATCH_IN_SEGFILE _("The infoHash in torrent file doesn't match to one in .aria2 file.")
 #define EX_NO_SUCH_FILE_ENTRY _("No such file entry %s")
 #define EX_TOO_SLOW_DOWNLOAD_SPEED _("Too slow Downloading speed: %d <= %d(B/s), host:%s")
 #define EX_NO_HTTP_REQUEST_ENTRY_FOUND _("No HttpRequestEntry found.")

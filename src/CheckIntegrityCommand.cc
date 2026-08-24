@@ -67,10 +67,6 @@ bool CheckIntegrityCommand::executeInternal()
   }
   entry_->validateChunk();
   if (entry_->finished()) {
-    // Enable control file saving here. See also
-    // RequestGroup::processCheckIntegrityEntry() to know why this is
-    // needed.
-    getRequestGroup()->enableSaveControlFile();
     if (getRequestGroup()->downloadFinished()) {
       A2_LOG_INFO(
           fmt(MSG_VERIFICATION_SUCCESSFUL,

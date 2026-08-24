@@ -89,6 +89,7 @@ private:
   bool aichFileHashRequested_;
   bool use64BitOffsets_;
   bool incoming_;
+  bool countAsDownloadCommand_;
   bool firewallCheck_;
   bool closeAfterOutbox_;
   Timer protocolActivity_;
@@ -203,6 +204,7 @@ private:
 protected:
   virtual bool executeInternal() override;
   virtual bool noCheck() const override;
+  virtual bool prepareForRetry(time_t wait) override;
 
 public:
   Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup, DownloadEngine* e,

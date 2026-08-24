@@ -41,7 +41,6 @@
 #include "DownloadEngine.h"
 #include "OptionParser.h"
 #include "Option.h"
-#include "LegacyOptionAdapter.h"
 #include "DlAbortEx.h"
 #include "fmt.h"
 #include "OptionHandler.h"
@@ -197,9 +196,8 @@ void apiGatherOption(InputIterator first, InputIterator last, Pred pred,
                      Option* option,
                      const std::shared_ptr<OptionParser>& optionParser)
 {
-  KeyVals raw(first, last);
-  for (const auto& item :
-       adaptLegacyOptions(raw, LegacyOptionSource::Library)) {
+  for (auto current = first; current != last; ++current) {
+    const auto& item = *current;
     PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
     if (!handler || !pred(handler)) {
@@ -490,13 +488,7 @@ const std::string& getGlobalOption(Session* session, const std::string& name)
   if (OptionParser::getInstance()->find(pref)) {
     return e->getOption()->get(pref);
   }
-  static thread_local std::string projected;
-  if (projectLegacyOption(e->getOption(), name, projected)) {
-    return projected;
-  }
-  else {
-    return "";
-  }
+  return "";
 }
 
 KeyVals getGlobalOptions(Session* session)
@@ -512,8 +504,6 @@ KeyVals getGlobalOptions(Session* session)
       options.push_back(KeyVals::value_type(pref->k, option->get(pref)));
     }
   }
-  const auto projected = projectLegacyOptions(option);
-  options.insert(options.end(), projected.begin(), projected.end());
   return options;
 }
 
@@ -695,13 +685,7 @@ const std::string& getRequestOption(const std::shared_ptr<Option>& option,
   if (OptionParser::getInstance()->find(pref)) {
     return option->get(pref);
   }
-  static thread_local std::string projected;
-  if (projectLegacyOption(option.get(), name, projected)) {
-    return projected;
-  }
-  else {
-    return "";
-  }
+  return "";
 }
 } // namespace
 
@@ -711,8 +695,6 @@ KeyVals getRequestOptions(const std::shared_ptr<Option>& option)
   KeyVals res;
   pushRequestOption(std::back_inserter(res), option,
                     OptionParser::getInstance());
-  const auto projected = projectLegacyOptions(option.get());
-  res.insert(res.end(), projected.begin(), projected.end());
   return res;
 }
 } // namespace
@@ -738,18 +720,12 @@ struct RequestGroupDH : public DownloadHandle {
       }
     }
   }
-  virtual int64_t getTotalLength() override
-  {
-    return group->getTotalLength();
-  }
+  virtual int64_t getTotalLength() override { return group->getTotalLength(); }
   virtual int64_t getCompletedLength() override
   {
     return group->getCompletedLength();
   }
-  virtual int64_t getUploadLength() override
-  {
-    return ts.allTimeUploadLength;
-  }
+  virtual int64_t getUploadLength() override { return ts.allTimeUploadLength; }
   virtual std::string getBitfield() override
   {
 #ifdef ENABLE_BITTORRENT
@@ -789,14 +765,8 @@ struct RequestGroupDH : public DownloadHandle {
   {
     return group->getDownloadContext()->getNumPieces();
   }
-  virtual int getConnections() override
-  {
-    return group->getNumConnection();
-  }
-  virtual int getErrorCode() override
-  {
-    return group->getLastErrorCode();
-  }
+  virtual int getConnections() override { return group->getNumConnection(); }
+  virtual int getErrorCode() override { return group->getLastErrorCode(); }
   virtual const std::vector<A2Gid>& getFollowedBy() override
   {
     return group->followedBy();
@@ -853,8 +823,7 @@ struct RequestGroupDH : public DownloadHandle {
     if (group->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
       auto torrentAttrs = static_cast<BtMetadata*>(
           group->getDownloadContext()->getAttribute(CTX_ATTR_BT).get());
-      return createBtMetaInfo(torrentAttrs,
-                              group->getBtDownload()->snapshot());
+      return createBtMetaInfo(torrentAttrs, group->getBtDownload()->snapshot());
     }
     else
 #endif // ENABLE_BITTORRENT
@@ -893,18 +862,12 @@ struct DownloadResultDH : public DownloadHandle {
     }
   }
   virtual int64_t getTotalLength() override { return dr->totalLength; }
-  virtual int64_t getCompletedLength() override
-  {
-    return dr->completedLength;
-  }
+  virtual int64_t getCompletedLength() override { return dr->completedLength; }
   virtual int64_t getUploadLength() override { return dr->uploadLength; }
   virtual std::string getBitfield() override { return dr->bitfield; }
   virtual int getDownloadSpeed() override { return 0; }
   virtual int getUploadSpeed() override { return 0; }
-  virtual const std::string& getInfoHash() override
-  {
-    return dr->infoHash;
-  }
+  virtual const std::string& getInfoHash() override { return dr->infoHash; }
   virtual size_t getPieceLength() override { return dr->pieceLength; }
   virtual int getNumPieces() override { return dr->numPieces; }
   virtual int getConnections() override { return 0; }

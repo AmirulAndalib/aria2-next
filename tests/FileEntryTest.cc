@@ -47,7 +47,7 @@ std::shared_ptr<FileEntry> createFileEntry()
 {
   auto fileEntry = std::make_shared<FileEntry>();
   fileEntry->setUris(std::vector<std::string>{"http://localhost/aria2.zip",
-                                              "ftp://localhost/aria2.zip",
+                                              "https://localhost/aria2.zip",
                                               "http://mirror/aria2.zip"});
   return fileEntry;
 }
@@ -114,7 +114,7 @@ void FileEntryTest::testGetRequest()
 
   auto req5th = fileEntry->getRequest(&selector, true, usedHosts);
   REQUIRE_EQ(std::string("localhost"), req5th->getHost());
-  REQUIRE_EQ(std::string("ftp"), req5th->getProtocol());
+  REQUIRE_EQ(std::string("https"), req5th->getProtocol());
 
   auto req6th = fileEntry->getRequest(&selector, true, usedHosts);
   REQUIRE_EQ(std::string("mirror"), req6th->getHost());
@@ -136,7 +136,7 @@ void FileEntryTest::testGetRequest_withoutUriReuse()
 
   auto req2nd = fileEntry->getRequest(&selector, false, usedHosts);
   REQUIRE_EQ(std::string("localhost"), req2nd->getHost());
-  REQUIRE_EQ(std::string("ftp"), req2nd->getProtocol());
+  REQUIRE_EQ(std::string("https"), req2nd->getProtocol());
 
   auto req3rd = fileEntry->getRequest(&selector, false, usedHosts);
   REQUIRE_EQ(std::string("mirror"), req3rd->getHost());
@@ -164,7 +164,7 @@ void FileEntryTest::testGetRequest_withUniqueProtocol()
   REQUIRE(!req3rd);
 
   REQUIRE_EQ((size_t)2, fileEntry->getRemainingUris().size());
-  REQUIRE_EQ(std::string("ftp://localhost/aria2.zip"),
+  REQUIRE_EQ(std::string("https://localhost/aria2.zip"),
                        fileEntry->getRemainingUris()[0]);
   REQUIRE_EQ(std::string("http://mirror/aria2.zip"),
                        fileEntry->getRemainingUris()[1]);
@@ -220,8 +220,8 @@ void FileEntryTest::testReuseUri()
   fileEntry->reuseUri(ignore);
   REQUIRE_EQ((size_t)2, fileEntry->getRemainingUris().size());
   auto uris = fileEntry->getRemainingUris();
-  REQUIRE_EQ(std::string("ftp://localhost/aria2.zip"), uris[0]);
-  REQUIRE_EQ(std::string("http://mirror/aria2.zip"), uris[1]);
+  REQUIRE_EQ(std::string("http://mirror/aria2.zip"), uris[0]);
+  REQUIRE_EQ(std::string("https://localhost/aria2.zip"), uris[1]);
   for (size_t i = 0; i < 2; ++i) {
     fileEntry->getRequest(&selector, false, usedHosts);
   }
@@ -231,7 +231,7 @@ void FileEntryTest::testReuseUri()
   fileEntry->reuseUri(ignore);
   REQUIRE_EQ((size_t)1, fileEntry->getRemainingUris().size());
   uris = fileEntry->getRemainingUris();
-  REQUIRE_EQ(std::string("ftp://localhost/aria2.zip"), uris[0]);
+  REQUIRE_EQ(std::string("https://localhost/aria2.zip"), uris[0]);
 }
 
 void FileEntryTest::testAddUri()
@@ -327,7 +327,7 @@ void FileEntryTest::testPutBackRequest()
   REQUIRE_EQ((size_t)3, uris.size());
   REQUIRE_EQ(std::string("http://localhost/aria2.zip"), uris[0]);
   REQUIRE_EQ(std::string("http://mirror/aria2.zip"), uris[1]);
-  REQUIRE_EQ(std::string("ftp://localhost/aria2.zip"), uris[2]);
+  REQUIRE_EQ(std::string("https://localhost/aria2.zip"), uris[2]);
 }
 
 } // namespace aria2

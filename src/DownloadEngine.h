@@ -60,8 +60,7 @@ class Option;
 class RequestGroupMan;
 class StatCalc;
 class SocketCore;
-class CookieStorage;
-class AuthConfigFactory;
+class CurlSession;
 class Request;
 class EventPoll;
 class Command;
@@ -129,8 +128,6 @@ private:
   std::chrono::milliseconds refreshInterval_;
   Timer lastRefresh_;
 
-  std::unique_ptr<CookieStorage> cookieStorage_;
-
 #ifdef ENABLE_BITTORRENT
   std::unique_ptr<BtSession> btSession_;
 #endif // ENABLE_BITTORRENT
@@ -139,7 +136,7 @@ private:
 
   std::unique_ptr<DNSCache> dnsCache_;
 
-  std::unique_ptr<AuthConfigFactory> authConfigFactory_;
+  std::unique_ptr<CurlSession> curlSession_;
 
 #ifdef ENABLE_WEBSOCKET
   std::unique_ptr<rpc::WebSocketSessionMan> webSocketSessionMan_;
@@ -153,6 +150,7 @@ private:
   void onEndOfRun();
 
   void afterEachIteration();
+  void rebalanceGlobalDownloadLimit();
 
   void poolSocket(const std::string& key, const SocketPoolEntry& entry);
 
@@ -231,7 +229,11 @@ public:
 
   Option* getOption() const { return option_; }
 
-  void setOption(Option* op) { option_ = op; }
+  void setOption(Option* op);
+
+  CurlSession* getCurlSession() const { return curlSession_.get(); }
+
+  void setCurlSession(std::unique_ptr<CurlSession> session);
 
   uint16_t getEd2kTcpPort() const { return ed2kTcpPort_; }
 
@@ -328,13 +330,8 @@ public:
 
   void evictSocketPool();
 
-  const std::unique_ptr<CookieStorage>& getCookieStorage() const;
-
 #ifdef ENABLE_BITTORRENT
-  const std::unique_ptr<BtSession>& getBtSession() const
-  {
-    return btSession_;
-  }
+  const std::unique_ptr<BtSession>& getBtSession() const { return btSession_; }
 
   void setBtSession(std::unique_ptr<BtSession> session);
 #endif // ENABLE_BITTORRENT
@@ -358,10 +355,6 @@ public:
                         uint16_t port);
 
   void removeCachedIPAddress(const std::string& hostname, uint16_t port);
-
-  void setAuthConfigFactory(std::unique_ptr<AuthConfigFactory> factory);
-
-  const std::unique_ptr<AuthConfigFactory>& getAuthConfigFactory() const;
 
   void setRefreshInterval(std::chrono::milliseconds interval);
 

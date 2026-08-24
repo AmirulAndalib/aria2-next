@@ -46,7 +46,7 @@ public:
 
   ~ProtocolDetector();
 
-  // Returns true if uri is http(s)/ftp, otherwise returns false.
+  // Returns true if uri is HTTP, HTTPS, or SFTP.
   bool isStreamProtocol(const std::string& uri) const;
 
   // Returns true if uri is a well-formed ED2K link.

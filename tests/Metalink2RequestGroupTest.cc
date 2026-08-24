@@ -52,10 +52,10 @@ void Metalink2RequestGroupTest::testGenerate()
     auto uris = rg->getDownloadContext()->getFirstFileEntry()->getUris();
     std::sort(uris.begin(), uris.end());
     REQUIRE_EQ((size_t)2, uris.size());
-    REQUIRE_EQ(std::string("ftp://ftphost/aria2-0.5.2.tar.bz2"),
-                         uris[0]);
     REQUIRE_EQ(std::string("http://httphost/aria2-0.5.2.tar.bz2"),
-                         uris[1]);
+               uris[0]);
+    REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
+               uris[1]);
 
     const std::shared_ptr<DownloadContext>& dctx = rg->getDownloadContext();
 

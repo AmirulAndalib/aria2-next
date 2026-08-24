@@ -25,6 +25,7 @@ std::string defaultDirectory();
 std::string btSessionFile(const Option* option);
 std::string btResumeDirectory(const Option* option);
 std::string ed2kDatabaseFile(const Option* option);
+std::string streamDatabaseFile(const Option* option);
 
 } // namespace state
 

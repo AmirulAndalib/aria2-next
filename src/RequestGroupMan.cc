@@ -44,7 +44,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "ProgressInfoFile.h"
 #include "RecoverableException.h"
 #include "RequestGroup.h"
 #include "Log.h"
@@ -59,9 +58,6 @@
 #include "ServerStatMan.h"
 #include "ServerStat.h"
 #include "SegmentMan.h"
-#include "FeedbackURISelector.h"
-#include "InorderURISelector.h"
-#include "AdaptiveURISelector.h"
 #include "Option.h"
 #include "prefs.h"
 #include "File.h"
@@ -128,8 +124,8 @@ RequestGroupMan::RequestGroupMan(
       removedErrorResult_(0),
       removedLastErrorResult_(error_code::FINISHED),
       maxDownloadResult_(option->getAsInt(PREF_MAX_DOWNLOAD_RESULT)),
-      openedFileCounter_(std::make_shared<OpenedFileCounter>(
-          this, DEFAULT_CORE_OPEN_FILES)),
+      openedFileCounter_(
+          std::make_shared<OpenedFileCounter>(this, DEFAULT_CORE_OPEN_FILES)),
       ed2kUploadQueue_(make_unique<ed2k::UploadQueue>(
           option->getAsInt(PREF_ED2K_UPLOAD_SLOTS))),
       ed2kSession_(make_unique<ed2k::Ed2kSession>(
@@ -388,9 +384,9 @@ public:
         if (group->isPauseRequested()) {
           if (!group->isRestartRequested()) {
             A2_LOG_INFO(fmt(_("Download GID#%s paused"),
-                              GroupId::toHex(group->getGID()).c_str()));
+                            GroupId::toHex(group->getGID()).c_str()));
           }
-          group->saveControlFile();
+          group->checkpointState();
         }
         else if (group->downloadFinished() &&
                  !group->getDownloadContext()->isChecksumVerificationNeeded()) {
@@ -398,11 +394,11 @@ public:
           group->reportDownloadFinished();
           if (group->allDownloadFinished() &&
               !group->getOption()->getAsBool(PREF_FORCE_SAVE)) {
-            group->removeControlFile();
+            group->removeState();
             saveSignature(group);
           }
           else {
-            group->saveControlFile();
+            group->checkpointState();
           }
           std::vector<std::shared_ptr<RequestGroup>> nextGroups;
           group->postDownloadProcessing(nextGroups);
@@ -414,15 +410,14 @@ public:
           }
         }
         else {
-          A2_LOG_INFO(
-              fmt(_("Download GID#%s not complete: %s"),
-                  GroupId::toHex(group->getGID()).c_str(),
-                  group->getDownloadContext()->getBasePath().c_str()));
+          A2_LOG_INFO(fmt(_("Download GID#%s not complete: %s"),
+                          GroupId::toHex(group->getGID()).c_str(),
+                          group->getDownloadContext()->getBasePath().c_str()));
           if (group->isUserRequestedHalt()) {
-            group->removeControlFile();
+            group->removeState();
           }
           else {
-            group->saveControlFile();
+            group->checkpointState();
           }
         }
       }
@@ -479,24 +474,6 @@ void RequestGroupMan::removeStoppedGroup(DownloadEngine* e)
   if (numRemoved > 0) {
     A2_LOG_TRACE(fmt("%lu RequestGroup(s) deleted.",
                      static_cast<unsigned long>(numRemoved)));
-  }
-}
-
-void RequestGroupMan::configureRequestGroup(
-    const std::shared_ptr<RequestGroup>& requestGroup) const
-{
-  const std::string& uriSelectorValue =
-      requestGroup->getOption()->get(PREF_URI_SELECTOR);
-  if (uriSelectorValue == V_FEEDBACK) {
-    requestGroup->setURISelector(
-        make_unique<FeedbackURISelector>(serverStatMan_));
-  }
-  else if (uriSelectorValue == V_INORDER) {
-    requestGroup->setURISelector(make_unique<InorderURISelector>());
-  }
-  else if (uriSelectorValue == V_ADAPTIVE) {
-    requestGroup->setURISelector(
-        make_unique<AdaptiveURISelector>(serverStatMan_, requestGroup.get()));
   }
 }
 
@@ -565,7 +542,6 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
     // Drop pieceStorage here because paused download holds its
     // reference.
     groupToAdd->dropPieceStorage();
-    configureRequestGroup(groupToAdd);
     groupToAdd->setRequestGroupMan(this);
     groupToAdd->setState(RequestGroup::STATE_ACTIVE);
     ++numActive_;
@@ -639,11 +615,11 @@ void RequestGroupMan::save()
     if (rg->allDownloadFinished() &&
         !rg->getDownloadContext()->isChecksumVerificationNeeded() &&
         !rg->getOption()->getAsBool(PREF_FORCE_SAVE)) {
-      rg->removeControlFile();
+      rg->removeState();
     }
     else {
       try {
-        rg->saveControlFile();
+        rg->checkpointState();
       }
       catch (RecoverableException& e) {
         A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, e);

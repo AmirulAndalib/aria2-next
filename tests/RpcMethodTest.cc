@@ -671,11 +671,6 @@ void RpcMethodTest::testGetOption()
   const Dict* resopt = downcast<Dict>(res.param);
   REQUIRE_EQ(std::string("alpha"),
              downcast<String>(resopt->get(PREF_DIR->k))->s());
-#ifdef ENABLE_BITTORRENT
-  REQUIRE_EQ(std::string("true"),
-             downcast<String>(resopt->get("bt-require-crypto"))->s());
-#endif
-
   req = createReq(GetOptionRpcMethod::getMethodName());
   req.params->append(dr->gid->toHex());
   res = m.execute(std::move(req), e_.get());
@@ -766,8 +761,7 @@ void RpcMethodTest::testChangeGlobalOption()
   opt->put(PREF_MAX_OVERALL_DOWNLOAD_LIMIT->k, "100K");
 #ifdef ENABLE_BITTORRENT
   opt->put(PREF_MAX_OVERALL_UPLOAD_LIMIT->k, "50K");
-  opt->put(PREF_BT_ENCRYPTION->k, "enabled");
-  opt->put("bt-tracker-timeout", "19");
+  opt->put(PREF_BT_ENCRYPTION->k, V_PREFERRED);
 #endif // ENABLE_BITTORRENT
   req.params->append(std::move(opt));
   auto res = m.execute(std::move(req), e_.get());
@@ -783,8 +777,6 @@ void RpcMethodTest::testChangeGlobalOption()
   REQUIRE_EQ(std::string("51200"),
              e_->getOption()->get(PREF_MAX_OVERALL_UPLOAD_LIMIT));
   REQUIRE_EQ(V_PREFERRED, e_->getOption()->get(PREF_BT_ENCRYPTION));
-  REQUIRE_EQ(std::string("19"),
-             e_->getOption()->get(PREF_BT_TRACKER_RECEIVE_TIMEOUT));
 #endif // ENABLE_BITTORRENT
 }
 
@@ -1560,11 +1552,9 @@ void RpcMethodTest::testBtFileSelectionGate()
   e_->getRequestGroupMan()->addReservedGroup(group);
 
   REQUIRE(download->awaitingFileSelection());
-  REQUIRE_EQ(BtSnapshot::State::Paused,
-             download->snapshot().state);
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
   download->applyTransportState(BtSnapshot::State::Downloading);
-  REQUIRE_EQ(BtSnapshot::State::Paused,
-             download->snapshot().state);
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
   BtErrorSnapshot injectedError;
   injectedError.present = true;
   injectedError.recoverable = true;
@@ -1606,8 +1596,7 @@ void RpcMethodTest::testBtFileSelectionGate()
   REQUIRE_EQ(std::string("0.000000"), getString(waitingBt, "progress"));
   REQUIRE(waitingBt->containsKey("error"));
   REQUIRE_EQ(std::string("true"),
-             getString(downcast<Dict>(waitingBt->get("error")),
-                       "recoverable"));
+             getString(downcast<Dict>(waitingBt->get("error")), "recoverable"));
 
   UnpauseRpcMethod unpause;
   request = createReq(UnpauseRpcMethod::getMethodName());
@@ -1617,8 +1606,9 @@ void RpcMethodTest::testBtFileSelectionGate()
   const auto unpauseError = downcast<Dict>(response.param);
   const auto errorKey =
       unpauseError->containsKey("message") ? "message" : "faultString";
-  REQUIRE(getString(unpauseError, errorKey)
-              .find("awaiting a valid select-file") != std::string::npos);
+  REQUIRE(
+      getString(unpauseError, errorKey).find("awaiting a valid select-file") !=
+      std::string::npos);
   REQUIRE(group->isPauseRequested());
   REQUIRE(download->awaitingFileSelection());
   REQUIRE(taskOption->getAsBool(PREF_PAUSE_METADATA));
@@ -1781,13 +1771,12 @@ void RpcMethodTest::testBtResumeProgressAuthority()
     const auto rpcFiles = downcast<List>(task->get("files"));
     REQUIRE_EQ(files.size(), rpcFiles->size());
     for (size_t i = 0; i < files.size(); ++i) {
-      REQUIRE_EQ(util::itos(files[i]),
-                 getString(downcast<Dict>(rpcFiles->get(i)),
-                           "completedLength"));
+      REQUIRE_EQ(
+          util::itos(files[i]),
+          getString(downcast<Dict>(rpcFiles->get(i)), "completedLength"));
     }
     REQUIRE_EQ(progress,
-               getString(downcast<Dict>(task->get("bittorrent")),
-                         "progress"));
+               getString(downcast<Dict>(task->get("bittorrent")), "progress"));
   };
 
   assertProgress(250, {200, 50}, "0.650000");

@@ -237,6 +237,7 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       use64BitOffsets_(requestGroup->getDownloadContext()->getTotalLength() >
                        std::numeric_limits<uint32_t>::max()),
       incoming_(false),
+      countAsDownloadCommand_(countAsDownloadCommand),
       firewallCheck_(firewallCheck),
       closeAfterOutbox_(false),
       tailReclaimTimer_(Timer::zero()),
@@ -296,6 +297,7 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       use64BitOffsets_(requestGroup->getDownloadContext()->getTotalLength() >
                        std::numeric_limits<uint32_t>::max()),
       incoming_(true),
+      countAsDownloadCommand_(true),
       firewallCheck_(false),
       closeAfterOutbox_(false),
       tailReclaimTimer_(Timer::zero()),
@@ -3038,6 +3040,19 @@ bool Ed2kCommand::executeInternal()
       state_ = State::WRITE;
     }
   }
+}
+
+bool Ed2kCommand::prepareForRetry(time_t)
+{
+  if (incoming_ || getRequestGroup()->isHaltRequested()) {
+    return true;
+  }
+  getDownloadEngine()->addCommand(make_unique<Ed2kCommand>(
+      getDownloadEngine()->newCUID(), getRequestGroup(), getDownloadEngine(),
+      endpoint_, mode_ == Mode::SERVER, countAsDownloadCommand_,
+      firewallCheck_));
+  getDownloadEngine()->setNoWait(true);
+  return true;
 }
 
 bool Ed2kCommand::noCheck() const

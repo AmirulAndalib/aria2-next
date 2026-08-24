@@ -18,7 +18,7 @@ You must use this program at your own risk.
 Introduction
 ------------
 
-aria2-next downloads files over HTTP(S), FTP, SFTP, BitTorrent, Metalink, and
+aria2-next downloads files over HTTP(S), SFTP, BitTorrent, Metalink, and
 ED2K file links. BitTorrent v1, v2, and hybrid torrents are handled by
 libtorrent-rasterbar 2.1. Metalink chunk checksums validate downloaded chunks.
 
@@ -39,17 +39,17 @@ Features
 Here is a list of features:
 
 * Command-line interface
-* Download files through HTTP(S)/FTP/SFTP/BitTorrent/ED2K
+* Download files through HTTP(S)/SFTP/BitTorrent/ED2K
 * Segmented downloading
-* Metalink version 4 (RFC 5854) support for HTTP/FTP/SFTP
-* Metalink version 3.0 support for HTTP/FTP/SFTP
+* Metalink version 4 (RFC 5854) support for HTTP/SFTP
+* Metalink version 3.0 support for HTTP/SFTP
 * Metalink/HTTP (RFC 6249) support
-* HTTP/1.1 implementation
+* libcurl HTTP/1.1, HTTP/2, HTTPS, and SFTP transport
 * HTTP Proxy support
 * HTTP BASIC authentication support
 * HTTP Proxy authentication support
 * Well-known environment variables for proxy: ``http_proxy``,
-  ``https_proxy``, ``ftp_proxy``, ``all_proxy`` and ``no_proxy``
+  ``https_proxy``, ``all_proxy`` and ``no_proxy``
 * HTTP gzip, deflate content encoding support
 * Verify peer using given trusted CA certificate in HTTPS
 * Client certificate authentication in HTTPS
@@ -60,7 +60,7 @@ Here is a list of features:
 * Save Cookies in the Mozilla/Firefox (1.x/2.x)/Netscape format.
 * Custom HTTP Header support
 * Persistent Connections support
-* FTP/SFTP through HTTP Proxy
+* SFTP through HTTP Proxy
 * Download/Upload speed throttling
 * BitTorrent extensions: Fast extension, DHT, PEX, MSE/PSE,
   Multi-Tracker, UDP tracker
@@ -109,7 +109,7 @@ Dependency
 features                  dependency
 ======================== ========================================
 HTTPS                    OpenSSL or Windows TLS (Schannel)
-SFTP                     libssh2
+HTTP/HTTPS/SFTP          libcurl with nghttp2 and libssh2
 BitTorrent               None (OpenSSL is used when present)
 ED2K                     None
 Metalink                 Expat
@@ -333,7 +333,7 @@ Other things should be noted
 Metalink
 --------
 
-The current Metalink implementation supports HTTP(S), FTP, and SFTP.
+The current Metalink implementation supports HTTP(S) and SFTP.
 Other protocols in Metalink documents are ignored. Both Metalink4 (RFC 5854) and
 Metalink version 3.0 documents are supported.
 
@@ -382,7 +382,7 @@ which location you prefer, you can use ``--metalink-location`` option.
 netrc
 -----
 
-netrc support is enabled by default for HTTP(S)/FTP/SFTP.  To disable
+netrc support is enabled by default for HTTP(S)/SFTP through libcurl. To disable
 netrc support, specify -n command-line option.  Your .netrc file
 should have correct permissions(600).
 
@@ -405,11 +405,8 @@ References
 
 * `aria2 Online Manual <https://aria2.github.io/manual/en/html/>`_
 * https://github.com/AnInsomniacy/aria2-next
-* `RFC 959 FILE TRANSFER PROTOCOL (FTP) <http://tools.ietf.org/html/rfc959>`_
 * `RFC 1738 Uniform Resource Locators (URL) <http://tools.ietf.org/html/rfc1738>`_
-* `RFC 2428 FTP Extensions for IPv6 and NATs <http://tools.ietf.org/html/rfc2428>`_
 * `RFC 2616 Hypertext Transfer Protocol -- HTTP/1.1 <http://tools.ietf.org/html/rfc2616>`_
-* `RFC 3659 Extensions to FTP <http://tools.ietf.org/html/rfc3659>`_
 * `RFC 3986 Uniform Resource Identifier (URI): Generic Syntax <http://tools.ietf.org/html/rfc3986>`_
 * `RFC 4038 Application Aspects of IPv6 Transition <http://tools.ietf.org/html/rfc4038>`_
 * `RFC 5854 The Metalink Download Description Format <http://tools.ietf.org/html/rfc5854>`_

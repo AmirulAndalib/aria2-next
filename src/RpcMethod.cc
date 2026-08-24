@@ -40,7 +40,6 @@
 #include "OptionParser.h"
 #include "OptionHandler.h"
 #include "Option.h"
-#include "LegacyOptionAdapter.h"
 #include "array_fun.h"
 #include "download_helper.h"
 #include "RpcRequest.h"
@@ -145,8 +144,7 @@ void gatherOption(const Dict* options, Pred pred, Option* option,
   if (!options) {
     return;
   }
-  for (const auto& item : adaptLegacyOptions(collectScalarOptions(options),
-                                               LegacyOptionSource::Rpc)) {
+  for (const auto& item : collectScalarOptions(options)) {
     PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
     if (!handler || !pred(handler)) {
@@ -188,8 +186,7 @@ void RpcMethod::gatherChangeableOption(Option* option, Option* pendingOption,
     return;
   }
 
-  const auto scalarOptions = adaptLegacyOptions(
-      collectScalarOptions(optionsDict), LegacyOptionSource::Rpc);
+  const auto scalarOptions = collectScalarOptions(optionsDict);
   for (const auto& item : scalarOptions) {
     auto pref = option::k2p(item.first);
     auto handler = optionParser_->find(pref);

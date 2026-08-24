@@ -45,9 +45,10 @@
 #include "Option.h"
 #include "OptionParser.h"
 #include "OptionHandler.h"
-#include "LegacyOptionAdapter.h"
 #include "DownloadEngine.h"
 #include "RequestGroup.h"
+#include "CurlSession.h"
+#include "CurlDownload.h"
 #include "download_helper.h"
 #include "util.h"
 #include "fmt.h"
@@ -548,6 +549,10 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
           e->getBtSession()->discard(group->getBtDownload());
         }
 #endif
+        if (group->getCurlDownload() && e->getCurlSession()) {
+          e->getCurlSession()->stop(group->getCurlDownload(), false);
+        }
+        group->removeState();
         e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {
@@ -1536,8 +1541,8 @@ ReplaceBtWebSeedsRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   return createGIDResponse(download->group()->getGID());
 }
 
-std::unique_ptr<ValueBase>
-AddBtPeersRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
+std::unique_ptr<ValueBase> AddBtPeersRpcMethod::process(const RpcRequest& req,
+                                                        DownloadEngine* e)
 {
   const auto download = requireBtDownload(req, e);
   const List* peersParam = checkRequiredParam<List>(req, 1);
@@ -1615,18 +1620,15 @@ GetBtSessionStatusRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   result->put("payloadUploaded", util::uitos(status.payloadUploaded));
   result->put("trackerDownloaded", util::uitos(status.trackerDownloaded));
   result->put("trackerUploaded", util::uitos(status.trackerUploaded));
-  result->put("ipOverheadDownloaded",
-              util::uitos(status.ipOverheadDownloaded));
+  result->put("ipOverheadDownloaded", util::uitos(status.ipOverheadDownloaded));
   result->put("ipOverheadUploaded", util::uitos(status.ipOverheadUploaded));
   result->put("dhtDownloaded", util::uitos(status.dhtDownloaded));
   result->put("dhtUploaded", util::uitos(status.dhtUploaded));
   result->put("diskBlocksInUse", util::uitos(status.diskBlocksInUse));
   result->put("queuedDiskJobs", util::uitos(status.queuedDiskJobs));
-  result->put("averageDiskJobTime",
-              util::uitos(status.averageDiskJobTime));
+  result->put("averageDiskJobTime", util::uitos(status.averageDiskJobTime));
   result->put("diskRequestLatency", util::uitos(status.diskRequestLatency));
-  result->put("diskReadWaitingPeers",
-              util::uitos(status.diskReadWaitingPeers));
+  result->put("diskReadWaitingPeers", util::uitos(status.diskReadWaitingPeers));
   result->put("diskWriteWaitingPeers",
               util::uitos(status.diskWriteWaitingPeers));
   if (!status.lastPerformanceWarning.empty()) {
@@ -1637,8 +1639,7 @@ GetBtSessionStatusRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     performanceWarnings->put(warning.first, util::uitos(warning.second));
   }
   result->put("performanceWarnings", std::move(performanceWarnings));
-  result->put("dhtStateHealthy",
-              status.dhtStateHealthy ? VLB_TRUE : VLB_FALSE);
+  result->put("dhtStateHealthy", status.dhtStateHealthy ? VLB_TRUE : VLB_FALSE);
   if (!status.portMappingError.empty()) {
     result->put("portMappingError", status.portMappingError);
   }
@@ -1839,9 +1840,6 @@ void pushRequestOption(Dict* dict, const std::shared_ptr<Option>& option,
       dict->put(pref->k, option->get(pref));
     }
   }
-  for (const auto& item : projectLegacyOptions(option.get())) {
-    dict->put(item.first, item.second);
-  }
 }
 } // namespace
 
@@ -1880,9 +1878,6 @@ GetGlobalOptionRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     if (h) {
       result->put(pref->k, e->getOption()->get(pref));
     }
-  }
-  for (const auto& item : projectLegacyOptions(e->getOption())) {
-    result->put(item.first, item.second);
   }
   return std::move(result);
 }
@@ -1935,6 +1930,22 @@ std::unique_ptr<ValueBase> GetServersRpcMethod::process(const RpcRequest& req,
         fmt("No active download for GID#%s", GroupId::toHex(gid).c_str()));
   }
   auto result = List::g();
+  if (const auto& download = group->getCurlDownload()) {
+    auto fileEntry = Dict::g();
+    fileEntry->put(KEY_INDEX, "1");
+    auto servers = List::g();
+    if (!download->snapshot().currentUri.empty() && !download->stopped()) {
+      auto server = Dict::g();
+      server->put(KEY_URI, download->snapshot().currentUri);
+      server->put(KEY_CURRENT_URI, download->snapshot().currentUri);
+      server->put(KEY_DOWNLOAD_SPEED,
+                  util::itos(download->snapshot().downloadSpeed));
+      servers->append(std::move(server));
+    }
+    fileEntry->put(KEY_SERVERS, std::move(servers));
+    result->append(std::move(fileEntry));
+    return std::move(result);
+  }
   size_t index = 1;
   for (auto& fe : group->getDownloadContext()->getFileEntries()) {
     auto fileEntry = Dict::g();
@@ -2005,10 +2016,12 @@ std::unique_ptr<ValueBase> ChangeUriRpcMethod::process(const RpcRequest& req,
       }
     }
   }
-  if (addcount && group->getPieceStorage()) {
+  if (addcount || delcount) {
     std::vector<std::unique_ptr<Command>> commands;
     group->createNextCommand(commands, e);
     e->addCommand(std::move(commands));
+  }
+  if (addcount && group->getPieceStorage()) {
     group->getSegmentMan()->recognizeSegmentFor(s);
   }
   auto res = List::g();

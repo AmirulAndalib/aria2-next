@@ -214,6 +214,7 @@ struct BtSession::Impl {
   std::map<lt::torrent_handle, std::weak_ptr<BtDownload>> handles;
   std::map<std::string, PendingDelete> pendingDeletes;
   BtSessionTransferStat transferStat;
+  int downloadRateLimit = 0;
   BtPeerBlocklist blocklist;
   uint64_t filterRevision = 0;
   uint16_t listenPort = 0;
@@ -265,6 +266,7 @@ struct BtSession::Impl {
   explicit Impl(const Option* option)
       : option(option),
         config(makeBtConfig(option)),
+        downloadRateLimit(option->getAsInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT)),
         sessionStateFile(state::btSessionFile(option))
   {
     metrics.peerSockets = lt::find_metric_idx("peer.num_peers_connected");
@@ -2106,10 +2108,24 @@ void BtSession::applyGlobalOptions(const Option* option)
   const bool networkChanged = !impl_->config.hasSameNetwork(config);
   impl_->session->apply_settings(config.settings);
   impl_->config = std::move(config);
+  impl_->downloadRateLimit =
+      option->getAsInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT);
   if (networkChanged) {
     impl_->listenEndpoints.clear();
     impl_->listenPort = 0;
   }
+}
+
+void BtSession::setGlobalDownloadLimit(int limit)
+{
+  limit = std::max(0, limit);
+  if (impl_->downloadRateLimit == limit) {
+    return;
+  }
+  lt::settings_pack settings;
+  settings.set_int(lt::settings_pack::download_rate_limit, limit);
+  impl_->session->apply_settings(settings);
+  impl_->downloadRateLimit = limit;
 }
 
 void BtSession::validateGlobalOptions(const Option* option) const

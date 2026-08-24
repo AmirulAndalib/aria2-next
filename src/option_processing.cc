@@ -263,7 +263,6 @@ error_code::Value option_processing(Option& op, bool standalone,
     // Override configuration with environment variables.
     overrideWithEnv(*confOption, oparser, PREF_HTTP_PROXY, "http_proxy");
     overrideWithEnv(*confOption, oparser, PREF_HTTPS_PROXY, "https_proxy");
-    overrideWithEnv(*confOption, oparser, PREF_FTP_PROXY, "ftp_proxy");
     overrideWithEnv(*confOption, oparser, PREF_ALL_PROXY, "all_proxy");
     overrideWithEnv(*confOption, oparser, PREF_NO_PROXY, "no_proxy");
     if (!standalone) {

@@ -41,14 +41,12 @@
 #include "PieceStorage.h"
 #include "Command.h"
 #include "FileAllocationEntry.h"
-#include "StreamFileAllocationEntry.h"
 
 namespace aria2 {
 
 ChecksumCheckIntegrityEntry::ChecksumCheckIntegrityEntry(
     RequestGroup* requestGroup, std::unique_ptr<Command> nextCommand)
-    : CheckIntegrityEntry{requestGroup, std::move(nextCommand)},
-      redownload_{false}
+    : CheckIntegrityEntry{requestGroup, std::move(nextCommand)}
 {
 }
 
@@ -87,15 +85,6 @@ void ChecksumCheckIntegrityEntry::onDownloadFinished(
 void ChecksumCheckIntegrityEntry::onDownloadIncomplete(
     std::vector<std::unique_ptr<Command>>& commands, DownloadEngine* e)
 {
-  if (redownload_) {
-    proceedFileAllocation(commands,
-                          make_unique<StreamFileAllocationEntry>(
-                              getRequestGroup(), popNextCommand()),
-                          e);
-    return;
-  }
-
-  // If we don't redownload, set error code to indicate checksum error
   getRequestGroup()->setLastErrorCode(error_code::CHECKSUM_ERROR);
 }
 

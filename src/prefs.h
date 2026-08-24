@@ -90,19 +90,12 @@ extern const std::string V_WARN;
 extern const std::string V_ERROR;
 extern const std::string V_INORDER;
 extern const std::string A2_V_RANDOM;
-extern const std::string V_FEEDBACK;
-extern const std::string V_ADAPTIVE;
 extern const std::string V_EPOLL;
 extern const std::string V_KQUEUE;
 extern const std::string V_POLL;
 extern const std::string V_SELECT;
-extern const std::string V_BINARY;
-extern const std::string V_ASCII;
-extern const std::string V_GET;
-extern const std::string V_TUNNEL;
 extern const std::string V_HTTP;
 extern const std::string V_HTTPS;
-extern const std::string V_FTP;
 extern const std::string V_PREFERRED;
 extern const std::string V_DISABLED;
 extern const std::string V_REQUIRED;
@@ -128,7 +121,7 @@ extern PrefPtr PREF_CONNECT_TIMEOUT;
 // values: 1*digit
 extern PrefPtr PREF_MAX_TRIES;
 // values: 1*digit
-extern PrefPtr PREF_AUTO_SAVE_INTERVAL;
+extern PrefPtr PREF_STATE_SAVE_INTERVAL;
 // values: a string that your file system recognizes as a file name.
 extern PrefPtr PREF_LOG;
 // values: 1*digit
@@ -192,7 +185,6 @@ extern PrefPtr PREF_AUTO_FILE_RENAMING;
 // value: true | false
 extern PrefPtr PREF_PARAMETERIZED_URI;
 // value: true | false
-extern PrefPtr PREF_ALLOW_PIECE_LENGTH_CHANGE;
 // value: true | false
 extern PrefPtr PREF_NO_CONF;
 // value: string
@@ -209,14 +201,6 @@ extern PrefPtr PREF_SUMMARY_INTERVAL;
 extern PrefPtr PREF_LOG_LEVEL;
 // value: trace, debug, info, warn, error
 extern PrefPtr PREF_CONSOLE_LOG_LEVEL;
-// value: inorder | feedback | adaptive
-extern PrefPtr PREF_URI_SELECTOR;
-// value: 1*digit
-extern PrefPtr PREF_SERVER_STAT_TIMEOUT;
-// value: string that your file system recognizes as a file name.
-extern PrefPtr PREF_SERVER_STAT_IF;
-// value: string that your file system recognizes as a file name.
-extern PrefPtr PREF_SERVER_STAT_OF;
 // value: true | false
 extern PrefPtr PREF_REMOTE_TIME;
 // value: 1*digit
@@ -244,8 +228,6 @@ extern PrefPtr PREF_RPC_SECURE;
 extern PrefPtr PREF_RPC_SAVE_UPLOAD_METADATA;
 // value: true | false
 extern PrefPtr PREF_DRY_RUN;
-// value: true | false
-extern PrefPtr PREF_REUSE_URI;
 // value: string
 extern PrefPtr PREF_ON_DOWNLOAD_START;
 extern PrefPtr PREF_ON_DOWNLOAD_PAUSE;
@@ -261,7 +243,6 @@ extern PrefPtr PREF_DISABLE_IPV6;
 // value: true | false
 extern PrefPtr PREF_HUMAN_READABLE;
 // value: true | false
-extern PrefPtr PREF_REMOVE_CONTROL_FILE;
 // value: true | false
 extern PrefPtr PREF_ALWAYS_RESUME;
 // value: 1*digit
@@ -273,9 +254,6 @@ extern PrefPtr PREF_MAX_CONNECTION_PER_SERVER;
 // value: 1*digit
 extern PrefPtr PREF_MIN_SPLIT_SIZE;
 // value: true | false
-extern PrefPtr PREF_CONDITIONAL_GET;
-// value: true | false
-extern PrefPtr PREF_SELECT_LEAST_USED_HOST;
 // value: true | false
 // value: 1*digit
 extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
@@ -348,19 +326,9 @@ extern PrefPtr PREF_STDERR;
 // value: true | false
 extern PrefPtr PREF_KEEP_UNFINISHED_DOWNLOAD_RESULT;
 
-/**
- * FTP related preferences
- */
-extern PrefPtr PREF_FTP_USER;
-extern PrefPtr PREF_FTP_PASSWD;
-// values: binary | ascii
-extern PrefPtr PREF_FTP_TYPE;
-// values: true | false
-extern PrefPtr PREF_FTP_PASV;
-// values: true | false
-extern PrefPtr PREF_FTP_REUSE_CONNECTION;
-// values: hashType=digest
-extern PrefPtr PREF_SSH_HOST_KEY_MD;
+extern PrefPtr PREF_SFTP_USER;
+extern PrefPtr PREF_SFTP_PASSWD;
+extern PrefPtr PREF_SSH_HOST_KEY_SHA256;
 
 /**
  * HTTP related preferences
@@ -376,9 +344,6 @@ extern PrefPtr PREF_SAVE_COOKIES;
 // values: true | false
 extern PrefPtr PREF_ENABLE_HTTP_KEEP_ALIVE;
 // values: true | false
-extern PrefPtr PREF_ENABLE_HTTP_PIPELINING;
-// value: 1*digit
-extern PrefPtr PREF_MAX_HTTP_PIPELINING;
 // value: string
 extern PrefPtr PREF_HEADER;
 // value: string that your file system recognizes as a file name.
@@ -390,35 +355,24 @@ extern PrefPtr PREF_CA_CERTIFICATE;
 // value: true | false
 extern PrefPtr PREF_CHECK_CERTIFICATE;
 // value: true | false
-extern PrefPtr PREF_USE_HEAD;
-// value: true | false
-extern PrefPtr PREF_HTTP_AUTH_CHALLENGE;
 // value: true | false
 extern PrefPtr PREF_HTTP_NO_CACHE;
 // value: true | false
 extern PrefPtr PREF_HTTP_ACCEPT_GZIP;
 // value: true | false
-extern PrefPtr PREF_CONTENT_DISPOSITION_DEFAULT_UTF8;
-// value: true | false
-extern PrefPtr PREF_NO_WANT_DIGEST_HEADER;
 
 /**;
  * Proxy related preferences
  */
 extern PrefPtr PREF_HTTP_PROXY;
 extern PrefPtr PREF_HTTPS_PROXY;
-extern PrefPtr PREF_FTP_PROXY;
 extern PrefPtr PREF_ALL_PROXY;
 // values: comma separated hostname or domain
 extern PrefPtr PREF_NO_PROXY;
-// values: get | tunnel
-extern PrefPtr PREF_PROXY_METHOD;
 extern PrefPtr PREF_HTTP_PROXY_USER;
 extern PrefPtr PREF_HTTP_PROXY_PASSWD;
 extern PrefPtr PREF_HTTPS_PROXY_USER;
 extern PrefPtr PREF_HTTPS_PROXY_PASSWD;
-extern PrefPtr PREF_FTP_PROXY_USER;
-extern PrefPtr PREF_FTP_PROXY_PASSWD;
 extern PrefPtr PREF_ALL_PROXY_USER;
 extern PrefPtr PREF_ALL_PROXY_PASSWD;
 
@@ -575,7 +529,7 @@ extern PrefPtr PREF_METALINK_OS;
 extern PrefPtr PREF_METALINK_LOCATION;
 // values: true | false | mem
 extern PrefPtr PREF_FOLLOW_METALINK;
-// values: http | https | ftp | none
+// values: http | https | none
 extern PrefPtr PREF_METALINK_PREFERRED_PROTOCOL;
 // values: true | false
 extern PrefPtr PREF_METALINK_ENABLE_UNIQUE_PROTOCOL;

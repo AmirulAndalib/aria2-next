@@ -300,21 +300,21 @@ void UriTest::testSetUri20()
 void UriTest::testSetUri_zeroUsername()
 {
   UriStruct us;
-  REQUIRE(!parse(us, "ftp://@localhost/download/aria2-1.0.0.tar.bz2"));
+  REQUIRE(!parse(us, "sftp://@localhost/download/aria2-1.0.0.tar.bz2"));
 
-  REQUIRE(!parse(us, "ftp://:@localhost/download/aria2-1.0.0.tar.bz2"));
+  REQUIRE(!parse(us, "sftp://:@localhost/download/aria2-1.0.0.tar.bz2"));
 
   REQUIRE(
-      !parse(us, "ftp://:pass@localhost/download/aria2-1.0.0.tar.bz2"));
+      !parse(us, "sftp://:pass@localhost/download/aria2-1.0.0.tar.bz2"));
 }
 
 void UriTest::testSetUri_username()
 {
   UriStruct us;
   REQUIRE(
-      parse(us, "ftp://aria2@user@localhost/download/aria2-1.0.0.tar.bz2"));
-  REQUIRE_EQ(std::string("ftp"), us.protocol);
-  REQUIRE_EQ((uint16_t)21, us.port);
+      parse(us, "sftp://aria2@user@localhost/download/aria2-1.0.0.tar.bz2"));
+  REQUIRE_EQ(std::string("sftp"), us.protocol);
+  REQUIRE_EQ((uint16_t)22, us.port);
   REQUIRE_EQ(std::string("localhost"), us.host);
   REQUIRE_EQ(std::string("/download/"), us.dir);
   REQUIRE_EQ(std::string("aria2-1.0.0.tar.bz2"), us.file);
@@ -326,10 +326,10 @@ void UriTest::testSetUri_usernamePassword()
 {
   UriStruct us;
   REQUIRE(parse(us,
-                       "ftp://aria2@user%40:aria2@pass%40@localhost/download/"
+                       "sftp://aria2@user%40:aria2@pass%40@localhost/download/"
                        "aria2-1.0.0.tar.bz2"));
-  REQUIRE_EQ(std::string("ftp"), us.protocol);
-  REQUIRE_EQ((uint16_t)21, us.port);
+  REQUIRE_EQ(std::string("sftp"), us.protocol);
+  REQUIRE_EQ((uint16_t)22, us.port);
   REQUIRE_EQ(std::string("pass%40@localhost"), us.host);
   REQUIRE_EQ(std::string("/download/"), us.dir);
   REQUIRE_EQ(std::string("aria2-1.0.0.tar.bz2"), us.file);
@@ -337,7 +337,7 @@ void UriTest::testSetUri_usernamePassword()
   REQUIRE_EQ(std::string("aria2"), us.password);
 
   // make sure that after new uri is set, username and password are updated.
-  REQUIRE(parse(us, "ftp://localhost/download/aria2-1.0.0.tar.bz2"));
+  REQUIRE(parse(us, "sftp://localhost/download/aria2-1.0.0.tar.bz2"));
   REQUIRE_EQ(std::string(""), us.username);
   REQUIRE_EQ(std::string(""), us.password);
 }
@@ -424,20 +424,20 @@ void UriTest::testConstruct()
   }
   {
     UriStruct us;
-    REQUIRE(parse(us, "ftp://user%40@host/dir/file"));
-    REQUIRE_EQ(std::string("ftp://user%40@host/dir/file"),
+    REQUIRE(parse(us, "sftp://user%40@host/dir/file"));
+    REQUIRE_EQ(std::string("sftp://user%40@host/dir/file"),
                          construct(us));
   }
   {
     UriStruct us;
-    REQUIRE(parse(us, "ftp://user:@host/dir/file"));
-    REQUIRE_EQ(std::string("ftp://user:@host/dir/file"),
+    REQUIRE(parse(us, "sftp://user:@host/dir/file"));
+    REQUIRE_EQ(std::string("sftp://user:@host/dir/file"),
                          construct(us));
   }
   {
     UriStruct us;
-    REQUIRE(parse(us, "ftp://user:passwd%40@host/dir/file"));
-    REQUIRE_EQ(std::string("ftp://user:passwd%40@host/dir/file"),
+    REQUIRE(parse(us, "sftp://user:passwd%40@host/dir/file"));
+    REQUIRE_EQ(std::string("sftp://user:passwd%40@host/dir/file"),
                          construct(us));
   }
 }
@@ -447,9 +447,9 @@ void UriTest::testSwap()
   UriStruct us1;
   REQUIRE(parse(us1, "http://u1:p1@[::1]/dir1/file1?k1=v1"));
   UriStruct us2;
-  REQUIRE(parse(us2, "ftp://host2/dir2/file2?k2=v2"));
+  REQUIRE(parse(us2, "sftp://host2/dir2/file2?k2=v2"));
   us1.swap(us2);
-  REQUIRE_EQ(std::string("ftp://host2/dir2/file2?k2=v2"),
+  REQUIRE_EQ(std::string("sftp://host2/dir2/file2?k2=v2"),
                        construct(us1));
   REQUIRE_EQ(std::string("http://u1:p1@[::1]/dir1/file1?k1=v1"),
                        construct(us2));

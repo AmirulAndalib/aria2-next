@@ -79,7 +79,6 @@
 #cmakedefine HAVE_LIBEXPAT @HAVE_LIBEXPAT@
 
 /* Define to 1 if you have libssh2. */
-#cmakedefine HAVE_LIBSSH2 @HAVE_LIBSSH2@
 
 /* Define to 1 if you have the `localtime_r' function or macro. */
 #cmakedefine HAVE_LOCALTIME_R @HAVE_LOCALTIME_R@

@@ -34,6 +34,8 @@
 /* copyright --> */
 #include "FeatureConfig.h"
 
+#include <curl/curlver.h>
+#include <nghttp2/nghttp2ver.h>
 #include <spdlog/version.h>
 
 #include <sstream>
@@ -57,9 +59,6 @@
 #ifdef HAVE_SYS_UTSNAME_H
 #  include <sys/utsname.h>
 #endif // HAVE_SYS_UTSNAME_H
-#ifdef HAVE_LIBSSH2
-#  include <libssh2.h>
-#endif // HAVE_LIBSSH2
 #ifdef ENABLE_BITTORRENT
 #  include <libtorrent/version.hpp>
 #endif
@@ -74,9 +73,6 @@ uint16_t getDefaultPort(const std::string& protocol)
   }
   else if (protocol == "https") {
     return 443;
-  }
-  else if (protocol == "ftp") {
-    return 21;
   }
   else if (protocol == "sftp") {
     return 22;
@@ -128,14 +124,6 @@ const char* strSupportedFeature(int feature)
     return "ED2K";
     break;
 
-  case (FEATURE_FF3_COOKIE):
-#ifdef HAVE_SQLITE3
-    return "Firefox3 Cookie";
-#else  // !HAVE_SQLITE3
-    return nullptr;
-#endif // !HAVE_SQLITE3
-    break;
-
   case (FEATURE_GZIP):
 #ifdef HAVE_ZLIB
     return "GZip";
@@ -173,11 +161,7 @@ const char* strSupportedFeature(int feature)
     break;
 
   case (FEATURE_SFTP):
-#ifdef HAVE_LIBSSH2
     return "SFTP";
-#else  // !HAVE_LIBSSH2
-    return nullptr;
-#endif // !HAVE_LIBSSH2
     break;
 
   default:
@@ -190,6 +174,8 @@ std::string usedLibs()
   std::string res;
   res += fmt("spdlog/%d.%d.%d ", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR,
              SPDLOG_VER_PATCH);
+  res += "libcurl/" LIBCURL_VERSION " ";
+  res += "nghttp2/" NGHTTP2_VERSION " ";
 #ifdef HAVE_ZLIB
   res += "zlib/" ZLIB_VERSION " ";
 #endif // HAVE_ZLIB
@@ -210,9 +196,6 @@ std::string usedLibs()
   res += "c-ares/" ARES_VERSION_STR " ";
 #endif // HAVE_LIBCARES
 
-#ifdef HAVE_LIBSSH2
-  res += "libssh2/" LIBSSH2_VERSION " ";
-#endif // HAVE_LIBSSH2
 #ifdef ENABLE_BITTORRENT
   res += fmt("libtorrent/%d.%d.%d ", LIBTORRENT_VERSION_MAJOR,
              LIBTORRENT_VERSION_MINOR, LIBTORRENT_VERSION_TINY);

@@ -24,7 +24,6 @@
 #include "SelectEventPoll.h"
 #include "Segment.h"
 #include "SegmentMan.h"
-#include "DefaultProgressInfoFile.h"
 #include "array_fun.h"
 #include "base32.h"
 #include "base64.h"
@@ -1965,7 +1964,6 @@ void DownloadHelperTest::testEd2kPeerTransferIgnoresDuplicateData()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-duplicate";
   const std::string outfile = outdir + "/aria2 next duplicate transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string data = "verified ed2k data";
@@ -1999,7 +1997,6 @@ void DownloadHelperTest::testEd2kPeerTransferAcceptsParallelPieceBlocks()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-parallel";
   const std::string outfile = outdir + "/aria2 next parallel transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string first(Piece::BLOCK_LENGTH, 'a');
@@ -2037,7 +2034,6 @@ void DownloadHelperTest::testEd2kPeerTransferCancelsOwnerAfterParallelHashFailur
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-parallel-bad";
   const std::string outfile = outdir + "/aria2 next parallel bad transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   const std::string first(Piece::BLOCK_LENGTH, 'a');
@@ -2076,7 +2072,6 @@ void DownloadHelperTest::testEd2kPeerTransferAppliesAichRecoveryData()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-transfer-aich-recovery";
   const std::string outfile = outdir + "/aria2 next aich transfer.bin";
   File(outfile).remove();
-  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   std::string block0(ed2k::EMBLOCK_LENGTH, 'a');
@@ -2138,7 +2133,6 @@ void DownloadHelperTest::testEd2kSchedulingKeepsInlineSourceLabel()
   const std::string outdir = A2_TEST_OUT_DIR "/ed2k-inline-source-label";
   const std::string outfile = outdir + "/aria2 next.bin";
   File(outfile).remove();
-  File(outfile + DefaultProgressInfoFile::getSuffix()).remove();
   File(outdir).mkdirs();
 
   std::vector<std::string> uris{
@@ -2665,10 +2659,10 @@ void DownloadHelperTest::testCreateRequestGroupForMetalink()
     auto uris = group->getDownloadContext()->getFirstFileEntry()->getUris();
     std::sort(uris.begin(), uris.end());
     REQUIRE_EQ((size_t)2, uris.size());
-    REQUIRE_EQ(std::string("ftp://ftphost/aria2-0.5.2.tar.bz2"),
-                         uris[0]);
     REQUIRE_EQ(std::string("http://httphost/aria2-0.5.2.tar.bz2"),
-                         uris[1]);
+               uris[0]);
+    REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
+               uris[1]);
     // See numConcurrentCommand is 1 because of maxconnections attribute.
     REQUIRE_EQ(1, group->getNumConcurrentCommand());
   }

@@ -8,7 +8,7 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-aria2-next is a utility for downloading files over HTTP(S), FTP, SFTP,
+aria2-next is a utility for downloading files over HTTP(S), SFTP,
 BitTorrent, Metalink, and ED2K file links. BitTorrent v1, v2, hybrid torrents,
 magnet links, trackers, DHT, Peer Exchange, Local Peer Discovery, web seeds,
 encryption, resume data, and disk verification are provided by
@@ -22,11 +22,6 @@ ED2K downloads and completed ED2K seed tasks.
 
 OPTIONS
 -------
-
-.. note::
-
-  Most FTP related options are applicable to SFTP as well.
-  Some options are not effective against SFTP (e.g., :option:`--ftp-pasv`)
 
 Basic Options
 ~~~~~~~~~~~~~
@@ -83,7 +78,7 @@ Basic Options
 
   Check file integrity by validating piece hashes or a hash of entire
   file.  This option has effect only in BitTorrent, Metalink downloads
-  with checksums or HTTP(S)/FTP downloads with
+  with checksums or HTTP(S)/SFTP downloads with
   :option:`--checksum` option.  If
   piece hashes are provided, this option can detect damaged portions
   of a file and re-download them.  If a hash of entire file is
@@ -99,7 +94,7 @@ Basic Options
    Continue downloading a partially downloaded file.
    Use this option to resume a download started by a web browser or another
    program which downloads files sequentially from the beginning.
-   Currently this option is only applicable to HTTP(S)/FTP downloads.
+   Currently this option is only applicable to HTTP(S)/SFTP downloads.
 
 .. option:: -h, --help[=<TAG>|<KEYWORD>]
 
@@ -107,67 +102,21 @@ Basic Options
    ``#``. For example, type ``--help=#http`` to get the usage for the
    options tagged with ``#http``. If non-tag word is given, print the
    usage for the options whose name includes that word.  Available
-   Values: ``#basic``, ``#advanced``, ``#http``, ``#https``, ``#ftp``,
+   Values: ``#basic``, ``#advanced``, ``#http``, ``#https``,
    ``#metalink``, ``#bittorrent``, ``#ed2k``, ``#cookie``, ``#hook``, ``#file``,
    ``#rpc``, ``#checksum``, ``#experimental``, ``#help``,
    ``#all``
    Default: ``#basic``
 
-Legacy Input Compatibility
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-aria2-next keeps one canonical option model. Retired aria2 option names and
-values are accepted by the command line, configuration files, session input
-files, JSON-RPC option dictionaries, and libaria2 ``KeyVals``. They are
-normalized before ordinary option validation and are never written to help
-output, completion files, saved sessions, or internal runtime state.
-
-Exact aliases are converted to their canonical replacement. Options whose old
-scope cannot be represented by libtorrent use the closest safe canonical
-setting and emit a warning. Options already owned by a native libtorrent policy
-are accepted without changing that policy and emit a warning. Invalid values
-still produce the normal option error; RPC errors never terminate the engine.
-
-The adapter applies these conversions:
-
-=============================== =============================================
-Retired input                   Effective handling
-=============================== =============================================
-``bt-detach-seed-only``         ``detach-share-only``
-Legacy encryption trio         ``bt-encryption``
-``bt-lpd-interface``            ``bt-interface``
-``bt-metadata-only``            ``pause-metadata`` on the same GID
-``bt-prioritize-piece``         ``bt-first-last-piece-first``
-Legacy tracker timeouts         Native completion and receive timeouts
-Legacy DHT entry points         ``bt-dht-bootstrap-nodes``
-Legacy DHT addresses            ``bt-interface``
-``dht-listen-port``             Unified ``listen-port``
-``enable-dht6``                 Unified ``enable-dht`` policy
-``enable-async-dns6``           Accepted; address families are automatic
-Log level ``notice``            ``info``
-``bt-encryption=enabled``       ``bt-encryption=preferred``
-=============================== =============================================
-
-Native libtorrent policy absorbs saved-metadata loading, peer-speed thresholds,
-request and peer timeouts, fixed tracker intervals, split DHT state files, DHT
-message timeouts, and peer identity tuning. The former hook-after-check,
-hash-check seed, unselected-file cleanup, metadata export, and zero-speed stop
-settings have no maintained equivalent. All of these inputs remain non-fatal
-and are reported once per input surface.
-
-The removed ``rpc-user`` and ``rpc-passwd`` options cannot be translated to
-token authentication. Non-empty values produce a migration error that requires
-``rpc-secret``; credentials are never logged or retained.
-
-HTTP/FTP/SFTP Options
-~~~~~~~~~~~~~~~~~~~~~
+HTTP/SFTP Options
+~~~~~~~~~~~~~~~~~
 
 .. option:: --all-proxy=<PROXY>
 
   Use a proxy server for all protocols.  To override a previously
   defined proxy, use "".  You also can override this setting and specify a
-  proxy server for a particular protocol using :option:`--http-proxy`,
-  :option:`--https-proxy` and :option:`--ftp-proxy` options.  This affects all
+  proxy server for a particular protocol using :option:`--http-proxy` and
+  :option:`--https-proxy` options.  This affects all
   downloads.
   The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``.
   See also `ENVIRONMENT`_ section.
@@ -175,7 +124,7 @@ HTTP/FTP/SFTP Options
   .. note::
 
     If user and password are embedded in proxy URI and they are also
-    specified by *--{http,https,ftp,all}-proxy-{user,passwd}* options,
+    specified by *--{http,https,all}-proxy-{user,passwd}* options,
     those specified later override prior options. For example, if you specified
     ``http-proxy-user=myname``, ``http-proxy-passwd=mypass`` in aria2.conf and
     you specified ``--http-proxy="http://proxy"`` on the command-line, then
@@ -206,12 +155,12 @@ HTTP/FTP/SFTP Options
   in ``Hash Algorithms`` in ``aria2-next -v``. DIGEST is hex digest.  For
   example, setting sha-1 digest looks like this:
   ``sha-1=0192ba11326fe2298c8cb4de616f4d4140213838`` This option applies
-  only to HTTP(S)/FTP downloads.
+  only to HTTP(S)/SFTP downloads.
 
 .. option:: --connect-timeout=<SEC>
 
   Set the connect timeout in seconds to establish connection to
-  HTTP/FTP/proxy server. After the connection is established, this
+  HTTP/SFTP/proxy server. After the connection is established, this
   option makes no effect and :option:`--timeout <-t>` option is used instead.
   Default: ``60``
 
@@ -219,7 +168,7 @@ HTTP/FTP/SFTP Options
 
   If ``true`` is given, aria2 just checks whether the remote file is
   available and doesn't download data. This option has effect on
-  HTTP/FTP download.  BitTorrent downloads are canceled if ``true`` is
+  HTTP/SFTP download.  BitTorrent downloads are canceled if ``true`` is
   specified.  Default: ``false``
 
 .. option:: --lowest-speed-limit=<SPEED>
@@ -239,10 +188,10 @@ HTTP/FTP/SFTP Options
 
 .. option:: --max-file-not-found=<NUM>
 
-  If aria2 receives "file not found" status from the remote HTTP/FTP
+  If aria2 receives "file not found" status from the remote HTTP/SFTP
   servers NUM times without getting a single byte, then force the
   download to fail. Specify ``0`` to disable this option. This options
-  is effective only when using HTTP/FTP servers.  The number of retry
+  is effective only when using HTTP/SFTP servers.  The number of retry
   attempt is counted toward :option:`--max-tries`, so it should be
   configured too.
 
@@ -322,23 +271,11 @@ HTTP/FTP/SFTP Options
 
       $ aria2-next -o myfile.zip "http://mirror1/file.zip" "http://mirror2/file.zip"
 
-.. option:: --proxy-method=<METHOD>
-
-  Set the method to use in proxy request.  METHOD is either ``get`` or
-  ``tunnel``. HTTPS downloads always use ``tunnel`` regardless of this
-  option.
-  Default: ``get``
-
 .. option:: -R, --remote-time [true|false]
 
-  Retrieve timestamp of the remote file from the remote HTTP/FTP
+  Retrieve timestamp of the remote file from the remote HTTP/SFTP
   server and if it is available, apply it to the local file.
   Default: ``false``
-
-.. option:: --reuse-uri [true|false]
-
-  Reuse already used URIs if no unused URIs are left.
-  Default: ``true``
 
 .. option:: --retry-wait=<SEC>
 
@@ -346,49 +283,14 @@ HTTP/FTP/SFTP Options
   retry downloads when the HTTP server returns a 503 response. Default:
   ``0``
 
-.. option:: --server-stat-of=<FILE>
-
-  Specify the file name to which performance profile of the servers is
-  saved. You can load saved data using :option:`--server-stat-if` option. See
-  `Server Performance Profile`_
-  subsection below for file format.
-
-.. option:: --server-stat-if=<FILE>
-
-  Specify the file name to load performance profile of the servers. The
-  loaded data will be used in some URI selector such as ``feedback``.
-  See also :option:`--uri-selector` option. See
-  `Server Performance Profile`_
-  subsection below for file format.
-
-.. option:: --server-stat-timeout=<SEC>
-
-  Specifies timeout in seconds to invalidate performance profile of
-  the servers since the last contact to them.
-  Default: ``86400`` (24hours)
-
 .. option:: -s, --split=<N>
 
-  Download a file using N connections.  If more than N URIs are given,
-  first N URIs are used and remaining URIs are used for backup.  If
-  less than N URIs are given, those URIs are used more than once so
-  that N connections total are made simultaneously.  The number of
-  connections to the same host is restricted by the
-  :option:`--max-connection-per-server <-x>` option.
-  See also the :option:`--min-split-size <-k>` option.
+  Set ED2K transfer concurrency.
   Default: ``5``
-
-  .. note::
-
-    Some Metalinks regulate the number of servers to connect.  aria2
-    strictly respects them.  This means that if Metalink defines the
-    ``maxconnections`` attribute lower than N, then aria2 uses the
-    value of this lower value instead of N.
 
 .. option:: --stream-piece-selector=<SELECTOR>
 
-  Specify piece selection algorithm used in HTTP/FTP download. A piece is a
-  fixed length segment which is downloaded in parallel in a segmented download.
+  Specify the ED2K piece selection algorithm.
   Default: ``default``.
 
   default
@@ -397,8 +299,7 @@ HTTP/FTP/SFTP Options
     expensive operation.
   inorder
     Select a piece closest to the beginning of the file. This is useful for
-    viewing movies while downloading. :option:`--enable-http-pipelining` option
-    may be useful to reduce re-connection overhead. Note that aria2 honors
+    viewing media while downloading. Note that aria2 honors
     :option:`--min-split-size <-k>` option, so it will be necessary to specify
     a reasonable value to :option:`--min-split-size <-k>` option.
   random
@@ -416,23 +317,6 @@ HTTP/FTP/SFTP Options
 
   Set timeout in seconds.
   Default: ``60``
-
-.. option:: --uri-selector=<SELECTOR>
-
-  Specify URI selection algorithm. The possible values are ``inorder``,
-  ``feedback`` and ``adaptive``.  If ``inorder`` is given, URI is tried in
-  the order appeared in the URI list.  If ``feedback`` is given, aria2
-  uses download speed observed in the previous downloads and choose
-  fastest server in the URI list. This also effectively skips dead
-  mirrors. The observed download speed is a part of performance
-  profile of servers mentioned in :option:`--server-stat-of` and
-  :option:`--server-stat-if` options.  If ``adaptive`` is given, selects one of
-  the best mirrors for the first and reserved connections.  For
-  supplementary ones, it returns mirrors which has not been tested
-  yet, and if each of them has already been tested, returns mirrors
-  which has to be tested again. Otherwise, it doesn't select anymore
-  mirrors. Like ``feedback``, it uses a performance profile of servers.
-  Default: ``feedback``
 
 HTTP Specific Options
 ~~~~~~~~~~~~~~~~~~~~~
@@ -493,14 +377,6 @@ HTTP Specific Options
     Some server responds with ``Content-Encoding: gzip`` for files which
     itself is gzipped file. aria2 inflates them anyway because of the
     response header.
-
-.. option:: --http-auth-challenge [true|false]
-
-  Send HTTP authorization header only when it is requested by the
-  server. If ``false`` is set, then authorization header is always sent
-  to the server.  There is an exception: if user name and password are
-  embedded in URI, authorization header is always sent to the server
-  regardless of this option.  Default: ``false``
 
 .. option:: --http-no-cache [true|false]
 
@@ -566,15 +442,6 @@ HTTP Specific Options
   Enable HTTP/1.1 persistent connection.
   Default: ``true``
 
-.. option:: --enable-http-pipelining [true|false]
-
-  Enable HTTP/1.1 pipelining.
-  Default: ``false``
-
-  .. note::
-
-    There is usually no performance gain from enabling this option.
-
 .. option:: --header=<HEADER>
 
   Append HEADER to HTTP request header.
@@ -586,14 +453,7 @@ HTTP Specific Options
 
 .. option:: --load-cookies=<FILE>
 
-  Load Cookies from FILE using the Firefox3 format (SQLite3),
-  Chromium/Google Chrome (SQLite3) and the
-  Mozilla/Firefox(1.x/2.x)/Netscape format.
-
-  .. note::
-
-    If aria2 is built without libsqlite3, then it doesn't support Firefox3
-    and Chromium/Google Chrome cookie format.
+  Load cookies from a Netscape-format cookie file using libcurl.
 
 .. option:: --save-cookies=<FILE>
 
@@ -602,84 +462,26 @@ HTTP Specific Options
   are also saved and their expiry values are treated as 0.  Possible
   Values: ``/path/to/file``
 
-.. option:: --use-head [true|false]
-
-  Use HEAD method for the first request to the HTTP server.
-  Default: ``false``
-
-.. option:: --no-want-digest-header [true|false]
-
-  Whether to disable Want-Digest header when doing requests.
-  Default: ``false``
-
 .. option:: -U, --user-agent=<USER_AGENT>
 
   Set user agent for HTTP(S) downloads.
   Default: ``aria2-next/$VERSION``, $VERSION is replaced by package version.
 
-FTP/SFTP Specific Options
-~~~~~~~~~~~~~~~~~~~~~~~~~
-.. option:: --ftp-user=<USER>
+SFTP Specific Options
+~~~~~~~~~~~~~~~~~~~~~
 
-  Set FTP user. This affects all URIs.
-  Default: ``anonymous``
+.. option:: --sftp-user=<USER>
 
-.. option:: --ftp-passwd=<PASSWD>
+  Set the SFTP user.
 
-  Set FTP password. This affects all URIs.
-  If user name is embedded but password is missing in URI, aria2 tries
-  to resolve password using .netrc. If password is found in .netrc,
-  then use it as password. If not, use the password specified in this
-  option.
-  Default: ``ARIA2USER@``
+.. option:: --sftp-passwd=<PASSWD>
 
-.. option:: -p, --ftp-pasv [true|false]
+  Set the SFTP password.
 
-  Use the passive mode in FTP.
-  If ``false`` is given, the active mode will be used.
-  Default: ``true``
+.. option:: --ssh-host-key-sha256=<DIGEST>
 
-  .. note::
-
-    This option is ignored for SFTP transfer.
-
-.. option:: --ftp-proxy=<PROXY>
-
-  Use a proxy server for FTP.  To override a previously defined proxy,
-  use "".
-  See also the :option:`--all-proxy` option.  This affects all ftp downloads.
-  The format of PROXY is ``[http://][USER:PASSWORD@]HOST[:PORT]``
-
-.. option:: --ftp-proxy-passwd=<PASSWD>
-
-  Set password for :option:`--ftp-proxy` option.
-
-.. option:: --ftp-proxy-user=<USER>
-
-  Set user for :option:`--ftp-proxy` option.
-
-.. option:: --ftp-type=<TYPE>
-
-  Set FTP transfer type. TYPE is either ``binary`` or ``ascii``.
-  Default: ``binary``
-
-  .. note::
-
-    This option is ignored for SFTP transfer.
-
-.. option:: --ftp-reuse-connection [true|false]
-
-  Reuse connection in FTP.
-  Default: ``true``
-
-.. option:: --ssh-host-key-md=<TYPE>=<DIGEST>
-
-  Set checksum for SSH host public key. TYPE is hash type. The
-  supported hash type is ``sha-1`` or ``md5``. DIGEST is hex
-  digest. For example:
-  ``sha-1=b030503d4de4539dc7885e6f0f5e256704edf4c3``.  This option can
-  be used to validate server's public key when SFTP is used. If this
-  option is not set, which is default, no validation takes place.
+  Validate the SFTP server public key using the libcurl SHA-256 host-key
+  contract.
 
 BitTorrent/Metalink Options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1184,7 +986,7 @@ Metalink Specific Options
 .. option:: --metalink-preferred-protocol=<PROTO>
 
   Specify preferred protocol.
-  The possible values are ``http``, ``https``, ``ftp`` and ``none``.
+  The possible values are ``http``, ``https`` and ``none``.
   Specify ``none`` to disable this feature.
   Default: ``none``
 
@@ -1306,15 +1108,8 @@ Advanced Options
 ~~~~~~~~~~~~~~~~
 .. option:: --allow-overwrite [true|false]
 
-  Restart download from scratch if the corresponding control file
-  doesn't exist.  See also :option:`--auto-file-renaming` option.  Default:
-  ``false``
-
-.. option:: --allow-piece-length-change [true|false]
-
-  If false is given, aria2 aborts download when a piece length is different
-  from one in a control file.
-  If true is given, you can proceed but some download progress will be lost.
+  Replace an existing output file when no valid persisted transfer state is
+  available. See also :option:`--auto-file-renaming`.
   Default: ``false``
 
 .. option:: --always-resume [true|false]
@@ -1345,31 +1140,16 @@ Advanced Options
 .. option:: --auto-file-renaming [true|false]
 
   Rename file name if the same file already exists.
-  This option works only in HTTP(S)/FTP download.
+  This option works for stream downloads.
   The new file name has a dot and a number(1..9999) appended after the
   name, but before the file extension, if any.
   Default: ``true``
 
-.. option:: --auto-save-interval=<SEC>
+.. option:: --state-save-interval=<SEC>
 
-  Save a control file(\*.aria2) every SEC seconds.
-  If ``0`` is given, a control file is not saved during download. aria2 saves a
-  control file when it stops regardless of the value.
+  Checkpoint persistent engine state every SEC seconds.
   The possible values are between ``0`` to ``600``.
   Default: ``60``
-
-.. option:: --conditional-get [true|false]
-
-  Download file only when the local file is older than remote
-  file. This function only works with HTTP(S) downloads only.  It does
-  not work if file size is specified in Metalink. It also ignores
-  Content-Disposition header.  If a control file exists, this option
-  will be ignored.  This function uses If-Modified-Since header to get
-  only newer file conditionally. When getting modification time of
-  local file, it uses user supplied file name (see :option:`--out <-o>` option) or
-  file name part in URI if :option:`--out <-o>` is not specified.
-  To overwrite existing file, :option:`--allow-overwrite` is required.
-  Default: ``false``
 
 .. option:: --conf-path=<PATH>
 
@@ -1381,12 +1161,6 @@ Advanced Options
   Set log level to output to console.  LEVEL is either ``trace``, ``debug``,
   ``info``, ``warn`` or ``error``. Console output contains one record per line.
   Default: ``info``
-
-.. option:: --content-disposition-default-utf8 [true|false]
-
-  Handle quoted string in Content-Disposition header as UTF-8 instead
-  of ISO-8859-1, for example, the filename parameter, but not the
-  extended version filename*.  Default: ``false``
 
 .. option:: -D, --daemon [true|false]
 
@@ -1430,10 +1204,11 @@ Advanced Options
 
 .. option:: --state-dir=<DIR>
 
-  Store persistent BitTorrent and ED2K engine state under *DIR*. BitTorrent
-  stores its native session state in ``bittorrent/session`` and per-torrent
-  fast-resume data in ``bittorrent/torrents``. ED2K stores its SQLite database
-  in ``ed2k/state.db``.
+  Store persistent transfer state under *DIR*. HTTP, HTTPS, SFTP, and Metalink
+  payload progress uses ``stream/state.db``. BitTorrent stores native session
+  and fast-resume data under ``bittorrent``. ED2K stores its SQLite database in
+  ``ed2k/state.db``. Completed, removed, and missing payloads are pruned from the
+  stream database.
 
   The default is the current user's native application state location:
   ``~/Library/Application Support/aria2-next`` on macOS,
@@ -1539,16 +1314,14 @@ Advanced Options
 .. option:: --force-save [true|false]
 
   Save download with :option:`--save-session <--save-session>` option
-  even if the download is completed or removed. This option also saves
-  control file in that situations. This may be useful to save
+  even if the download is completed or removed. This may be useful to save
   BitTorrent seeding which is recognized as completed state.
   Default: ``false``
 
 .. option:: --save-not-found [true|false]
 
   Save download with :option:`--save-session <--save-session>` option
-  even if the file was not found on the server. This option also saves
-  control file in that situations.
+  even if the file was not found on the server.
   Default: ``true``
 
 .. option:: --gid=<GID>
@@ -1736,18 +1509,9 @@ Advanced Options
 
 .. option:: --piece-length=<LENGTH>
 
-  Set a piece length for HTTP/FTP downloads. This is the boundary when
-  aria2 splits a file. All splits occur at multiple of this
-  length. This option will be ignored in BitTorrent downloads.  It
-  will be also ignored if Metalink file contains piece hashes.
+  Set the piece length for ED2K and checksum-aware Metalink downloads.
+  This option is ignored by BitTorrent and ordinary libcurl transfers.
   Default: ``1M``
-
-  .. note::
-
-    The possible use case of :option:`--piece-length`
-    option is change the request range in one HTTP pipelined request.
-    To enable HTTP pipelining use
-    :option:`--enable-http-pipelining`.
 
 .. option:: --show-console-readout [true|false]
 
@@ -1823,13 +1587,6 @@ Advanced Options
    chunk checksums are provided.
    Default: ``true``
 
-
-.. option:: --remove-control-file [true|false]
-
-   Remove control file before download. Using with
-   :option:`--allow-overwrite=true, <--allow-overwrite>` download always starts from
-   scratch. This will be useful for users behind proxy server which
-   disables resume.
 
 .. option:: --save-session=<FILE>
 
@@ -1945,8 +1702,8 @@ treated as a separate download. Both Metalink4 and Metalink version
 
 You can specify both torrent file with -T option and URIs. By doing
 this, you can download a file from both torrent swarm and
-HTTP(S)/FTP/SFTP server at the same time, while the data from
-HTTP(S)/FTP/SFTP are uploaded to the torrent swarm.  For single file
+HTTP(S)/SFTP server at the same time, while the data from
+HTTP(S)/SFTP are uploaded to the torrent swarm.  For single file
 torrents, URI can be a complete URI pointing to the resource or if URI
 ends with /, name in torrent file in torrent is added. For multi-file
 torrents, name and path are added to form a URI for each file.
@@ -1980,7 +1737,7 @@ occurred. Currently following options are available:
 
 aria2 passes 3 arguments to specified command when it is executed.
 These arguments are: GID, the number of files and file path.  For
-HTTP, FTP, and SFTP downloads, usually the number of files is 1.
+HTTP and SFTP downloads usually contain one file.
 BitTorrent download can contain multiple files.  If number of files is
 more than one, file path is first one.  In other words, this is the
 value of path key of first struct whose selected key is true in the
@@ -2045,8 +1802,7 @@ based on the last error encountered.
   If there was not enough disk space available.
 
 10
-  If piece length was different from one in .aria2 control file. See
-  :option:`--allow-piece-length-change` option.
+  Reserved.
 
 11
   If aria2 was downloading same file at that moment.
@@ -2079,15 +1835,12 @@ based on the last error encountered.
   If aria2 could not parse Metalink document.
 
 21
-  If FTP command failed.
-
-22
   If HTTP response header was bad or unexpected.
 
-23
+22
   If too many redirects  occurred.
 
-24
+23
   If HTTP authorization failed.
 
 25
@@ -2135,11 +1888,6 @@ aria2 recognizes the following environment variables.
   Overrides https-proxy value in configuration file.
   The command-line option :option:`--https-proxy` overrides this value.
 
-``ftp_proxy [http://][USER:PASSWORD@]HOST[:PORT]``
-  Specify proxy server for use in FTP.
-  Overrides ftp-proxy value in configuration file.
-  The command-line option :option:`--ftp-proxy` overrides this value.
-
 ``all_proxy [http://][USER:PASSWORD@]HOST[:PORT]``
   Specify proxy server for use if no protocol-specific proxy is specified.
   Overrides all-proxy value in configuration file.
@@ -2147,9 +1895,7 @@ aria2 recognizes the following environment variables.
 
 .. note::
 
-  Although aria2 accepts ``ftp://`` and ``https://`` scheme in proxy URI, it
-  simply assumes that ``http://`` is specified and does not change its
-  behavior based on the specified scheme.
+  Proxy URI schemes and tunneling behavior are handled by libcurl.
 
 ``no_proxy [DOMAIN,...]``
   Specify a comma-separated list of host names, domains and network addresses
@@ -2176,7 +1922,7 @@ lines beginning ``#`` are treated as comments::
   listen-port=60000
   seed-ratio=1.0
   max-upload-limit=50K
-  ftp-pasv=true
+  http-accept-gzip=true
 
 .. note::
 
@@ -2212,8 +1958,6 @@ user's home directory:
 * :option:`rpc-private-key <--rpc-private-key>`
 * :option:`save-cookies <--save-cookies>`
 * :option:`save-session <--save-session>`
-* :option:`server-stat-if <--server-stat-if>`
-* :option:`server-stat-of <--server-stat-of>`
 * :option:`torrent-file <--torrent-file>`
 
 Note that this expansion occurs even if the above options are used in
@@ -2231,41 +1975,17 @@ locations.
 Netrc
 ~~~~~
 
-Netrc support is enabled by default for HTTP(S)/FTP/SFTP.  To disable
-netrc support, specify :option:`--no-netrc <-n>` option.  Your .netrc
-file should have correct permissions(600).
+Netrc support is enabled by default for HTTP(S) and SFTP through libcurl. Use
+:option:`--no-netrc <-n>` to disable it and :option:`--netrc-path` to select a
+file.
 
-If machine name starts ``.``, aria2 performs domain-match instead of
-exact match. This is an extension of aria2. For example of domain
-match, imagine the following .netrc entry::
+Persistent State
+~~~~~~~~~~~~~~~~
 
-  machine .example.org login myid password mypasswd
-
-
-``aria2.example.org`` domain-matches ``.example.org`` and uses ``myid`` and
-``mypasswd``.
-
-Some domain-match example follow: ``example.net`` does not domain-match
-``.example.org``. ``example.org`` does not domain-match ``.example.org``
-because of preceding ``.``. If you want to match ``example.org``, specify
-``example.org``.
-
-Control File
-~~~~~~~~~~~~
-
-HTTP(S), FTP, SFTP, and Metalink downloads use a control file to track
-progress. The file is placed beside the downloading file with ``.aria2``
-appended to its name. BitTorrent and ED2K use :option:`--state-dir` and do not
-create adjacent control files.
-
-Usually a control file is deleted once download completed.  If aria2
-decides that download cannot be resumed(for example, when downloading
-a file from a HTTP server which doesn't support resume), a control
-file is not created.
-
-Normally if you lose a control file, you cannot resume that download. Metalink
-downloads with chunk checksums can reconstruct progress by using
-:option:`--check-integrity <-V>`.
+HTTP(S), SFTP, and Metalink progress is stored in ``stream/state.db`` under
+:option:`--state-dir`. BitTorrent keeps native session and fast-resume data in
+``bittorrent``. ED2K keeps network and transfer state in ``ed2k/state.db``.
+Downloads never create adjacent sidecar files.
 
 .. _input-file:
 
@@ -2294,7 +2014,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`all-proxy-passwd <--all-proxy-passwd>`
   * :option:`all-proxy-user <--all-proxy-user>`
   * :option:`allow-overwrite <--allow-overwrite>`
-  * :option:`allow-piece-length-change <--allow-piece-length-change>`
   * :option:`always-resume <--always-resume>`
   * :option:`async-dns <--async-dns>`
   * :option:`auto-file-renaming <--auto-file-renaming>`
@@ -2309,9 +2028,7 @@ of URIs. These optional lines must start with white space(s).
   * :option:`bt-tracker <--bt-tracker>`
   * :option:`check-integrity <-V>`
   * :option:`checksum <--checksum>`
-  * :option:`conditional-get <--conditional-get>`
   * :option:`connect-timeout <--connect-timeout>`
-  * :option:`content-disposition-default-utf8 <--content-disposition-default-utf8>`
   * :option:`continue <-c>`
   * :option:`dir <-d>`
   * :option:`dry-run <--dry-run>`
@@ -2322,26 +2039,16 @@ of URIs. These optional lines must start with white space(s).
   * :option:`ed2k-server-list <--ed2k-server-list>`
   * :option:`ed2k-upload-slots <--ed2k-upload-slots>`
   * :option:`enable-http-keep-alive <--enable-http-keep-alive>`
-  * :option:`enable-http-pipelining <--enable-http-pipelining>`
   * :option:`enable-mmap <--enable-mmap>`
   * :option:`enable-peer-exchange <--enable-peer-exchange>`
   * :option:`file-allocation <--file-allocation>`
   * :option:`follow-metalink <--follow-metalink>`
   * :option:`follow-torrent <--follow-torrent>`
   * :option:`force-save <--force-save>`
-  * :option:`ftp-passwd <--ftp-passwd>`
-  * :option:`ftp-pasv <-p>`
-  * :option:`ftp-proxy <--ftp-proxy>`
-  * :option:`ftp-proxy-passwd <--ftp-proxy-passwd>`
-  * :option:`ftp-proxy-user <--ftp-proxy-user>`
-  * :option:`ftp-reuse-connection <--ftp-reuse-connection>`
-  * :option:`ftp-type <--ftp-type>`
-  * :option:`ftp-user <--ftp-user>`
   * :option:`gid <--gid>`
   * :option:`hash-check-only <--hash-check-only>`
   * :option:`header <--header>`
   * :option:`http-accept-gzip <--http-accept-gzip>`
-  * :option:`http-auth-challenge <--http-auth-challenge>`
   * :option:`http-no-cache <--http-no-cache>`
   * :option:`http-passwd <--http-passwd>`
   * :option:`http-proxy <--http-proxy>`
@@ -2376,23 +2083,20 @@ of URIs. These optional lines must start with white space(s).
   * :option:`pause <--pause>`
   * :option:`pause-metadata <--pause-metadata>`
   * :option:`piece-length <--piece-length>`
-  * :option:`proxy-method <--proxy-method>`
   * :option:`realtime-chunk-checksum <--realtime-chunk-checksum>`
   * :option:`referer <--referer>`
   * :option:`remote-time <-R>`
-  * :option:`remove-control-file <--remove-control-file>`
   * :option:`retry-wait <--retry-wait>`
-  * :option:`reuse-uri <--reuse-uri>`
   * :option:`rpc-save-upload-metadata <--rpc-save-upload-metadata>`
   * :option:`seed-ratio <--seed-ratio>`
   * :option:`seed-time <--seed-time>`
   * :option:`select-file <--select-file>`
   * :option:`split <-s>`
-  * :option:`ssh-host-key-md <--ssh-host-key-md>`
+  * :option:`sftp-passwd <--sftp-passwd>`
+  * :option:`sftp-user <--sftp-user>`
+  * :option:`ssh-host-key-sha256 <--ssh-host-key-sha256>`
   * :option:`stream-piece-selector <--stream-piece-selector>`
   * :option:`timeout <-t>`
-  * :option:`uri-selector <--uri-selector>`
-  * :option:`use-head <--use-head>`
   * :option:`user-agent <-U>`
 
 These options have exactly same meaning of the ones in the
@@ -2416,57 +2120,6 @@ from ``http://server/file.iso`` and ``http://mirror/file.iso``.  The file
 In some cases, :option:`out <-o>` parameter has no effect.
 See note of :option:`--out <-o>`
 option for the restrictions.
-
-Server Performance Profile
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-This section describes the format of server performance profile.  The
-file is plain text and each line has several ``NAME=VALUE`` pair,
-delimited by comma.  Currently following NAMEs are recognized:
-
-``host``
-  Host name of the server. Required.
-
-``protocol``
-  Protocol for this profile, such as ftp, http. Required.
-
-``dl_speed``
-  The average download speed observed in the previous download in
-  bytes per sec.  Required.
-
-``sc_avg_speed``
-  The average download speed observed in the previous download in
-  bytes per sec. This value is only updated if the download is done in
-  single connection environment and only used by
-  AdaptiveURISelector. Optional.
-
-``mc_avg_speed``
-  The average download speed observed in the previous download in
-  bytes per sec. This value is only updated if the download is done in
-  multi connection environment and only used by
-  AdaptiveURISelector. Optional.
-
-``counter``
-  How many times the server is used. Currently this value is only used
-  by AdaptiveURISelector.  Optional.
-
-``last_updated``
-  Last contact time in GMT with this server, specified in the seconds
-  since the Epoch(00:00:00 on January 1, 1970, UTC). Required.
-
-``status``
-  ERROR is set when server cannot be reached or out-of-service or
-  timeout occurred. Otherwise, OK is set.
-
-Those fields must exist in one line. The order of the fields is not
-significant. You can put pairs other than the above; they are simply
-ignored.
-
-An example follows::
-
-  host=localhost, protocol=http, dl_speed=32000, last_updated=1222491640, status=OK
-  host=localhost, protocol=ftp, dl_speed=0, last_updated=1222491632, status=ERROR
-
 
 RPC INTERFACE
 -------------
@@ -2557,7 +2210,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 .. function:: aria2.addUri([secret], uris[, options[, position]])
 
   This method adds a new download. *uris* is an array of
-  HTTP/FTP/SFTP/BitTorrent/Thunder URIs (strings) pointing to the same
+  HTTP/SFTP/BitTorrent/Thunder URIs (strings) pointing to the same
   resource.  If you mix URIs pointing to different resources, then the
   download may fail or be corrupted without aria2 complaining.  When
   adding BitTorrent Magnet URIs, *uris* must have only one element and
@@ -3591,7 +3244,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
 .. function:: aria2.getServers([secret], gid)
 
-  This method returns currently connected HTTP(S)/FTP/SFTP servers of
+  This method returns currently connected HTTP(S)/SFTP servers of
   the download denoted by *gid* (string). The response is an array of
   structs and contains the following keys. Values are strings.
 
@@ -3810,7 +3463,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     {'id': 'qwer',
      'jsonrpc': '2.0',
      'result': {'allow-overwrite': 'false',
-                 'allow-piece-length-change': 'false',
                  'always-resume': 'true',
                  'async-dns': 'true',
      ...
@@ -3825,7 +3477,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     >>> r = s.aria2.getOption('2089b05ecca3d829')
     >>> pprint(r)
     {'allow-overwrite': 'false',
-     'allow-piece-length-change': 'false',
      'always-resume': 'true',
      'async-dns': 'true',
      ....
@@ -3927,7 +3578,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`optimize-concurrent-downloads <--optimize-concurrent-downloads>`
   * :option:`save-cookies <--save-cookies>`
   * :option:`save-session <--save-session>`
-  * :option:`server-stat-of <--server-stat-of>`
 
   In addition, options listed in the `Input File`_ subsection
   are available, **except** for following options:
@@ -4557,8 +4207,8 @@ Checksum
 EXAMPLE
 -------
 
-HTTP/FTP Segmented Downloads
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+HTTP/SFTP Downloads
+~~~~~~~~~~~~~~~~~~~
 Download a file
 ^^^^^^^^^^^^^^^
 .. code-block:: console
@@ -4577,25 +4227,6 @@ Download a file from two different HTTP servers
 .. code-block:: console
 
   $ aria2-next "http://host/file.zip" "http://mirror/file.zip"
-
-
-Download a file from one host using multiple connections
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. code-block:: console
-
-  $ aria2-next -x2 -k1M "http://host/file.zip"
-
-.. note::
-
-  The -x option specified the number of allowed connections, while the -k option
-  specified the size of chunks.
-
-
-Download a file from HTTP and FTP servers at the same time
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. code-block:: console
-
-  $ aria2-next "http://host1/file.zip" "ftp://host2/file.zip"
 
 
 Download files listed in a text file concurrently
@@ -4622,16 +4253,10 @@ For HTTP:
   $ aria2-next --http-proxy="http://proxy:8080" --no-proxy="localhost,127.0.0.1,192.168.0.0/16" "http://host/file"
 
 
-For FTP:
-
-.. code-block:: console
-
-  $ aria2-next --ftp-proxy="http://proxy:8080" "ftp://host/file"
-
 .. note::
 
-  See :option:`--http-proxy`, :option:`--https-proxy`, :option:`--ftp-proxy`,
-  :option:`--all-proxy` and :option:`--no-proxy` for details.  You can specify
+  See :option:`--http-proxy`, :option:`--https-proxy`, :option:`--all-proxy`
+  and :option:`--no-proxy` for details. You can specify
   proxy in the environment variables. See `ENVIRONMENT`_ section.
 
 Using a Proxy with authorization

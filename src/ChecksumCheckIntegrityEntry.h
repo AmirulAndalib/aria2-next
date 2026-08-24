@@ -42,8 +42,6 @@ namespace aria2 {
 class FileAllocationEntry;
 
 class ChecksumCheckIntegrityEntry : public CheckIntegrityEntry {
-private:
-  bool redownload_;
   std::unique_ptr<FileAllocationEntry> nextFileAllocationEntry_;
 
 public:
@@ -64,8 +62,6 @@ public:
   virtual void
   onDownloadIncomplete(std::vector<std::unique_ptr<Command>>& commands,
                        DownloadEngine* e) override;
-
-  void setRedownload(bool redownload) { redownload_ = redownload; }
 
   void setNextFileAllocationEntry(std::unique_ptr<FileAllocationEntry> entry);
 };

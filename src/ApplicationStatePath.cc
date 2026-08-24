@@ -53,6 +53,13 @@ std::string ed2kDatabaseFile(const Option* option)
                            : util::applyDir(directory, "state.db");
 }
 
+std::string streamDatabaseFile(const Option* option)
+{
+  const auto directory = protocolDirectory(option, "stream");
+  return directory.empty() ? std::string()
+                           : util::applyDir(directory, "state.db");
+}
+
 } // namespace state
 
 } // namespace aria2

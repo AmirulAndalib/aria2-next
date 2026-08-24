@@ -509,8 +509,7 @@ void HttpProxyOptionHandler::parseArg(Option& option,
   else {
     std::string uri;
     if (util::startsWith(optarg, "http://") ||
-        util::startsWith(optarg, "https://") ||
-        util::startsWith(optarg, "ftp://")) {
+        util::startsWith(optarg, "https://")) {
       uri = optarg;
     }
     else {

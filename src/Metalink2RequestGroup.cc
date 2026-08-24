@@ -78,7 +78,7 @@ public:
     switch (resource->type) {
     case MetalinkResource::TYPE_HTTP:
     case MetalinkResource::TYPE_HTTPS:
-    case MetalinkResource::TYPE_FTP:
+    case MetalinkResource::TYPE_SFTP:
       urisPtr.push_back(resource->url);
       break;
     default:
@@ -261,7 +261,7 @@ void Metalink2RequestGroup::createRequestGroup(
       int64_t offset = 0;
       for (auto entry : mes) {
         A2_LOG_DEBUG(fmt("Metalink: Queueing %s for download as a member.",
-                        entry->getPath().c_str()));
+                         entry->getPath().c_str()));
         A2_LOG_TRACE(
             fmt("originalName = %s", entry->metaurls[0]->name.c_str()));
         entry->reorderResourcesByPriority();

@@ -11,35 +11,27 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/Base32Test.cc
   tests/a2functionalTest.cc
   tests/ApplicationStatePathTest.cc
+  tests/StreamStoreTest.cc
   tests/FileEntryTest.cc
   tests/PieceTest.cc
   tests/SegmentTest.cc
   tests/GrowSegmentTest.cc
   tests/SingleFileAllocationIteratorTest.cc
-  tests/DefaultProgressInfoFileTest.cc
   tests/RequestGroupTest.cc
   tests/UtilTest1.cc
   tests/UtilTest2.cc
   tests/UtilSecurityTest.cc
   tests/UriListParserTest.cc
   tests/HttpHeaderProcessorTest.cc
-  tests/HttpTailReclaimPolicyTest.cc
   tests/RequestTest.cc
-  tests/HttpRequestTest.cc
   tests/RequestGroupManTest.cc
-  tests/LegacyOptionAdapterTest.cc
   tests/LogTest.cc
   tests/ShareRatioSeedCriteriaTest.cc
-  tests/AuthConfigFactoryTest.cc
-  tests/NetrcAuthResolverTest.cc
-  tests/DefaultAuthResolverTest.cc
   tests/OptionHandlerTest.cc
   tests/SegmentManTest.cc
   tests/BitfieldManTest.cc
-  tests/NetrcTest.cc
   tests/SingletonHolderTest.cc
   tests/HttpHeaderTest.cc
-  tests/HttpResponseTest.cc
   tests/FileTest.cc
   tests/OptionTest.cc
   tests/DefaultDiskWriterTest.cc
@@ -56,16 +48,11 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/DownloadEngineTest.cc
   tests/SignatureTest.cc
   tests/ServerStatManTest.cc
-  tests/FeedbackURISelectorTest.cc
   tests/InorderURISelectorTest.cc
   tests/ServerStatTest.cc
-  tests/NsCookieParserTest.cc
   tests/DirectDiskAdaptorTest.cc
-  tests/CookieTest.cc
-  tests/CookieStorageTest.cc
   tests/TimeTest.cc
   tests/TimeSeedCriteriaTest.cc
-  tests/FtpConnectionTest.cc
   tests/OptionParserTest.cc
   tests/DNSCacheTest.cc
   tests/DownloadHelperTest.cc
@@ -82,7 +69,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/UriTest.cc
   tests/UriSplitTest.cc
   tests/MockSegment.h
-  tests/CookieHelperTest.cc
   tests/JsonTest.cc
   tests/ValueBaseJsonParserTest.cc
   tests/RpcResponseTest.cc
@@ -93,7 +79,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/SegListTest.cc
   tests/ParamedStringTest.cc
   tests/RpcHelperTest.cc
-  tests/AbstractCommandTest.cc
   tests/SinkStreamFilterTest.cc
   tests/WrDiskCacheTest.cc
   tests/WrDiskCacheEntryTest.cc
@@ -131,7 +116,6 @@ set(ARIA2_TEST_SOURCES_HAVE_ZLIB
 )
 
 set(ARIA2_TEST_SOURCES_HAVE_SQLITE3
-  tests/Sqlite3CookieParserTest.cc
 )
 
 set(ARIA2_TEST_SOURCES_ENABLE_BITTORRENT

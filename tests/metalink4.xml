@@ -19,7 +19,7 @@
       <hash>487ba2299be7f759d7c7bf6a4ac3a32cee81f1bb9332fc485947e32918864fb2</hash>
       <hash>37290d74ac4d186e3a8e5785d259d2ec04fac91ae28092e7620ec8bc99e830aa</hash>
     </pieces>
-    <url location="de" priority="1">ftp://ftp.example.com/example.ext</url>
+    <url location="de" priority="1">sftp://ftp.example.com/example.ext</url>
     <url location="fr" priority="1">http://example.com/example.ext</url>
     <metaurl mediatype="torrent" priority="2">http://example.com/example.ext.torrent</metaurl>
     <signature mediatype="application/pgp-signature">a signature</signature>

@@ -58,7 +58,6 @@ class Command;
 class DownloadCommand;
 class DownloadContext;
 class PieceStorage;
-class ProgressInfoFile;
 class Dependency;
 class PreDownloadHandler;
 class PostDownloadHandler;
@@ -66,8 +65,8 @@ class DiskWriterFactory;
 class Option;
 class RequestGroup;
 class CheckIntegrityEntry;
+class CurlDownload;
 struct DownloadResult;
-class URISelector;
 class URIResult;
 class RequestGroupMan;
 #ifdef ENABLE_BITTORRENT
@@ -105,17 +104,15 @@ private:
 
   std::shared_ptr<PieceStorage> pieceStorage_;
 
-  std::shared_ptr<ProgressInfoFile> progressInfoFile_;
-
   std::shared_ptr<DiskWriterFactory> diskWriterFactory_;
 
   std::shared_ptr<Dependency> dependency_;
 
-  std::unique_ptr<URISelector> uriSelector_;
-
   std::shared_ptr<MetadataInfo> metadataInfo_;
 
   RequestGroupMan* requestGroupMan_;
+
+  std::shared_ptr<CurlDownload> curlDownload_;
 
 #ifdef ENABLE_BITTORRENT
   std::shared_ptr<BtDownload> btDownload_;
@@ -137,7 +134,7 @@ private:
 
   Time lastModifiedTime_;
 
-  // Timeout used for HTTP/FTP downloads.
+  // Transport timeout.
   std::chrono::seconds timeout_;
 
   int state_;
@@ -145,7 +142,7 @@ private:
   int numConcurrentCommand_;
 
   /**
-   * This is the number of connections used in streaming protocol(http/ftp)
+   * This is the number of legacy segment connections.
    */
   int numStreamConnection_;
 
@@ -166,8 +163,6 @@ private:
   error_code::Value lastErrorCode_;
 
   std::string lastErrorMessage_;
-
-  bool saveControlFile_;
 
   bool fileAllocationEnabled_;
 
@@ -204,9 +199,6 @@ private:
   // returns error_code::UNKNOWN_ERROR.
   std::pair<error_code::Value, std::string> downloadResult() const;
 
-  void removeDefunctControlFile(
-      const std::shared_ptr<ProgressInfoFile>& progressInfoFile);
-
 public:
   RequestGroup(const std::shared_ptr<GroupId>& gid,
                const std::shared_ptr<Option>& option);
@@ -222,12 +214,8 @@ public:
     return segmentMan_;
   }
 
-  std::unique_ptr<CheckIntegrityEntry> createCheckIntegrityEntry(
-      FileOpenMode fileOpenMode = DEFAULT_FILE_OPEN);
-
   // Returns first bootstrap commands to initiate a download.
-  // If this is HTTP/FTP download and file size is unknown, only 1 command
-  // (usually, HttpInitiateConnection or FtpInitiateConnection) will be created.
+  // Create the first command for the selected native transport backend.
   void createInitialCommand(std::vector<std::unique_ptr<Command>>& commands,
                             DownloadEngine* e);
 
@@ -279,6 +267,16 @@ public:
 
   TransferStat calculateStat() const;
 
+  const std::shared_ptr<CurlDownload>& getCurlDownload() const
+  {
+    return curlDownload_;
+  }
+
+  void setCurlDownload(std::shared_ptr<CurlDownload> download)
+  {
+    curlDownload_ = std::move(download);
+  }
+
   const std::shared_ptr<DownloadContext>& getDownloadContext() const
   {
     return downloadContext_;
@@ -307,9 +305,6 @@ public:
     btDownload_ = std::move(download);
   }
 #endif // ENABLE_BITTORRENT
-
-  void setProgressInfoFile(
-      const std::shared_ptr<ProgressInfoFile>& progressInfoFile);
 
   void increaseStreamCommand();
 
@@ -346,8 +341,7 @@ public:
   bool needsFileAllocation() const;
 
   /**
-   * Setting preLocalFileCheckEnabled_ to false, then skip the check to see
-   * if a file is already exists and control file exists etc.
+   * Setting preLocalFileCheckEnabled_ to false skips existing-file checks.
    * Always open file with DiskAdaptor::initAndOpenFile()
    */
   void setPreLocalFileCheckEnabled(bool f) { preLocalFileCheckEnabled_ = f; }
@@ -394,11 +388,6 @@ public:
 
   void clearPreDownloadHandler();
 
-  void
-  processCheckIntegrityEntry(std::vector<std::unique_ptr<Command>>& commands,
-                             std::unique_ptr<CheckIntegrityEntry> entry,
-                             DownloadEngine* e);
-
   // Initializes pieceStorage_ and segmentMan_.  We guarantee that
   // either both of pieceStorage_ and segmentMan_ are initialized or
   // they are not.
@@ -408,26 +397,13 @@ public:
 
   bool downloadFinishedByFileLength();
 
-  void loadAndOpenFile(
-      const std::shared_ptr<ProgressInfoFile>& progressInfoFile,
-      FileOpenMode fileOpenMode = DEFAULT_FILE_OPEN);
-
   void shouldCancelDownloadForSafety();
-
-  void adjustFilename(const std::shared_ptr<ProgressInfoFile>& infoFile);
 
   std::shared_ptr<DownloadResult> createDownloadResult() const;
 
   const std::shared_ptr<Option>& getOption() const { return option_; }
 
   void reportDownloadFinished();
-
-  void setURISelector(std::unique_ptr<URISelector> uriSelector);
-
-  const std::unique_ptr<URISelector>& getURISelector() const
-  {
-    return uriSelector_;
-  }
 
   void applyLastModifiedTimeToLocalFiles();
 
@@ -471,13 +447,9 @@ public:
 
   error_code::Value getLastErrorCode() const { return lastErrorCode_; }
 
-  void saveControlFile() const;
+  void checkpointState() const;
 
-  void removeControlFile() const;
-
-  void enableSaveControlFile() { saveControlFile_ = true; }
-
-  void disableSaveControlFile() { saveControlFile_ = false; }
+  void removeState() const;
 
   template <typename InputIterator>
   void followedBy(InputIterator groupFirst, InputIterator groupLast)

@@ -24,7 +24,7 @@ fffff
 	</signature>
       </verification>
       <resources maxconnections="1">
-        <url type="ftp" location="jp" preference="100" maxconnections="1">ftp://ftphost/aria2-0.5.2.tar.bz2</url>
+        <url type="sftp" location="jp" preference="100" maxconnections="1">sftp://ftphost/aria2-0.5.2.tar.bz2</url>
         <url type="http" location="us" preference="100">http://httphost/aria2-0.5.2.tar.bz2</url>
       </resources>
     </file>
@@ -42,13 +42,13 @@ fffff
 	</pieces>
       </verification>
       <resources>
-        <url type="ftp" preference="100">ftp://ftphost/aria2-0.5.1.tar.bz2</url>
+        <url type="sftp" preference="100">sftp://ftphost/aria2-0.5.1.tar.bz2</url>
         <url type="http" preference="100">http://httphost/aria2-0.5.1.tar.bz2</url>
       </resources>
     </file>
     <file name="NoVerificationHash">
     <resources>
-    <url type="ftp" preference="100">ftp://host/file</url>
+    <url type="sftp" preference="100">sftp://host/file</url>
     </resources>
     </file>
     <file name="UnsupportedVerificationHashTypeIncluded">
@@ -65,7 +65,7 @@ fffff
 	</pieces>
       </verification>
       <resources>
-        <url type="ftp" preference="100">ftp://host/file</url>
+        <url type="sftp" preference="100">sftp://host/file</url>
       </resources>
     </file>
     <file name="torrent-http.integrated">

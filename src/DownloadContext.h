@@ -160,9 +160,8 @@ public:
   void setDigest(const std::string& hashType, const std::string& digest);
 
   // The representative path name for this context. It is used as a
-  // part of .aria2 control file. If basePath_ is set, returns
-  // basePath_. Otherwise, the first FileEntry's getFilePath() is
-  // returned.
+  // If basePath_ is set, returns basePath_. Otherwise, the first
+  // FileEntry's getFilePath() is returned.
   const std::string& getBasePath() const;
 
   void setBasePath(const std::string& basePath);

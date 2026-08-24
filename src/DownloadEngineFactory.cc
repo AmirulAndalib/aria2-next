@@ -47,7 +47,7 @@
 #include "prefs.h"
 #include "FillRequestGroupCommand.h"
 #include "FileAllocationDispatcherCommand.h"
-#include "AutoSaveCommand.h"
+#include "StateSaveCommand.h"
 #include "SaveSessionCommand.h"
 #include "HaveEraseCommand.h"
 #include "TimedHaltCommand.h"
@@ -150,10 +150,10 @@ std::unique_ptr<DownloadEngine> DownloadEngineFactory::newDownloadEngine(
   e->addRoutineCommand(
       make_unique<EvictSocketPoolCommand>(e->newCUID(), e.get(), 30_s));
 
-  if (op->getAsInt(PREF_AUTO_SAVE_INTERVAL) > 0) {
-    e->addRoutineCommand(make_unique<AutoSaveCommand>(
+  if (op->getAsInt(PREF_STATE_SAVE_INTERVAL) > 0) {
+    e->addRoutineCommand(make_unique<StateSaveCommand>(
         e->newCUID(), e.get(),
-        std::chrono::seconds(op->getAsInt(PREF_AUTO_SAVE_INTERVAL))));
+        std::chrono::seconds(op->getAsInt(PREF_STATE_SAVE_INTERVAL))));
   }
   if (op->getAsInt(PREF_SAVE_SESSION_INTERVAL) > 0) {
     e->addRoutineCommand(make_unique<SaveSessionCommand>(

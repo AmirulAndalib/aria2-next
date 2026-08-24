@@ -34,6 +34,8 @@ void ApplicationStatePathTest::testProtocolPaths()
              state::btResumeDirectory(&option));
   REQUIRE_EQ(std::string("/var/lib/aria2-next/ed2k/state.db"),
              state::ed2kDatabaseFile(&option));
+  REQUIRE_EQ(std::string("/var/lib/aria2-next/stream/state.db"),
+             state::streamDatabaseFile(&option));
 }
 
 } // namespace aria2

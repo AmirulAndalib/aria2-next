@@ -53,15 +53,12 @@
 #include "a2functional.h"
 #include "DlAbortEx.h"
 #include "ServerStatMan.h"
-#include "CookieStorage.h"
-#include "AuthConfigFactory.h"
-#include "AuthConfig.h"
 #include "Request.h"
 #include "EventPoll.h"
 #include "Command.h"
+#include "CurlSession.h"
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityEntry.h"
-#include "ProgressInfoFile.h"
 #include "DownloadContext.h"
 #include "fmt.h"
 #include "wallclock.h"
@@ -98,7 +95,6 @@ DownloadEngine::DownloadEngine(std::unique_ptr<EventPoll> eventPoll)
       noWait_(true),
       refreshInterval_(DEFAULT_REFRESH_INTERVAL),
       lastRefresh_(Timer::zero()),
-      cookieStorage_(make_unique<CookieStorage>()),
       dnsCache_(make_unique<DNSCache>()),
       option_(nullptr)
 {
@@ -107,7 +103,16 @@ DownloadEngine::DownloadEngine(std::unique_ptr<EventPoll> eventPoll)
   sessionId_.assign(&sessionId[0], &sessionId[sizeof(sessionId)]);
 }
 
-DownloadEngine::~DownloadEngine() {}
+DownloadEngine::~DownloadEngine()
+{
+  commands_.clear();
+  routineCommands_.clear();
+  curlSession_.reset();
+#ifdef ENABLE_BITTORRENT
+  btSession_.reset();
+#endif // ENABLE_BITTORRENT
+  requestGroupMan_.reset();
+}
 
 namespace {
 void executeCommand(std::deque<std::unique_ptr<Command>>& commands,
@@ -164,6 +169,10 @@ int DownloadEngine::run(bool oneshot)
       btSession_->poll();
     }
 #endif
+    rebalanceGlobalDownloadLimit();
+    if (curlSession_) {
+      curlSession_->poll();
+    }
     calculateStatistics();
     if (lastRefresh_.difference(global::wallclock()) + A2_DELTA_MILLIS >=
         refreshInterval_) {
@@ -182,6 +191,35 @@ int DownloadEngine::run(bool oneshot)
   }
   onEndOfRun();
   return 0;
+}
+
+void DownloadEngine::rebalanceGlobalDownloadLimit()
+{
+  if (!option_) {
+    return;
+  }
+  const auto overall = option_->getAsInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT);
+  auto curlLimit = overall;
+  auto btLimit = overall;
+#ifdef ENABLE_BITTORRENT
+  const auto btActive =
+      btSession_ && btSession_->transferStat().downloadSpeed > 0;
+#else
+  const auto btActive = false;
+#endif
+  const auto curlActive = curlSession_ && curlSession_->activeCount() > 0;
+  if (overall > 0 && btActive && curlActive) {
+    curlLimit = std::max(1, overall / 2);
+    btLimit = std::max(1, overall - curlLimit);
+  }
+  if (curlSession_) {
+    curlSession_->setGlobalDownloadLimit(curlLimit);
+  }
+#ifdef ENABLE_BITTORRENT
+  if (btSession_) {
+    btSession_->setGlobalDownloadLimit(btLimit);
+  }
+#endif
 }
 
 void DownloadEngine::waitData()
@@ -245,7 +283,7 @@ void DownloadEngine::afterEachIteration()
 {
   if (global::globalHaltRequested == 1) {
     A2_LOG_INFO(_("Shutdown sequence commencing..."
-                    " Press Ctrl-C again for emergency shutdown."));
+                  " Press Ctrl-C again for emergency shutdown."));
     requestHalt();
     global::globalHaltRequested = 2;
     setNoWait(true);
@@ -278,6 +316,19 @@ void DownloadEngine::requestForceHalt()
 void DownloadEngine::setStatCalc(std::unique_ptr<StatCalc> statCalc)
 {
   statCalc_ = std::move(statCalc);
+}
+
+void DownloadEngine::setOption(Option* option)
+{
+  option_ = option;
+  if (option_ && !curlSession_) {
+    curlSession_ = make_unique<CurlSession>(option_);
+  }
+}
+
+void DownloadEngine::setCurlSession(std::unique_ptr<CurlSession> session)
+{
+  curlSession_ = std::move(session);
 }
 
 #ifdef ENABLE_ASYNC_DNS
@@ -372,8 +423,7 @@ void DownloadEngine::poolSocket(const std::string& ipaddr, uint16_t port,
                                 std::chrono::seconds timeout)
 {
   SocketPoolEntry e(sock, std::move(timeout));
-  poolSocket(createSockPoolKey(ipaddr, port, "", proxyhost, proxyport),
-             e);
+  poolSocket(createSockPoolKey(ipaddr, port, "", proxyhost, proxyport), e);
 }
 
 void DownloadEngine::poolSocketForHostname(
@@ -436,8 +486,8 @@ void DownloadEngine::poolSocket(const std::shared_ptr<Request>& request,
 
   Endpoint peerInfo;
   if (getPeerInfo(peerInfo, socket)) {
-    poolSocket(peerInfo.addr, peerInfo.port, username, "", 0, socket,
-               options, std::move(timeout));
+    poolSocket(peerInfo.addr, peerInfo.port, username, "", 0, socket, options,
+               std::move(timeout));
   }
 }
 
@@ -592,23 +642,6 @@ void DownloadEngine::removeCachedIPAddress(const std::string& hostname,
                                            uint16_t port)
 {
   dnsCache_->remove(hostname, port);
-}
-
-void DownloadEngine::setAuthConfigFactory(
-    std::unique_ptr<AuthConfigFactory> factory)
-{
-  authConfigFactory_ = std::move(factory);
-}
-
-const std::unique_ptr<AuthConfigFactory>&
-DownloadEngine::getAuthConfigFactory() const
-{
-  return authConfigFactory_;
-}
-
-const std::unique_ptr<CookieStorage>& DownloadEngine::getCookieStorage() const
-{
-  return cookieStorage_;
 }
 
 void DownloadEngine::setRefreshInterval(std::chrono::milliseconds interval)

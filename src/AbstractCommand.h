@@ -92,8 +92,6 @@ private:
 
   int32_t calculateMinSplitSize() const;
 
-  void useFasterRequest(const std::shared_ptr<Request>& fasterRequest);
-
   bool shouldProcess() const;
 
 protected:
@@ -176,8 +174,6 @@ public:
     timeout_ = std::move(timeout);
   }
 
-  void prepareForNextAction(std::unique_ptr<CheckIntegrityEntry> checkEntry);
-
   // Check if socket is connected. If socket is not connected and
   // there are other addresses to try, command is created using
   // InitiateConnectionCommandFactory and it is pushed to
@@ -187,22 +183,6 @@ public:
                                     const std::string& connectedHostname,
                                     const std::string& connectedAddr,
                                     uint16_t connectedPort);
-
-  /*
-   * Returns true if proxy for the procol indicated by Request::getProtocol()
-   * is defined. Otherwise, returns false.
-   */
-  bool isProxyDefined() const;
-
-  /*
-   * Creates Request object for proxy URI and returns it.
-   * If no valid proxy is defined, then returns std::shared_ptr<Request>().
-   */
-  std::shared_ptr<Request> createProxyRequest() const;
-
-  // Returns proxy method for given protocol. Either V_GET or V_TUNNEL
-  // is returned.  For HTTPS, always returns V_TUNNEL.
-  const std::string& resolveProxyMethod(const std::string& protocol) const;
 
   const std::shared_ptr<Option>& getOption() const;
 
@@ -239,10 +219,6 @@ public:
 
   virtual bool execute() override;
 };
-
-// Returns proxy URI for given protocol.  If no proxy URI is defined,
-// then returns an empty string.
-std::string getProxyUri(const std::string& protocol, const Option* option);
 
 } // namespace aria2
 

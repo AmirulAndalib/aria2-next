@@ -6,7 +6,6 @@
 #include "DownloadContext.h"
 #include "FileEntry.h"
 #include "PieceStorage.h"
-#include "DefaultProgressInfoFile.h"
 #include "File.h"
 #include "TestUtil.h"
 #include "DownloadResult.h"
@@ -14,7 +13,6 @@
 namespace aria2 {
 
 class RequestGroupTest {
-
 
 private:
   std::shared_ptr<Option> option_;
@@ -25,13 +23,11 @@ public:
   void testGetFirstFilePath();
   void testTryAutoFileRenaming();
   void testCreateDownloadResult();
-  void testLoadAndOpenFileRestartFromScratch();
 };
 
 A2_TEST(RequestGroupTest, testGetFirstFilePath)
 A2_TEST(RequestGroupTest, testTryAutoFileRenaming)
 A2_TEST(RequestGroupTest, testCreateDownloadResult)
-A2_TEST(RequestGroupTest, testLoadAndOpenFileRestartFromScratch)
 
 void RequestGroupTest::testGetFirstFilePath()
 {
@@ -70,18 +66,15 @@ void RequestGroupTest::testTryAutoFileRenaming()
 
   ctx->getFirstFileEntry()->setPath("/tmp/myfile.txt");
   group.tryAutoFileRenaming();
-  REQUIRE_EQ(std::string("/tmp/myfile.1.txt"),
-                       group.getFirstFilePath());
+  REQUIRE_EQ(std::string("/tmp/myfile.1.txt"), group.getFirstFilePath());
 
   ctx->getFirstFileEntry()->setPath("/tmp.txt/myfile");
   group.tryAutoFileRenaming();
-  REQUIRE_EQ(std::string("/tmp.txt/myfile.1"),
-                       group.getFirstFilePath());
+  REQUIRE_EQ(std::string("/tmp.txt/myfile.1"), group.getFirstFilePath());
 
   ctx->getFirstFileEntry()->setPath("/tmp.txt/myfile.txt");
   group.tryAutoFileRenaming();
-  REQUIRE_EQ(std::string("/tmp.txt/myfile.1.txt"),
-                       group.getFirstFilePath());
+  REQUIRE_EQ(std::string("/tmp.txt/myfile.1.txt"), group.getFirstFilePath());
 
   ctx->getFirstFileEntry()->setPath(".bashrc");
   group.tryAutoFileRenaming();
@@ -93,13 +86,11 @@ void RequestGroupTest::testTryAutoFileRenaming()
 
   ctx->getFirstFileEntry()->setPath("/tmp.txt/.bashrc");
   group.tryAutoFileRenaming();
-  REQUIRE_EQ(std::string("/tmp.txt/.bashrc.1"),
-                       group.getFirstFilePath());
+  REQUIRE_EQ(std::string("/tmp.txt/.bashrc.1"), group.getFirstFilePath());
 
   ctx->getFirstFileEntry()->setPath("/tmp.txt/.bashrc.txt");
   group.tryAutoFileRenaming();
-  REQUIRE_EQ(std::string("/tmp.txt/.bashrc.1.txt"),
-                       group.getFirstFilePath());
+  REQUIRE_EQ(std::string("/tmp.txt/.bashrc.1.txt"), group.getFirstFilePath());
 }
 
 void RequestGroupTest::testCreateDownloadResult()
@@ -112,10 +103,8 @@ void RequestGroupTest::testCreateDownloadResult()
   {
     std::shared_ptr<DownloadResult> result = group.createDownloadResult();
 
-    REQUIRE_EQ(std::string("/tmp/myfile"),
-                         result->fileEntries[0]->getPath());
-    REQUIRE_EQ((int64_t)1_m,
-                         result->fileEntries.back()->getLastOffset());
+    REQUIRE_EQ(std::string("/tmp/myfile"), result->fileEntries[0]->getPath());
+    REQUIRE_EQ((int64_t)1_m, result->fileEntries.back()->getLastOffset());
     REQUIRE_EQ((uint64_t)0, result->sessionDownloadLength);
     REQUIRE_EQ((int64_t)0, result->sessionTime.count());
     // result is UNKNOWN_ERROR if download has not completed and no specific
@@ -147,31 +136,6 @@ void RequestGroupTest::testCreateDownloadResult()
 
     REQUIRE_EQ(error_code::FINISHED, result->result);
   }
-}
-
-void RequestGroupTest::testLoadAndOpenFileRestartFromScratch()
-{
-  auto path = std::string(A2_TEST_OUT_DIR) +
-              "/aria2_RequestGroupTest_testLoadAndOpenFileRestartFromScratch";
-  File(path).remove();
-  File(path + DefaultProgressInfoFile::getSuffix()).remove();
-  createFile(path, 1_k);
-
-  option_->put(PREF_CONTINUE, A2_V_TRUE);
-  option_->put(PREF_FILE_ALLOCATION, V_NONE);
-
-  auto ctx = std::make_shared<DownloadContext>(1_k, 2_k, path);
-  RequestGroup group(GroupId::create(), option_);
-  group.setDownloadContext(ctx);
-  group.initPieceStorage();
-
-  auto infoFile =
-      std::make_shared<DefaultProgressInfoFile>(ctx, group.getPieceStorage(),
-                                                  option_.get());
-  group.loadAndOpenFile(infoFile, RequestGroup::RESTART_FROM_SCRATCH);
-
-  REQUIRE_EQ((int64_t)0, group.getCompletedLength());
-  REQUIRE_EQ((int64_t)0, File(path).size());
 }
 
 } // namespace aria2

@@ -38,6 +38,7 @@
 #include <sstream>
 
 #include "RequestGroup.h"
+#include "CurlDownload.h"
 #include "Option.h"
 #include "prefs.h"
 #include "Metalink2RequestGroup.h"
@@ -413,6 +414,7 @@ createRequestGroup(const std::shared_ptr<Option>& optionTemplate,
                     util::fromHex(std::begin(hexDigest), std::end(hexDigest)));
   }
   rg->setDownloadContext(dctx);
+  rg->setCurlDownload(std::make_shared<CurlDownload>(uris));
 
   if (option->getAsBool(PREF_ENABLE_RPC)) {
     rg->setPauseRequested(option->getAsBool(PREF_PAUSE));
@@ -802,7 +804,7 @@ void createRequestGroupForUri(
   else {
     auto strmProtoEnd = std::stable_partition(
         std::begin(nargs), std::end(nargs), StreamProtocolFilter());
-    // let's process http/ftp protocols first.
+    // Process stream protocols first.
     if (std::begin(nargs) != strmProtoEnd) {
       size_t numIter = option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER);
       size_t numSplit = option->getAsInt(PREF_SPLIT);

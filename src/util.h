@@ -727,8 +727,7 @@ bool saveAs(const std::string& filename, const std::string& data,
 // dir = "/",    relPath = "foo" => "/foo"
 std::string applyDir(const std::string& dir, const std::string& relPath);
 
-// In HTTP/FTP, file name is file component in URI. In HTTP, filename
-// may be a value of Content-Disposition header.  They are likely
+// A stream file name is normally the file component in its URI. It is likely
 // percent encoded. If they contains, for example, %2F, when decoded,
 // basename contains dir component. This should be avoided.  This
 // function is created to fix these issues.  This function expects src

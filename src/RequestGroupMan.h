@@ -146,9 +146,6 @@ private:
       const char* status,
       const std::shared_ptr<DownloadResult>& downloadResult) const;
 
-  void configureRequestGroup(
-      const std::shared_ptr<RequestGroup>& requestGroup) const;
-
   void addRequestGroupIndex(const std::shared_ptr<RequestGroup>& group);
   void addRequestGroupIndex(
       const std::vector<std::shared_ptr<RequestGroup>>& groups);

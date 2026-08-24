@@ -43,7 +43,7 @@ namespace aria2 {
 class MetalinkResource {
 public:
   enum TYPE {
-    TYPE_FTP = 0,
+    TYPE_SFTP = 0,
     TYPE_HTTP,
     TYPE_HTTPS,
     TYPE_BITTORRENT,

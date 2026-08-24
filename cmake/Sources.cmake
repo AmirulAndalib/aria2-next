@@ -7,8 +7,6 @@ set(ARIA2_SOURCES_BASE
   src/a2iterator.h
   src/a2netcompat.h
   src/a2time.h
-  src/AbstractAuthResolver.cc
-  src/AbstractAuthResolver.h
   src/AbstractCommand.cc
   src/AbstractCommand.h
   src/AbstractDiskWriter.cc
@@ -17,29 +15,16 @@ set(ARIA2_SOURCES_BASE
   src/AbstractHttpServerResponseCommand.h
   src/AbstractOptionHandler.cc
   src/AbstractOptionHandler.h
-  src/AbstractProxyRequestCommand.cc
-  src/AbstractProxyRequestCommand.h
-  src/AbstractProxyResponseCommand.cc
-  src/AbstractProxyResponseCommand.h
   src/AbstractSingleDiskAdaptor.cc
   src/AbstractSingleDiskAdaptor.h
   src/AdaptiveFileAllocationIterator.cc
   src/AdaptiveFileAllocationIterator.h
-  src/AdaptiveURISelector.cc
-  src/AdaptiveURISelector.h
   src/ApplicationStatePath.cc
   src/ApplicationStatePath.h
   src/AnonDiskWriterFactory.h
   src/array_fun.h
-  src/AuthConfig.cc
-  src/AuthConfig.h
-  src/AuthConfigFactory.cc
-  src/AuthConfigFactory.h
-  src/AuthResolver.h
-  src/AutoSaveCommand.cc
-  src/AutoSaveCommand.h
-  src/BackupIPv4ConnectCommand.h
-  src/BackupIPv4ConnectCommand.cc
+  src/StateSaveCommand.cc
+  src/StateSaveCommand.h
   src/base32.cc
   src/base32.h
   src/base64.h
@@ -47,7 +32,6 @@ set(ARIA2_SOURCES_BASE
   src/bitfield.h
   src/BitfieldMan.cc
   src/BitfieldMan.h
-  src/ProgressInfoFile.h
   src/BufferedFile.cc
   src/BufferedFile.h
   src/ByteArrayDiskWriter.cc
@@ -73,8 +57,6 @@ set(ARIA2_SOURCES_BASE
   src/Command.cc
   src/Command.h
   src/common.h
-  src/ConnectCommand.cc
-  src/ConnectCommand.h
   src/console.cc
   src/console.h
   src/ConsoleStatCalc.cc
@@ -86,21 +68,18 @@ set(ARIA2_SOURCES_BASE
   src/ContextAttribute.cc
   src/ContextAttribute.h
   src/ControlChain.h
-  src/Cookie.cc
-  src/Cookie.h
-  src/CookieStorage.cc
-  src/CookieStorage.h
-  src/cookie_helper.cc
-  src/cookie_helper.h
-  src/CreateRequestCommand.cc
-  src/CreateRequestCommand.h
   src/crypto_endian.h
   src/CUIDCounter.cc
   src/CUIDCounter.h
-  src/DefaultAuthResolver.cc
-  src/DefaultAuthResolver.h
-  src/DefaultProgressInfoFile.cc
-  src/DefaultProgressInfoFile.h
+  src/CurlDownload.cc
+  src/CurlDownload.h
+  src/CurlDownloadCommand.cc
+  src/CurlDownloadCommand.h
+  src/CurlDownloadImpl.h
+  src/CurlSession.cc
+  src/CurlSession.h
+  src/CurlCheckIntegrityEntry.cc
+  src/CurlCheckIntegrityEntry.h
   src/DefaultDiskWriter.cc
   src/DefaultDiskWriter.h
   src/DefaultDiskWriterFactory.cc
@@ -123,8 +102,6 @@ set(ARIA2_SOURCES_BASE
   src/DlRetryEx.h
   src/DNSCache.cc
   src/DNSCache.h
-  src/DownloadCommand.cc
-  src/DownloadCommand.h
   src/DownloadContext.cc
   src/DownloadContext.h
   src/DownloadEngine.cc
@@ -151,8 +128,6 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kListenCommand.h
   src/Ed2kPeerTransfer.cc
   src/Ed2kPeerTransfer.h
-  src/Ed2kProgressInfoFile.cc
-  src/Ed2kProgressInfoFile.h
   src/Ed2kSession.cc
   src/Ed2kSession.h
   src/Ed2kStore.cc
@@ -208,8 +183,6 @@ set(ARIA2_SOURCES_BASE
   src/FatalException.h
   src/FeatureConfig.cc
   src/FeatureConfig.h
-  src/FeedbackURISelector.cc
-  src/FeedbackURISelector.h
   src/File.cc
   src/File.h
   src/FileAllocationCommand.cc
@@ -226,22 +199,6 @@ set(ARIA2_SOURCES_BASE
   src/FillRequestGroupCommand.h
   src/fmt.cc
   src/fmt.h
-  src/FtpConnection.cc
-  src/FtpConnection.h
-  src/FtpDownloadCommand.cc
-  src/FtpDownloadCommand.h
-  src/FtpFinishDownloadCommand.cc
-  src/FtpFinishDownloadCommand.h
-  src/FtpInitiateConnectionCommand.cc
-  src/FtpInitiateConnectionCommand.h
-  src/FtpNegotiationCommand.cc
-  src/FtpNegotiationCommand.h
-  src/FtpNegotiationConnectChain.h
-  src/FtpTunnelRequestCommand.cc
-  src/FtpTunnelRequestCommand.h
-  src/FtpTunnelRequestConnectChain.h
-  src/FtpTunnelResponseCommand.cc
-  src/FtpTunnelResponseCommand.h
   src/GenericParser.h
   src/GeomStreamPieceSelector.cc
   src/GeomStreamPieceSelector.h
@@ -253,34 +210,12 @@ set(ARIA2_SOURCES_BASE
   src/HaveEraseCommand.h
   src/help_tags.cc
   src/help_tags.h
-  src/HttpConnection.cc
-  src/HttpConnection.h
-  src/HttpDownloadCommand.cc
-  src/HttpDownloadCommand.h
   src/HttpHeader.cc
   src/HttpHeader.h
   src/HttpHeaderProcessor.cc
   src/HttpHeaderProcessor.h
-  src/HttpInitiateConnectionCommand.cc
-  src/HttpInitiateConnectionCommand.h
   src/HttpListenCommand.cc
   src/HttpListenCommand.h
-  src/HttpProxyRequestCommand.cc
-  src/HttpProxyRequestCommand.h
-  src/HttpProxyRequestConnectChain.h
-  src/HttpProxyResponseCommand.cc
-  src/HttpProxyResponseCommand.h
-  src/HttpRequest.cc
-  src/HttpRequest.h
-  src/HttpRequestCommand.cc
-  src/HttpRequestCommand.h
-  src/HttpRequestConnectChain.h
-  src/HttpTailReclaimPolicy.cc
-  src/HttpTailReclaimPolicy.h
-  src/HttpResponse.cc
-  src/HttpResponse.h
-  src/HttpResponseCommand.cc
-  src/HttpResponseCommand.h
   src/HttpServer.cc
   src/HttpServer.h
   src/HttpServerBodyCommand.cc
@@ -289,13 +224,7 @@ set(ARIA2_SOURCES_BASE
   src/HttpServerCommand.h
   src/HttpServerResponseCommand.cc
   src/HttpServerResponseCommand.h
-  src/HttpSkipResponseCommand.cc
-  src/HttpSkipResponseCommand.h
   src/IndexedList.h
-  src/InitiateConnectionCommand.cc
-  src/InitiateConnectionCommand.h
-  src/InitiateConnectionCommandFactory.cc
-  src/InitiateConnectionCommandFactory.h
   src/InorderStreamPieceSelector.cc
   src/InorderStreamPieceSelector.h
   src/RandomStreamPieceSelector.cc
@@ -314,8 +243,6 @@ set(ARIA2_SOURCES_BASE
   src/JsonDiskWriter.h
   src/JsonParser.cc
   src/JsonParser.h
-  src/LegacyOptionAdapter.cc
-  src/LegacyOptionAdapter.h
   src/Lock.h
   src/Log.cc
   src/Log.h
@@ -339,18 +266,11 @@ set(ARIA2_SOURCES_BASE
   src/MultiUrlRequestInfo.h
   src/NameResolver.cc
   src/NameResolver.h
-  src/Netrc.cc
-  src/Netrc.h
-  src/NetrcAuthResolver.cc
-  src/NetrcAuthResolver.h
   src/NetStat.cc
   src/NetStat.h
   src/Notifier.cc
   src/Notifier.h
-  src/NsCookieParser.cc
-  src/NsCookieParser.h
   src/NullOutputFile.h
-  src/NullProgressInfoFile.h
   src/NullSinkStreamFilter.cc
   src/NullSinkStreamFilter.h
   src/NullStatCalc.h
@@ -460,13 +380,11 @@ set(ARIA2_SOURCES_BASE
   src/SpeedCalc.cc
   src/SpeedCalc.h
   src/StatCalc.h
-  src/StreamCheckIntegrityEntry.cc
-  src/StreamCheckIntegrityEntry.h
-  src/StreamFileAllocationEntry.cc
-  src/StreamFileAllocationEntry.h
   src/StreamFilter.cc
   src/StreamFilter.h
   src/StreamPieceSelector.h
+  src/StreamStore.cc
+  src/StreamStore.h
   src/StructParserStateMachine.h
   src/TimeA2.cc
   src/TimeA2.h
@@ -637,22 +555,6 @@ set(ARIA2_SOURCES_HAVE_ZLIB
 )
 
 set(ARIA2_SOURCES_HAVE_SQLITE3
-  src/Sqlite3CookieParser.cc
-  src/Sqlite3CookieParser.h
-  src/Sqlite3CookieParserImpl.cc
-  src/Sqlite3CookieParserImpl.h
-)
-
-set(ARIA2_SOURCES_HAVE_LIBSSH2
-  src/SSHSession.cc
-  src/SSHSession.h
-  src/SftpNegotiationCommand.cc
-  src/SftpNegotiationCommand.h
-  src/SftpNegotiationConnectChain.h
-  src/SftpDownloadCommand.cc
-  src/SftpDownloadCommand.h
-  src/SftpFinishDownloadCommand.cc
-  src/SftpFinishDownloadCommand.h
 )
 
 set(ARIA2_SOURCES_ENABLE_ASYNC_DNS

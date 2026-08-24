@@ -30,8 +30,8 @@ std::unique_ptr<MetalinkEntry> createTestEntry()
 {
   auto entry = make_unique<MetalinkEntry>();
   auto res1 = make_unique<MetalinkResource>();
-  res1->url = "ftp://myhost/aria2.tar.bz2";
-  res1->type = MetalinkResource::TYPE_FTP;
+  res1->url = "sftp://myhost/aria2.tar.bz2";
+  res1->type = MetalinkResource::TYPE_SFTP;
   res1->location = "ro";
   res1->priority = 50;
   auto res2 = make_unique<MetalinkResource>();
@@ -77,7 +77,7 @@ void MetalinkEntryTest::testDropUnsupportedResource()
 #endif // defined(ENABLE_SSL) || defined(ENABLE_BITTORRENT)
 
   auto itr = std::begin(entry->resources);
-  REQUIRE_EQ(MetalinkResource::TYPE_FTP, (*itr++)->type);
+  REQUIRE_EQ(MetalinkResource::TYPE_SFTP, (*itr++)->type);
   REQUIRE_EQ(MetalinkResource::TYPE_HTTP, (*itr++)->type);
 #ifdef ENABLE_BITTORRENT
   REQUIRE_EQ(MetalinkResource::TYPE_BITTORRENT, (*itr++)->type);

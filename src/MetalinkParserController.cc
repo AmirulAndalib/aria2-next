@@ -195,8 +195,8 @@ void MetalinkParserController::setTypeOfResource(std::string type)
   if (!tResource_) {
     return;
   }
-  if (type == "ftp" || type == "sftp") {
-    tResource_->type = MetalinkResource::TYPE_FTP;
+  if (type == "sftp") {
+    tResource_->type = MetalinkResource::TYPE_SFTP;
   }
   else if (type == "http") {
     tResource_->type = MetalinkResource::TYPE_HTTP;

@@ -7,7 +7,6 @@
 
 #include "TestUtil.h"
 #include "Ed2kAttribute.h"
-#include "DefaultProgressInfoFile.h"
 #include "DiskAdaptor.h"
 #include "prefs.h"
 #include "DownloadContext.h"
@@ -64,6 +63,7 @@ public:
   {
     option_ = std::make_shared<Option>();
     option_->put(PREF_PIECE_LENGTH, "1048576");
+    option_->put(PREF_DIR, A2_TEST_OUT_DIR "/aria2_RequestGroupManTest");
     // To enable paused RequestGroup
     option_->put(PREF_ENABLE_RPC, A2_V_TRUE);
     File(option_->get(PREF_DIR)).mkdirs();
@@ -83,7 +83,6 @@ public:
   void testFillRequestGroupFromReserver();
   void testFillRequestGroupFromReserver_uriParser();
   void testReduceMaxConcurrentDownloads();
-  void testUserRemoveDoesNotKeepControlFile();
   void testInsertReservedGroup();
   void testAddDownloadResult();
   void testMergedTransferStat();
@@ -97,7 +96,6 @@ A2_TEST(RequestGroupManTest, testChangeReservedGroupPosition)
 A2_TEST(RequestGroupManTest, testFillRequestGroupFromReserver)
 A2_TEST(RequestGroupManTest, testFillRequestGroupFromReserver_uriParser)
 A2_TEST(RequestGroupManTest, testReduceMaxConcurrentDownloads)
-A2_TEST(RequestGroupManTest, testUserRemoveDoesNotKeepControlFile)
 A2_TEST(RequestGroupManTest, testInsertReservedGroup)
 A2_TEST(RequestGroupManTest, testAddDownloadResult)
 A2_TEST(RequestGroupManTest, testMergedTransferStat)
@@ -275,7 +273,7 @@ void RequestGroupManTest::testFillRequestGroupFromReserver()
   }
   rgman_->fillRequestGroupFromReserver(e_.get());
 
-  REQUIRE_EQ((size_t)2, rgman_->getReservedGroups().size());
+  REQUIRE_EQ((size_t)1, rgman_->getReservedGroups().size());
 }
 
 void RequestGroupManTest::testFillRequestGroupFromReserver_uriParser()
@@ -335,42 +333,6 @@ void RequestGroupManTest::testReduceMaxConcurrentDownloads()
   REQUIRE(findReservedGroup(rgman_, rgs[2]->getGID()));
   REQUIRE(!rgs[1]->isPauseRequested());
   REQUIRE(!rgs[2]->isPauseRequested());
-}
-
-void RequestGroupManTest::testUserRemoveDoesNotKeepControlFile()
-{
-  const std::string path =
-      A2_TEST_OUT_DIR "/request-group-man-user-remove.bin";
-  const std::string ctrlPath = path + DefaultProgressInfoFile::getSuffix();
-  File(path).remove();
-  File(ctrlPath).remove();
-  option_->put(PREF_FILE_ALLOCATION, V_NONE);
-  rgman_->setMaxDownloadResult(1);
-
-  auto group = createRequestGroup(1_k, 4_k, path, "http://host/file",
-                                  util::copy(option_));
-  group->setRequestGroupMan(rgman_);
-  group->setState(RequestGroup::STATE_ACTIVE);
-  group->initPieceStorage();
-  group->getPieceStorage()->getDiskAdaptor()->openFile();
-  group->setProgressInfoFile(std::make_shared<DefaultProgressInfoFile>(
-      group->getDownloadContext(), group->getPieceStorage(), option_.get()));
-  group->saveControlFile();
-  REQUIRE(File(ctrlPath).isFile());
-
-  rgman_->addRequestGroup(group);
-  e_->addCommand(make_unique<ActiveDownloadCommand>(e_->newCUID(),
-                                                    group.get()));
-
-  group->setForceHaltRequested(true, RequestGroup::USER_REQUEST);
-  while (e_->run(true) != 0)
-    ;
-
-  REQUIRE(!File(ctrlPath).exists());
-  REQUIRE_EQ((size_t)0, rgman_->getRequestGroups().size());
-  auto result = rgman_->findDownloadResult(group->getGID());
-  REQUIRE(result);
-  REQUIRE_EQ(error_code::REMOVED, result->result);
 }
 
 void RequestGroupManTest::testInsertReservedGroup()

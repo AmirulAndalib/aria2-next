@@ -123,11 +123,11 @@ void MetalinkProcessorTest::testParseFileV4()
 
   REQUIRE_EQ((size_t)2, e->resources.size());
   auto& r = e->resources[0];
-  REQUIRE_EQ(std::string("ftp://ftp.example.com/example.ext"),
+  REQUIRE_EQ(std::string("sftp://ftp.example.com/example.ext"),
                        r->url);
   REQUIRE_EQ(std::string("de"), r->location);
   REQUIRE_EQ(1, r->priority);
-  REQUIRE_EQ(std::string("ftp"),
+  REQUIRE_EQ(std::string("sftp"),
                        MetalinkResource::getTypeString(r->type));
   REQUIRE_EQ(-1, r->maxConnections);
 #ifdef ENABLE_BITTORRENT
@@ -540,10 +540,10 @@ void MetalinkProcessorTest::testParseFile()
 
     auto resourceItr1 = std::begin(entry1->resources);
     auto& resource1 = *resourceItr1;
-    REQUIRE_EQ(MetalinkResource::TYPE_FTP, resource1->type);
+    REQUIRE_EQ(MetalinkResource::TYPE_SFTP, resource1->type);
     REQUIRE_EQ(std::string("jp"), resource1->location);
     REQUIRE_EQ(1, resource1->priority);
-    REQUIRE_EQ(std::string("ftp://ftphost/aria2-0.5.2.tar.bz2"),
+    REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
                          resource1->url);
     REQUIRE_EQ(1, resource1->maxConnections);
 
@@ -783,8 +783,8 @@ void MetalinkProcessorTest::testBadURLPrefs()
                "  <language>en-US</language>"
                "  <os>Linux-x86</os>"
                "  <resources>"
-               "    <url type=\"ftp\" maxconnections=\"1\" preference=\"xyz\""
-               "         location=\"jp\">ftp://mirror/</url>"
+               "    <url type=\"sftp\" maxconnections=\"1\" preference=\"xyz\""
+               "         location=\"jp\">sftp://mirror/</url>"
                "  </resources>"
                "</file>"
                "</files>"
@@ -794,7 +794,7 @@ void MetalinkProcessorTest::testBadURLPrefs()
     auto m = metalink::parseBinaryStream(&dw);
     auto& e = m->getEntries()[0];
     auto& r = e->resources[0];
-    REQUIRE_EQ(MetalinkResource::TYPE_FTP, r->type);
+    REQUIRE_EQ(MetalinkResource::TYPE_SFTP, r->type);
     REQUIRE_EQ(MetalinkResource::getLowestPriority(), r->priority);
     REQUIRE_EQ(1, r->maxConnections);
     REQUIRE_EQ(std::string("jp"), r->location);
@@ -815,9 +815,9 @@ void MetalinkProcessorTest::testBadURLMaxConn()
                "  <language>en-US</language>"
                "  <os>Linux-x86</os>"
                "  <resources>"
-               "    <url maxconnections=\"xyz\" type=\"ftp\""
+               "    <url maxconnections=\"xyz\" type=\"sftp\""
                "         preference=\"100\""
-               "         location=\"jp\">ftp://mirror/</url>"
+               "         location=\"jp\">sftp://mirror/</url>"
                "  </resources>"
                "</file>"
                "</files>"
@@ -827,7 +827,7 @@ void MetalinkProcessorTest::testBadURLMaxConn()
     auto m = metalink::parseBinaryStream(&dw);
     auto& e = m->getEntries()[0];
     auto& r = e->resources[0];
-    REQUIRE_EQ(MetalinkResource::TYPE_FTP, r->type);
+    REQUIRE_EQ(MetalinkResource::TYPE_SFTP, r->type);
     REQUIRE_EQ(1, r->priority);
     REQUIRE_EQ(-1, r->maxConnections);
     REQUIRE_EQ(std::string("jp"), r->location);
@@ -848,7 +848,7 @@ void MetalinkProcessorTest::testUnsupportedType()
                "  <language>en-US</language>"
                "  <os>Linux-x86</os>"
                "  <resources>"
-               "    <url type=\"ftp\">ftp://mirror/</url>"
+               "    <url type=\"sftp\">sftp://mirror/</url>"
                "    <url type=\"magnet\">magnet:xt=XYZ</url>"
                "    <url type=\"http\">http://mirror/</url>"
                "  </resources>"
@@ -861,7 +861,7 @@ void MetalinkProcessorTest::testUnsupportedType()
     auto& e = m->getEntries()[0];
     REQUIRE_EQ((size_t)3, e->resources.size());
     auto& r1 = e->resources[0];
-    REQUIRE_EQ(MetalinkResource::TYPE_FTP, r1->type);
+    REQUIRE_EQ(MetalinkResource::TYPE_SFTP, r1->type);
     auto& r2 = e->resources[1];
     REQUIRE_EQ(MetalinkResource::TYPE_NOT_SUPPORTED, r2->type);
     auto& r3 = e->resources[2];
@@ -1008,7 +1008,7 @@ void MetalinkProcessorTest::testLargeFileSize()
                "<file name=\"dvd.iso\">"
                "  <size>9223372036854775807</size>"
                "  <resources>"
-               "    <url type=\"http\">ftp://mirror/</url>"
+               "    <url type=\"http\">sftp://mirror/</url>"
                "  </resources>"
                "</file>"
                "</files>"
@@ -1032,7 +1032,7 @@ void MetalinkProcessorTest::testXmlPrefixV3()
       "<m:file name=\"dvd.iso\">"
       "  <m:size>9223372036854775807</m:size>"
       "  <m:resources>"
-      "    <m:url type=\"http\">ftp://mirror/</m:url>"
+      "    <m:url type=\"http\">sftp://mirror/</m:url>"
       "  </m:resources>"
       "</m:file>"
       "</m:files>"

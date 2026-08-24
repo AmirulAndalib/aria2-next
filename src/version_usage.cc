@@ -144,7 +144,7 @@ void showUsage(const std::string& keyword,
   if (keyword == strHelpTag(TAG_BASIC)) {
     out->printf("URI, MAGNET, ED2K_LINK, TORRENT_FILE, METALINK_FILE:\n");
     out->printf(
-        _(" You can specify multiple HTTP(S)/FTP URIs. Unless you specify -Z "
+        _(" You can specify multiple HTTP(S)/SFTP URIs. Unless you specify -Z "
           "option, all\n"
           " URIs must point to the same file or downloading will fail."));
     out->printf("\n");
@@ -156,9 +156,9 @@ void showUsage(const std::string& keyword,
     out->printf("\n\n");
     out->printf(_(" You can specify both torrent file with -T option and URIs. "
                   "By doing this,\n"
-                  " download a file from both torrent swarm and HTTP/FTP "
+                  " download a file from both torrent swarm and HTTP/SFTP "
                   "server at the same time,\n"
-                  " while the data from HTTP/FTP are uploaded to the torrent "
+                  " while the data from HTTP/SFTP are uploaded to the torrent "
                   "swarm. For single file\n"
                   " torrents, URI can be a complete URI pointing to the "
                   "resource or if URI ends\n"

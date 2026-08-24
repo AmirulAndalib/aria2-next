@@ -152,6 +152,7 @@ public:
                    BtDownload::StopReason reason);
   void validateGlobalOptions(const Option* option) const;
   void applyGlobalOptions(const Option* option);
+  void setGlobalDownloadLimit(int limit);
   bool applyDownloadOptions(const std::shared_ptr<BtDownload>& download,
                             const Option* option);
   void forceRecheck(const std::shared_ptr<BtDownload>& download);

@@ -12,7 +12,6 @@ namespace aria2 {
 
 class FeatureConfigTest {
 
-
 public:
   void testGetDefaultPort();
   void testStrSupportedFeature();
@@ -27,7 +26,7 @@ void FeatureConfigTest::testGetDefaultPort()
 {
   REQUIRE_EQ((uint16_t)80, getDefaultPort("http"));
   REQUIRE_EQ((uint16_t)443, getDefaultPort("https"));
-  REQUIRE_EQ((uint16_t)21, getDefaultPort("ftp"));
+  REQUIRE_EQ((uint16_t)0, getDefaultPort("ftp"));
   REQUIRE_EQ((uint16_t)22, getDefaultPort("sftp"));
 }
 
@@ -41,12 +40,7 @@ void FeatureConfigTest::testStrSupportedFeature()
 #endif // ENABLE_SSL
   REQUIRE(!strSupportedFeature(MAX_FEATURE));
 
-  auto sftp = strSupportedFeature(FEATURE_SFTP);
-#ifdef HAVE_LIBSSH2
-  REQUIRE(sftp);
-#else  // !HAVE_LIBSSH2
-  REQUIRE(!sftp);
-#endif // !HAVE_LIBSSH2
+  REQUIRE(strSupportedFeature(FEATURE_SFTP));
 }
 
 void FeatureConfigTest::testFeatureSummary()
@@ -62,10 +56,6 @@ void FeatureConfigTest::testFeatureSummary()
 #endif // ENABLE_BITTORRENT
 
       "ED2K",
-
-#ifdef HAVE_SQLITE3
-      "Firefox3 Cookie",
-#endif // HAVE_SQLITE3
 
 #ifdef HAVE_ZLIB
       "GZip",
@@ -85,9 +75,7 @@ void FeatureConfigTest::testFeatureSummary()
       "XML-RPC",
 #endif // ENABLE_XML_RPC
 
-#ifdef HAVE_LIBSSH2
       "SFTP",
-#endif // HAVE_LIBSSH2
   };
 
   std::string featuresString =

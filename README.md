@@ -18,7 +18,9 @@ aria2 is remarkable open source software. For over a decade it has been one of t
 
 But upstream development has slowed dramatically in recent years. Dependencies grew stale, builds broke on modern platforms, and a backlog of bugs went unaddressed. We picked up the baton: migrated the codebase to a modern build framework, triaged and fixed a substantial number of upstream issues, and introduced ED2K protocol support for the first time. A full audit trail is preserved in [`docs/maintenance/upstream-issue-review/matrix.csv`](docs/maintenance/upstream-issue-review/matrix.csv).
 
-Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, FTP, SFTP, Metalink, ED2K, RPC, and libaria2 remain in the aria2 codebase. BitTorrent is implemented by libtorrent-rasterbar 2.1 instead of aria2's former peer-wire, tracker, DHT, encryption, and disk pipeline. The canonical option model contains only maintained settings. A removable input adapter normalizes retired aria2 option names and values without restoring removed implementations or persisting legacy settings.
+Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, HTTPS, SFTP, Metalink, ED2K, RPC, and libaria2 remain supported. HTTP, HTTPS, SFTP, and Metalink payload transfers use libcurl 8.21 with nghttp2. BitTorrent uses libtorrent-rasterbar 2.1. FTP and the former custom stream protocol stacks have been removed.
+
+Stream, BitTorrent, and ED2K resume state is stored under `--state-dir`. Payload directories no longer receive adjacent `.aria2` control files. HTTP cookies, authentication, proxies, TLS, SFTP, resume validation, and HTTP/2 use their native library implementations.
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted. Aria2 Next then replaces the metadata-only native handle with a checked libtorrent handle that already contains the final file priorities. This prevents stale partfiles from entering the payload session.
 
@@ -35,10 +37,10 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 | Surface | Current contract |
 | --- | --- |
 | Executable | `aria2-next` |
-| CLI | Maintained aria2 options plus normalized legacy input |
-| Configuration | aria2 key-value format with legacy input normalization |
+| CLI | Maintained aria2-next options |
+| Configuration | aria2 key-value format |
 | Sessions | aria2 input/session files and libtorrent resume data |
-| RPC | Maintained aria2 JSON-RPC methods, legacy input normalization, and native endpoint and blocklist methods |
+| RPC | Maintained aria2 JSON-RPC methods plus native endpoint and blocklist methods |
 | Library | public libaria2 headers under `src/includes/aria2/` |
 
 Motrix Next embeds this engine, and release artifacts are standalone binaries.

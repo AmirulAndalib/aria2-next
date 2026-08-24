@@ -26,7 +26,6 @@ namespace aria2 {
 
 class SessionSerializerTest {
 
-
 public:
   void testSave();
   void testSaveErrorDownload();
@@ -93,8 +92,7 @@ void SessionSerializerTest::testSave()
   std::ifstream ss(filename.c_str(), std::ios::binary);
   std::string line;
   std::getline(ss, line);
-  REQUIRE_EQ(
-      std::string("http://error\thttp://error3\thttp://error2\t"), line);
+  REQUIRE_EQ(std::string("http://error\thttp://error3\thttp://error2\t"), line);
   std::getline(ss, line);
   REQUIRE_EQ(fmt(" gid=%s", drs[1]->gid->toHex().c_str()), line);
   std::getline(ss, line);
@@ -106,32 +104,28 @@ void SessionSerializerTest::testSave()
   REQUIRE_EQ(std::string(" force-save=true"), line);
   // Check active download is also saved
   std::getline(ss, line);
-  REQUIRE_EQ(uris[0] + "\t" + uris[1] + "\t", line);
+  REQUIRE_EQ(uris[1] + "\t" + uris[0] + "\t", line);
   std::getline(ss, line);
-  REQUIRE_EQ(
-      fmt(" gid=%s", GroupId::toHex(result[0]->getGID()).c_str()), line);
+  REQUIRE_EQ(fmt(" gid=%s", GroupId::toHex(result[0]->getGID()).c_str()), line);
   std::getline(ss, line);
   REQUIRE_EQ(std::string(" dir=/tmp"), line);
   std::getline(ss, line);
   REQUIRE_EQ(uris[2], line);
   std::getline(ss, line);
-  REQUIRE_EQ(
-      fmt(" gid=%s", GroupId::toHex(result[1]->getGID()).c_str()), line);
+  REQUIRE_EQ(fmt(" gid=%s", GroupId::toHex(result[1]->getGID()).c_str()), line);
   std::getline(ss, line);
   REQUIRE_EQ(std::string(" dir=/tmp"), line);
   std::getline(ss, line);
   REQUIRE_EQ(uris[3], line);
   std::getline(ss, line);
   // local metalink download does not save meaningful GID
-  REQUIRE(fmt(" gid=%s", GroupId::toHex(result[2]->getGID()).c_str()) !=
-                 line);
+  REQUIRE(fmt(" gid=%s", GroupId::toHex(result[2]->getGID()).c_str()) != line);
   std::getline(ss, line);
   REQUIRE_EQ(std::string(" dir=/tmp"), line);
   std::getline(ss, line);
   REQUIRE_EQ(uris[4], line);
   std::getline(ss, line);
-  REQUIRE_EQ(
-      fmt(" gid=%s", GroupId::toHex(result[4]->getGID()).c_str()), line);
+  REQUIRE_EQ(fmt(" gid=%s", GroupId::toHex(result[4]->getGID()).c_str()), line);
   std::getline(ss, line);
   REQUIRE_EQ(std::string(" dir=/tmp"), line);
   std::getline(ss, line);
@@ -164,11 +158,10 @@ void SessionSerializerTest::testSaveErrorDownload()
 
 void SessionSerializerTest::testSaveEd2kDownload()
 {
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20next.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|"
-      "p=11111111111111111111111111111111:"
-      "22222222222222222222222222222222|/"};
+  std::vector<std::string> uris{"ed2k://|file|aria2%20next.bin|9728001|"
+                                "0123456789abcdef0123456789abcdef|"
+                                "p=11111111111111111111111111111111:"
+                                "22222222222222222222222222222222|/"};
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, "/tmp");
   std::vector<std::shared_ptr<RequestGroup>> result;
@@ -199,9 +192,8 @@ void SessionSerializerTest::testSaveEd2kDownload()
 
 void SessionSerializerTest::testSaveActiveEd2kSharing()
 {
-  std::vector<std::string> uris{
-      "ed2k://|file|aria2%20sharing.bin|9728001|"
-      "0123456789abcdef0123456789abcdef|/"};
+  std::vector<std::string> uris{"ed2k://|file|aria2%20sharing.bin|9728001|"
+                                "0123456789abcdef0123456789abcdef|/"};
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, "/tmp");
   option->put(PREF_FORCE_SAVE, A2_V_FALSE);

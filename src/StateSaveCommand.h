@@ -32,19 +32,19 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#ifndef D_AUTO_SAVE_COMMAND_H
-#define D_AUTO_SAVE_COMMAND_H
+#ifndef D_STATE_SAVE_COMMAND_H
+#define D_STATE_SAVE_COMMAND_H
 
 #include "TimeBasedCommand.h"
 
 namespace aria2 {
 
-class AutoSaveCommand : public TimeBasedCommand {
+class StateSaveCommand : public TimeBasedCommand {
 public:
-  AutoSaveCommand(cuid_t cuid, DownloadEngine* e,
-                  std::chrono::seconds interval);
+  StateSaveCommand(cuid_t cuid, DownloadEngine* e,
+                   std::chrono::seconds interval);
 
-  virtual ~AutoSaveCommand();
+  virtual ~StateSaveCommand();
 
   virtual void preProcess() override;
 
@@ -53,4 +53,4 @@ public:
 
 } // namespace aria2
 
-#endif // D_AUTO_SAVE_COMMAND_H
+#endif // D_STATE_SAVE_COMMAND_H

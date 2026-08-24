@@ -47,9 +47,6 @@
 #include "DlAbortEx.h"
 #include "DlRetryEx.h"
 #include "DownloadFailureException.h"
-#include "CreateRequestCommand.h"
-#include "InitiateConnectionCommandFactory.h"
-#include "StreamCheckIntegrityEntry.h"
 #include "PieceStorage.h"
 #include "SocketCore.h"
 #include "message.h"
@@ -155,20 +152,6 @@ void AbstractCommand::changeRequestGroup(RequestGroup* requestGroup)
   requestGroup_->increaseNumCommand();
 }
 
-void AbstractCommand::useFasterRequest(
-    const std::shared_ptr<Request>& fasterRequest)
-{
-  A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - Use faster Request hostname=%s, port=%u",
-                  getCuid(), fasterRequest->getHost().c_str(),
-                  fasterRequest->getPort()));
-  // Cancel current Request object and use faster one.
-  fileEntry_->removeRequest(req_);
-  e_->setNoWait(true);
-  e_->addCommand(
-      InitiateConnectionCommandFactory::createInitiateConnectionCommand(
-          getCuid(), fasterRequest, fileEntry_, requestGroup_, e_));
-}
-
 bool AbstractCommand::shouldProcess() const
 {
   if (checkSocketIsReadable_) {
@@ -236,42 +219,7 @@ bool AbstractCommand::execute()
                          " - It seems previously assigned segments"
                          " are canceled. Restart.",
                          getCuid()));
-        // Request::isPipeliningEnabled() == true means aria2
-        // accessed the remote server and discovered that the server
-        // supports pipelining.
-        if (req_ && req_->isPipeliningEnabled()) {
-          e_->poolSocket(req_, createProxyRequest(), socket_);
-        }
         return prepareForRetry(0);
-      }
-
-      // TODO it is not needed to check other PeerStats every time.
-      // Find faster Request when no segment split is allowed.
-      if (req_ && fileEntry_->countPooledRequest() > 0 &&
-          requestGroup_->getPendingLength() < calculateMinSplitSize() * 2) {
-        auto fasterRequest = fileEntry_->findFasterRequest(req_);
-        if (fasterRequest) {
-          useFasterRequest(fasterRequest);
-          return true;
-        }
-      }
-      // Don't use this feature if PREF_MAX_{OVERALL_}DOWNLOAD_LIMIT
-      // is used or total length is unknown.
-      if (req_ && fileEntry_->getLength() > 0 &&
-          e_->getRequestGroupMan()->getMaxOverallDownloadSpeedLimit() == 0 &&
-          requestGroup_->getMaxDownloadSpeedLimit() == 0 &&
-          serverStatTimer_.difference(global::wallclock()) >= 10_s) {
-        serverStatTimer_ = global::wallclock();
-        std::vector<std::pair<size_t, std::string>> usedHosts;
-        if (getOption()->getAsBool(PREF_SELECT_LEAST_USED_HOST)) {
-          getDownloadEngine()->getRequestGroupMan()->getUsedHosts(usedHosts);
-        }
-        auto fasterRequest = fileEntry_->findFasterRequest(
-            req_, usedHosts, e_->getRequestGroupMan()->getServerStatMan());
-        if (fasterRequest) {
-          useFasterRequest(fasterRequest);
-          return true;
-        }
       }
     }
 
@@ -396,9 +344,9 @@ bool AbstractCommand::execute()
     A2_LOG_DEBUG_EX(
         fmt(MSG_RESTARTING_DOWNLOAD, getCuid(),
             logging::sanitizeUri(req_->getUri()).c_str()),
-        DL_RETRY_EX2(fmt("URI=%s",
-                         logging::sanitizeUri(req_->getCurrentUri()).c_str()),
-                     err));
+        DL_RETRY_EX2(
+            fmt("URI=%s", logging::sanitizeUri(req_->getCurrentUri()).c_str()),
+            err));
     req_->addTryCount();
     req_->resetRedirectCount();
     req_->resetUri();
@@ -407,10 +355,9 @@ bool AbstractCommand::execute()
     bool isAbort = maxTries != 0 && req_->getTryCount() >= maxTries;
     if (isAbort) {
       A2_LOG_DEBUG(fmt(MSG_MAX_TRY, getCuid(), req_->getTryCount()));
-      A2_LOG_ERROR_EX(
-          fmt(MSG_DOWNLOAD_ABORTED, getCuid(),
-              logging::sanitizeUri(req_->getUri()).c_str()),
-          err);
+      A2_LOG_ERROR_EX(fmt(MSG_DOWNLOAD_ABORTED, getCuid(),
+                          logging::sanitizeUri(req_->getUri()).c_str()),
+                      err);
       fileEntry_->addURIResult(req_->getUri(), err.getErrorCode());
       requestGroup_->setLastErrorCode(err.getErrorCode(), err.what());
       if (err.getErrorCode() == error_code::CANNOT_RESUME) {
@@ -451,28 +398,7 @@ bool AbstractCommand::execute()
   }
 }
 
-void AbstractCommand::tryReserved()
-{
-  if (getDownloadContext()->getFileEntries().size() == 1) {
-    const auto& entry = getDownloadContext()->getFirstFileEntry();
-    // Don't create new command if currently file length is unknown
-    // and there are no URI left. Because file length is unknown, we
-    // can assume that there are no in-flight request object.
-    if (entry->getLength() == 0 && entry->getRemainingUris().empty()) {
-      A2_LOG_TRACE(fmt("CUID#%" PRId64 " - Not trying next request."
-                       " No reserved/pooled request is remaining and"
-                       " total length is still unknown.",
-                       getCuid()));
-      return;
-    }
-  }
-  A2_LOG_TRACE(
-      fmt("CUID#%" PRId64 " - Trying reserved/pooled request.", getCuid()));
-  std::vector<std::unique_ptr<Command>> commands;
-  requestGroup_->createNextCommand(commands, e_, 1);
-  e_->setNoWait(true);
-  e_->addCommand(std::move(commands));
-}
+void AbstractCommand::tryReserved() {}
 
 bool AbstractCommand::prepareForRetry(time_t wait)
 {
@@ -494,17 +420,7 @@ bool AbstractCommand::prepareForRetry(time_t wait)
     }
   }
 
-  auto command =
-      make_unique<CreateRequestCommand>(getCuid(), requestGroup_, e_);
-  if (wait == 0) {
-    e_->setNoWait(true);
-  }
-  else {
-    // We don't use wait so that Command can be executed by
-    // DownloadEngine::setRefreshInterval(std::chrono::milliseconds(0)).
-    command->setStatus(Command::STATUS_INACTIVE);
-  }
-  e_->addCommand(std::move(command));
+  (void)wait;
   return true;
 }
 
@@ -540,8 +456,8 @@ void AbstractCommand::onAbort()
   // ones) doesn't support resume. Let's restart download from
   // scratch.
   A2_LOG_INFO(fmt(_("CUID#%" PRId64 " - Failed to resume download."
-                      " Download from scratch."),
-                    getCuid()));
+                    " Download from scratch."),
+                  getCuid()));
   A2_LOG_TRACE(fmt("CUID#%" PRId64 " - Gathering URIs that has CANNOT_RESUME"
                    " error",
                    getCuid()));
@@ -661,140 +577,6 @@ void AbstractCommand::swapSocket(std::shared_ptr<SocketCore>& socket)
   socket_.swap(socket);
 }
 
-namespace {
-// Constructs proxy URI, merging username and password if they are
-// defined.
-std::string makeProxyUri(PrefPtr proxyPref, PrefPtr proxyUser,
-                         PrefPtr proxyPasswd, const Option* option)
-{
-  uri::UriStruct us;
-  if (!uri::parse(us, option->get(proxyPref))) {
-    return "";
-  }
-  if (option->defined(proxyUser)) {
-    us.username = option->get(proxyUser);
-  }
-  if (option->defined(proxyPasswd)) {
-    us.password = option->get(proxyPasswd);
-    us.hasPassword = true;
-  }
-  return uri::construct(us);
-}
-} // namespace
-
-namespace {
-// Returns proxy option value for the given protocol.
-std::string getProxyOptionFor(PrefPtr proxyPref, PrefPtr proxyUser,
-                              PrefPtr proxyPasswd, const Option* option)
-{
-  std::string uri = makeProxyUri(proxyPref, proxyUser, proxyPasswd, option);
-  if (uri.empty()) {
-    return makeProxyUri(PREF_ALL_PROXY, PREF_ALL_PROXY_USER,
-                        PREF_ALL_PROXY_PASSWD, option);
-  }
-
-  return uri;
-}
-} // namespace
-
-// Returns proxy URI for given protocol.  If no proxy URI is defined,
-// then returns an empty string.
-std::string getProxyUri(const std::string& protocol, const Option* option)
-{
-  if (protocol == "http") {
-    return getProxyOptionFor(PREF_HTTP_PROXY, PREF_HTTP_PROXY_USER,
-                             PREF_HTTP_PROXY_PASSWD, option);
-  }
-
-  if (protocol == "https") {
-    return getProxyOptionFor(PREF_HTTPS_PROXY, PREF_HTTPS_PROXY_USER,
-                             PREF_HTTPS_PROXY_PASSWD, option);
-  }
-
-  if (protocol == "ftp" || protocol == "sftp") {
-    return getProxyOptionFor(PREF_FTP_PROXY, PREF_FTP_PROXY_USER,
-                             PREF_FTP_PROXY_PASSWD, option);
-  }
-
-  return "";
-}
-
-namespace {
-// Returns true if proxy is defined for the given protocol. Otherwise
-// returns false.
-bool isProxyRequest(const std::string& protocol,
-                    const std::shared_ptr<Option>& option)
-{
-  std::string proxyUri = getProxyUri(protocol, option.get());
-  return !proxyUri.empty();
-}
-} // namespace
-
-namespace {
-bool inNoProxy(const std::shared_ptr<Request>& req, const std::string& noProxy)
-{
-  std::vector<Scip> entries;
-  util::splitIter(std::begin(noProxy), std::end(noProxy),
-                  std::back_inserter(entries), ',', true);
-  if (entries.empty()) {
-    return false;
-  }
-
-  for (const auto& e : entries) {
-    const auto slashpos = std::find(e.first, e.second, '/');
-    if (slashpos == e.second) {
-      if (util::noProxyDomainMatch(req->getHost(),
-                                   std::string(e.first, e.second))) {
-        return true;
-      }
-
-      continue;
-    }
-    // TODO We don't resolve hostname here.  More complete
-    // implementation is that we should first resolve
-    // hostname(which may result in several IP addresses) and
-    // evaluates against all of them
-    std::string ip(e.first, slashpos);
-    uint32_t bits;
-    if (!util::parseUIntNoThrow(bits, std::string(slashpos + 1, e.second))) {
-      continue;
-    }
-    if (util::inSameCidrBlock(ip, req->getHost(), bits)) {
-      return true;
-    }
-  }
-  return false;
-}
-} // namespace
-
-bool AbstractCommand::isProxyDefined() const
-{
-  return isProxyRequest(req_->getProtocol(), getOption()) &&
-         !inNoProxy(req_, getOption()->get(PREF_NO_PROXY));
-}
-
-std::shared_ptr<Request> AbstractCommand::createProxyRequest() const
-{
-  std::shared_ptr<Request> proxyRequest;
-  if (inNoProxy(req_, getOption()->get(PREF_NO_PROXY))) {
-    return proxyRequest;
-  }
-
-  std::string proxy = getProxyUri(req_->getProtocol(), getOption().get());
-  if (!proxy.empty()) {
-    proxyRequest = std::make_shared<Request>();
-    if (proxyRequest->setUri(proxy)) {
-      A2_LOG_TRACE(fmt("CUID#%" PRId64 " - Using proxy", getCuid()));
-    }
-    else {
-      A2_LOG_TRACE(
-          fmt("CUID#%" PRId64 " - Failed to parse proxy string", getCuid()));
-      proxyRequest.reset();
-    }
-  }
-  return proxyRequest;
-}
-
 std::string AbstractCommand::resolveHostname(std::vector<std::string>& addrs,
                                              const std::string& hostname,
                                              uint16_t port)
@@ -807,8 +589,9 @@ std::string AbstractCommand::resolveHostname(std::vector<std::string>& addrs,
   e_->findAllCachedIPAddresses(std::back_inserter(addrs), hostname, port);
   if (!addrs.empty()) {
     auto ipaddr = addrs.front();
-    A2_LOG_DEBUG(fmt(MSG_DNS_CACHE_HIT, getCuid(), hostname.c_str(),
-                    strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
+    A2_LOG_DEBUG(
+        fmt(MSG_DNS_CACHE_HIT, getCuid(), hostname.c_str(),
+            strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
     return ipaddr;
   }
 
@@ -832,22 +615,20 @@ std::string AbstractCommand::resolveHostname(std::vector<std::string>& addrs,
         try {
           resolveWithSystemResolver();
           A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                          " - Falling back to system name resolver for %s",
-                          getCuid(), hostname.c_str()));
+                           " - Falling back to system name resolver for %s",
+                           getCuid(), hostname.c_str()));
           break;
         }
         catch (const DlAbortEx& ex) {
-          throw DL_ABORT_EX2(
-              fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(), hostname.c_str(),
-                  asyncNameResolverMan_->getLastError().c_str()),
-              ex);
+          throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
+                                 hostname.c_str(),
+                                 asyncNameResolverMan_->getLastError().c_str()),
+                             ex);
         }
       }
-      if (!isProxyRequest(req_->getProtocol(), getOption())) {
-        e_->getRequestGroupMan()
-            ->getOrCreateServerStat(req_->getHost(), req_->getProtocol())
-            ->setError();
-      }
+      e_->getRequestGroupMan()
+          ->getOrCreateServerStat(req_->getHost(), req_->getProtocol())
+          ->setError();
       throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
                              hostname.c_str(),
                              asyncNameResolverMan_->getLastError().c_str()),
@@ -871,22 +652,12 @@ std::string AbstractCommand::resolveHostname(std::vector<std::string>& addrs,
     resolveWithSystemResolver();
   }
   A2_LOG_DEBUG(fmt(MSG_NAME_RESOLUTION_COMPLETE, getCuid(), hostname.c_str(),
-                  strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
+                   strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
   for (const auto& addr : addrs) {
     e_->cacheIPAddress(hostname, addr, port);
   }
   ipaddr = e_->findCachedIPAddress(hostname, port);
   return ipaddr;
-}
-
-void AbstractCommand::prepareForNextAction(
-    std::unique_ptr<CheckIntegrityEntry> checkEntry)
-{
-  std::vector<std::unique_ptr<Command>> commands;
-  requestGroup_->processCheckIntegrityEntry(commands, std::move(checkEntry),
-                                            e_);
-  e_->addCommand(std::move(commands));
-  e_->setNoWait(true);
 }
 
 bool AbstractCommand::checkIfConnectionEstablished(
@@ -903,33 +674,15 @@ bool AbstractCommand::checkIfConnectionEstablished(
   e_->markBadIPAddress(connectedHostname, connectedAddr, connectedPort);
   if (e_->findCachedIPAddress(connectedHostname, connectedPort).empty()) {
     e_->removeCachedIPAddress(connectedHostname, connectedPort);
-    // Don't set error if proxy server is used and its method is GET.
-    if (resolveProxyMethod(req_->getProtocol()) != V_GET ||
-        !isProxyRequest(req_->getProtocol(), getOption())) {
-      e_->getRequestGroupMan()
-          ->getOrCreateServerStat(req_->getHost(), req_->getProtocol())
-          ->setError();
-    }
+    e_->getRequestGroupMan()
+        ->getOrCreateServerStat(req_->getHost(), req_->getProtocol())
+        ->setError();
     throw DL_RETRY_EX(fmt(MSG_ESTABLISHING_CONNECTION_FAILED, error.c_str()));
   }
 
   A2_LOG_DEBUG(fmt(MSG_CONNECT_FAILED_AND_RETRY, getCuid(),
-                  connectedAddr.c_str(), connectedPort));
-  e_->setNoWait(true);
-  e_->addCommand(
-      InitiateConnectionCommandFactory::createInitiateConnectionCommand(
-          getCuid(), req_, fileEntry_, requestGroup_, e_));
-  return false;
-}
-
-const std::string&
-AbstractCommand::resolveProxyMethod(const std::string& protocol) const
-{
-  if (getOption()->get(PREF_PROXY_METHOD) == V_TUNNEL || protocol == "https" ||
-      protocol == "sftp") {
-    return V_TUNNEL;
-  }
-  return V_GET;
+                   connectedAddr.c_str(), connectedPort));
+  throw DL_RETRY_EX(fmt(MSG_ESTABLISHING_CONNECTION_FAILED, error.c_str()));
 }
 
 const std::shared_ptr<Option>& AbstractCommand::getOption() const

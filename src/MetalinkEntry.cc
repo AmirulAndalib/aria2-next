@@ -107,7 +107,7 @@ public:
   bool operator()(const std::shared_ptr<MetalinkResource>& res) const
   {
     switch (res->type) {
-    case MetalinkResource::TYPE_FTP:
+    case MetalinkResource::TYPE_SFTP:
     case MetalinkResource::TYPE_HTTP:
 #ifdef ENABLE_SSL
     case MetalinkResource::TYPE_HTTPS:
@@ -129,7 +129,7 @@ void MetalinkEntry::dropUnsupportedResource()
       std::remove_if(std::begin(resources), std::end(resources),
                      [](const std::unique_ptr<MetalinkResource>& res) {
                        switch (res->type) {
-                       case MetalinkResource::TYPE_FTP:
+                       case MetalinkResource::TYPE_SFTP:
                        case MetalinkResource::TYPE_HTTP:
 #ifdef ENABLE_SSL
                        case MetalinkResource::TYPE_HTTPS:

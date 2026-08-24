@@ -9,7 +9,6 @@ namespace aria2 {
 
 class ProtocolDetectorTest {
 
-
 public:
   void setUp() {}
 
@@ -33,7 +32,7 @@ void ProtocolDetectorTest::testIsStreamProtocol()
   ProtocolDetector detector;
   REQUIRE(detector.isStreamProtocol("http://localhost/index.html"));
   REQUIRE(detector.isStreamProtocol("https://localhost/index.html"));
-  REQUIRE(detector.isStreamProtocol("ftp://localhost/index.html"));
+  REQUIRE(!detector.isStreamProtocol("ftp://localhost/index.html"));
   REQUIRE(detector.isStreamProtocol("sftp://localhost/index.html"));
   REQUIRE(!detector.isStreamProtocol("magnet:?xt=urn:btih:abc"));
   REQUIRE(!detector.isStreamProtocol("E://downloads/file.torrent"));

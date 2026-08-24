@@ -32,21 +32,21 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#include "AutoSaveCommand.h"
+#include "StateSaveCommand.h"
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 
 namespace aria2 {
 
-AutoSaveCommand::AutoSaveCommand(cuid_t cuid, DownloadEngine* e,
-                                 std::chrono::seconds interval)
+StateSaveCommand::StateSaveCommand(cuid_t cuid, DownloadEngine* e,
+                                   std::chrono::seconds interval)
     : TimeBasedCommand(cuid, e, std::move(interval), true)
 {
 }
 
-AutoSaveCommand::~AutoSaveCommand() = default;
+StateSaveCommand::~StateSaveCommand() = default;
 
-void AutoSaveCommand::preProcess()
+void StateSaveCommand::preProcess()
 {
   if (getDownloadEngine()->getRequestGroupMan()->downloadFinished() ||
       getDownloadEngine()->isHaltRequested()) {
@@ -54,7 +54,7 @@ void AutoSaveCommand::preProcess()
   }
 }
 
-void AutoSaveCommand::process()
+void StateSaveCommand::process()
 {
   getDownloadEngine()->getRequestGroupMan()->save();
 }

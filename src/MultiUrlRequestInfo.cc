@@ -51,10 +51,7 @@
 #include "Option.h"
 #include "ConsoleStatCalc.h"
 #include "NullStatCalc.h"
-#include "CookieStorage.h"
 #include "File.h"
-#include "Netrc.h"
-#include "AuthConfigFactory.h"
 #include "SessionSerializer.h"
 #include "TimeA2.h"
 #include "fmt.h"
@@ -213,41 +210,6 @@ int MultiUrlRequestInfo::prepare()
     }
 #endif // ENABLE_WEBSOCKET
 
-    if (!option_->blank(PREF_LOAD_COOKIES)) {
-      File cookieFile(option_->get(PREF_LOAD_COOKIES));
-      if (cookieFile.isFile() &&
-          e_->getCookieStorage()->load(cookieFile.getPath(),
-                                       Time().getTimeFromEpoch())) {
-        A2_LOG_DEBUG(
-            fmt("Loaded cookies from '%s'.", cookieFile.getPath().c_str()));
-      }
-      else {
-        A2_LOG_ERROR(
-            fmt(MSG_LOADING_COOKIE_FAILED, cookieFile.getPath().c_str()));
-      }
-    }
-
-    auto authConfigFactory = make_unique<AuthConfigFactory>();
-    File netrccf(option_->get(PREF_NETRC_PATH));
-    if (!option_->getAsBool(PREF_NO_NETRC) && netrccf.isFile()) {
-#ifdef __MINGW32__
-      // Windows OS does not have permission, so set it to 0.
-      mode_t mode = 0;
-#else  // !__MINGW32__
-      mode_t mode = netrccf.mode();
-#endif // !__MINGW32__
-      if (mode & (S_IRWXG | S_IRWXO)) {
-        A2_LOG_INFO(fmt(MSG_INCORRECT_NETRC_PERMISSION,
-                          option_->get(PREF_NETRC_PATH).c_str()));
-      }
-      else {
-        auto netrc = make_unique<Netrc>();
-        netrc->parse(option_->get(PREF_NETRC_PATH));
-        authConfigFactory->setNetrc(std::move(netrc));
-      }
-    }
-    e_->setAuthConfigFactory(std::move(authConfigFactory));
-
 #ifdef ENABLE_SSL
     auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
     std::shared_ptr<TLSContext> clTlsContext(
@@ -274,12 +236,6 @@ int MultiUrlRequestInfo::prepare()
     SocketCore::setClientTLSContext(clTlsContext);
 #endif
 
-    std::string serverStatIf = option_->get(PREF_SERVER_STAT_IF);
-    if (!serverStatIf.empty()) {
-      e_->getRequestGroupMan()->loadServerStat(serverStatIf);
-      e_->getRequestGroupMan()->removeStaleServerStat(
-          std::chrono::seconds(option_->getAsInt(PREF_SERVER_STAT_TIMEOUT)));
-    }
     e_->setStatCalc(getStatCalc(option_));
     if (uriListParser_) {
       e_->getRequestGroupMan()->setUriListParser(uriListParser_);
@@ -303,14 +259,6 @@ int MultiUrlRequestInfo::prepare()
 error_code::Value MultiUrlRequestInfo::getResult()
 {
   error_code::Value returnValue = error_code::FINISHED;
-  if (!option_->blank(PREF_SAVE_COOKIES)) {
-    e_->getCookieStorage()->saveNsFormat(option_->get(PREF_SAVE_COOKIES));
-  }
-
-  const std::string& serverStatOf = option_->get(PREF_SERVER_STAT_OF);
-  if (!serverStatOf.empty()) {
-    e_->getRequestGroupMan()->saveServerStat(serverStatOf);
-  }
   if (!option_->getAsBool(PREF_QUIET) &&
       option_->get(PREF_DOWNLOAD_RESULT) != A2_V_HIDE) {
     e_->getRequestGroupMan()->showDownloadResults(
