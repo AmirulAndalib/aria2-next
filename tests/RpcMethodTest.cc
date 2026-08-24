@@ -1703,7 +1703,7 @@ void RpcMethodTest::testBtSharingContract()
   auto response = query();
   auto result = downcast<Dict>(response.param);
   REQUIRE_EQ(std::string("active"), getString(result, "status"));
-  REQUIRE_EQ(std::string("false"), getString(result, "seeder"));
+  REQUIRE_EQ(std::string("true"), getString(result, "seeder"));
   auto bt = downcast<Dict>(result->get("bittorrent"));
   REQUIRE_EQ(std::string("finished"), getString(bt, "state"));
   REQUIRE_EQ(std::string("45"), getString(bt, "finishedTime"));

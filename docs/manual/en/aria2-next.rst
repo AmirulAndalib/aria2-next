@@ -2888,8 +2888,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     The number of seeders aria2 has connected to. BitTorrent only.
 
   ``seeder``
-    ``true`` if the local endpoint has every piece in the BitTorrent payload.
-    A task that has completed only its selected files reports ``false``.
+    ``true`` while a BitTorrent task has completed its selected payload and is
+    available for sharing. Selective downloads may report ``true`` without
+    owning every piece in the torrent.
 
   ``pieceLength``
     Piece length in bytes.

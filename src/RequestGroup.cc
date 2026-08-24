@@ -1282,7 +1282,7 @@ bool RequestGroup::isSeeder() const
   }
 #ifdef ENABLE_BITTORRENT
   return btDownload_ && btDownload_->hasMetadata() &&
-         btDownload_->snapshot().complete;
+         btDownload_->snapshot().selectedComplete;
 #else  // !ENABLE_BITTORRENT
   return false;
 #endif // !ENABLE_BITTORRENT
