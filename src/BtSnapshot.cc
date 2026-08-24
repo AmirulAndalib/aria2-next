@@ -21,8 +21,6 @@ const char* btStateName(BtSnapshot::State state)
     return "adding";
   case BtSnapshot::State::DownloadingMetadata:
     return "downloadingMetadata";
-  case BtSnapshot::State::AwaitingFileSelection:
-    return "awaitingFileSelection";
   case BtSnapshot::State::Checking:
     return "checking";
   case BtSnapshot::State::Downloading:
@@ -37,10 +35,23 @@ const char* btStateName(BtSnapshot::State state)
     return "stopping";
   case BtSnapshot::State::Stopped:
     return "stopped";
-  case BtSnapshot::State::Error:
-    return "error";
   }
-  return "error";
+  return "stopped";
+}
+
+const char* btFileSelectionStateName(BtSnapshot::FileSelectionState state)
+{
+  switch (state) {
+  case BtSnapshot::FileSelectionState::None:
+    return "none";
+  case BtSnapshot::FileSelectionState::Awaiting:
+    return "awaiting";
+  case BtSnapshot::FileSelectionState::Ready:
+    return "ready";
+  case BtSnapshot::FileSelectionState::Applying:
+    return "applying";
+  }
+  return "none";
 }
 
 } // namespace aria2

@@ -108,10 +108,21 @@ public:
   struct Impl;
 
 private:
+  enum class AttachMode { Running, RestorePaused };
+
   std::unique_ptr<Impl> impl_;
+  void attach(const std::shared_ptr<BtDownload>& download,
+              RequestGroup* group, AttachMode mode);
   void requestResumeCheckpoint(BtDownload* download, bool force = false);
   void finishResumeSave(BtDownload* download);
   void discardRemovedResume(BtDownload* download);
+  bool applyDownloadOptionsInternal(
+      const std::shared_ptr<BtDownload>& download, const Option* option,
+      bool synchronizeFileSelection);
+  bool synchronizeSelection(BtDownload* download);
+  void finishFilePriorityUpdate(BtDownload* download);
+  void continueSelectionSynchronization(BtDownload* download);
+  void failFilePriorityUpdate(BtDownload* download);
   void requestProgressRefresh(BtDownload* download);
   void resumeTorrent(BtDownload* download);
   void refreshAutomaticRoute(bool reopenSockets);
@@ -125,6 +136,8 @@ public:
 
   std::unique_ptr<Command> start(const std::shared_ptr<BtDownload>& download,
                                  RequestGroup* group, DownloadEngine* engine);
+  void restorePaused(const std::shared_ptr<BtDownload>& download,
+                     RequestGroup* group);
 
   void poll();
   void requestStop(const std::shared_ptr<BtDownload>& download,
@@ -143,7 +156,7 @@ public:
   addPeers(const std::shared_ptr<BtDownload>& download,
            const std::vector<std::string>& peers);
   void discard(const std::shared_ptr<BtDownload>& download);
-  void remove(a2_gid_t gid);
+  void suspend(a2_gid_t gid);
 
   uint16_t listenPort() const;
   uint16_t announcePort() const;

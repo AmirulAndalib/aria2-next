@@ -659,7 +659,7 @@ std::unique_ptr<ValueBase> UnpauseRpcMethod::process(const RpcRequest& req,
   else {
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
-      group->getBtDownload()->prepareFileSelectionResume();
+      group->getBtDownload()->beginFileSelectionApply();
     }
 #endif
     group->setPauseRequested(false);
@@ -684,7 +684,7 @@ std::unique_ptr<ValueBase> UnpauseAllRpcMethod::process(const RpcRequest& req,
   for (auto& group : groups) {
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
-      group->getBtDownload()->prepareFileSelectionResume();
+      group->getBtDownload()->beginFileSelectionApply();
     }
 #endif
     group->setPauseRequested(false);
@@ -1061,6 +1061,24 @@ void gatherBitTorrentMetadata(Dict* btDict, const BtSnapshot& snapshot,
   btDict->put(KEY_PRIVATE_TORRENT,
               snapshot.privateTorrent ? VLB_TRUE : VLB_FALSE);
   btDict->put("state", btStateName(snapshot.state));
+  btDict->put("fileSelectionState",
+              btFileSelectionStateName(snapshot.fileSelectionState));
+  if (snapshot.error.present) {
+    auto error = Dict::g();
+    error->put("code", util::itos(snapshot.error.code));
+    error->put("kind", snapshot.error.kind);
+    error->put("category", snapshot.error.category);
+    error->put("message", snapshot.error.message);
+    error->put("recoverable",
+               snapshot.error.recoverable ? VLB_TRUE : VLB_FALSE);
+    if (!snapshot.error.operation.empty()) {
+      error->put("operation", snapshot.error.operation);
+    }
+    if (!snapshot.error.file.empty()) {
+      error->put("file", snapshot.error.file);
+    }
+    btDict->put("error", std::move(error));
+  }
   if (!snapshot.infoHashV1.empty()) {
     btDict->put("infoHashV1", snapshot.infoHashV1);
   }
@@ -2285,13 +2303,13 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
   }
 #ifdef ENABLE_BITTORRENT
   if (group->getBtDownload()) {
-    if (e->getBtSession()) {
-      e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
-                                              grOption.get());
-    }
     if (option.defined(PREF_SELECT_FILE)) {
       group->getBtDownload()->updateSelection(dctx);
       group->getBtDownload()->submitFileSelection(grOption.get());
+    }
+    if (e->getBtSession()) {
+      e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
+                                              grOption.get());
     }
   }
 #endif

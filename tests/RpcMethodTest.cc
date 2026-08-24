@@ -108,6 +108,7 @@ public:
   void testSetBtPeerBlocklist();
   void testBtGlobalStat();
   void testBtFileSelectionGate();
+  void testBtSharingContract();
   void testBtResumeProgressAuthority();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
@@ -171,6 +172,7 @@ A2_TEST(RpcMethodTest, testGetBtSessionStatus)
 A2_TEST(RpcMethodTest, testSetBtPeerBlocklist)
 A2_TEST(RpcMethodTest, testBtGlobalStat)
 A2_TEST(RpcMethodTest, testBtFileSelectionGate)
+A2_TEST(RpcMethodTest, testBtSharingContract)
 A2_TEST(RpcMethodTest, testBtResumeProgressAuthority)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
@@ -1558,11 +1560,14 @@ void RpcMethodTest::testBtFileSelectionGate()
   e_->getRequestGroupMan()->addReservedGroup(group);
 
   REQUIRE(download->awaitingFileSelection());
-  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+  REQUIRE_EQ(BtSnapshot::State::Paused,
              download->snapshot().state);
   download->applyTransportState(BtSnapshot::State::Downloading);
-  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+  REQUIRE_EQ(BtSnapshot::State::Paused,
              download->snapshot().state);
+  download->setError("file too short", true);
+  REQUIRE(download->awaitingFileSelection());
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
 
   GetFilesRpcMethod getFiles;
   auto request = createReq(GetFilesRpcMethod::getMethodName());
@@ -1587,9 +1592,14 @@ void RpcMethodTest::testBtFileSelectionGate()
   const auto waitingTask = downcast<Dict>(waiting->get(0));
   REQUIRE_EQ(std::string("paused"), getString(waitingTask, "status"));
   REQUIRE_EQ((size_t)2, downcast<List>(waitingTask->get("files"))->size());
-  REQUIRE_EQ(std::string("awaitingFileSelection"),
-             getString(downcast<Dict>(waitingTask->get("bittorrent")),
-                       "state"));
+  const auto waitingBt = downcast<Dict>(waitingTask->get("bittorrent"));
+  REQUIRE_EQ(std::string("paused"), getString(waitingBt, "state"));
+  REQUIRE_EQ(std::string("awaiting"),
+             getString(waitingBt, "fileSelectionState"));
+  REQUIRE(waitingBt->containsKey("error"));
+  REQUIRE_EQ(std::string("true"),
+             getString(downcast<Dict>(waitingBt->get("error")),
+                       "recoverable"));
 
   UnpauseRpcMethod unpause;
   request = createReq(UnpauseRpcMethod::getMethodName());
@@ -1640,8 +1650,83 @@ void RpcMethodTest::testBtFileSelectionGate()
   response = unpause.execute(std::move(request), e_.get());
   REQUIRE_EQ(0, response.code);
   REQUIRE(!group->isPauseRequested());
-  REQUIRE(download->fileSelectionResuming());
+  REQUIRE(download->fileSelectionApplying());
   REQUIRE(!taskOption->getAsBool(PREF_PAUSE_METADATA));
+
+  download->failFileSelectionApply();
+  group->setPauseRequested(true);
+  REQUIRE(download->fileSelectionReady());
+  request = createReq(UnpauseRpcMethod::getMethodName());
+  request.params->append(GroupId::toHex(group->getGID()));
+  response = unpause.execute(std::move(request), e_.get());
+  REQUIRE_EQ(0, response.code);
+  REQUIRE(download->fileSelectionApplying());
+  REQUIRE(!taskOption->getAsBool(PREF_PAUSE_METADATA));
+}
+
+void RpcMethodTest::testBtSharingContract()
+{
+  auto taskOption = util::copy(option_);
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOption);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->configure(taskOption.get());
+  download->populateDownloadContext(context, taskOption.get());
+  download->setGroup(group.get());
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  group->setState(RequestGroup::STATE_ACTIVE);
+  e_->getRequestGroupMan()->addReservedGroup(group);
+
+  auto& snapshot = download->mutableSnapshot();
+  snapshot.state = BtSnapshot::State::Finished;
+  snapshot.selectedComplete = true;
+  snapshot.complete = false;
+  snapshot.activeTime = 120;
+  snapshot.finishedTime = 45;
+  snapshot.seedingTime = 0;
+
+  TellStatusRpcMethod tellStatus;
+  auto query = [&]() {
+    auto request = createReq(TellStatusRpcMethod::getMethodName());
+    request.params->append(GroupId::toHex(group->getGID()));
+    auto keys = List::g();
+    keys->append("status");
+    keys->append("seeder");
+    keys->append("bittorrent");
+    request.params->append(std::move(keys));
+    auto response = tellStatus.execute(std::move(request), e_.get());
+    REQUIRE_EQ(0, response.code);
+    return response;
+  };
+
+  auto response = query();
+  auto result = downcast<Dict>(response.param);
+  REQUIRE_EQ(std::string("active"), getString(result, "status"));
+  REQUIRE_EQ(std::string("false"), getString(result, "seeder"));
+  auto bt = downcast<Dict>(result->get("bittorrent"));
+  REQUIRE_EQ(std::string("finished"), getString(bt, "state"));
+  REQUIRE_EQ(std::string("45"), getString(bt, "finishedTime"));
+  REQUIRE_EQ(std::string("0"), getString(bt, "seedingTime"));
+
+  snapshot.state = BtSnapshot::State::Seeding;
+  snapshot.complete = true;
+  snapshot.finishedTime = 62;
+  snapshot.seedingTime = 17;
+  response = query();
+  result = downcast<Dict>(response.param);
+  REQUIRE_EQ(std::string("true"), getString(result, "seeder"));
+  bt = downcast<Dict>(result->get("bittorrent"));
+  REQUIRE_EQ(std::string("seeding"), getString(bt, "state"));
+  REQUIRE_EQ(std::string("62"), getString(bt, "finishedTime"));
+  REQUIRE_EQ(std::string("17"), getString(bt, "seedingTime"));
+
+  group->setState(RequestGroup::STATE_WAITING);
+  group->setPauseRequested(true);
+  response = query();
+  result = downcast<Dict>(response.param);
+  REQUIRE_EQ(std::string("paused"), getString(result, "status"));
+  REQUIRE_EQ(std::string("true"), getString(result, "seeder"));
 }
 
 void RpcMethodTest::testBtResumeProgressAuthority()
@@ -1700,28 +1785,30 @@ void RpcMethodTest::testBtResumeProgressAuthority()
   assertProgress(250, {200, 50}, "0.650000");
   download->prepareStart();
   group->setPauseRequested(false);
-  download->applyProgress(384, 0, 0, BtSnapshot::State::Paused);
+  download->beginProgressVerification();
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Paused, false);
   download->applyFileProgress({0, 0});
   assertProgress(250, {200, 50}, "0.650000");
 
   download->beginProgressRefresh();
-  download->applyProgress(384, 0, 0, BtSnapshot::State::Downloading);
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Downloading, false);
   download->applyFileProgress({0, 0});
-  assertProgress(250, {200, 50}, "0.650000");
+  assertProgress(0, {0, 0}, "0.000000");
 
+  download->beginProgressRefresh();
   download->applyProgress(384, 300, 781250,
-                          BtSnapshot::State::Downloading);
+                          BtSnapshot::State::Downloading, false);
   download->applyFileProgress({220, 80});
   assertProgress(300, {220, 80}, "0.781250");
 
   download->beginProgressVerification();
-  download->applyProgress(384, 0, 0, BtSnapshot::State::Checking);
+  download->applyProgress(384, 0, 0, BtSnapshot::State::Paused, true);
   download->applyFileProgress({0, 0});
   assertProgress(300, {220, 80}, "0.781250");
 
   download->beginProgressRefresh();
   download->applyProgress(384, 120, 312500,
-                          BtSnapshot::State::Downloading);
+                          BtSnapshot::State::Downloading, false);
   download->applyFileProgress({100, 20});
   assertProgress(120, {100, 20}, "0.312500");
 }

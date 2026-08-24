@@ -20,9 +20,9 @@ But upstream development has slowed dramatically in recent years. Dependencies g
 
 Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, FTP, SFTP, Metalink, ED2K, RPC, and libaria2 remain in the aria2 codebase. BitTorrent is implemented by libtorrent-rasterbar 2.1 instead of aria2's former peer-wire, tracker, DHT, encryption, and disk pipeline. The canonical option model contains only maintained settings. A removable input adapter normalizes retired aria2 option names and values without restoring removed implementations or persisting legacy settings.
 
-Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list until a valid `select-file` is submitted.
+Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted.
 
-The BitTorrent session persists native IPv4 and IPv6 DHT routing state, keeps paused torrents inside libtorrent for fast recovery, checkpoints fast-resume data while running, preserves native tracker tiers, and isolates private torrents from global tracker injection. TCP, uTP, PEX, Local Peer Discovery, UPnP/NAT-PMP, transport encryption, v1/v2 torrents, sparse or allocated storage, sequential mode, and HTTP/SOCKS proxying use native libtorrent facilities.
+The BitTorrent session persists native IPv4 and IPv6 DHT routing state, restores paused torrents into libtorrent without activating network transfer, checkpoints fast-resume data while running, preserves representable tracker tiers, compacts only excess lowest-priority tiers, and isolates private torrents from global tracker injection. Paused tasks retain verified task and file progress across process restarts and resume through the same native torrent handle. TCP, uTP, PEX, Local Peer Discovery, UPnP/NAT-PMP, transport encryption, v1/v2 torrents, sparse or allocated storage, sequential mode, and HTTP/SOCKS proxying use native libtorrent facilities.
 
 Advanced native controls cover request and disk queues, disk I/O policy, peer turnover, TCP/uTP balancing, upload scheduling, file priorities, web seeds, manual peers, and resume checkpoints. Runtime diagnostics report peer discovery, tracker, DHT, transport, disk queue, protocol overhead, and aggregated performance-warning state through JSON-RPC.
 
@@ -61,6 +61,12 @@ Run the JSON-RPC server:
 
 ```bash
 aria2-next --enable-rpc --rpc-listen-all=false --rpc-listen-port=6800
+```
+
+Run the JSON-RPC server as a daemon:
+
+```bash
+aria2-next --daemon=true --enable-rpc=true --rpc-listen-all=false --rpc-listen-port=6800
 ```
 
 Inspect enabled features and build details:

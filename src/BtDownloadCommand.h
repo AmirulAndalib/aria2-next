@@ -31,7 +31,6 @@ private:
   RequestGroup* group_;
   DownloadEngine* engine_;
   bool seedingStarted_ = false;
-  bool completionNotified_ = false;
 
 public:
   BtDownloadCommand(cuid_t cuid, std::shared_ptr<BtDownload> download,

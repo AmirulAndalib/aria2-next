@@ -47,14 +47,16 @@ bool BtDownloadCommand::execute()
 
   if (download_->failed()) {
     group_->setLastErrorCode(error_code::UNKNOWN_ERROR,
-                             download_->snapshot().errorMessage.c_str());
+                             download_->snapshot().error.message.c_str());
     if (download_->stopped()) {
       return true;
     }
     if (download_->recoverableError()) {
-      group_->setHaltRequested(true, RequestGroup::NONE);
-      group_->setPauseRequested(true);
-      session_->requestStop(download_, BtDownload::StopReason::Pause);
+      if (download_->stopReason() != BtDownload::StopReason::FileSelection) {
+        group_->setHaltRequested(true, RequestGroup::NONE);
+        group_->setPauseRequested(true);
+        session_->requestStop(download_, BtDownload::StopReason::Pause);
+      }
     }
     else {
       session_->requestStop(download_, BtDownload::StopReason::Stop);
@@ -71,26 +73,24 @@ bool BtDownloadCommand::execute()
     return true;
   }
 
-  if (download_->snapshot().finished && !download_->stopRequested() &&
+  if (download_->snapshot().selectedComplete && !download_->stopRequested() &&
       !seedingStarted_) {
     seedingStarted_ = true;
     group_->enableSeedOnly();
   }
 
-  if (download_->snapshot().finished && !download_->stopRequested() &&
-      !completionNotified_) {
-    completionNotified_ = true;
+  if (!download_->stopRequested() && download_->takeCompletionNotification()) {
     util::executeHookByOptName(group_, group_->getOption().get(),
                                PREF_ON_BT_DOWNLOAD_COMPLETE);
     SingletonHolder<Notifier>::instance()->notifyDownloadEvent(
         EVENT_ON_BT_DOWNLOAD_COMPLETE, group_);
   }
 
-  if (download_->snapshot().finished && !download_->stopRequested()) {
+  if (download_->snapshot().selectedComplete && !download_->stopRequested()) {
     const auto& snapshot = download_->snapshot();
     bool stop = false;
     if (group_->getOption()->defined(PREF_SEED_TIME)) {
-      stop = snapshot.seedingTime >=
+      stop = snapshot.finishedTime >=
              static_cast<int>(group_->getOption()->getAsDouble(PREF_SEED_TIME) *
                               60.0);
     }

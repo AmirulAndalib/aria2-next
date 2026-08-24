@@ -430,7 +430,7 @@ int unpauseDownload(Session* session, A2Gid gid)
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
       try {
-        group->getBtDownload()->prepareFileSelectionResume();
+        group->getBtDownload()->beginFileSelectionApply();
       }
       catch (RecoverableException&) {
         return -1;

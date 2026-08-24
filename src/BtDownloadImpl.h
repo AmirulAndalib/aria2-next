@@ -30,6 +30,8 @@ namespace aria2 {
 
 enum class BtTrackerOrigin { Metainfo, Magnet, Resume, Global, Rpc };
 
+enum class BtNativeState { Detached, Adding, Attached, Removing };
+
 struct BtTrackerSpec {
   std::string url;
   int tier = 0;
@@ -45,9 +47,12 @@ struct BtDownload::Impl {
   a2_gid_t gid = 0;
   libtorrent::add_torrent_params params;
   libtorrent::torrent_handle handle;
+  BtNativeState nativeState = BtNativeState::Detached;
+  bool runRequested = false;
   std::vector<BtTrackerSpec> sourceTrackers;
   std::vector<BtTrackerSpec> effectiveTrackers;
   bool trackerOverride = false;
+  bool trackerTierCompressionReported = false;
   uint64_t trackerRevision = 1;
   uint64_t appliedTrackerRevision = 0;
   std::string resumePath;
@@ -57,9 +62,11 @@ struct BtDownload::Impl {
   bool checkpointPending = false;
   bool stopSavePending = false;
   bool initialRecheckStarted = false;
-  bool progressBoundaryPending = false;
-  std::size_t pendingFilePriorityUpdates = 0;
+  bool filePriorityUpdatePending = false;
+  bool resumeAfterFilePriorityUpdate = false;
+  std::vector<libtorrent::download_priority_t> desiredFilePriorities;
   std::vector<libtorrent::download_priority_t> appliedFilePriorities;
+  std::vector<libtorrent::download_priority_t> desiredPiecePriorities;
   std::vector<libtorrent::download_priority_t> appliedPiecePriorities;
   Timer lastResumeSave = Timer::zero();
   Timer lastTrackerUpdate = Timer::zero();

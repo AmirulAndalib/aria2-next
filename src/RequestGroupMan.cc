@@ -87,6 +87,9 @@
 #include "OpenedFileCounter.h"
 #include "wallclock.h"
 #include "RpcMethodImpl.h"
+#ifdef ENABLE_BITTORRENT
+#  include "BtSession.h"
+#endif
 
 namespace aria2 {
 
@@ -509,6 +512,16 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
 {
   removeStoppedGroup(e);
 
+#ifdef ENABLE_BITTORRENT
+  if (keepRunning_ && e->getBtSession()) {
+    for (const auto& group : reservedGroups_) {
+      if (group->isPauseRequested() && group->getBtDownload()) {
+        e->getBtSession()->restorePaused(group->getBtDownload(), group.get());
+      }
+    }
+  }
+#endif
+
   int maxConcurrentDownloads = optimizeConcurrentDownloads_
                                    ? optimizeConcurrentDownloads()
                                    : maxConcurrentDownloads_;
@@ -538,8 +551,11 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
     }
     std::shared_ptr<RequestGroup> groupToAdd = *reservedGroups_.begin();
     reservedGroups_.pop_front();
-    if ((keepRunning_ && groupToAdd->isPauseRequested()) ||
-        !groupToAdd->isDependencyResolved()) {
+    if (keepRunning_ && groupToAdd->isPauseRequested()) {
+      pending.push_back(groupToAdd);
+      continue;
+    }
+    if (!groupToAdd->isDependencyResolved()) {
       pending.push_back(groupToAdd);
       continue;
     }

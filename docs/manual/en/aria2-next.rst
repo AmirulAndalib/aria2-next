@@ -1061,7 +1061,9 @@ BitTorrent Specific Options
   as one native tier after the tiers from the torrent. Trackers are
   deduplicated and never injected into private torrents. WebTorrent ``ws://``
   and ``wss://`` trackers are rejected because maintained builds do not include
-  WebRTC.
+  WebRTC. Metainfo with more native tiers than libtorrent can represent keeps
+  every tracker and merges only the lowest-priority excess tiers. When this
+  option adds trackers, the final native tier is reserved for them.
 
 .. option:: --bt-tracker-completion-timeout=<SEC>
 
@@ -1078,8 +1080,11 @@ BitTorrent Specific Options
   Store the last known usable native libtorrent IPv4 and IPv6 DHT routing state
   in *FILE*. Disabling DHT or observing an empty routing table never replaces a
   usable state. Per-torrent native fast-resume files are stored in a ``torrents``
-  directory beside this file. All state is written atomically. Default:
-  ``${HOME}/.aria2-next/bittorrent.session``
+  directory beside this file. Paused torrents are restored into libtorrent in
+  a native stop-when-ready state, so resume data and local files are validated
+  without starting peer or tracker traffic. RPC task and file progress remain
+  available while the task stays paused. All state is written atomically.
+  Default: ``${HOME}/.aria2-next/bittorrent.session``
 
 .. option:: --enable-dht [true|false]
 
@@ -1214,7 +1219,10 @@ RPC Options
 
 .. option:: --pause [true|false]
 
-  Pause download after added. This option is effective only when
+  Pause download after added. Paused BitTorrent tasks remain in libtorrent and
+  preserve validated task, file, and seeding progress across process restarts
+  without participating in peer discovery or payload transfer. This option is
+  effective only when
   :option:`--enable-rpc=true <--enable-rpc>` is given.
   Default: ``false``
 
@@ -1222,7 +1230,7 @@ RPC Options
 
   For a Magnet URI, retrieve and validate torrent metadata without requesting
   file payload, then pause the same GID. The paused task exposes its complete
-  file list and reports ``bittorrent.state`` as ``awaitingFileSelection``.
+  file list and reports ``bittorrent.fileSelectionState`` as ``awaiting``.
   Set :option:`select-file <--select-file>` through
   :func:`aria2.changeOption`, then resume the same GID with
   :func:`aria2.unpause`. The selection must contain at least one valid file
@@ -1393,7 +1401,8 @@ Advanced Options
 
   Run as daemon. The current working directory will be changed to ``/``
   and standard input, standard output and standard error will be
-  redirected to ``/dev/null``. Default: ``false``
+  redirected to ``/dev/null``. Daemon mode requires at least one download or
+  input file, or :option:`--enable-rpc=true <--enable-rpc>`. Default: ``false``
 
 .. option:: --deferred-input [true|false]
 
@@ -2818,7 +2827,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   This method changes the status of the download denoted by *gid* (string) from
   ``paused`` to ``waiting``, making the download eligible to be restarted.
-  A Magnet task whose ``bittorrent.state`` is ``awaitingFileSelection`` rejects
+  A Magnet task whose ``bittorrent.fileSelectionState`` is ``awaiting`` rejects
   this method until :func:`aria2.changeOption` sets a valid ``select-file``.
   This method returns the GID of the unpaused download.
 
@@ -2879,8 +2888,8 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     The number of seeders aria2 has connected to. BitTorrent only.
 
   ``seeder``
-    ``true`` if the local endpoint has completed a P2P download and is sharing
-    it. Otherwise ``false``.
+    ``true`` if the local endpoint has every piece in the BitTorrent payload.
+    A task that has completed only its selected files reports ``false``.
 
   ``pieceLength``
     Piece length in bytes.
@@ -2951,8 +2960,21 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
     ``state``
       BitTorrent lifecycle state: ``adding``, ``downloadingMetadata``,
-      ``awaitingFileSelection``, ``checking``, ``downloading``, ``finished``,
-      ``seeding``, ``paused``, ``stopping``, ``stopped``, or ``error``.
+      ``checking``, ``downloading``, ``finished``, ``seeding``, ``paused``,
+      ``stopping``, or ``stopped``. ``finished`` means every selected file is
+      available. ``seeding`` means every piece in the torrent is available.
+
+    ``fileSelectionState``
+      File-selection transaction state: ``none``, ``awaiting``, ``ready``, or
+      ``applying``. This field is authoritative and independent of ``state``
+      and ``error``. Clients must not unpause a task while it is ``awaiting``.
+
+    ``error``
+      Present when libtorrent or the engine reports an error. The struct
+      contains ``code``, ``kind``, ``category``, ``message``, and
+      ``recoverable``. Storage errors also contain ``operation`` and ``file``
+      when libtorrent provides them. A recoverable error does not replace the
+      file-selection state.
 
     ``infoHashV1``
       Hexadecimal SHA-1 info hash when the torrent supports BitTorrent v1.
@@ -2977,6 +2999,21 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
     ``progress``
       Completion ratio from ``0.000000`` to ``1.000000``.
+
+    ``activeTime``
+      Native libtorrent duration, in seconds, for which the torrent has been
+      active and unpaused. It is restored from fast-resume data.
+
+    ``finishedTime``
+      Native libtorrent duration, in seconds, for which every selected file
+      has been available while the torrent was active. This is the
+      authoritative sharing duration for partial-file downloads and is used
+      by :option:`seed-time <--seed-time>`.
+
+    ``seedingTime``
+      Native libtorrent duration, in seconds, for which every piece in the
+      torrent has been available while the torrent was active. It remains zero
+      when only selected files are complete.
 
     ``info``
       Struct which contains data from Info dictionary. It contains

@@ -88,11 +88,21 @@ struct BtTrackerSnapshot {
   std::vector<BtTrackerEndpointSnapshot> endpoints;
 };
 
+struct BtErrorSnapshot {
+  bool present = false;
+  bool recoverable = false;
+  int code = 0;
+  std::string kind;
+  std::string category;
+  std::string message;
+  std::string operation;
+  std::string file;
+};
+
 struct BtSnapshot {
   enum class State {
     Adding,
     DownloadingMetadata,
-    AwaitingFileSelection,
     Checking,
     Downloading,
     Finished,
@@ -100,16 +110,18 @@ struct BtSnapshot {
     Paused,
     Stopping,
     Stopped,
-    Error,
   };
 
+  enum class FileSelectionState { None, Awaiting, Ready, Applying };
+
   State state = State::Adding;
+  FileSelectionState fileSelectionState = FileSelectionState::None;
+  BtErrorSnapshot error;
   std::string name;
   std::string infoHashV1;
   std::string infoHashV2;
   std::string magnetLink;
   std::string currentTracker;
-  std::string errorMessage;
   std::string bitfield;
   std::vector<std::string> webSeeds;
   std::vector<std::vector<std::string>> announceList;
@@ -140,11 +152,12 @@ struct BtSnapshot {
   int availabilityPpm = -1;
   bool privateTorrent = false;
   bool hasMetadata = false;
-  bool finished = false;
-  bool seeding = false;
+  bool selectedComplete = false;
+  bool complete = false;
 };
 
 const char* btStateName(BtSnapshot::State state);
+const char* btFileSelectionStateName(BtSnapshot::FileSelectionState state);
 
 } // namespace aria2
 

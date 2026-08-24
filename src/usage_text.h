@@ -49,7 +49,7 @@
   _(" -D, --daemon[=true|false]    Run as daemon. The current working directory will\n" \
     "                              be changed to \"/\" and standard input, standard\n" \
     "                              output and standard error will be redirected to\n" \
-    "                              \"/dev/null\".")
+    "                              \"/dev/null\". Requires RPC, an input file, or a URI.")
 #define TEXT_SPLIT                                                      \
   _(" -s, --split=N                Download a file using N connections. If more\n" \
     "                              than N URIs are given, first N URIs are used and\n" \

@@ -217,7 +217,7 @@ bool RequestGroup::downloadFinished() const
 {
 #ifdef ENABLE_BITTORRENT
   if (btDownload_) {
-    return btDownload_->snapshot().finished;
+    return btDownload_->snapshot().selectedComplete;
   }
 #endif // ENABLE_BITTORRENT
   if (!pieceStorage_) {
@@ -230,7 +230,7 @@ bool RequestGroup::allDownloadFinished() const
 {
 #ifdef ENABLE_BITTORRENT
   if (btDownload_) {
-    return btDownload_->snapshot().seeding;
+    return btDownload_->snapshot().complete;
   }
 #endif // ENABLE_BITTORRENT
   if (!pieceStorage_) {
@@ -957,7 +957,7 @@ void RequestGroup::releaseRuntimeResource(DownloadEngine* e)
 {
 #ifdef ENABLE_BITTORRENT
   if (btDownload_) {
-    e->getBtSession()->remove(gid_->getNumericId());
+    e->getBtSession()->suspend(gid_->getNumericId());
   }
 #endif // ENABLE_BITTORRENT
   if (pieceStorage_) {
@@ -1281,7 +1281,8 @@ bool RequestGroup::isSeeder() const
     return true;
   }
 #ifdef ENABLE_BITTORRENT
-  return btDownload_ && btDownload_->hasMetadata() && downloadFinished();
+  return btDownload_ && btDownload_->hasMetadata() &&
+         btDownload_->snapshot().complete;
 #else  // !ENABLE_BITTORRENT
   return false;
 #endif // !ENABLE_BITTORRENT

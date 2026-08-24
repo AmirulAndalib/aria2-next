@@ -8,24 +8,30 @@
 #include "BufferedFile.h"
 #include "File.h"
 #include "DownloadContext.h"
+#include "DownloadEngine.h"
 #include "MetadataInfo.h"
 #include "RequestGroup.h"
 #include "RequestGroupMan.h"
 #include "SessionSerializer.h"
+#include "SelectEventPoll.h"
 #include "Option.h"
 #include "OptionParser.h"
 #include "prefs.h"
 #include "util.h"
+#include "wallclock.h"
 
 #include <libtorrent/address.hpp>
+#include <libtorrent/create_torrent.hpp>
 #include <libtorrent/load_torrent.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/session.hpp>
 #include <libtorrent/session_params.hpp>
 #include <libtorrent/write_resume_data.hpp>
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 namespace aria2 {
 
@@ -34,16 +40,22 @@ public:
   void testSessionStateRoundTrip();
   void testTransferStatAggregation();
   void testFileSelectionResumeState();
+  void testNativeFileSelectionApply();
+  void testPausedRestoreHydration();
   void testDesktopSettings();
   void testTrackerOwnership();
+  void testTrackerTierNormalization();
   void testResumeStore();
 };
 
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
 A2_TEST(BtSessionTest, testTransferStatAggregation)
 A2_TEST(BtSessionTest, testFileSelectionResumeState)
+A2_TEST(BtSessionTest, testNativeFileSelectionApply)
+A2_TEST(BtSessionTest, testPausedRestoreHydration)
 A2_TEST(BtSessionTest, testDesktopSettings)
 A2_TEST(BtSessionTest, testTrackerOwnership)
+A2_TEST(BtSessionTest, testTrackerTierNormalization)
 A2_TEST(BtSessionTest, testResumeStore)
 
 void BtSessionTest::testTransferStatAggregation()
@@ -125,13 +137,20 @@ void BtSessionTest::testFileSelectionResumeState()
   auto awaiting = makeGroup(awaitingOption);
   REQUIRE(awaiting->isPauseRequested());
   REQUIRE(awaiting->getBtDownload()->awaitingFileSelection());
-  REQUIRE_EQ(BtSnapshot::State::AwaitingFileSelection,
+  REQUIRE_EQ(BtSnapshot::State::Paused,
              awaiting->getBtDownload()->snapshot().state);
+  REQUIRE_EQ(BtSnapshot::FileSelectionState::Awaiting,
+             awaiting->getBtDownload()->snapshot().fileSelectionState);
   REQUIRE_EQ((size_t)2, awaiting->getBtDownload()->snapshot().files.size());
   awaiting->getBtDownload()->applyTransportState(
       BtSnapshot::State::Downloading);
   REQUIRE(awaiting->getBtDownload()->awaitingFileSelection());
   REQUIRE_EQ((size_t)2, awaiting->getBtDownload()->snapshot().files.size());
+
+  auto independentOption = std::make_shared<Option>(option);
+  independentOption->remove(PREF_PAUSE);
+  auto independent = makeGroup(independentOption);
+  REQUIRE(independent->getBtDownload()->awaitingFileSelection());
 
   const auto serialize = [](const std::shared_ptr<RequestGroup>& group,
                             const std::string& path) {
@@ -160,29 +179,201 @@ void BtSessionTest::testFileSelectionResumeState()
   REQUIRE_EQ((int64_t)0,
              awaiting->getBtDownload()->snapshot().completedLength);
   awaiting->getBtDownload()->submitFileSelection(awaitingOption.get());
-  awaiting->getBtDownload()->prepareFileSelectionResume();
+  REQUIRE(independent->getBtDownload()->awaitingFileSelection());
+  awaiting->getBtDownload()->beginFileSelectionApply();
   awaiting->setPauseRequested(false);
   REQUIRE(!awaitingOption->getAsBool(PREF_PAUSE_METADATA));
-  REQUIRE(awaiting->getBtDownload()->fileSelectionResuming());
-  REQUIRE(!awaiting->getBtDownload()->completeFileSelectionResume(true));
-  REQUIRE(awaiting->getBtDownload()->fileSelectionResuming());
-  REQUIRE(awaiting->getBtDownload()->completeFileSelectionResume(false));
-  REQUIRE(!awaiting->getBtDownload()->fileSelectionResuming());
+  REQUIRE(awaiting->getBtDownload()->fileSelectionApplying());
+  awaiting->getBtDownload()->completeFileSelectionApply();
+  REQUIRE(!awaiting->getBtDownload()->fileSelectionApplying());
   const auto selectedSession = serialize(
       awaiting, A2_TEST_OUT_DIR "/bt-selection/selected.session");
   REQUIRE(selectedSession.find(" pause=true\n") == std::string::npos);
   REQUIRE(selectedSession.find(" select-file=2\n") != std::string::npos);
   REQUIRE(selectedSession.find(" pause-metadata=false\n") != std::string::npos);
 
+  params.active_time = 120;
+  params.finished_time = 45;
+  params.seeding_time = 0;
+  params.completed_time = 1;
+  const auto completedResume = libtorrent::write_resume_data_buf(params);
+  BtResumeStore::write(resumePath, completedResume.data(),
+                       completedResume.size());
+
   auto selectedOption = std::make_shared<Option>(*awaitingOption);
   auto restored = makeGroup(selectedOption);
   REQUIRE(!restored->isPauseRequested());
   REQUIRE(!restored->getBtDownload()->awaitingFileSelection());
+  REQUIRE(restored->getBtDownload()->snapshot().selectedComplete);
+  REQUIRE(!restored->getBtDownload()->snapshot().complete);
+  REQUIRE_EQ(120, restored->getBtDownload()->snapshot().activeTime);
+  REQUIRE_EQ(45, restored->getBtDownload()->snapshot().finishedTime);
+  REQUIRE_EQ(0, restored->getBtDownload()->snapshot().seedingTime);
   REQUIRE_EQ((size_t)2, restored->getBtDownload()->snapshot().files.size());
   REQUIRE(!restored->getBtDownload()->snapshot().files[0].selected);
   REQUIRE(restored->getBtDownload()->snapshot().files[1].selected);
 
   File(resumePath).remove();
+}
+
+void BtSessionTest::testNativeFileSelectionApply()
+{
+  auto option = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*option);
+  option->put(PREF_DIR, A2_TEST_OUT_DIR "/bt-native-selection");
+  option->put(PREF_BT_SESSION_STATE_FILE,
+              A2_TEST_OUT_DIR "/bt-native-selection/bittorrent.session");
+  File(option->get(PREF_DIR)).mkdirs();
+
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->configure(option.get());
+  download->populateDownloadContext(context, option.get());
+  download->updateSelection(context);
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  download->initialize(group.get());
+
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  BtSession session(option.get());
+
+  auto command = session.start(download, group.get(), &engine);
+  const auto waitUntil = [&session](const auto& ready) {
+    for (int attempt = 0; attempt < 2000; ++attempt) {
+      session.poll();
+      if (ready()) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+  };
+  REQUIRE(waitUntil([&]() {
+    try {
+      session.forceAnnounce(download);
+      return true;
+    }
+    catch (...) {
+      return false;
+    }
+  }));
+
+  session.requestStop(download, BtDownload::StopReason::Pause);
+  REQUIRE(waitUntil([&]() { return download->stopped(); }));
+
+  download->beginFileSelectionPause();
+  REQUIRE(download->awaitingFileSelection());
+  option->put(PREF_SELECT_FILE, "2");
+  auto selected = util::parseIntSegments("2");
+  selected.normalize();
+  context->setFileFilter(std::move(selected));
+  download->updateSelection(context);
+  download->submitFileSelection(option.get());
+  download->beginFileSelectionApply();
+  group->setPauseRequested(false);
+
+  command = session.start(download, group.get(), &engine);
+  REQUIRE(download->fileSelectionApplying());
+  REQUIRE(waitUntil([&]() { return !download->fileSelectionApplying(); }));
+  REQUIRE_EQ(BtSnapshot::FileSelectionState::None,
+             download->snapshot().fileSelectionState);
+  REQUIRE(!download->failed());
+}
+
+void BtSessionTest::testPausedRestoreHydration()
+{
+  auto option = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*option);
+  option->put(PREF_DIR, A2_TEST_OUT_DIR "/bt-paused-restore");
+  option->put(PREF_ENABLE_RPC, A2_V_TRUE);
+  option->put(PREF_ENABLE_DHT, A2_V_FALSE);
+  option->put(PREF_BT_ENABLE_LPD, A2_V_FALSE);
+  option->put(PREF_ENABLE_PEER_EXCHANGE, A2_V_FALSE);
+  option->put(PREF_BT_SEED_UNVERIFIED, A2_V_TRUE);
+  option->put(PREF_BT_SESSION_STATE_FILE,
+              A2_TEST_OUT_DIR "/bt-paused-restore/bittorrent.session");
+
+  const auto root = option->get(PREF_DIR) + "/aria2-test";
+  File(root + "/aria2/src").mkdirs();
+  const auto writeFile = [](const std::string& path, size_t size) {
+    BufferedFile file(path.c_str(), BufferedFile::WRITE);
+    REQUIRE(file);
+    const std::string data(size, '\0');
+    REQUIRE_EQ(size, file.write(data.data(), data.size()));
+  };
+  writeFile(root + "/aria2/src/aria2c", 284);
+  writeFile(root + "/aria2-0.2.2.tar.bz2", 100);
+
+  libtorrent::error_code error;
+  auto params =
+      libtorrent::load_torrent_file(A2_TEST_DIR "/test.torrent", error, {});
+  REQUIRE(!error);
+  params.save_path = option->get(PREF_DIR);
+  params.have_pieces.resize(params.ti->num_pieces(), true);
+  params.flags |= libtorrent::torrent_flags::seed_mode;
+  params.flags |= libtorrent::torrent_flags::paused;
+  params.flags &= ~libtorrent::torrent_flags::auto_managed;
+  params.completed_time = 1;
+  params.active_time = 90;
+  params.finished_time = 30;
+  params.seeding_time = 15;
+
+  auto probe = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  const auto identity = !probe->snapshot().infoHashV1.empty()
+                            ? probe->snapshot().infoHashV1
+                            : probe->snapshot().infoHashV2;
+  const auto resumePath = BtResumeStore::path(option.get(), identity);
+  const auto resume = libtorrent::write_resume_data_buf(params);
+  BtResumeStore::write(resumePath, resume.data(), resume.size());
+
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->configure(option.get());
+  download->populateDownloadContext(context, option.get());
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  group->setPauseRequested(true);
+  download->initialize(group.get());
+
+  REQUIRE_EQ((int64_t)384, download->snapshot().completedLength);
+  REQUIRE(download->snapshot().complete);
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
+
+  BtSession session(option.get());
+  session.restorePaused(download, group.get());
+  const auto waitUntil = [&session](const auto& ready) {
+    for (int attempt = 0; attempt < 3000; ++attempt) {
+      global::wallclock().reset();
+      session.poll();
+      if (ready()) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+  };
+  REQUIRE(waitUntil([&]() { return download->stopped(); }));
+  REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
+  REQUIRE_EQ((int64_t)384, download->snapshot().completedLength);
+  REQUIRE(download->snapshot().complete);
+  REQUIRE_EQ(0, download->snapshot().downloadSpeed);
+  REQUIRE_EQ(0, download->snapshot().uploadSpeed);
+
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  group->setPauseRequested(false);
+  auto command = session.start(download, group.get(), &engine);
+  const bool resumed = waitUntil([&]() {
+    return download->snapshot().state == BtSnapshot::State::Seeding;
+  });
+  REQUIRE(resumed);
+  REQUIRE_EQ((int64_t)384, download->snapshot().completedLength);
+
+  session.discard(download);
+  REQUIRE(waitUntil([&]() { return download->stopped(); }));
 }
 
 void BtSessionTest::testResumeStore()
@@ -311,6 +502,43 @@ void BtSessionTest::testTrackerOwnership()
   download->configure(&option);
   REQUIRE_EQ(std::string("global"), download->trackerSource(
                                         "udp://tracker.example:6969/announce"));
+}
+
+void BtSessionTest::testTrackerTierNormalization()
+{
+  std::vector<libtorrent::create_file_entry> files;
+  files.emplace_back("tracker-tier-limit.bin", 1);
+  libtorrent::create_torrent torrent(
+      std::move(files), 16_k, libtorrent::create_torrent::v1_only);
+  torrent.set_hash(libtorrent::piece_index_t{0},
+                   libtorrent::sha1_hash::max());
+  for (int tier = 0; tier <= 256; ++tier) {
+    torrent.add_tracker("http://tracker-" + std::to_string(tier) +
+                            ".example/announce",
+                        tier);
+  }
+  const auto encoded = torrent.generate_buf();
+
+  Option option;
+  OptionParser::getInstance()->parseDefaultValues(option);
+  auto download = BtDownload::fromBuffer(
+      std::string(encoded.data(), encoded.size()), {});
+  download->configure(&option);
+
+  const auto& nativeTiers = download->snapshot().announceList;
+  REQUIRE_EQ((size_t)256, nativeTiers.size());
+  REQUIRE_EQ((size_t)2, nativeTiers.back().size());
+
+  option.put(PREF_BT_TRACKER, "udp://global.example:6969/announce");
+  download->configure(&option);
+  const auto& tiersWithGlobal = download->snapshot().announceList;
+  REQUIRE_EQ((size_t)256, tiersWithGlobal.size());
+  REQUIRE_EQ((size_t)3, tiersWithGlobal[254].size());
+  REQUIRE_EQ((size_t)1, tiersWithGlobal[255].size());
+  REQUIRE_EQ(std::string("udp://global.example:6969/announce"),
+             tiersWithGlobal[255][0]);
+  REQUIRE_EQ(std::string("global"), download->trackerSource(
+                                        "udp://global.example:6969/announce"));
 }
 
 void BtSessionTest::testSessionStateRoundTrip()

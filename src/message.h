@@ -140,6 +140,8 @@
 #define MSG_INCORRECT_NETRC_PERMISSION _(".netrc file %s does not have correct permissions. It should be 600. netrc support disabled.")
 #define MSG_LOGGING_STARTED _("Logging started.")
 #define MSG_URI_REQUIRED _("Specify at least one URL.")
+#define MSG_DAEMON_REQUIRES_WORK                                        \
+  _("Daemon mode requires --enable-rpc=true or at least one download or input file.")
 #define MSG_DAEMON_FAILED _("daemon failed.")
 #define MSG_VERIFICATION_SUCCESSFUL _("Verification finished successfully. file=%s")
 #define MSG_VERIFICATION_FAILED _("Checksum error detected. file=%s")
