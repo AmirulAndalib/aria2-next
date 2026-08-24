@@ -78,6 +78,7 @@ public:
   void testEd2kAichHashRequiresQuorum();
   void testEd2kSourceExchangeMergePolicy();
   void testEd2kSourcePolicyRanksSources();
+  void testEd2kPieceSelectionMatchesAMulePriorities();
   void testEd2kSourcePolicyClassifiesLifecycle();
   void testEd2kLowIdCallbackStateTransitions();
   void testEd2kPeerActionPolicySelectsConnect();
@@ -148,6 +149,7 @@ A2_TEST(DownloadHelperTest, testEd2kServerSourceMergeAcceptsRequiredEncryption)
 A2_TEST(DownloadHelperTest, testEd2kAichHashRequiresQuorum)
 A2_TEST(DownloadHelperTest, testEd2kSourceExchangeMergePolicy)
 A2_TEST(DownloadHelperTest, testEd2kSourcePolicyRanksSources)
+A2_TEST(DownloadHelperTest, testEd2kPieceSelectionMatchesAMulePriorities)
 A2_TEST(DownloadHelperTest, testEd2kSourcePolicyClassifiesLifecycle)
 A2_TEST(DownloadHelperTest, testEd2kLowIdCallbackStateTransitions)
 A2_TEST(DownloadHelperTest, testEd2kPeerActionPolicySelectsConnect)
@@ -882,6 +884,34 @@ void DownloadHelperTest::testEd2kSourcePolicyRanksSources()
 
   REQUIRE(selected);
   REQUIRE_EQ(cryptRequired.host, selected->endpoint.host);
+}
+
+void DownloadHelperTest::testEd2kPieceSelectionMatchesAMulePriorities()
+{
+  ed2k::PieceSelectionCandidate rare;
+  rare.frequency = 1;
+  rare.completedBlocks = 10;
+  rare.totalBlocks = 100;
+
+  auto common = rare;
+  common.frequency = 20;
+  common.completedBlocks = 90;
+  REQUIRE(ed2k::rankPieceSelection(rare, 100) <
+          ed2k::rankPieceSelection(common, 100));
+
+  auto requested = common;
+  requested.requested = true;
+  REQUIRE(ed2k::rankPieceSelection(common, 100) <
+          ed2k::rankPieceSelection(requested, 100));
+
+  auto preview = common;
+  preview.preview = true;
+  REQUIRE(ed2k::rankPieceSelection(preview, 100) <
+          ed2k::rankPieceSelection(common, 100));
+
+  auto continuing = requested;
+  continuing.continuing = true;
+  REQUIRE_EQ((uint32_t)0, ed2k::rankPieceSelection(continuing, 100));
 }
 
 void DownloadHelperTest::testEd2kSourcePolicyClassifiesLifecycle()

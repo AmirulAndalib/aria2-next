@@ -307,6 +307,8 @@ extern PrefPtr PREF_FORCE_SAVE;
 extern PrefPtr PREF_SAVE_NOT_FOUND;
 // value: 1*digit
 extern PrefPtr PREF_DISK_CACHE;
+// value: path to persistent application state directory
+extern PrefPtr PREF_STATE_DIR;
 // value: host:port[,host:port]
 extern PrefPtr PREF_ED2K_SERVER;
 // value: path to server.met
@@ -319,8 +321,8 @@ extern PrefPtr PREF_ED2K_LISTEN_PORT;
 extern PrefPtr PREF_ED2K_UDP_LISTEN_PORT;
 // value: 1*digit
 extern PrefPtr PREF_ED2K_UPLOAD_SLOTS;
-// value: path to persistent ED2K runtime state
-extern PrefPtr PREF_ED2K_STATE_FILE;
+// value: true | false
+extern PrefPtr PREF_ED2K_PREVIEW_PRIORITY;
 // value: string
 extern PrefPtr PREF_GID;
 // values: 1*digit
@@ -449,8 +451,6 @@ extern PrefPtr PREF_ENABLE_DHT;
 extern PrefPtr PREF_BT_ENCRYPTION;
 // values: tcp | utp | both
 extern PrefPtr PREF_BT_TRANSPORT;
-// values: a string (file path)
-extern PrefPtr PREF_BT_SESSION_STATE_FILE;
 // values: HOST:PORT[,HOST:PORT...]
 extern PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES;
 // values: 1*digit

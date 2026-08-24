@@ -27,6 +27,8 @@ set(ARIA2_SOURCES_BASE
   src/AdaptiveFileAllocationIterator.h
   src/AdaptiveURISelector.cc
   src/AdaptiveURISelector.h
+  src/ApplicationStatePath.cc
+  src/ApplicationStatePath.h
   src/AnonDiskWriterFactory.h
   src/array_fun.h
   src/AuthConfig.cc
@@ -149,8 +151,12 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kListenCommand.h
   src/Ed2kPeerTransfer.cc
   src/Ed2kPeerTransfer.h
+  src/Ed2kProgressInfoFile.cc
+  src/Ed2kProgressInfoFile.h
   src/Ed2kSession.cc
   src/Ed2kSession.h
+  src/Ed2kStore.cc
+  src/Ed2kStore.h
   src/Ed2kShareIndex.cc
   src/Ed2kShareIndex.h
   src/Ed2kSharedFile.cc
@@ -605,6 +611,18 @@ set(ARIA2_SOURCES_HAVE_OPENSSL_TLS
 set(ARIA2_SOURCES_APPLE_TRUST
   src/AppleTrustVerifier.cc
   src/AppleTrustVerifier.h
+)
+
+set(ARIA2_SOURCES_APPLE_STATE_PATH
+  src/ApplicationStatePathApple.mm
+)
+
+set(ARIA2_SOURCES_WINDOWS_STATE_PATH
+  src/ApplicationStatePathWindows.cc
+)
+
+set(ARIA2_SOURCES_POSIX_STATE_PATH
+  src/ApplicationStatePathPosix.cc
 )
 
 set(ARIA2_SOURCES_HAVE_ZLIB

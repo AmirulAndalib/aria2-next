@@ -46,7 +46,6 @@
 #include "Option.h"
 #include "DownloadResult.h"
 #include "DownloadContext.h"
-#include "Ed2kUploadQueue.h"
 #include "FileEntry.h"
 #include "prefs.h"
 #include "util.h"
@@ -55,10 +54,6 @@
 #include "OptionParser.h"
 #include "OptionHandler.h"
 #include "SHA1IOFile.h"
-#include "Ed2kAttribute.h"
-#include "ed2k_kad.h"
-#include "ed2k_link.h"
-#include "ed2k_server.h"
 
 #if HAVE_ZLIB
 #  include "GZipFile.h"
@@ -165,22 +160,6 @@ bool writeUri(IOFile& fp, const std::string& uri)
          fp.write("\t", 1) == 1;
 }
 
-void addUniqueEd2kSource(std::vector<ed2k::Endpoint>& sources,
-                         const ed2k::Endpoint& source)
-{
-  if (source.host.empty() || source.port == 0) {
-    return;
-  }
-  auto i = std::find_if(sources.begin(), sources.end(),
-                        [&](const ed2k::Endpoint& item) {
-                          return item.host == source.host &&
-                                 item.port == source.port;
-                        });
-  if (i == sources.end()) {
-    sources.push_back(source);
-  }
-}
-
 template <typename InputIterator, class UnaryPredicate>
 bool writeUri(IOFile& fp, InputIterator first, InputIterator last,
               UnaryPredicate& filter)
@@ -235,27 +214,7 @@ bool writeDownloadResult(IOFile& fp, std::set<a2_gid_t>& metainfoCache,
       return true;
     }
     if (dr->attrs.size() > CTX_ATTR_ED2K && dr->attrs[CTX_ATTR_ED2K]) {
-      auto attrs = static_cast<Ed2kAttribute*>(dr->attrs[CTX_ATTR_ED2K].get());
-      auto link = attrs->link;
-      if (!attrs->pieceHashes.empty()) {
-        link.pieceHashes = attrs->pieceHashes;
-      }
-      if (!attrs->aichRootHash.empty()) {
-        link.aichHash = attrs->aichRootHash;
-      }
-      for (const auto& peer : attrs->peers) {
-        addUniqueEd2kSource(link.sources, peer);
-      }
-      if (!writeUri(fp, ed2k::toFileLink(link)) ||
-          fp.write("\n", 1) != 1 ||
-          !writeOptionLine(fp, PREF_GID, dr->gid->toHex())) {
-        return false;
-      }
-      if (pauseRequested &&
-          !writeOptionLine(fp, PREF_PAUSE, A2_V_TRUE)) {
-        return false;
-      }
-      return writeOption(fp, dr->option);
+      return true;
     }
     const std::shared_ptr<FileEntry>& file = dr->fileEntries[0];
     // Don't save download if there are no URIs.
@@ -349,15 +308,6 @@ bool saveDownloadResult(IOFile& fp, std::set<a2_gid_t>& metainfoCache,
 }
 } // namespace
 
-namespace {
-bool isActiveEd2kSharingGroup(const std::shared_ptr<RequestGroup>& rg)
-{
-  return rg->isSeedOnlyEnabled() && !rg->isHaltRequested() &&
-         rg->downloadFinished() &&
-         rg->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K);
-}
-} // namespace
-
 bool SessionSerializer::save(IOFile& fp) const
 {
   std::set<a2_gid_t> metainfoCache;
@@ -383,7 +333,6 @@ bool SessionSerializer::save(IOFile& fp) const
       bool stopped = dr->result == error_code::FINISHED ||
                      dr->result == error_code::REMOVED;
       if ((!stopped && saveInProgress_) ||
-          isActiveEd2kSharingGroup(rg) ||
           (stopped && dr->option->getAsBool(PREF_FORCE_SAVE))) {
         if (!writeDownloadResult(fp, metainfoCache, dr,
                                  rg->isPauseRequested())) {

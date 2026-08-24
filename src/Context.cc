@@ -34,6 +34,8 @@
 /* copyright --> */
 #include "Context.h"
 
+#include "ApplicationStatePath.h"
+
 #include <unistd.h>
 #include <getopt.h>
 
@@ -301,8 +303,9 @@ Context::Context(bool standalone, int argc, char** argv, const KeyVals& options)
   op->remove(PREF_CHECKSUM);
   op->remove(PREF_GID);
 
+  const auto hasEd2kDatabase = File(state::ed2kDatabaseFile(op.get())).isFile();
   if (standalone && !op->getAsBool(PREF_ENABLE_RPC) && requestGroups.empty() &&
-      !uriListParser) {
+      !uriListParser && !hasEd2kDatabase) {
     global::cout()->printf("%s\n", MSG_NO_FILES_TO_DOWNLOAD);
   }
   else {

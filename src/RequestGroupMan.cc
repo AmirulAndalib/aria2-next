@@ -34,6 +34,8 @@
 /* copyright --> */
 #include "RequestGroupMan.h"
 
+#include "ApplicationStatePath.h"
+
 #include <unistd.h>
 #include <cstring>
 #include <iomanip>
@@ -131,10 +133,11 @@ RequestGroupMan::RequestGroupMan(
       ed2kUploadQueue_(make_unique<ed2k::UploadQueue>(
           option->getAsInt(PREF_ED2K_UPLOAD_SLOTS))),
       ed2kSession_(make_unique<ed2k::Ed2kSession>(
-          ed2kUploadQueue_.get(), option->get(PREF_ED2K_STATE_FILE))),
+          ed2kUploadQueue_.get(), state::ed2kDatabaseFile(option))),
       numStoppedTotal_(0)
 {
   setupOptimizeConcurrentDownloads();
+  ed2kSession_->restoreDownloads(option, requestGroups);
   appendReservedGroup(reservedGroups_, requestGroups.begin(),
                       requestGroups.end());
 }

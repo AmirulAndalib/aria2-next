@@ -312,8 +312,8 @@ DHT
 
 libtorrent provides mainline-compatible IPv4 and IPv6 DHT. DHT and UDP
 trackers use the UDP side of ``--listen-port``. aria2-next atomically
-checkpoints the native routing table selected by ``--bt-session-state-file``
-and restores it before bootstrapping a new session.
+checkpoints the native routing table below ``--state-dir`` and restores it
+before bootstrapping a new session.
 
 UDP tracker
 ~~~~~~~~~~~

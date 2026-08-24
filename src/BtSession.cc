@@ -12,6 +12,8 @@
 /* copyright --> */
 #include "BtSession.h"
 
+#include "ApplicationStatePath.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -263,7 +265,7 @@ struct BtSession::Impl {
   explicit Impl(const Option* option)
       : option(option),
         config(makeBtConfig(option)),
-        sessionStateFile(option->get(PREF_BT_SESSION_STATE_FILE))
+        sessionStateFile(state::btSessionFile(option))
   {
     metrics.peerSockets = lt::find_metric_idx("peer.num_peers_connected");
     metrics.halfOpenPeers = lt::find_metric_idx("peer.num_peers_half_open");
@@ -352,7 +354,8 @@ lt::session_params makeSessionParams(const Option* option,
                                      const BtConfig& config,
                                      std::string& loadedState)
 {
-  loadedState = readStateFile(option->get(PREF_BT_SESSION_STATE_FILE));
+  const auto stateFile = state::btSessionFile(option);
+  loadedState = readStateFile(stateFile);
   if (loadedState.empty()) {
     return lt::session_params(config.settings);
   }
@@ -366,13 +369,12 @@ lt::session_params makeSessionParams(const Option* option,
       loadedState.clear();
     }
     A2_LOG_DEBUG(fmt("Loaded BitTorrent session state from %s",
-                     option->get(PREF_BT_SESSION_STATE_FILE).c_str()));
+                     stateFile.c_str()));
     return params;
   }
   catch (const std::exception& error) {
     A2_LOG_WARN(fmt("Ignoring BitTorrent session state %s: %s",
-                    option->get(PREF_BT_SESSION_STATE_FILE).c_str(),
-                    error.what()));
+                    stateFile.c_str(), error.what()));
     loadedState.clear();
     return lt::session_params(config.settings);
   }

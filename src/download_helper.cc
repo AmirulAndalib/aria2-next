@@ -380,6 +380,13 @@ createEd2kRequestGroup(const std::string& ed2kUri,
 }
 } // namespace
 
+std::shared_ptr<RequestGroup>
+createEd2kFileRequestGroup(const std::string& ed2kUri,
+                           const std::shared_ptr<Option>& optionTemplate)
+{
+  return createEd2kRequestGroup(ed2kUri, optionTemplate);
+}
+
 namespace {
 std::shared_ptr<RequestGroup>
 createRequestGroup(const std::shared_ptr<Option>& optionTemplate,

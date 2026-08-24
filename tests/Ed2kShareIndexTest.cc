@@ -163,12 +163,18 @@ void Ed2kShareIndexTest::testRequestGroupManFindsActiveSource()
   RequestGroupMan rgman(std::vector<std::shared_ptr<RequestGroup>>{}, 1,
                         option.get());
   rgman.addRequestGroup(group);
+  auto nonEd2k = std::make_shared<RequestGroup>(GroupId::create(), option);
+  nonEd2k->setDownloadContext(
+      std::make_shared<DownloadContext>(4, 8, A2_TEST_OUT_DIR "/http.bin"));
+  rgman.addRequestGroup(nonEd2k);
 
   auto attrs = getEd2kAttrs(dctx);
+  REQUIRE(!getEd2kAttrs(nonEd2k->getDownloadContext()));
   auto source = findSharedSource(&rgman, attrs->link.hash);
   REQUIRE(source);
   REQUIRE(!source->complete());
   REQUIRE_EQ(std::string("active.bin"), source->name());
+  REQUIRE_EQ((size_t)1, listSharedSources(&rgman).size());
 }
 
 void Ed2kShareIndexTest::testOfferFilesPayloadSkipsLargeFilesWithoutServerSupport()

@@ -12,13 +12,14 @@
 /* copyright --> */
 #include "BtResumeStore.h"
 
+#include "ApplicationStatePath.h"
+
 #include <sstream>
 
 #include "BufferedFile.h"
 #include "DlAbortEx.h"
 #include "File.h"
 #include "Option.h"
-#include "prefs.h"
 #include "util.h"
 
 namespace aria2 {
@@ -26,10 +27,10 @@ namespace aria2 {
 std::string BtResumeStore::path(const Option* option,
                                 const std::string& infoHash)
 {
-  const auto stateDirectory =
-      File(option->get(PREF_BT_SESSION_STATE_FILE)).getDirname();
-  return util::applyDir(util::applyDir(stateDirectory, "torrents"),
-                        infoHash + ".fastresume");
+  const auto directory = state::btResumeDirectory(option);
+  return directory.empty() ? std::string()
+                           : util::applyDir(directory,
+                                            infoHash + ".fastresume");
 }
 
 std::string BtResumeStore::read(const std::string& path)
@@ -59,3 +60,4 @@ void BtResumeStore::write(const std::string& path, const char* data,
 }
 
 } // namespace aria2
+#include "ApplicationStatePath.h"

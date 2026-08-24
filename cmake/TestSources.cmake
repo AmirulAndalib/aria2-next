@@ -10,6 +10,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/Base64Test.cc
   tests/Base32Test.cc
   tests/a2functionalTest.cc
+  tests/ApplicationStatePathTest.cc
   tests/FileEntryTest.cc
   tests/PieceTest.cc
   tests/SegmentTest.cc

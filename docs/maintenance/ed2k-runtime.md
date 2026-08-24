@@ -5,11 +5,11 @@ Kad UDP socket, client identity, routing table, upload queue, and peer credits.
 Concurrent ED2K downloads register with the session and share network discovery
 without duplicate listeners or server connections.
 
-Durable state is stored in the binary file selected by
-`--ed2k-state-file`. The default is `${HOME}/.aria2/ed2k.state`. State format
-version 2 stores identity, Kad routing state, server metadata, peer credits, and
-up to ten useful source seeds per incomplete file. Version 1 is intentionally
-not migrated.
+Durable state is stored in `ed2k/state.db` under the platform application state
+directory selected by `--state-dir`. The database stores identity, Kad routing
+state, server metadata, peer credits, useful source seeds, and per-download
+piece and block progress. ED2K does not use adjacent `.aria2` control files or
+migrate retired state formats.
 
 The interoperability baseline is aMule. TCP and UDP obfuscation use aMule's key
 derivation and datagram framing. Server source requests use the persistent TCP

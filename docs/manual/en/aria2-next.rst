@@ -738,12 +738,10 @@ ED2K Specific Options
 
   Set the maximum number of active ED2K upload slots. Default: ``3``
 
-.. option:: --ed2k-state-file=<FILE>
+.. option:: --ed2k-preview-priority[=true|false]
 
-  Store the process-wide ED2K client identity, Kad routing table, server
-  metadata, useful source seeds for incomplete files, and peer credits in
-  *FILE*. Default:
-  ``${HOME}/.aria2/ed2k.state``
+  Prioritize the first and last ED2K parts after rare parts. This can make
+  archives and media files usable sooner. Default: ``false``
 
 P2P Sharing Options
 ~~~~~~~~~~~~~~~~~~~
@@ -1075,17 +1073,6 @@ BitTorrent Specific Options
 
   Set the maximum number of seconds that a tracker request may receive no data.
   Default: ``10``
-
-.. option:: --bt-session-state-file=<FILE>
-
-  Store the last known usable native libtorrent IPv4 and IPv6 DHT routing state
-  in *FILE*. Disabling DHT or observing an empty routing table never replaces a
-  usable state. Per-torrent native fast-resume files are stored in a ``torrents``
-  directory beside this file. Paused torrents are restored into libtorrent in
-  a native stop-when-ready state, so resume data and local files are validated
-  without starting peer or tracker traffic. RPC task and file progress remain
-  available while the task stays paused. All state is written atomically.
-  Default: ``${HOME}/.aria2-next/bittorrent.session``
 
 .. option:: --enable-dht [true|false]
 
@@ -1440,6 +1427,20 @@ Advanced Options
   need to read them from the disk. Decimal SIZE values can include ``K`` or
   ``M`` (1K = 1024, 1M = 1024K). Fractional bytes are rounded down.
   Default: ``16M``
+
+.. option:: --state-dir=<DIR>
+
+  Store persistent BitTorrent and ED2K engine state under *DIR*. BitTorrent
+  stores its native session state in ``bittorrent/session`` and per-torrent
+  fast-resume data in ``bittorrent/torrents``. ED2K stores its SQLite database
+  in ``ed2k/state.db``.
+
+  The default is the current user's native application state location:
+  ``~/Library/Application Support/aria2-next`` on macOS,
+  ``%LOCALAPPDATA%/aria2-next`` on Windows, and
+  ``${XDG_STATE_HOME:-$HOME/.local/state}/aria2-next`` on other Unix systems.
+  Android application hosts should pass their private persistent files
+  directory explicitly. Retired state locations are not read or migrated.
 
 .. option:: --download-result=<OPT>
 
@@ -2192,7 +2193,6 @@ aria2 expands ``${HOME}`` found in the following option values to
 user's home directory:
 
 * :option:`ca-certificate <--ca-certificate>`
-* :option:`bt-session-state-file <--bt-session-state-file>`
 * :option:`certificate <--certificate>`
 * :option:`dir <--dir>`
 * :option:`input-file <--input-file>`
@@ -2220,12 +2220,13 @@ Note that this expansion occurs even if the above options are used in
 the command-line.  This means that expansion may occur 2 times: first,
 shell and then aria2-next.
 
-bittorrent.session
-~~~~~~~~~~~~~~~~~~
+Application State
+~~~~~~~~~~~~~~~~~
 
-The native libtorrent DHT routing table is stored in the file selected by
-:option:`--bt-session-state-file`. aria2-next does not read the former
-``dht.dat`` or ``dht6.dat`` formats.
+BitTorrent and ED2K state is stored below :option:`--state-dir`. The files are
+persistent application state and must not be placed in a temporary or cache
+directory. aria2-next does not read retired DHT, BitTorrent, or ED2K state
+locations.
 
 Netrc
 ~~~~~
@@ -2252,25 +2253,19 @@ because of preceding ``.``. If you want to match ``example.org``, specify
 Control File
 ~~~~~~~~~~~~
 
-aria2 uses a control file to track the progress of a download.  A
-control file is placed in the same directory as the downloading file
-and its file name is the file name of downloading file with ``.aria2``
-appended.  For example, if you are downloading file.zip, then the
-control file should be file.zip.aria2.  (There is a exception for this
-naming convention.  If you are downloading a multi torrent, its
-control file is the "top directory" name of the torrent with ``.aria2``
-appended.  The "top directory" name is a value of "name" key in "info"
-directory in a torrent file.)
+HTTP(S), FTP, SFTP, and Metalink downloads use a control file to track
+progress. The file is placed beside the downloading file with ``.aria2``
+appended to its name. BitTorrent and ED2K use :option:`--state-dir` and do not
+create adjacent control files.
 
 Usually a control file is deleted once download completed.  If aria2
 decides that download cannot be resumed(for example, when downloading
 a file from a HTTP server which doesn't support resume), a control
 file is not created.
 
-Normally if you lose a control file, you cannot resume download.  But
-if you have a torrent or metalink with chunk checksums for the file,
-you can resume the download without a control file by giving -V option
-to aria2-next in command-line.
+Normally if you lose a control file, you cannot resume that download. Metalink
+downloads with chunk checksums can reconstruct progress by using
+:option:`--check-integrity <-V>`.
 
 .. _input-file:
 
@@ -2325,7 +2320,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`ed2k-udp-listen-port <--ed2k-udp-listen-port>`
   * :option:`ed2k-server <--ed2k-server>`
   * :option:`ed2k-server-list <--ed2k-server-list>`
-  * :option:`ed2k-state-file <--ed2k-state-file>`
   * :option:`ed2k-upload-slots <--ed2k-upload-slots>`
   * :option:`enable-http-keep-alive <--enable-http-keep-alive>`
   * :option:`enable-http-pipelining <--enable-http-pipelining>`

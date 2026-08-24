@@ -18,10 +18,12 @@
 #include <vector>
 
 #include "Ed2kKadState.h"
+#include "Ed2kStore.h"
 #include "ed2k_server.h"
 
 namespace aria2 {
 
+class Option;
 class RequestGroup;
 
 namespace ed2k {
@@ -29,15 +31,9 @@ namespace ed2k {
 class KadRoutingTable;
 class UploadQueue;
 
-struct PersistedFileSources {
-  std::string fileHash;
-  int64_t fileSize = 0;
-  std::vector<Endpoint> sources;
-};
-
 class Ed2kSession {
 public:
-  Ed2kSession(UploadQueue* uploadQueue, std::string stateFile);
+  Ed2kSession(UploadQueue* uploadQueue, std::string databasePath);
   ~Ed2kSession();
 
   void registerDownload(RequestGroup* group);
@@ -50,6 +46,17 @@ public:
   RequestGroup* networkDownload() const;
   bool empty() const { return downloads_.empty(); }
 
+  const std::string& databasePath() const { return databasePath_; }
+  bool hasDownloadState(RequestGroup* group) const;
+  bool loadDownloadState(RequestGroup* group);
+  bool saveDownloadState(RequestGroup* group);
+  bool removeDownloadState(RequestGroup* group);
+  size_t restoreDownloads(
+      const Option* option,
+      std::vector<std::shared_ptr<RequestGroup>>& requestGroups);
+  RequestGroup* findAlternativeDownload(RequestGroup* current,
+                                        const Endpoint& peer) const;
+
 private:
   std::vector<RequestGroup*> downloads_;
   std::shared_ptr<KadRoutingTable> routingTable_;
@@ -60,13 +67,13 @@ private:
   bool hasKadSnapshot_ = false;
   std::vector<ServerState> serverStates_;
   std::vector<PersistedFileSources> fileSources_;
-  std::string stateFile_;
-  mutable std::string lastSavedData_;
+  std::string databasePath_;
+  std::unique_ptr<Ed2kStore> store_;
 
   void captureNetworkState(RequestGroup* group);
   void applyPersistedState(RequestGroup* group);
   void load();
-  void save() const;
+  void save();
 };
 
 } // namespace ed2k

@@ -27,6 +27,10 @@ project(
   HOMEPAGE_URL "https://github.com/AnInsomniacy/aria2-next"
   LANGUAGES C CXX)
 
+if(APPLE)
+  enable_language(OBJCXX)
+endif()
+
 include(CheckCSourceCompiles)
 include(CheckCSourceRuns)
 include(CheckCXXSourceCompiles)

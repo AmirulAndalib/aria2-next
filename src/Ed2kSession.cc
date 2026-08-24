@@ -13,20 +13,22 @@
 #include "Ed2kSession.h"
 
 #include <algorithm>
-#include <array>
-#include <cstdio>
 #include <limits>
 
-#include "BufferedFile.h"
 #include "DownloadContext.h"
 #include "Ed2kAttribute.h"
 #include "Ed2kUploadQueue.h"
 #include "File.h"
+#include "GroupId.h"
 #include "Log.h"
+#include "Option.h"
+#include "Piece.h"
+#include "PieceStorage.h"
+#include "RecoverableException.h"
 #include "RequestGroup.h"
-#include "ed2k_helper.h"
+#include "download_helper.h"
 #include "fmt.h"
-#include "util.h"
+#include "prefs.h"
 
 namespace aria2 {
 
@@ -34,58 +36,14 @@ namespace ed2k {
 
 namespace {
 
-constexpr std::array<char, 8> STATE_MAGIC = {
-    'A', '2', 'E', 'D', '2', 'K', 2, 0};
 constexpr size_t MAX_PERSISTED_SOURCES_PER_FILE = 10;
-
-void appendBlob(std::string& out, const std::string& value)
-{
-  out += packUInt32(static_cast<uint32_t>(value.size()));
-  out += value;
-}
-
-bool readBlob(std::string& value, const std::string& data, size_t& offset)
-{
-  if (data.size() - offset < 4) {
-    return false;
-  }
-  const auto length = readUInt32(data.data() + offset);
-  offset += 4;
-  if (length > data.size() - offset) {
-    return false;
-  }
-  value.assign(data.data() + offset, length);
-  offset += length;
-  return true;
-}
-
-void appendSource(std::string& out, const Endpoint& source)
-{
-  appendBlob(out, source.host);
-  out += packUInt16(source.port);
-  out += packUInt16(source.cryptOptions);
-  appendBlob(out, source.userHash);
-}
-
-bool readSource(Endpoint& source, const std::string& data, size_t& offset)
-{
-  if (!readBlob(source.host, data, offset) || data.size() - offset < 4) {
-    return false;
-  }
-  source.port = readUInt16(data.data() + offset);
-  offset += 2;
-  source.cryptOptions = readUInt16(data.data() + offset);
-  offset += 2;
-  return readBlob(source.userHash, data, offset) && !source.host.empty() &&
-         source.port != 0 &&
-         (source.userHash.empty() || source.userHash.size() == HASH_LENGTH);
-}
 
 } // namespace
 
-Ed2kSession::Ed2kSession(UploadQueue* uploadQueue, std::string stateFile)
+Ed2kSession::Ed2kSession(UploadQueue* uploadQueue, std::string databasePath)
     : uploadQueue_(uploadQueue),
-      stateFile_(std::move(stateFile))
+      databasePath_(std::move(databasePath)),
+      store_(make_unique<Ed2kStore>(databasePath_))
 {
   load();
 }
@@ -95,6 +53,7 @@ Ed2kSession::~Ed2kSession()
   if (!downloads_.empty()) {
     for (auto group : downloads_) {
       captureNetworkState(group);
+      saveDownloadState(group);
     }
     save();
   }
@@ -166,6 +125,7 @@ void Ed2kSession::unregisterDownload(RequestGroup* group)
     return;
   }
   captureNetworkState(*i);
+  saveDownloadState(*i);
   (*i)->decreaseNumCommand();
   downloads_.erase(i);
   if (downloads_.empty()) {
@@ -182,6 +142,7 @@ void Ed2kSession::unregisterStoppedDownloads()
       continue;
     }
     captureNetworkState(*i);
+    saveDownloadState(*i);
     (*i)->decreaseNumCommand();
     i = downloads_.erase(i);
     removed = true;
@@ -198,6 +159,7 @@ void Ed2kSession::unregisterAllDownloads()
   }
   for (auto group : downloads_) {
     captureNetworkState(group);
+    saveDownloadState(group);
     group->decreaseNumCommand();
   }
   downloads_.clear();
@@ -349,102 +311,219 @@ void Ed2kSession::applyPersistedState(RequestGroup* group)
   }
 }
 
+bool Ed2kSession::hasDownloadState(RequestGroup* group) const
+{
+  if (!store_ || !store_->available() || !group) {
+    return false;
+  }
+  return store_->hasDownload(GroupId::toHex(group->getGID()));
+}
+
+bool Ed2kSession::loadDownloadState(RequestGroup* group)
+{
+  if (!store_ || !store_->available() || !group || !group->getPieceStorage()) {
+    return false;
+  }
+  PersistedDownloadState state;
+  if (!store_->loadDownload(state, GroupId::toHex(group->getGID()))) {
+    return false;
+  }
+  const auto dctx = group->getDownloadContext();
+  const auto attrs = getEd2kAttrs(dctx);
+  const auto storage = group->getPieceStorage();
+  if (!attrs || state.fileHash != attrs->link.hash ||
+      state.fileSize != dctx->getTotalLength() ||
+      state.path != dctx->getBasePath() ||
+      state.bitfield.size() != storage->getBitfieldLength()) {
+    A2_LOG_WARN(fmt("Ignored mismatched ED2K database state for GID %s.",
+                    state.gid.c_str()));
+    return false;
+  }
+
+  storage->setBitfield(
+      reinterpret_cast<const unsigned char*>(state.bitfield.data()),
+      state.bitfield.size());
+  std::vector<std::shared_ptr<Piece>> pieces;
+  pieces.reserve(state.pieces.size());
+  for (const auto& persisted : state.pieces) {
+    if (persisted.index >= dctx->getNumPieces() || persisted.length <= 0 ||
+        persisted.length != storage->getPieceLength(persisted.index)) {
+      A2_LOG_WARN(fmt("Ignored invalid ED2K piece state for GID %s.",
+                      state.gid.c_str()));
+      return false;
+    }
+    auto piece = std::make_shared<Piece>(persisted.index, persisted.length);
+    if (persisted.bitfield.size() != piece->getBitfieldLength()) {
+      A2_LOG_WARN(fmt("Ignored invalid ED2K block state for GID %s.",
+                      state.gid.c_str()));
+      return false;
+    }
+    piece->setBitfield(
+        reinterpret_cast<const unsigned char*>(persisted.bitfield.data()),
+        persisted.bitfield.size());
+    pieces.push_back(std::move(piece));
+  }
+  storage->addInFlightPiece(pieces);
+  A2_LOG_DEBUG(fmt("Loaded ED2K download state for GID %s from %s.",
+                   state.gid.c_str(), databasePath_.c_str()));
+  return true;
+}
+
+bool Ed2kSession::saveDownloadState(RequestGroup* group)
+{
+  if (!store_ || !store_->available() || !group || !group->getPieceStorage()) {
+    return false;
+  }
+  const auto dctx = group->getDownloadContext();
+  const auto attrs = getEd2kAttrs(dctx);
+  const auto storage = group->getPieceStorage();
+  if (!attrs || attrs->link.hash.size() != HASH_LENGTH ||
+      dctx->getTotalLength() <= 0) {
+    return false;
+  }
+
+  PersistedDownloadState state;
+  state.gid = GroupId::toHex(group->getGID());
+  state.fileHash = attrs->link.hash;
+  state.fileSize = dctx->getTotalLength();
+  state.link = toFileLink(attrs->link);
+  state.path = dctx->getBasePath();
+  File content(state.path);
+  if (content.isFile()) {
+    state.modifiedTime = content.getModifiedTime().getTimeFromEpoch();
+  }
+  state.paused = group->isPauseRequested();
+  state.complete = group->downloadFinished();
+  state.bitfield.assign(
+      reinterpret_cast<const char*>(storage->getBitfield()),
+      storage->getBitfieldLength());
+
+  std::vector<std::shared_ptr<Piece>> pieces;
+  storage->getInFlightPieces(pieces);
+  state.pieces.reserve(pieces.size());
+  for (const auto& piece : pieces) {
+    if (!piece || piece->getCompletedLength() == 0) {
+      continue;
+    }
+    PersistedPieceState persisted;
+    persisted.index = piece->getIndex();
+    persisted.length = piece->getLength();
+    persisted.bitfield.assign(
+        reinterpret_cast<const char*>(piece->getBitfield()),
+        piece->getBitfieldLength());
+    state.pieces.push_back(std::move(persisted));
+  }
+  return store_->saveDownload(state);
+}
+
+bool Ed2kSession::removeDownloadState(RequestGroup* group)
+{
+  return store_ && store_->available() && group &&
+         store_->removeDownload(GroupId::toHex(group->getGID()));
+}
+
+size_t Ed2kSession::restoreDownloads(
+    const Option* option,
+    std::vector<std::shared_ptr<RequestGroup>>& requestGroups)
+{
+  if (!store_ || !store_->available() || !option) {
+    return 0;
+  }
+  std::vector<PersistedDownloadState> states;
+  if (!store_->loadDownloads(states)) {
+    A2_LOG_ERROR(fmt("Failed to enumerate ED2K downloads from %s.",
+                     databasePath_.c_str()));
+    return 0;
+  }
+
+  size_t restored = 0;
+  for (const auto& state : states) {
+    const auto duplicate = std::any_of(
+        requestGroups.begin(), requestGroups.end(), [&](const auto& group) {
+          if (!group) {
+            return false;
+          }
+          if (GroupId::toHex(group->getGID()) == state.gid) {
+            return true;
+          }
+          const auto dctx = group->getDownloadContext();
+          return dctx && dctx->getBasePath() == state.path;
+        });
+    if (duplicate) {
+      continue;
+    }
+    try {
+      auto taskOption = std::make_shared<Option>(*option);
+      File content(state.path);
+      taskOption->put(PREF_DIR, content.getDirname());
+      taskOption->put(PREF_OUT, content.getBasename());
+      taskOption->put(PREF_GID, state.gid);
+      taskOption->put(PREF_PAUSE, state.paused ? A2_V_TRUE : A2_V_FALSE);
+      requestGroups.push_back(
+          createEd2kFileRequestGroup(state.link, taskOption));
+      ++restored;
+    }
+    catch (const RecoverableException& ex) {
+      A2_LOG_ERROR_EX("Failed to restore ED2K download", ex);
+    }
+  }
+  if (restored != 0) {
+    A2_LOG_INFO(fmt("Restored %lu ED2K download(s) from %s.",
+                    static_cast<unsigned long>(restored),
+                    databasePath_.c_str()));
+  }
+  return restored;
+}
+
+RequestGroup* Ed2kSession::findAlternativeDownload(
+    RequestGroup* current, const Endpoint& peer) const
+{
+  RequestGroup* selected = nullptr;
+  size_t selectedSourceCount = std::numeric_limits<size_t>::max();
+  for (auto group : downloads_) {
+    if (!group || group == current || group->isHaltRequested() ||
+        group->isPauseRequested() || group->downloadFinished() ||
+        !group->getPieceStorage()) {
+      continue;
+    }
+    auto attrs = getEd2kAttrs(group->getDownloadContext());
+    auto state = attrs ? getEd2kPeerState(attrs, peer) : nullptr;
+    if (!state || state->noFile || state->cancelled || state->dead) {
+      continue;
+    }
+    bool needed = state->partStatus.empty();
+    for (size_t i = 0; !needed && i < state->partStatus.size() &&
+                       i < group->getDownloadContext()->getNumPieces();
+         ++i) {
+      needed = state->partStatus[i] && !group->getPieceStorage()->hasPiece(i);
+    }
+    if (!needed) {
+      continue;
+    }
+    if (!selected || attrs->peerStates.size() < selectedSourceCount) {
+      selected = group;
+      selectedSourceCount = attrs->peerStates.size();
+    }
+  }
+  return selected;
+}
+
 void Ed2kSession::load()
 {
-  if (stateFile_.empty()) {
+  if (!store_->open()) {
     return;
   }
-  File file(stateFile_);
-  if (!file.isFile() || file.size() <= 0 ||
-      file.size() > 16 * 1024 * 1024) {
-    return;
-  }
-  BufferedFile fp(stateFile_.c_str(), BufferedFile::READ);
-  if (!fp) {
-    return;
-  }
-  std::string data(static_cast<size_t>(file.size()), '\0');
-  if (fp.read(&data[0], data.size()) != data.size()) {
-    return;
-  }
-  size_t offset = 0;
-  if (data.size() < STATE_MAGIC.size() ||
-      !std::equal(STATE_MAGIC.begin(), STATE_MAGIC.end(), data.begin())) {
-    return;
-  }
-  offset += STATE_MAGIC.size();
-
   std::string clientHash;
   std::string kadState;
-  if (!readBlob(clientHash, data, offset) ||
-      clientHash.size() != HASH_LENGTH || !readBlob(kadState, data, offset) ||
-      data.size() - offset < 4) {
-    return;
-  }
   std::vector<ServerState> servers;
-  const auto serverCount = readUInt32(data.data() + offset);
-  offset += 4;
-  for (uint32_t i = 0; i < serverCount; ++i) {
-    std::string payload;
-    ServerState state;
-    if (!readBlob(payload, data, offset) ||
-        !parseServerStatePayload(state, payload)) {
-      return;
-    }
-    state.connecting = false;
-    state.connected = false;
-    state.handshakeCompleted = false;
-    servers.push_back(std::move(state));
-  }
-  if (data.size() - offset < 4) {
-    return;
-  }
   std::vector<PersistedFileSources> fileSources;
-  const auto fileCount = readUInt32(data.data() + offset);
-  offset += 4;
-  for (uint32_t i = 0; i < fileCount; ++i) {
-    PersistedFileSources fileState;
-    if (!readBlob(fileState.fileHash, data, offset) ||
-        fileState.fileHash.size() != HASH_LENGTH ||
-        data.size() - offset < 12) {
-      return;
-    }
-    const auto fileSize = readUInt64(data.data() + offset);
-    offset += 8;
-    if (fileSize > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-      return;
-    }
-    fileState.fileSize = static_cast<int64_t>(fileSize);
-    const auto sourceCount = readUInt32(data.data() + offset);
-    offset += 4;
-    if (sourceCount > MAX_PERSISTED_SOURCES_PER_FILE) {
-      return;
-    }
-    for (uint32_t j = 0; j < sourceCount; ++j) {
-      Endpoint source;
-      if (!readSource(source, data, offset)) {
-        return;
-      }
-      fileState.sources.push_back(std::move(source));
-    }
-    fileSources.push_back(std::move(fileState));
-  }
-  if (data.size() - offset < 4) {
-    return;
-  }
   std::vector<PeerCreditState> credits;
-  const auto creditCount = readUInt32(data.data() + offset);
-  offset += 4;
-  for (uint32_t i = 0; i < creditCount; ++i) {
-    std::string payload;
-    PeerCreditState state;
-    if (!readBlob(payload, data, offset) ||
-        !parsePeerCreditStatePayload(state, payload)) {
-      return;
-    }
-    credits.push_back(std::move(state));
-  }
-  if (offset != data.size()) {
+  if (!store_->loadIdentity(clientHash, kadState) ||
+      !store_->loadServers(servers) ||
+      !store_->loadFileSources(fileSources) ||
+      !store_->loadCredits(credits)) {
+    A2_LOG_ERROR(fmt("Failed to load ED2K database state from %s.",
+                     databasePath_.c_str()));
     return;
   }
 
@@ -463,56 +542,29 @@ void Ed2kSession::load()
   if (uploadQueue_) {
     uploadQueue_->credits().restore(credits);
   }
-  lastSavedData_ = data;
-  A2_LOG_DEBUG(fmt("Loaded ED2K runtime state from %s.", stateFile_.c_str()));
+  A2_LOG_DEBUG(fmt("Loaded ED2K runtime state from %s.",
+                   databasePath_.c_str()));
 }
 
-void Ed2kSession::save() const
+void Ed2kSession::save()
 {
-  if (stateFile_.empty() || clientHash_.size() != HASH_LENGTH) {
+  if (!store_ || !store_->available() || clientHash_.size() != HASH_LENGTH) {
     return;
   }
-  std::string data(STATE_MAGIC.begin(), STATE_MAGIC.end());
-  appendBlob(data, clientHash_);
-  appendBlob(data, hasKadSnapshot_ ? createKadRoutingStatePayload(kadSnapshot_)
-                                  : std::string());
-  data += packUInt32(static_cast<uint32_t>(serverStates_.size()));
-  for (const auto& state : serverStates_) {
-    appendBlob(data, createServerStatePayload(state));
-  }
-  data += packUInt32(static_cast<uint32_t>(fileSources_.size()));
-  for (const auto& fileState : fileSources_) {
-    appendBlob(data, fileState.fileHash);
-    data += packUInt64(static_cast<uint64_t>(fileState.fileSize));
-    data += packUInt32(static_cast<uint32_t>(fileState.sources.size()));
-    for (const auto& source : fileState.sources) {
-      appendSource(data, source);
-    }
-  }
-  const auto& credits = uploadQueue_->credits().list();
-  data += packUInt32(static_cast<uint32_t>(credits.size()));
-  for (const auto& credit : credits) {
-    appendBlob(data, createPeerCreditStatePayload(credit));
-  }
-
-  if (data == lastSavedData_) {
-    return;
-  }
-
-  File directory(File(stateFile_).getDirname());
-  if (!directory.isDir() && !directory.mkdirs()) {
-    return;
-  }
-  const auto temporary = stateFile_ + "__temp";
-  BufferedFile fp(temporary.c_str(), BufferedFile::WRITE);
-  if (!fp || fp.write(data.data(), data.size()) != data.size() ||
-      fp.close() == EOF || !File(temporary).renameTo(stateFile_)) {
+  const auto kadState =
+      hasKadSnapshot_ ? createKadRoutingStatePayload(kadSnapshot_)
+                      : std::string();
+  const auto credits = uploadQueue_ ? uploadQueue_->credits().list()
+                                    : std::vector<PeerCreditState>();
+  if (!store_->saveRuntime(clientHash_, kadState, serverStates_, fileSources_,
+                           credits)) {
     A2_LOG_ERROR(fmt("Failed to save ED2K runtime state to %s.",
-                     stateFile_.c_str()));
-    return;
+                     databasePath_.c_str()));
   }
-  lastSavedData_ = std::move(data);
-  A2_LOG_DEBUG(fmt("Saved ED2K runtime state to %s.", stateFile_.c_str()));
+  else {
+    A2_LOG_DEBUG(fmt("Saved ED2K runtime state to %s.",
+                     databasePath_.c_str()));
+  }
 }
 
 } // namespace ed2k

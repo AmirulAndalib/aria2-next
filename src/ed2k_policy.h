@@ -63,6 +63,16 @@ struct PeerAction {
   PeerState* peer = nullptr;
 };
 
+struct PieceSelectionCandidate {
+  size_t index = 0;
+  size_t frequency = 0;
+  size_t completedBlocks = 0;
+  size_t totalBlocks = 0;
+  bool requested = false;
+  bool preview = false;
+  bool continuing = false;
+};
+
 int sourcePriority(uint32_t sourceFlags);
 PeerLifecycle classifyPeerLifecycle(const PeerState& peer, int64_t now);
 PeerAction selectPeerAction(std::vector<PeerState>& peers, int64_t now);
@@ -76,6 +86,8 @@ bool serverTcpSourceRequestDue(const ServerState& server, int64_t fileSize,
 bool serverUdpSourceRequestDue(const ServerState& server, int64_t fileSize,
                                int64_t now);
 bool serverConnectionDue(const ServerState& server, int64_t now);
+uint32_t rankPieceSelection(const PieceSelectionCandidate& candidate,
+                            size_t sourceCount);
 
 } // namespace ed2k
 

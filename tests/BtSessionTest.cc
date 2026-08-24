@@ -1,4 +1,5 @@
 #include "BtSession.h"
+#include "ApplicationStatePath.h"
 #include "BtDownload.h"
 #include "BtResumeStore.h"
 #include "BtSettings.h"
@@ -102,8 +103,7 @@ void BtSessionTest::testFileSelectionResumeState()
   option.put(PREF_DIR, A2_TEST_OUT_DIR "/bt-selection");
   option.put(PREF_ENABLE_RPC, A2_V_TRUE);
   option.put(PREF_PAUSE_METADATA, A2_V_TRUE);
-  option.put(PREF_BT_SESSION_STATE_FILE,
-             A2_TEST_OUT_DIR "/bt-selection/bittorrent.session");
+  option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-selection");
 
   libtorrent::error_code error;
   auto params =
@@ -230,8 +230,7 @@ void BtSessionTest::testNativeFileSelectionApply()
   auto option = std::make_shared<Option>();
   OptionParser::getInstance()->parseDefaultValues(*option);
   option->put(PREF_DIR, A2_TEST_OUT_DIR "/bt-native-selection");
-  option->put(PREF_BT_SESSION_STATE_FILE,
-              A2_TEST_OUT_DIR "/bt-native-selection/bittorrent.session");
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-native-selection");
   File(option->get(PREF_DIR)).mkdirs();
 
   auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
@@ -317,8 +316,7 @@ void BtSessionTest::testPausedRestoreHydration()
   option->put(PREF_BT_ENABLE_LPD, A2_V_FALSE);
   option->put(PREF_ENABLE_PEER_EXCHANGE, A2_V_FALSE);
   option->put(PREF_BT_SEED_UNVERIFIED, A2_V_TRUE);
-  option->put(PREF_BT_SESSION_STATE_FILE,
-              A2_TEST_OUT_DIR "/bt-paused-restore/bittorrent.session");
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-paused-restore");
 
   const auto root = option->get(PREF_DIR) + "/aria2-test";
   File(root + "/aria2/src").mkdirs();
@@ -405,11 +403,11 @@ void BtSessionTest::testResumeStore()
 {
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
-  option.put(PREF_BT_SESSION_STATE_FILE,
-             A2_TEST_OUT_DIR "/bt-state/bittorrent.session");
+  option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-state");
   const auto path = BtResumeStore::path(&option, "0123456789abcdef");
   REQUIRE_EQ(std::string(A2_TEST_OUT_DIR
-                         "/bt-state/torrents/0123456789abcdef.fastresume"),
+                         "/bt-state/bittorrent/torrents/"
+                         "0123456789abcdef.fastresume"),
              path);
   BtResumeStore::write(path, "resume", 6);
   REQUIRE_EQ(std::string("resume"), BtResumeStore::read(path));
@@ -568,8 +566,7 @@ void BtSessionTest::testTrackerTierNormalization()
 
 void BtSessionTest::testSessionStateRoundTrip()
 {
-  const std::string path = A2_TEST_OUT_DIR "/bittorrent.session";
-  File(path).remove();
+  const std::string stateDirectory = A2_TEST_OUT_DIR "/bt-session-state";
 
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
@@ -577,7 +574,10 @@ void BtSessionTest::testSessionStateRoundTrip()
   REQUIRE_EQ(V_PREFERRED, option.get(PREF_BT_ENCRYPTION));
   REQUIRE_EQ(30, option.getAsInt(PREF_BT_TRACKER_COMPLETION_TIMEOUT));
   REQUIRE_EQ(10, option.getAsInt(PREF_BT_TRACKER_RECEIVE_TIMEOUT));
-  option.put(PREF_BT_SESSION_STATE_FILE, path);
+  option.put(PREF_STATE_DIR, stateDirectory);
+  const auto path = state::btSessionFile(&option);
+  File(File(path).getDirname()).mkdirs();
+  File(path).remove();
   option.put(PREF_LISTEN_PORT, "0");
   option.put(PREF_ENABLE_DHT, A2_V_FALSE);
   option.put(PREF_BT_PORT_MAPPING, A2_V_FALSE);

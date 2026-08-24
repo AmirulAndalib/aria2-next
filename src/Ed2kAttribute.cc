@@ -68,6 +68,9 @@ Ed2kAttribute* getEd2kAttrs(const std::shared_ptr<DownloadContext>& dctx)
 
 Ed2kAttribute* getEd2kAttrs(DownloadContext* dctx)
 {
+  if (!dctx || !dctx->hasAttribute(CTX_ATTR_ED2K)) {
+    return nullptr;
+  }
   return static_cast<Ed2kAttribute*>(dctx->getAttribute(CTX_ATTR_ED2K).get());
 }
 

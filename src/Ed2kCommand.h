@@ -193,6 +193,7 @@ private:
   bool expireStalledTransfer();
   ed2k::SharedResponder createSharedResponder();
   bool updatePeerEndpointFromHello(bool helloPacket);
+  bool switchToAlternativeDownload();
   void routeIncomingFileRequest();
   void addPeer(const ed2k::Endpoint& peer);
   void addPeers(const std::vector<ed2k::Endpoint>& peers);

@@ -194,20 +194,6 @@ void SessionSerializerTest::testSaveEd2kDownload()
   std::ifstream in(filename.c_str(), std::ios::binary);
   std::string line;
   std::getline(in, line);
-  REQUIRE(util::startsWith(line, "ed2k://|file|aria2%20next.bin|"));
-  REQUIRE(line.find("0123456789abcdef0123456789abcdef") !=
-                 std::string::npos);
-  REQUIRE(line.find("33333333333333333333333333333333:"
-                           "44444444444444444444444444444444") !=
-                 std::string::npos);
-  REQUIRE(line.find("sources,203.0.113.20:4662") !=
-                 std::string::npos);
-  std::getline(in, line);
-  REQUIRE_EQ(
-      fmt(" gid=%s", GroupId::toHex(result[0]->getGID()).c_str()), line);
-  std::getline(in, line);
-  REQUIRE_EQ(std::string(" dir=/tmp"), line);
-  std::getline(in, line);
   REQUIRE(!in);
 }
 
@@ -243,12 +229,7 @@ void SessionSerializerTest::testSaveActiveEd2kSharing()
   std::ifstream in(filename.c_str(), std::ios::binary);
   std::string line;
   std::getline(in, line);
-  REQUIRE(util::startsWith(line, "ed2k://|file|aria2%20sharing.bin|"));
-  std::getline(in, line);
-  REQUIRE_EQ(
-      fmt(" gid=%s", GroupId::toHex(group->getGID()).c_str()), line);
-  std::getline(in, line);
-  REQUIRE_EQ(std::string(" pause=true"), line);
+  REQUIRE(!in);
 }
 
 } // namespace aria2

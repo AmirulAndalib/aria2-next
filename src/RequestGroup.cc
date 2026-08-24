@@ -65,6 +65,7 @@
 #include "Ed2kAttribute.h"
 #include "Ed2kCommand.h"
 #include "Ed2kListenCommand.h"
+#include "Ed2kProgressInfoFile.h"
 #include "Ed2kSession.h"
 #include "Ed2kKadCommand.h"
 #include "ed2k_hash.h"
@@ -341,17 +342,16 @@ void RequestGroup::createInitialCommand(
           error_code::DUPLICATE_DOWNLOAD);
     }
     initPieceStorage();
-    auto progressInfoFile = std::make_shared<DefaultProgressInfoFile>(
-        downloadContext_, pieceStorage_, option_.get());
+    auto ed2kSession = e->getRequestGroupMan()->getEd2kSession();
+    auto progressInfoFile =
+        std::make_shared<ed2k::Ed2kProgressInfoFile>(ed2kSession, this);
     if (!option_->getAsBool(PREF_DRY_RUN) &&
         option_->getAsBool(PREF_REMOVE_CONTROL_FILE) &&
         progressInfoFile->exists()) {
       progressInfoFile->removeFile();
-      A2_LOG_INFO(fmt(_("Removed control file for %s because it is requested by"
-                          " user."),
-                        progressInfoFile->getFilename().c_str()));
+      A2_LOG_INFO(fmt("Removed ED2K database state for GID %s.",
+                      gid_->toHex().c_str()));
     }
-    removeDefunctControlFile(progressInfoFile);
     auto attrs = getEd2kAttrs(downloadContext_);
     if (progressInfoFile->exists()) {
       progressInfoFile->load();
@@ -387,7 +387,6 @@ void RequestGroup::createInitialCommand(
     for (const auto& source : attrs->link.sources) {
       addEd2kPeer(attrs, source, ed2k::PEER_SOURCE_INLINE);
     }
-    auto ed2kSession = e->getRequestGroupMan()->getEd2kSession();
     ed2kSession->registerDownload(this);
     schedulePendingEd2kServers(this, e);
     for (const auto& peer : attrs->peers) {

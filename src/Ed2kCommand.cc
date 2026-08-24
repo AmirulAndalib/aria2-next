@@ -43,6 +43,7 @@
 #include "RequestGroupMan.h"
 #include "Segment.h"
 #include "SegmentMan.h"
+#include "SimpleRandomizer.h"
 #include "SocketCore.h"
 #include "ed2k_aich.h"
 #include "ed2k_compression.h"
@@ -1487,12 +1488,12 @@ void Ed2kCommand::queuePeerPartRequest()
   }
   const auto maxNewRanges = 3 - outstanding.size();
 
-  struct PieceCandidate {
-    size_t index;
-    size_t frequency;
-    size_t completedBlocks;
-  };
-  std::vector<PieceCandidate> candidates;
+  std::vector<ed2k::PieceSelectionCandidate> candidates;
+  const auto pieceLength = getDownloadContext()->getPieceLength();
+  const auto continuingPiece =
+      outstanding.empty()
+          ? getDownloadContext()->getNumPieces()
+          : static_cast<size_t>(outstanding.front().begin / pieceLength);
   for (size_t index = 0; index < getDownloadContext()->getNumPieces(); ++index) {
     if (getPieceStorage()->hasPiece(index)) {
       continue;
@@ -1515,18 +1516,48 @@ void Ed2kCommand::queuePeerPartRequest()
         completedBlocks += localPiece->hasBlock(block) ? 1 : 0;
       }
     }
-    candidates.push_back({index, frequency, completedBlocks});
+    const auto pieceBegin = static_cast<int64_t>(index) * pieceLength;
+    const auto pieceEnd = std::min(pieceBegin + static_cast<int64_t>(pieceLength),
+                                   getDownloadContext()->getTotalLength());
+    const auto requested = std::any_of(
+        attrs->requestedPartRanges.begin(), attrs->requestedPartRanges.end(),
+        [&](const ed2k::PartRange& range) {
+          return range.begin < pieceEnd && range.end > pieceBegin;
+        });
+    bool preview = false;
+    if (getRequestGroup()->getOption()->getAsBool(PREF_ED2K_PREVIEW_PRIORITY)) {
+      const auto pieceCount = getDownloadContext()->getNumPieces();
+      preview = index == 0 || index + 1 == pieceCount;
+      if (!preview && index + 2 == pieceCount && pieceCount > 1) {
+        const auto lastBegin =
+            static_cast<int64_t>(pieceCount - 1) * pieceLength;
+        preview = getDownloadContext()->getTotalLength() - lastBegin <
+                  pieceLength / 3;
+      }
+    }
+    ed2k::PieceSelectionCandidate candidate;
+    candidate.index = index;
+    candidate.frequency = frequency;
+    candidate.completedBlocks = completedBlocks;
+    candidate.totalBlocks = localPiece ? localPiece->countBlock()
+                                       : static_cast<size_t>(
+                                             (pieceEnd - pieceBegin +
+                                              Piece::BLOCK_LENGTH - 1) /
+                                             Piece::BLOCK_LENGTH);
+    candidate.requested = requested;
+    candidate.preview = preview;
+    candidate.continuing = index == continuingPiece;
+    candidates.push_back(candidate);
   }
-  std::sort(candidates.begin(), candidates.end(),
-            [](const PieceCandidate& lhs, const PieceCandidate& rhs) {
-              if (lhs.frequency != rhs.frequency) {
-                return lhs.frequency < rhs.frequency;
-              }
-              if (lhs.completedBlocks != rhs.completedBlocks) {
-                return lhs.completedBlocks > rhs.completedBlocks;
-              }
-              return lhs.index < rhs.index;
-            });
+  std::shuffle(candidates.begin(), candidates.end(),
+               *SimpleRandomizer::getInstance());
+  const auto sourceCount = attrs->peerStates.size();
+  std::stable_sort(
+      candidates.begin(), candidates.end(),
+      [&](const auto& lhs, const auto& rhs) {
+        return ed2k::rankPieceSelection(lhs, sourceCount) <
+               ed2k::rankPieceSelection(rhs, sourceCount);
+      });
 
   for (const auto& candidate : candidates) {
     if (ranges.size() >= maxNewRanges) {
@@ -1865,6 +1896,48 @@ void Ed2kCommand::routeIncomingFileRequest()
                    " - Routed incoming ED2K peer %s:%u to file %s.",
                    getCuid(), endpoint_.host.c_str(), endpoint_.port,
                    util::toHex(fileHash).c_str()));
+}
+
+bool Ed2kCommand::switchToAlternativeDownload()
+{
+  if (mode_ != Mode::PEER || incoming_ || firewallCheck_) {
+    return false;
+  }
+  auto session =
+      getDownloadEngine()->getRequestGroupMan()->getEd2kSession();
+  auto target = session->findAlternativeDownload(getRequestGroup(), endpoint_);
+  if (!target) {
+    return false;
+  }
+
+  auto oldAttrs = getEd2kAttrs(getDownloadContext());
+  if (auto oldState = getEd2kPeerState(oldAttrs, endpoint_)) {
+    releaseEd2kRequestedRanges(oldAttrs, oldState->requestedParts);
+    oldState->requestedParts.clear();
+    oldState->accepted = false;
+    oldState->connecting = false;
+  }
+  changeRequestGroup(target);
+  use64BitOffsets_ = getDownloadContext()->getTotalLength() >
+                     std::numeric_limits<uint32_t>::max();
+  peerFileStatusReceived_ = false;
+  peerFileRequestSent_ = false;
+  peerFileStatusRequested_ = false;
+  peerAccepted_ = false;
+  sourceExchangeRequested_ = false;
+  aichFileHashRequested_ = false;
+  resetCompressedPartInflaters();
+
+  auto attrs = getEd2kAttrs(getDownloadContext());
+  addEd2kPeer(attrs, endpoint_, ed2k::PEER_SOURCE_EXCHANGE);
+  markEd2kPeerConnecting(attrs, endpoint_);
+  queuePeerFileRequest();
+  state_ = State::WRITE;
+  A2_LOG_DEBUG(fmt("CUID#%" PRId64
+                   " - Switched ED2K peer %s:%u to alternative file %s.",
+                   getCuid(), endpoint_.host.c_str(), endpoint_.port,
+                   util::toHex(attrs->link.hash).c_str()));
+  return true;
 }
 
 void Ed2kCommand::startResolve()
@@ -2630,6 +2703,9 @@ void Ed2kCommand::handlePeerPacket()
     break;
   case ed2k::OP_OUTOFPARTREQS:
     markEd2kPeerOutOfParts(attrs, endpoint_, nowSeconds());
+    if (switchToAlternativeDownload()) {
+      break;
+    }
     schedulePendingPeers();
     state_ = State::DONE;
     break;
@@ -2640,6 +2716,9 @@ void Ed2kCommand::handlePeerPacket()
             global::wallclock().getTime().time_since_epoch())
             .count(),
         std::max<int64_t>(1, getOption()->getAsInt(PREF_RETRY_WAIT)));
+    if (switchToAlternativeDownload()) {
+      break;
+    }
     schedulePendingPeers();
     state_ = State::DONE;
     break;

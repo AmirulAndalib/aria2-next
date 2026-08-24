@@ -8,8 +8,11 @@
 #include "File.h"
 #include "GroupId.h"
 #include "Option.h"
+#include "Piece.h"
+#include "PieceStorage.h"
 #include "RequestGroup.h"
 #include "TestUtil.h"
+#include "download_helper.h"
 #include "ed2k_constants.h"
 #include "ed2k_hash.h"
 
@@ -42,13 +45,17 @@ std::shared_ptr<RequestGroup> createEd2kGroup(const std::string& clientHash)
 class Ed2kSessionTest {
 public:
   void testRestoresRuntimeStateAcrossRestart();
+  void testPersistsDownloadProgressWithoutControlFile();
+  void testSelectsAlternativeDownloadForPeer();
 };
 
 A2_TEST(Ed2kSessionTest, testRestoresRuntimeStateAcrossRestart)
+A2_TEST(Ed2kSessionTest, testPersistsDownloadProgressWithoutControlFile)
+A2_TEST(Ed2kSessionTest, testSelectsAlternativeDownloadForPeer)
 
 void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
 {
-  const std::string stateFile = A2_TEST_OUT_DIR "/ed2k-runtime.state";
+  const std::string stateFile = A2_TEST_OUT_DIR "/ed2k-runtime.db";
   File(stateFile).remove();
   const std::string clientHash(HASH_LENGTH, '\x31');
   const std::string peerHash(HASH_LENGTH, '\x42');
@@ -128,6 +135,91 @@ void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
   }
 
   File(stateFile).remove();
+}
+
+void Ed2kSessionTest::testPersistsDownloadProgressWithoutControlFile()
+{
+  const std::string database = A2_TEST_OUT_DIR "/ed2k-progress.db";
+  const std::string output = A2_TEST_OUT_DIR "/ed2k-progress.bin";
+  File(database).remove();
+  File(output).remove();
+  File(output + ".aria2").remove();
+
+  const std::string uri =
+      "ed2k://|file|ed2k-progress.bin|10000000|"
+      "0123456789abcdef0123456789abcdef|/";
+  auto option = std::make_shared<Option>();
+  option->put(PREF_DIR, A2_TEST_OUT_DIR);
+  option->put(PREF_OUT, "ed2k-progress.bin");
+  option->put(PREF_ENABLE_RPC, A2_V_TRUE);
+  auto group = createEd2kFileRequestGroup(uri, option);
+  const auto gid = GroupId::toHex(group->getGID());
+  group->initPieceStorage();
+  auto storage = group->getPieceStorage();
+  storage->markPiecesDone(PIECE_LENGTH);
+  auto partial = storage->getMissingPiece(1, 1);
+  REQUIRE(partial);
+  partial->completeBlock(0);
+
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE(session.saveDownloadState(group.get()));
+  }
+  REQUIRE(File(database).isFile());
+  REQUIRE(!File(output + ".aria2").exists());
+
+  group.reset();
+  auto restoredOption = std::make_shared<Option>();
+  restoredOption->put(PREF_DIR, A2_TEST_OUT_DIR);
+  restoredOption->put(PREF_OUT, "ed2k-progress.bin");
+  restoredOption->put(PREF_GID, gid);
+  restoredOption->put(PREF_ENABLE_RPC, A2_V_TRUE);
+  auto restored = createEd2kFileRequestGroup(uri, restoredOption);
+  restored->initPieceStorage();
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE(session.hasDownloadState(restored.get()));
+    REQUIRE(session.loadDownloadState(restored.get()));
+  }
+  REQUIRE(restored->getPieceStorage()->hasPiece(0));
+  auto restoredPartial = restored->getPieceStorage()->getPiece(1);
+  REQUIRE(restoredPartial);
+  REQUIRE(restoredPartial->hasBlock(0));
+
+  restored.reset();
+  File(database).remove();
+  File(output).remove();
+}
+
+void Ed2kSessionTest::testSelectsAlternativeDownloadForPeer()
+{
+  const std::string clientHash(HASH_LENGTH, '\x31');
+  auto current = createEd2kGroup(clientHash);
+  auto alternative = createEd2kGroup(clientHash);
+  getEd2kAttrs(alternative->getDownloadContext())->link.hash =
+      std::string(HASH_LENGTH, '\x72');
+  current->initPieceStorage();
+  alternative->initPieceStorage();
+
+  Endpoint peer;
+  peer.host = "203.0.113.60";
+  peer.port = 4662;
+  REQUIRE(addEd2kPeer(getEd2kAttrs(alternative->getDownloadContext()), peer,
+                      PEER_SOURCE_EXCHANGE));
+  REQUIRE(updateEd2kPeerPartStatus(
+      getEd2kAttrs(alternative->getDownloadContext()), peer,
+      std::vector<bool>{true}));
+
+  UploadQueue queue;
+  Ed2kSession session(&queue, "");
+  session.registerDownload(current.get());
+  session.registerDownload(alternative.get());
+  REQUIRE_EQ(alternative.get(),
+             session.findAlternativeDownload(current.get(), peer));
+  alternative->setPauseRequested(true);
+  REQUIRE(!session.findAlternativeDownload(current.get(), peer));
 }
 
 } // namespace ed2k

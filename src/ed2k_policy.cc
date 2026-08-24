@@ -296,6 +296,45 @@ bool serverConnectionDue(const ServerState& server, int64_t now)
   return !server.connecting && !server.connected && retryDue(server, now);
 }
 
+uint32_t rankPieceSelection(const PieceSelectionCandidate& candidate,
+                            size_t sourceCount)
+{
+  if (candidate.continuing) {
+    return 0;
+  }
+  size_t rarityPercent = 10;
+  if (sourceCount > 800) {
+    rarityPercent = 2;
+  }
+  else if (sourceCount > 200) {
+    rarityPercent = 5;
+  }
+  const auto veryRare = std::max<size_t>(1, rarityPercent * sourceCount / 100);
+  const auto rare = veryRare * 2;
+  const auto completion =
+      candidate.totalBlocks == 0
+          ? 0
+          : std::min<size_t>(100, candidate.completedBlocks * 100 /
+                                      candidate.totalBlocks);
+
+  if (candidate.frequency <= veryRare) {
+    return static_cast<uint32_t>(25 * candidate.frequency +
+                                 (candidate.preview ? 0 : 1) +
+                                 (100 - completion));
+  }
+  if (candidate.preview) {
+    return static_cast<uint32_t>((candidate.requested ? 30000 : 10000) +
+                                 (100 - completion));
+  }
+  if (candidate.frequency <= rare) {
+    return static_cast<uint32_t>(25 * candidate.frequency +
+                                 (candidate.requested ? 30101 : 10101) +
+                                 (100 - completion));
+  }
+  return static_cast<uint32_t>(candidate.requested ? 40000 + completion
+                                                    : 20000 + 100 - completion);
+}
+
 } // namespace ed2k
 
 } // namespace aria2

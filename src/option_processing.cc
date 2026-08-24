@@ -34,6 +34,8 @@
 /* copyright --> */
 #include "common.h"
 
+#include "ApplicationStatePath.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -309,7 +311,8 @@ error_code::Value option_processing(Option& op, bool standalone,
 #ifdef ENABLE_METALINK
       op.blank(PREF_METALINK_FILE) &&
 #endif // ENABLE_METALINK
-      op.blank(PREF_INPUT_FILE)) {
+      op.blank(PREF_INPUT_FILE) &&
+      !File(state::ed2kDatabaseFile(&op)).isFile()) {
     if (uris.empty()) {
       global::cerr()->printf(op.getAsBool(PREF_DAEMON)
                                  ? MSG_DAEMON_REQUIRES_WORK

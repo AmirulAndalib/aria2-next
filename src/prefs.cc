@@ -357,6 +357,8 @@ PrefPtr PREF_FORCE_SAVE = makePref("force-save");
 PrefPtr PREF_SAVE_NOT_FOUND = makePref("save-not-found");
 // value: 1*digit
 PrefPtr PREF_DISK_CACHE = makePref("disk-cache");
+// value: path to persistent application state directory
+PrefPtr PREF_STATE_DIR = makePref("state-dir");
 // value: host:port[,host:port]
 PrefPtr PREF_ED2K_SERVER = makePref("ed2k-server");
 // value: path to server.met
@@ -369,8 +371,8 @@ PrefPtr PREF_ED2K_LISTEN_PORT = makePref("ed2k-listen-port");
 PrefPtr PREF_ED2K_UDP_LISTEN_PORT = makePref("ed2k-udp-listen-port");
 // value: 1*digit
 PrefPtr PREF_ED2K_UPLOAD_SLOTS = makePref("ed2k-upload-slots");
-// value: path to persistent ED2K runtime state
-PrefPtr PREF_ED2K_STATE_FILE = makePref("ed2k-state-file");
+// value: true | false
+PrefPtr PREF_ED2K_PREVIEW_PRIORITY = makePref("ed2k-preview-priority");
 // value: string
 PrefPtr PREF_GID = makePref("gid");
 // values: 1*digit
@@ -500,8 +502,6 @@ PrefPtr PREF_ENABLE_DHT = makePref("enable-dht");
 PrefPtr PREF_BT_ENCRYPTION = makePref("bt-encryption");
 // values: tcp | utp | both
 PrefPtr PREF_BT_TRANSPORT = makePref("bt-transport");
-// values: a string that your file system recognizes as a file name.
-PrefPtr PREF_BT_SESSION_STATE_FILE = makePref("bt-session-state-file");
 // values: HOST:PORT[,HOST:PORT...]
 PrefPtr PREF_BT_DHT_BOOTSTRAP_NODES = makePref("bt-dht-bootstrap-nodes");
 // values: 1*digit

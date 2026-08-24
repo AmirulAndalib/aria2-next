@@ -34,6 +34,8 @@
 /* copyright --> */
 #include "OptionHandlerFactory.h"
 
+#include "ApplicationStatePath.h"
+
 #include <cstdlib>
 
 #include "prefs.h"
@@ -187,6 +189,13 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
+    OptionHandler* op(new LocalFilePathOptionHandler(
+        PREF_STATE_DIR, TEXT_STATE_DIR, state::defaultDirectory(), false, 0,
+        false, PATH_TO_DIR));
+    op->addTag(TAG_ADVANCED);
+    handlers.push_back(op);
+  }
+  {
     OptionHandler* op(
         new DefaultOptionHandler(PREF_ED2K_SERVER, TEXT_ED2K_SERVER));
     op->addTag(TAG_ADVANCED);
@@ -239,13 +248,12 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(new LocalFilePathOptionHandler(
-        PREF_ED2K_STATE_FILE, TEXT_ED2K_STATE_FILE, "${HOME}/.aria2/ed2k.state",
-        false, 0, false));
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_ED2K_PREVIEW_PRIORITY, TEXT_ED2K_PREVIEW_PRIORITY, A2_V_FALSE,
+        OptionHandler::OPT_ARG));
     op->addTag(TAG_ADVANCED);
     op->addTag(TAG_ED2K);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -1570,15 +1578,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->addTag(TAG_BITTORRENT);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new LocalFilePathOptionHandler(
-        PREF_BT_SESSION_STATE_FILE, TEXT_BT_SESSION_STATE_FILE,
-        "${HOME}/.aria2-next/bittorrent.session", false, 0, false));
-    op->addTag(TAG_ADVANCED);
-    op->addTag(TAG_BITTORRENT);
-    op->setInitialOption(true);
     handlers.push_back(op);
   }
   {

@@ -116,6 +116,10 @@ void createRequestGroupForUri(
     bool throwOnError = false);
 
 std::shared_ptr<RequestGroup>
+createEd2kFileRequestGroup(const std::string& ed2kUri,
+                           const std::shared_ptr<Option>& optionTemplate);
+
+std::shared_ptr<RequestGroup>
 createEd2kSearchRequestGroup(const ed2k::SearchQuery& query,
                              const std::shared_ptr<Option>& optionTemplate);
 
