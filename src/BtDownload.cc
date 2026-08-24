@@ -630,6 +630,12 @@ void BtDownload::beginProgressVerification()
   resetPendingProgress();
 }
 
+void BtDownload::beginSelectionProgressHold()
+{
+  progressState_ = ProgressState::Selecting;
+  resetPendingProgress();
+}
+
 void BtDownload::beginProgressRefresh()
 {
   progressState_ = ProgressState::Refreshing;
@@ -655,7 +661,8 @@ void BtDownload::applyProgress(int64_t totalLength, int64_t completedLength,
     snapshot_.progressPpm = progressPpm;
     return;
   }
-  if (progressState_ == ProgressState::Verifying) {
+  if (progressState_ == ProgressState::Verifying ||
+      progressState_ == ProgressState::Selecting) {
     return;
   }
 
@@ -671,6 +678,7 @@ void BtDownload::applyFileProgress(
 {
   if (progressState_ != ProgressState::Stable) {
     if (progressState_ == ProgressState::Verifying ||
+        progressState_ == ProgressState::Selecting ||
         !pendingProgress_.taskReady) {
       return;
     }
@@ -948,6 +956,7 @@ void BtDownload::beginFileSelectionApply()
   }
   validateFileSelection(group_->getOption().get());
   group_->getOption()->put(PREF_PAUSE_METADATA, A2_V_FALSE);
+  beginSelectionProgressHold();
   snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Applying;
   snapshot_.state = BtSnapshot::State::Adding;
 }
@@ -965,6 +974,8 @@ void BtDownload::completeFileSelectionApply()
 void BtDownload::failFileSelectionApply()
 {
   if (fileSelectionApplying()) {
+    progressState_ = ProgressState::Stable;
+    resetPendingProgress();
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
     snapshot_.state = BtSnapshot::State::Paused;
   }

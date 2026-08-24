@@ -700,12 +700,17 @@ SelectionPlan makeSelectionPlan(const lt::torrent_handle& handle,
   if (!handle.is_valid()) {
     return plan;
   }
-  plan.files = makeFilePriorities(group);
   const auto info = handle.torrent_file();
+  if (!info ||
+      group->getDownloadContext()->getFileEntries().size() !=
+          static_cast<size_t>(info->layout().num_files())) {
+    return plan;
+  }
+  plan.files = makeFilePriorities(group);
   const auto& savePath = group->getOption()->get(PREF_DIR);
   size_t index = 0;
   for (const auto& file : group->getDownloadContext()->getFileEntries()) {
-    if (info && index < static_cast<size_t>(info->layout().num_files())) {
+    if (index < static_cast<size_t>(info->layout().num_files())) {
       const auto nativeIndex =
           lt::file_index_t{static_cast<int>(index)};
       if (info->layout().pad_file_at(nativeIndex)) {
@@ -735,9 +740,6 @@ SelectionPlan makeSelectionPlan(const lt::torrent_handle& handle,
         static_cast<int>(static_cast<uint8_t>(plan.files[i]));
   }
 
-  if (!info) {
-    return plan;
-  }
   const bool prioritizeBoundaries =
       group->getOption()->getAsBool(PREF_BT_FIRST_LAST_PIECE_FIRST);
 
@@ -856,6 +858,10 @@ bool BtSession::synchronizeSelection(BtDownload* download)
   download->impl_->desiredFilePriorities = std::move(plan.files);
   download->impl_->desiredPiecePriorities = std::move(plan.pieces);
 
+  if (download->impl_->desiredFilePriorities.empty()) {
+    return false;
+  }
+
   if (download->impl_->filePriorityUpdatePending) {
     return true;
   }
@@ -897,7 +903,11 @@ void BtSession::continueSelectionSynchronization(BtDownload* download)
   requestResumeCheckpoint(download);
   if (download->impl_->resumeAfterFilePriorityUpdate) {
     download->impl_->resumeAfterFilePriorityUpdate = false;
+    const bool selectionApplying = download->fileSelectionApplying();
     download->completeFileSelectionApply();
+    if (selectionApplying) {
+      requestProgressRefresh(download);
+    }
     if (download->group() && !download->group()->isHaltRequested() &&
         download->shutdownStage() == BtDownload::ShutdownStage::Idle) {
       resumeTorrent(download);
@@ -941,6 +951,8 @@ void BtSession::resumeTorrent(BtDownload* download)
     download->impl_->initialRecheckStarted = true;
     download->impl_->handle.force_recheck();
   }
+  download->impl_->handle.unset_flags(lt::torrent_flags::auto_managed |
+                                      lt::torrent_flags::stop_when_ready);
   download->impl_->handle.resume();
 }
 
@@ -1041,16 +1053,17 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
     }
 
     download->impl_->handle.clear_error();
-    download->impl_->handle.unset_flags(
-        lt::torrent_flags::paused | lt::torrent_flags::auto_managed |
-        lt::torrent_flags::stop_when_ready);
     const bool filePriorityUpdatePending =
         applyDownloadOptions(download, group->getOption().get());
     if (filePriorityUpdatePending) {
       download->impl_->resumeAfterFilePriorityUpdate = true;
     }
     else {
+      const bool selectionApplying = download->fileSelectionApplying();
       download->completeFileSelectionApply();
+      if (selectionApplying) {
+        requestProgressRefresh(download.get());
+      }
       resumeTorrent(download.get());
     }
     return;
@@ -1077,7 +1090,6 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
       download->impl_->params.file_priorities;
   download->impl_->appliedPiecePriorities.clear();
   download->impl_->nativeState = BtNativeState::Adding;
-  download->completeFileSelectionApply();
   impl_->session->async_add_torrent(download->impl_->params);
 }
 
@@ -1156,15 +1168,23 @@ void BtSession::poll()
         }
       }
       else {
+        bool filePriorityUpdatePending = false;
         if (!download->awaitingFileSelection() &&
             !download->fileSelectionReady()) {
-          synchronizeSelection(download);
+          filePriorityUpdatePending = synchronizeSelection(download);
         }
         if (download->impl_->runRequested) {
-          download->impl_->handle.unset_flags(
-              lt::torrent_flags::paused | lt::torrent_flags::auto_managed |
-              lt::torrent_flags::stop_when_ready);
-          resumeTorrent(download);
+          if (filePriorityUpdatePending) {
+            download->impl_->resumeAfterFilePriorityUpdate = true;
+          }
+          else {
+            const bool selectionApplying = download->fileSelectionApplying();
+            download->completeFileSelectionApply();
+            if (selectionApplying) {
+              requestProgressRefresh(download);
+            }
+            resumeTorrent(download);
+          }
         }
       }
       continue;

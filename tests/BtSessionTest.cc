@@ -184,7 +184,19 @@ void BtSessionTest::testFileSelectionResumeState()
   awaiting->setPauseRequested(false);
   REQUIRE(!awaitingOption->getAsBool(PREF_PAUSE_METADATA));
   REQUIRE(awaiting->getBtDownload()->fileSelectionApplying());
+  awaiting->getBtDownload()->applyProgress(
+      awaiting->getBtDownload()->snapshot().files[0].length + selectedLength,
+      64, 1000, BtSnapshot::State::Downloading, false);
+  awaiting->getBtDownload()->applyFileProgress({64, 0});
+  REQUIRE_EQ(selectedLength,
+             awaiting->getBtDownload()->snapshot().totalLength);
+  REQUIRE_EQ((int64_t)0,
+             awaiting->getBtDownload()->snapshot().completedLength);
   awaiting->getBtDownload()->completeFileSelectionApply();
+  awaiting->getBtDownload()->beginProgressRefresh();
+  awaiting->getBtDownload()->applyProgress(
+      selectedLength, 0, 0, BtSnapshot::State::Downloading, false);
+  awaiting->getBtDownload()->applyFileProgress({0, 0});
   REQUIRE(!awaiting->getBtDownload()->fileSelectionApplying());
   const auto selectedSession = serialize(
       awaiting, A2_TEST_OUT_DIR "/bt-selection/selected.session");

@@ -1233,8 +1233,9 @@ RPC Options
   file list and reports ``bittorrent.fileSelectionState`` as ``awaiting``.
   Set :option:`select-file <--select-file>` through
   :func:`aria2.changeOption`, then resume the same GID with
-  :func:`aria2.unpause`. The selection must contain at least one valid file
-  index. Resuming without a valid selection fails and leaves the task paused.
+  :func:`aria2.unpause`. Payload transfer starts only after libtorrent confirms
+  the selected file priorities. The selection must contain at least one valid
+  file index. Resuming without a valid selection fails and leaves the task paused.
   The metadata pause is consumed only after a valid selection and is not
   repeated. The paused task and its file list remain available through
   ``tellStatus``, ``tellWaiting``, and ``getFiles`` until the task is removed.

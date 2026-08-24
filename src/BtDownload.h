@@ -43,7 +43,7 @@ public:
   };
 
 private:
-  enum class ProgressState { Stable, Verifying, Refreshing };
+  enum class ProgressState { Stable, Verifying, Selecting, Refreshing };
 
   struct PendingProgress {
     std::vector<int64_t> files;
@@ -123,6 +123,7 @@ public:
   void failFileSelectionApply();
   void applyTransportState(BtSnapshot::State state);
   void beginProgressVerification();
+  void beginSelectionProgressHold();
   void beginProgressRefresh();
   void applyProgress(int64_t totalLength, int64_t completedLength,
                      int progressPpm, BtSnapshot::State transportState,
