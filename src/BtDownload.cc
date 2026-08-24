@@ -601,90 +601,43 @@ void BtDownload::restoreResumeProgress()
       hasAllPieces(impl_->params.have_pieces, info.num_pieces());
 }
 
-void BtDownload::resetPendingProgress()
+void BtDownload::refreshLogicalProgress()
 {
-  pendingProgress_ = PendingProgress{};
-}
-
-void BtDownload::commitPendingProgress()
-{
-  if (!pendingProgress_.taskReady || !pendingProgress_.filesReady ||
-      pendingProgress_.files.size() != snapshot_.files.size()) {
+  if (!group_) {
     return;
   }
-
-  for (size_t i = 0; i < snapshot_.files.size(); ++i) {
-    snapshot_.files[i].completedLength = std::clamp<int64_t>(
-        pendingProgress_.files[i], 0, snapshot_.files[i].length);
-  }
-  snapshot_.totalLength = pendingProgress_.totalLength;
-  snapshot_.completedLength = pendingProgress_.completedLength;
-  snapshot_.progressPpm = pendingProgress_.progressPpm;
-  progressState_ = ProgressState::Stable;
-  resetPendingProgress();
+  updateSelection(group_->getDownloadContext());
+  snapshot_.selectedComplete =
+      progressState_ == ProgressState::Stable &&
+      snapshot_.fileSelectionState == BtSnapshot::FileSelectionState::None &&
+      !snapshot_.error.present && snapshot_.totalLength > 0 &&
+      snapshot_.completedLength == snapshot_.totalLength;
 }
 
 void BtDownload::beginProgressVerification()
 {
   progressState_ = ProgressState::Verifying;
-  resetPendingProgress();
+  snapshot_.selectedComplete = false;
 }
 
 void BtDownload::beginSelectionProgressHold()
 {
   progressState_ = ProgressState::Selecting;
-  resetPendingProgress();
+  snapshot_.selectedComplete = false;
+  snapshot_.complete = false;
 }
 
 void BtDownload::beginProgressRefresh()
 {
   progressState_ = ProgressState::Refreshing;
-  resetPendingProgress();
-}
-
-void BtDownload::applyProgress(int64_t totalLength, int64_t completedLength,
-                               int progressPpm,
-                               BtSnapshot::State transportState,
-                               bool verificationInProgress)
-{
-  if (verificationInProgress) {
-    beginProgressVerification();
-    return;
-  }
-
-  totalLength = std::max<int64_t>(0, totalLength);
-  completedLength = std::max<int64_t>(0, completedLength);
-  progressPpm = std::clamp(progressPpm, 0, 1000000);
-  if (progressState_ == ProgressState::Stable) {
-    snapshot_.totalLength = totalLength;
-    snapshot_.completedLength = completedLength;
-    snapshot_.progressPpm = progressPpm;
-    return;
-  }
-  if (progressState_ == ProgressState::Verifying ||
-      progressState_ == ProgressState::Selecting) {
-    return;
-  }
-
-  pendingProgress_.totalLength = totalLength;
-  pendingProgress_.completedLength = completedLength;
-  pendingProgress_.progressPpm = progressPpm;
-  pendingProgress_.taskReady = true;
-  commitPendingProgress();
+  snapshot_.selectedComplete = false;
 }
 
 void BtDownload::applyFileProgress(
     const std::vector<int64_t>& completedLengths)
 {
-  if (progressState_ != ProgressState::Stable) {
-    if (progressState_ == ProgressState::Verifying ||
-        progressState_ == ProgressState::Selecting ||
-        !pendingProgress_.taskReady) {
-      return;
-    }
-    pendingProgress_.files = completedLengths;
-    pendingProgress_.filesReady = true;
-    commitPendingProgress();
+  if (progressState_ == ProgressState::Verifying ||
+      progressState_ == ProgressState::Selecting) {
     return;
   }
 
@@ -694,6 +647,8 @@ void BtDownload::applyFileProgress(
     snapshot_.files[i].completedLength = std::clamp<int64_t>(
         completedLengths[i], 0, snapshot_.files[i].length);
   }
+  progressState_ = ProgressState::Stable;
+  refreshLogicalProgress();
 }
 
 void BtDownload::initialize(RequestGroup* group)
@@ -924,6 +879,7 @@ void BtDownload::validateFileSelection(const Option* option) const
 void BtDownload::beginFileSelectionPause()
 {
   stopReason_ = StopReason::FileSelection;
+  beginSelectionProgressHold();
   if (fileSelectionError(group_ ? group_->getOption().get() : nullptr)
           .empty()) {
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
@@ -932,6 +888,7 @@ void BtDownload::beginFileSelectionPause()
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Awaiting;
   }
   snapshot_.state = BtSnapshot::State::Paused;
+  snapshot_.progressPpm = 0;
 }
 
 void BtDownload::submitFileSelection(const Option* option)
@@ -941,7 +898,9 @@ void BtDownload::submitFileSelection(const Option* option)
           BtSnapshot::FileSelectionState::Awaiting ||
       snapshot_.fileSelectionState == BtSnapshot::FileSelectionState::Ready) {
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
-    snapshot_.state = BtSnapshot::State::Paused;
+    snapshot_.state = snapshot_.error.present ? BtSnapshot::State::Error
+                                               : BtSnapshot::State::Paused;
+    snapshot_.selectedComplete = false;
   }
 }
 
@@ -975,14 +934,24 @@ void BtDownload::failFileSelectionApply()
 {
   if (fileSelectionApplying()) {
     progressState_ = ProgressState::Stable;
-    resetPendingProgress();
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
     snapshot_.state = BtSnapshot::State::Paused;
+    snapshot_.selectedComplete = false;
   }
 }
 
 void BtDownload::applyTransportState(BtSnapshot::State state)
 {
+  if (snapshot_.error.present) {
+    snapshot_.state = BtSnapshot::State::Error;
+    return;
+  }
+  if (impl_->recheckAfterAdd &&
+      (impl_->nativeState == BtNativeState::Adding ||
+       impl_->nativeState == BtNativeState::Removing)) {
+    snapshot_.state = BtSnapshot::State::Recovering;
+    return;
+  }
   if ((group_ && group_->isPauseRequested()) || awaitingFileSelection() ||
       fileSelectionReady()) {
     snapshot_.state = BtSnapshot::State::Paused;
@@ -994,11 +963,10 @@ void BtDownload::applyTransportState(BtSnapshot::State state)
   snapshot_.state = state;
 }
 
-void BtDownload::setError(std::string message, bool recoverable)
+void BtDownload::setError(std::string message)
 {
   BtErrorSnapshot error;
   error.present = true;
-  error.recoverable = recoverable;
   error.kind = "engine";
   error.category = "aria2";
   error.message = std::move(message);
@@ -1009,6 +977,8 @@ void BtDownload::setError(BtErrorSnapshot error)
 {
   error.present = true;
   snapshot_.error = std::move(error);
+  snapshot_.state = BtSnapshot::State::Error;
+  snapshot_.selectedComplete = false;
   snapshot_.downloadSpeed = 0;
   snapshot_.uploadSpeed = 0;
 }

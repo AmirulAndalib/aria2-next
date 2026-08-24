@@ -62,6 +62,9 @@ struct BtDownload::Impl {
   bool checkpointPending = false;
   bool stopSavePending = false;
   bool initialRecheckStarted = false;
+  bool recheckAfterAdd = false;
+  bool resumeAfterRecheck = false;
+  bool partfileRecoveryAttempted = false;
   bool filePriorityUpdatePending = false;
   bool resumeAfterFilePriorityUpdate = false;
   std::vector<libtorrent::download_priority_t> desiredFilePriorities;

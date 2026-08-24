@@ -965,8 +965,9 @@ BitTorrent Specific Options
 .. option:: --bt-resume-save-interval=<MIN>
 
   Save changed native per-torrent fast-resume data at this interval. ``0``
-  disables periodic saves; pause, stop, metadata and configuration changes still
-  save immediately. Default: ``60``
+  disables periodic saves; pause, metadata and configuration changes still save
+  immediately. Permanent removal deletes both fast-resume and native partfile
+  state. Default: ``60``
 
 .. option:: --bt-upload-suggestions [true|false]
 
@@ -1233,9 +1234,11 @@ RPC Options
   file list and reports ``bittorrent.fileSelectionState`` as ``awaiting``.
   Set :option:`select-file <--select-file>` through
   :func:`aria2.changeOption`, then resume the same GID with
-  :func:`aria2.unpause`. Payload transfer starts only after libtorrent confirms
-  the selected file priorities. The selection must contain at least one valid
-  file index. Resuming without a valid selection fails and leaves the task paused.
+  :func:`aria2.unpause`. The metadata-only native handle is removed with its
+  partfile and replaced by a checked libtorrent handle that already contains the
+  final file priorities. Payload transfer starts only after this replacement.
+  The selection must contain at least one valid file index. Resuming without a
+  valid selection fails and leaves the task paused.
   The metadata pause is consumed only after a valid selection and is not
   repeated. The paused task and its file list remain available through
   ``tellStatus``, ``tellWaiting``, and ``getFiles`` until the task is removed.
@@ -2962,9 +2965,11 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
     ``state``
       BitTorrent lifecycle state: ``adding``, ``downloadingMetadata``,
-      ``checking``, ``downloading``, ``finished``, ``seeding``, ``paused``,
-      ``stopping``, or ``stopped``. ``finished`` means every selected file is
-      available. ``seeding`` means every piece in the torrent is available.
+      ``checking``, ``downloading``, ``recovering``, ``finished``, ``seeding``,
+      ``paused``, ``stopping``, ``stopped``, or ``error``. ``recovering`` means
+      libtorrent is replacing invalid native storage state and rechecking local
+      files. ``finished`` means every selected file is available. ``seeding``
+      means every piece in the torrent is available.
 
     ``fileSelectionState``
       File-selection transaction state: ``none``, ``awaiting``, ``ready``, or
@@ -2975,8 +2980,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
       Present when libtorrent or the engine reports an error. The struct
       contains ``code``, ``kind``, ``category``, ``message``, and
       ``recoverable``. Storage errors also contain ``operation`` and ``file``
-      when libtorrent provides them. A recoverable error does not replace the
-      file-selection state.
+      when libtorrent provides them. Structural partfile errors are recovered
+      once with native deletion, handle replacement, and a full recheck. A
+      repeated failure becomes a terminal error.
 
     ``infoHashV1``
       Hexadecimal SHA-1 info hash when the torrent supports BitTorrent v1.
@@ -3000,7 +3006,9 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
       Number of connected seeds as a decimal string.
 
     ``progress``
-      Completion ratio from ``0.000000`` to ``1.000000``.
+      Completion ratio from ``0.000000`` to ``1.000000``, calculated from the
+      confirmed progress of selected files. Metadata-only and recovery phases
+      never report completion.
 
     ``activeTime``
       Native libtorrent duration, in seconds, for which the torrent has been

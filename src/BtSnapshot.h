@@ -105,11 +105,13 @@ struct BtSnapshot {
     DownloadingMetadata,
     Checking,
     Downloading,
+    Recovering,
     Finished,
     Seeding,
     Paused,
     Stopping,
     Stopped,
+    Error,
   };
 
   enum class FileSelectionState { None, Awaiting, Ready, Applying };

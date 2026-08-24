@@ -25,6 +25,8 @@ const char* btStateName(BtSnapshot::State state)
     return "checking";
   case BtSnapshot::State::Downloading:
     return "downloading";
+  case BtSnapshot::State::Recovering:
+    return "recovering";
   case BtSnapshot::State::Finished:
     return "finished";
   case BtSnapshot::State::Seeding:
@@ -35,6 +37,8 @@ const char* btStateName(BtSnapshot::State state)
     return "stopping";
   case BtSnapshot::State::Stopped:
     return "stopped";
+  case BtSnapshot::State::Error:
+    return "error";
   }
   return "stopped";
 }

@@ -141,6 +141,8 @@ void BtSessionTest::testFileSelectionResumeState()
              awaiting->getBtDownload()->snapshot().state);
   REQUIRE_EQ(BtSnapshot::FileSelectionState::Awaiting,
              awaiting->getBtDownload()->snapshot().fileSelectionState);
+  REQUIRE(!awaiting->getBtDownload()->snapshot().selectedComplete);
+  REQUIRE_EQ(0, awaiting->getBtDownload()->snapshot().progressPpm);
   REQUIRE_EQ((size_t)2, awaiting->getBtDownload()->snapshot().files.size());
   awaiting->getBtDownload()->applyTransportState(
       BtSnapshot::State::Downloading);
@@ -184,9 +186,6 @@ void BtSessionTest::testFileSelectionResumeState()
   awaiting->setPauseRequested(false);
   REQUIRE(!awaitingOption->getAsBool(PREF_PAUSE_METADATA));
   REQUIRE(awaiting->getBtDownload()->fileSelectionApplying());
-  awaiting->getBtDownload()->applyProgress(
-      awaiting->getBtDownload()->snapshot().files[0].length + selectedLength,
-      64, 1000, BtSnapshot::State::Downloading, false);
   awaiting->getBtDownload()->applyFileProgress({64, 0});
   REQUIRE_EQ(selectedLength,
              awaiting->getBtDownload()->snapshot().totalLength);
@@ -194,8 +193,6 @@ void BtSessionTest::testFileSelectionResumeState()
              awaiting->getBtDownload()->snapshot().completedLength);
   awaiting->getBtDownload()->completeFileSelectionApply();
   awaiting->getBtDownload()->beginProgressRefresh();
-  awaiting->getBtDownload()->applyProgress(
-      selectedLength, 0, 0, BtSnapshot::State::Downloading, false);
   awaiting->getBtDownload()->applyFileProgress({0, 0});
   REQUIRE(!awaiting->getBtDownload()->fileSelectionApplying());
   const auto selectedSession = serialize(
@@ -292,6 +289,22 @@ void BtSessionTest::testNativeFileSelectionApply()
   REQUIRE_EQ(BtSnapshot::FileSelectionState::None,
              download->snapshot().fileSelectionState);
   REQUIRE(!download->failed());
+
+  const auto partfile = option->get(PREF_DIR) + "/." +
+                        download->snapshot().infoHashV1 + ".parts";
+  {
+    BufferedFile file(partfile.c_str(), BufferedFile::WRITE);
+    REQUIRE(file);
+    REQUIRE_EQ((size_t)5, file.write("stale", 5));
+  }
+  REQUIRE(File(partfile).exists());
+  session.discard(download);
+  REQUIRE(waitUntil([&]() { return download->stopped(); }));
+  for (int attempt = 0; attempt < 50; ++attempt) {
+    session.poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  REQUIRE(!File(partfile).exists());
 }
 
 void BtSessionTest::testPausedRestoreHydration()

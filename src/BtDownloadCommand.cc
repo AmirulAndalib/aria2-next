@@ -51,16 +51,7 @@ bool BtDownloadCommand::execute()
     if (download_->stopped()) {
       return true;
     }
-    if (download_->recoverableError()) {
-      if (download_->stopReason() != BtDownload::StopReason::FileSelection) {
-        group_->setHaltRequested(true, RequestGroup::NONE);
-        group_->setPauseRequested(true);
-        session_->requestStop(download_, BtDownload::StopReason::Pause);
-      }
-    }
-    else {
-      session_->requestStop(download_, BtDownload::StopReason::Stop);
-    }
+    session_->requestStop(download_, BtDownload::StopReason::Stop);
   }
 
   if (group_->isHaltRequested() && !download_->stopRequested()) {

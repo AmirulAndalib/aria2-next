@@ -45,29 +45,18 @@ public:
 private:
   enum class ProgressState { Stable, Verifying, Selecting, Refreshing };
 
-  struct PendingProgress {
-    std::vector<int64_t> files;
-    int64_t totalLength = 0;
-    int64_t completedLength = 0;
-    int progressPpm = 0;
-    bool taskReady = false;
-    bool filesReady = false;
-  };
-
   std::unique_ptr<Impl> impl_;
   BtSnapshot snapshot_;
   Source source_;
   StopReason stopReason_ = StopReason::None;
   ShutdownStage shutdownStage_ = ShutdownStage::Idle;
   ProgressState progressState_ = ProgressState::Stable;
-  PendingProgress pendingProgress_;
   bool completionNotified_ = false;
   RequestGroup* group_ = nullptr;
 
   std::string fileSelectionError(const Option* option) const;
   void restoreResumeProgress();
-  void resetPendingProgress();
-  void commitPendingProgress();
+  void refreshLogicalProgress();
   BtDownload(std::unique_ptr<Impl> impl, Source source);
 
 public:
@@ -100,7 +89,6 @@ public:
   bool active() const;
   bool stopped() const;
   bool failed() const;
-  bool recoverableError() const { return snapshot_.error.recoverable; }
   bool stopRequested() const { return shutdownStage_ != ShutdownStage::Idle; }
   StopReason stopReason() const { return stopReason_; }
   ShutdownStage shutdownStage() const { return shutdownStage_; }
@@ -125,11 +113,8 @@ public:
   void beginProgressVerification();
   void beginSelectionProgressHold();
   void beginProgressRefresh();
-  void applyProgress(int64_t totalLength, int64_t completedLength,
-                     int progressPpm, BtSnapshot::State transportState,
-                     bool verificationInProgress);
   void applyFileProgress(const std::vector<int64_t>& completedLengths);
-  void setError(std::string message, bool recoverable);
+  void setError(std::string message);
   void setError(BtErrorSnapshot error);
   void clearError();
   bool takeCompletionNotification();

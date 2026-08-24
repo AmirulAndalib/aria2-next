@@ -66,6 +66,21 @@ namespace lt = libtorrent;
 
 namespace {
 
+std::string hashKey(const lt::info_hash_t& hashes)
+{
+  if (hashes.has_v1()) {
+    return std::string("v1:") +
+           std::string(reinterpret_cast<const char*>(hashes.v1.data()),
+                       static_cast<size_t>(hashes.v1.size()));
+  }
+  if (hashes.has_v2()) {
+    return std::string("v2:") +
+           std::string(reinterpret_cast<const char*>(hashes.v2.data()),
+                       static_cast<size_t>(hashes.v2.size()));
+  }
+  return {};
+}
+
 int clampSpeed(int64_t speed)
 {
   return static_cast<int>(
@@ -155,6 +170,11 @@ void BtSessionTransferStat::clearSpeeds()
 }
 
 struct BtSession::Impl {
+  struct PendingDelete {
+    std::shared_ptr<BtDownload> download;
+    DeleteIntent intent = DeleteIntent::Permanent;
+  };
+
   struct MetricIndices {
     int peerSockets = -1;
     int halfOpenPeers = -1;
@@ -189,7 +209,8 @@ struct BtSession::Impl {
   std::atomic<bool> alertsPending{true};
   std::unique_ptr<lt::session> session;
   std::map<a2_gid_t, std::shared_ptr<BtDownload>> downloads;
-  std::map<lt::torrent_handle, BtDownload*> handles;
+  std::map<lt::torrent_handle, std::weak_ptr<BtDownload>> handles;
+  std::map<std::string, PendingDelete> pendingDeletes;
   BtSessionTransferStat transferStat;
   BtPeerBlocklist blocklist;
   uint64_t filterRevision = 0;
@@ -687,10 +708,12 @@ std::vector<lt::download_priority_t> makeFilePriorities(RequestGroup* group)
 struct SelectionPlan {
   std::vector<lt::download_priority_t> files;
   std::vector<lt::download_priority_t> pieces;
+  bool pieceOverrides = false;
 };
 
 SelectionPlan makeSelectionPlan(const lt::torrent_handle& handle,
-                                RequestGroup* group)
+                                RequestGroup* group,
+                                bool restoreNativePiecePriorities)
 {
   SelectionPlan plan;
   if (!group) {
@@ -742,6 +765,10 @@ SelectionPlan makeSelectionPlan(const lt::torrent_handle& handle,
 
   const bool prioritizeBoundaries =
       group->getOption()->getAsBool(PREF_BT_FIRST_LAST_PIECE_FIRST);
+  if (!prioritizeBoundaries && !restoreNativePiecePriorities) {
+    return plan;
+  }
+  plan.pieceOverrides = prioritizeBoundaries;
 
   plan.pieces.assign(
       static_cast<size_t>(info->num_pieces()), lt::dont_download);
@@ -836,16 +863,6 @@ void BtSession::finishResumeSave(BtDownload* download)
   }
 }
 
-void BtSession::discardRemovedResume(BtDownload* download)
-{
-  if (download->stopReason() != BtDownload::StopReason::Stop ||
-      !download->group() || !download->group()->isUserRequestedHalt() ||
-      download->impl_->resumePath.empty()) {
-    return;
-  }
-  File(download->impl_->resumePath).remove();
-}
-
 bool BtSession::synchronizeSelection(BtDownload* download)
 {
   if (!download || !download->group() ||
@@ -854,7 +871,9 @@ bool BtSession::synchronizeSelection(BtDownload* download)
     return false;
   }
 
-  auto plan = makeSelectionPlan(download->impl_->handle, download->group());
+  auto plan = makeSelectionPlan(
+      download->impl_->handle, download->group(),
+      !download->impl_->appliedPiecePriorities.empty());
   download->impl_->desiredFilePriorities = std::move(plan.files);
   download->impl_->desiredPiecePriorities = std::move(plan.pieces);
 
@@ -877,8 +896,13 @@ bool BtSession::synchronizeSelection(BtDownload* download)
       download->impl_->appliedPiecePriorities) {
     download->impl_->handle.prioritize_pieces(
         download->impl_->desiredPiecePriorities);
-    download->impl_->appliedPiecePriorities =
-        download->impl_->desiredPiecePriorities;
+    if (plan.pieceOverrides) {
+      download->impl_->appliedPiecePriorities =
+          download->impl_->desiredPiecePriorities;
+    }
+    else {
+      download->impl_->appliedPiecePriorities.clear();
+    }
   }
   return false;
 }
@@ -956,6 +980,170 @@ void BtSession::resumeTorrent(BtDownload* download)
   download->impl_->handle.resume();
 }
 
+void BtSession::prepareFreshAdd(BtDownload* download)
+{
+  if (!download || !download->group() || !download->impl_->params.ti) {
+    return;
+  }
+
+  auto& params = download->impl_->params;
+  params.file_priorities = makeFilePriorities(download->group());
+  const auto priorityCount =
+      std::min(params.file_priorities.size(), download->snapshot_.files.size());
+  for (size_t index = 0; index < priorityCount; ++index) {
+    download->snapshot_.files[index].priority = static_cast<int>(
+        static_cast<std::uint8_t>(params.file_priorities[index]));
+  }
+  params.have_pieces.clear();
+  params.verified_pieces.clear();
+  params.unfinished_pieces.clear();
+  params.piece_priorities.clear();
+  params.completed_time = 0;
+  params.finished_time = 0;
+  params.seeding_time = 0;
+  params.last_seen_complete = 0;
+  params.flags &= ~(lt::torrent_flags::auto_managed |
+                    lt::torrent_flags::default_dont_download |
+                    lt::torrent_flags::seed_mode |
+                    lt::torrent_flags::stop_when_ready);
+  params.flags |= lt::torrent_flags::paused;
+
+  download->impl_->filePriorityUpdatePending = false;
+  download->impl_->resumeAfterFilePriorityUpdate = false;
+  download->impl_->desiredFilePriorities = params.file_priorities;
+  download->impl_->appliedFilePriorities = params.file_priorities;
+  download->impl_->desiredPiecePriorities.clear();
+  download->impl_->appliedPiecePriorities.clear();
+  download->impl_->recheckAfterAdd = true;
+  download->impl_->resumeAfterRecheck = download->impl_->runRequested;
+  download->beginProgressVerification();
+  download->snapshot_.complete = false;
+  download->snapshot_.selectedComplete = false;
+  download->snapshot_.state = BtSnapshot::State::Recovering;
+  download->clearError();
+  if (!download->impl_->resumePath.empty()) {
+    File(download->impl_->resumePath).remove();
+  }
+}
+
+void BtSession::beginNativeDelete(
+    const std::shared_ptr<BtDownload>& download, DeleteIntent intent)
+{
+  if (!download) {
+    return;
+  }
+  const auto handle = download->impl_->handle;
+  if (!handle.is_valid() || !handle.in_session()) {
+    download->impl_->nativeState = BtNativeState::Detached;
+    if (intent == DeleteIntent::Permanent) {
+      forgetHandles(download.get());
+      impl_->transferStat.retire(download->impl_->gid);
+      download->finishStopping();
+      impl_->downloads.erase(download->impl_->gid);
+    }
+    return;
+  }
+
+  if (intent == DeleteIntent::Replace) {
+    prepareFreshAdd(download.get());
+  }
+  else if (!download->impl_->resumePath.empty()) {
+    File(download->impl_->resumePath).remove();
+  }
+
+  const auto key = hashKey(handle.info_hashes());
+  if (key.empty()) {
+    download->setError("BitTorrent native handle has no info hash");
+    download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
+    download->impl_->nativeState = BtNativeState::Detached;
+    return;
+  }
+
+  impl_->pendingDeletes[key] = {download, intent};
+  impl_->transferStat.suspend(download->impl_->gid);
+  download->impl_->nativeState = BtNativeState::Removing;
+  if (intent == DeleteIntent::Permanent) {
+    download->beginRemoving();
+  }
+  impl_->session->remove_torrent(handle, lt::session::delete_partfile);
+}
+
+void BtSession::forgetHandles(BtDownload* download)
+{
+  for (auto it = impl_->handles.begin(); it != impl_->handles.end();) {
+    const auto owner = it->second.lock();
+    if (!owner || owner.get() == download) {
+      it = impl_->handles.erase(it);
+    }
+    else {
+      ++it;
+    }
+  }
+}
+
+void BtSession::finishNativeDelete(const std::string& key,
+                                   const std::string& error)
+{
+  const auto found = impl_->pendingDeletes.find(key);
+  if (found == impl_->pendingDeletes.end()) {
+    return;
+  }
+  auto pending = std::move(found->second);
+  impl_->pendingDeletes.erase(found);
+  const auto& download = pending.download;
+  forgetHandles(download.get());
+  download->impl_->handle = {};
+  download->impl_->nativeState = BtNativeState::Detached;
+
+  if (!error.empty()) {
+    impl_->transferStat.retire(download->impl_->gid);
+    if (pending.intent == DeleteIntent::Replace) {
+      download->setError("Unable to reset BitTorrent partfile: " + error);
+      download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
+      download->snapshot_.state = BtSnapshot::State::Error;
+    }
+    else {
+      A2_LOG_ERROR(fmt("Failed to delete BitTorrent partfile: %s",
+                       error.c_str()));
+      download->finishStopping();
+    }
+    impl_->downloads.erase(download->impl_->gid);
+    return;
+  }
+
+  if (pending.intent == DeleteIntent::Replace) {
+    download->impl_->nativeState = BtNativeState::Adding;
+    impl_->session->async_add_torrent(download->impl_->params);
+    return;
+  }
+
+  impl_->transferStat.retire(download->impl_->gid);
+  download->finishStopping();
+  impl_->downloads.erase(download->impl_->gid);
+}
+
+bool BtSession::recoverPartfile(
+    const std::shared_ptr<BtDownload>& download,
+    const BtErrorSnapshot& error)
+{
+  if (!download || download->impl_->partfileRecoveryAttempted ||
+      error.category != "libtorrent" ||
+      error.code != static_cast<int>(lt::errors::file_too_short) ||
+      (error.operation != "partfile_read" &&
+       error.operation != "partfile_write")) {
+    return false;
+  }
+
+  download->impl_->partfileRecoveryAttempted = true;
+  download->impl_->filePriorityUpdatePending = false;
+  download->impl_->resumeAfterFilePriorityUpdate = false;
+  download->impl_->runRequested =
+      download->group() && !download->group()->isPauseRequested();
+  A2_LOG_WARN("Recovering a structurally invalid BitTorrent partfile");
+  beginNativeDelete(download, DeleteIntent::Replace);
+  return true;
+}
+
 void BtSession::refreshAutomaticRoute(bool reopenSockets)
 {
   auto announce = [this]() {
@@ -1023,7 +1211,6 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
   download->impl_->runRequested = running;
   download->initialize(group);
   download->configure(group->getOption().get());
-  download->impl_->params.userdata = download.get();
 
   if (download->impl_->params.ti &&
       (download->snapshot().files.empty() ||
@@ -1046,9 +1233,16 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
   if (download->impl_->nativeState == BtNativeState::Attached &&
       download->impl_->handle.is_valid() &&
       download->impl_->handle.in_session()) {
-    impl_->handles[download->impl_->handle] = download.get();
+    impl_->handles[download->impl_->handle] = download;
     if (!running) {
       download->snapshot_.state = BtSnapshot::State::Paused;
+      return;
+    }
+
+    if (download->fileSelectionApplying()) {
+      download->configure(group->getOption().get());
+      download->updateSelection(group->getDownloadContext());
+      beginNativeDelete(download, DeleteIntent::Replace);
       return;
     }
 
@@ -1136,13 +1330,25 @@ void BtSession::poll()
   }
   for (auto* alert : alerts) {
     if (auto* added = lt::alert_cast<lt::add_torrent_alert>(alert)) {
-      auto* download = added->params.userdata.get<BtDownload>();
+      std::shared_ptr<BtDownload> download;
+      const auto addedKey = hashKey(added->params.info_hashes);
+      for (const auto& entry : impl_->downloads) {
+        if (hashKey(entry.second->impl_->params.info_hashes) == addedKey) {
+          download = entry.second;
+          break;
+        }
+      }
       if (!download) {
+        if (!added->error && added->handle.is_valid()) {
+          impl_->session->remove_torrent(added->handle,
+                                        lt::session::delete_partfile);
+        }
         continue;
       }
       if (added->error) {
         download->impl_->nativeState = BtNativeState::Detached;
-        download->setError(added->error.message(), false);
+        download->setError(added->error.message());
+        forgetHandles(download.get());
         impl_->transferStat.retire(download->impl_->gid);
         impl_->downloads.erase(download->impl_->gid);
         download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
@@ -1156,9 +1362,10 @@ void BtSession::poll()
           download->impl_->trackerRevision;
       impl_->handles[added->handle] = download;
       if (removalPending) {
-        download->impl_->nativeState = BtNativeState::Removing;
-        impl_->session->remove_torrent(added->handle,
-                                      lt::session::delete_partfile);
+        const auto managed = impl_->downloads.find(download->impl_->gid);
+        if (managed != impl_->downloads.end()) {
+          beginNativeDelete(managed->second, DeleteIntent::Permanent);
+        }
         continue;
       }
       if (download->stopRequested()) {
@@ -1167,11 +1374,17 @@ void BtSession::poll()
           requestStop(managed->second, download->stopReason());
         }
       }
+      else if (download->impl_->recheckAfterAdd) {
+        download->impl_->initialRecheckStarted = true;
+        download->beginProgressVerification();
+        download->snapshot_.state = BtSnapshot::State::Recovering;
+        download->impl_->handle.force_recheck();
+      }
       else {
         bool filePriorityUpdatePending = false;
         if (!download->awaitingFileSelection() &&
             !download->fileSelectionReady()) {
-          filePriorityUpdatePending = synchronizeSelection(download);
+          filePriorityUpdatePending = synchronizeSelection(download.get());
         }
         if (download->impl_->runRequested) {
           if (filePriorityUpdatePending) {
@@ -1181,25 +1394,41 @@ void BtSession::poll()
             const bool selectionApplying = download->fileSelectionApplying();
             download->completeFileSelectionApply();
             if (selectionApplying) {
-              requestProgressRefresh(download);
+              requestProgressRefresh(download.get());
             }
-            resumeTorrent(download);
+            resumeTorrent(download.get());
           }
         }
       }
       continue;
     }
 
-    auto findDownload =
-        [this](const lt::torrent_handle& handle) -> BtDownload* {
+    auto findDownload = [this](const lt::torrent_handle& handle) {
       const auto found = impl_->handles.find(handle);
-      return found == impl_->handles.end() ? nullptr : found->second;
+      return found == impl_->handles.end()
+                 ? std::shared_ptr<BtDownload>{}
+                 : found->second.lock();
     };
 
     if (auto* checked = lt::alert_cast<lt::torrent_checked_alert>(alert)) {
-      auto* download = findDownload(checked->handle);
+      auto download = findDownload(checked->handle);
       if (download) {
-        requestProgressRefresh(download);
+        requestProgressRefresh(download.get());
+        if (download->impl_->recheckAfterAdd) {
+          download->impl_->recheckAfterAdd = false;
+          const bool resume = download->impl_->resumeAfterRecheck;
+          download->impl_->resumeAfterRecheck = false;
+          download->clearError();
+          download->completeFileSelectionApply();
+          if (resume && download->group() &&
+              !download->group()->isPauseRequested() &&
+              !download->group()->isHaltRequested()) {
+            resumeTorrent(download.get());
+          }
+          else {
+            download->snapshot_.state = BtSnapshot::State::Paused;
+          }
+        }
         if (download->group() && download->group()->isPauseRequested()) {
           download->stopReason_ = BtDownload::StopReason::Pause;
           download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
@@ -1211,7 +1440,7 @@ void BtSession::poll()
 
     if (auto* rejected =
             lt::alert_cast<lt::fastresume_rejected_alert>(alert)) {
-      auto* download = findDownload(rejected->handle);
+      auto download = findDownload(rejected->handle);
       if (download) {
         download->beginProgressVerification();
       }
@@ -1220,7 +1449,7 @@ void BtSession::poll()
     }
 
     if (auto* failed = lt::alert_cast<lt::hash_failed_alert>(alert)) {
-      auto* download = findDownload(failed->handle);
+      auto download = findDownload(failed->handle);
       if (download) {
         download->beginProgressVerification();
       }
@@ -1228,7 +1457,7 @@ void BtSession::poll()
     }
 
     if (auto* changed = lt::alert_cast<lt::state_changed_alert>(alert)) {
-      auto* download = findDownload(changed->handle);
+      auto download = findDownload(changed->handle);
       if (download &&
           (changed->state == lt::torrent_status::checking_files ||
            changed->state == lt::torrent_status::checking_resume_data)) {
@@ -1281,7 +1510,7 @@ void BtSession::poll()
 
     if (auto* update = lt::alert_cast<lt::state_update_alert>(alert)) {
       for (const auto& status : update->status) {
-        auto* download = findDownload(status.handle);
+        auto download = findDownload(status.handle);
         if (!download) {
           continue;
         }
@@ -1292,7 +1521,6 @@ void BtSession::poll()
         if (status.errc && !download->failed()) {
           BtErrorSnapshot error;
           error.present = true;
-          error.recoverable = true;
           error.code = status.errc.value();
           error.kind = "status";
           error.category = status.errc.category().name();
@@ -1300,10 +1528,6 @@ void BtSession::poll()
           download->setError(std::move(error));
         }
         download->applyTransportState(transportState);
-        download->applyProgress(status.total_wanted,
-                                status.total_wanted_done,
-                                status.progress_ppm, transportState,
-                                verificationInProgress);
         snapshot.name = status.name.empty() ? snapshot.name : status.name;
         snapshot.currentTracker = status.current_tracker;
         snapshot.allTimeDownload = status.all_time_download;
@@ -1337,8 +1561,13 @@ void BtSession::poll()
                 : status.distributed_full_copies * 1000000 +
                       status.distributed_fraction * 1000;
         snapshot.hasMetadata = status.has_metadata;
-        if (!verificationInProgress) {
-          snapshot.selectedComplete = status.is_finished;
+        if (!verificationInProgress &&
+            snapshot.fileSelectionState ==
+                BtSnapshot::FileSelectionState::None &&
+            !snapshot.error.present) {
+          if (!status.is_finished) {
+            snapshot.selectedComplete = false;
+          }
           snapshot.complete = status.is_seeding;
         }
         if (download->group()) {
@@ -1351,7 +1580,7 @@ void BtSession::poll()
     }
 
     if (auto* peers = lt::alert_cast<lt::peer_info_alert>(alert)) {
-      auto* download = findDownload(peers->handle);
+      auto download = findDownload(peers->handle);
       if (download) {
         download->snapshot_.peers.clear();
         download->snapshot_.peers.reserve(peers->peer_info.size());
@@ -1380,7 +1609,7 @@ void BtSession::poll()
     }
 
     if (auto* progress = lt::alert_cast<lt::file_progress_alert>(alert)) {
-      auto* download = findDownload(progress->handle);
+      auto download = findDownload(progress->handle);
       if (download) {
         std::vector<int64_t> completedLengths;
         completedLengths.reserve(progress->files.size());
@@ -1393,27 +1622,27 @@ void BtSession::poll()
     }
 
     if (auto* priorities = lt::alert_cast<lt::file_prio_alert>(alert)) {
-      auto* download = findDownload(priorities->handle);
+      auto download = findDownload(priorities->handle);
       if (download) {
-        finishFilePriorityUpdate(download);
+        finishFilePriorityUpdate(download.get());
       }
       continue;
     }
 
     if (auto* priorities =
             lt::alert_cast<lt::file_priorities_alert>(alert)) {
-      auto* download = findDownload(priorities->handle);
+      auto download = findDownload(priorities->handle);
       if (download && download->impl_->filePriorityUpdatePending) {
         download->impl_->filePriorityUpdatePending = false;
         download->impl_->appliedFilePriorities = priorities->priorities;
         download->impl_->appliedPiecePriorities.clear();
-        continueSelectionSynchronization(download);
+        continueSelectionSynchronization(download.get());
       }
       continue;
     }
 
     if (auto* metadata = lt::alert_cast<lt::metadata_received_alert>(alert)) {
-      auto* download = findDownload(metadata->handle);
+      auto download = findDownload(metadata->handle);
       if (download && download->group()) {
         const bool pauseForSelection = download->shouldPauseAfterMetadata();
         auto info = metadata->handle.torrent_file();
@@ -1439,7 +1668,7 @@ void BtSession::poll()
                   {tracker.url, tracker.tier, BtTrackerOrigin::Metainfo});
             }
           }
-          updateDownloadContext(download, download->group());
+          updateDownloadContext(download.get(), download->group());
           auto managed = impl_->downloads.at(download->group()->getGID());
           const bool removalPending = download->group()->isHaltRequested() &&
                                       !download->group()->isPauseRequested();
@@ -1454,7 +1683,7 @@ void BtSession::poll()
                                  download->group()->getOption().get());
           }
           catch (RecoverableException& error) {
-            download->setError(error.what(), false);
+            download->setError(error.what());
             requestStop(managed, BtDownload::StopReason::Stop);
             continue;
           }
@@ -1464,7 +1693,7 @@ void BtSession::poll()
             requestStop(managed, BtDownload::StopReason::FileSelection);
           }
           else if (!download->stopRequested()) {
-            requestResumeCheckpoint(download, true);
+            requestResumeCheckpoint(download.get(), true);
           }
         }
       }
@@ -1472,15 +1701,15 @@ void BtSession::poll()
     }
 
     if (auto* finished = lt::alert_cast<lt::torrent_finished_alert>(alert)) {
-      auto* download = findDownload(finished->handle);
+      auto download = findDownload(finished->handle);
       if (download) {
-        requestResumeCheckpoint(download, true);
+        requestResumeCheckpoint(download.get(), true);
       }
       continue;
     }
 
     if (auto* saved = lt::alert_cast<lt::save_resume_data_alert>(alert)) {
-      auto* download = findDownload(saved->handle);
+      auto download = findDownload(saved->handle);
       if (download) {
         try {
           saveResume(download->impl_->resumePath, saved->params);
@@ -1489,7 +1718,7 @@ void BtSession::poll()
           A2_LOG_ERROR_EX("Failed to save BitTorrent resume data", error);
         }
         const bool saveStopState = download->impl_->stopSavePending;
-        finishResumeSave(download);
+        finishResumeSave(download.get());
         if (saveStopState) {
           download->impl_->stopSavePending = false;
           download->impl_->resumeSaveOutstanding = true;
@@ -1500,7 +1729,6 @@ void BtSession::poll()
           download->impl_->handle.save_resume_data(flags);
           continue;
         }
-        discardRemovedResume(download);
         if (download->shutdownStage() ==
             BtDownload::ShutdownStage::SavingResume) {
           if (download->stopReason() == BtDownload::StopReason::Pause ||
@@ -1508,8 +1736,10 @@ void BtSession::poll()
             download->finishStopping();
           }
           else {
-            download->beginRemoving();
-            impl_->session->remove_torrent(saved->handle);
+            const auto managed = impl_->downloads.find(download->impl_->gid);
+            if (managed != impl_->downloads.end()) {
+              beginNativeDelete(managed->second, DeleteIntent::Permanent);
+            }
           }
         }
       }
@@ -1518,7 +1748,7 @@ void BtSession::poll()
 
     if (auto* failed =
             lt::alert_cast<lt::save_resume_data_failed_alert>(alert)) {
-      auto* download = findDownload(failed->handle);
+      auto download = findDownload(failed->handle);
       if (download) {
         if (failed->error != lt::errors::resume_data_not_modified) {
           A2_LOG_ERROR(fmt("Failed to save BitTorrent resume data %s: %s",
@@ -1526,7 +1756,7 @@ void BtSession::poll()
                            failed->error.message().c_str()));
         }
         const bool saveStopState = download->impl_->stopSavePending;
-        finishResumeSave(download);
+        finishResumeSave(download.get());
         if (saveStopState) {
           download->impl_->stopSavePending = false;
           download->impl_->resumeSaveOutstanding = true;
@@ -1537,7 +1767,6 @@ void BtSession::poll()
           download->impl_->handle.save_resume_data(flags);
           continue;
         }
-        discardRemovedResume(download);
         if (download->shutdownStage() ==
             BtDownload::ShutdownStage::SavingResume) {
           if (download->stopReason() == BtDownload::StopReason::Pause ||
@@ -1545,8 +1774,10 @@ void BtSession::poll()
             download->finishStopping();
           }
           else {
-            download->beginRemoving();
-            impl_->session->remove_torrent(failed->handle);
+            const auto managed = impl_->downloads.find(download->impl_->gid);
+            if (managed != impl_->downloads.end()) {
+              beginNativeDelete(managed->second, DeleteIntent::Permanent);
+            }
           }
         }
       }
@@ -1554,30 +1785,31 @@ void BtSession::poll()
     }
 
     if (auto* removed = lt::alert_cast<lt::torrent_removed_alert>(alert)) {
-      auto* download = findDownload(removed->handle);
+      auto download = findDownload(removed->handle);
       if (download) {
-        impl_->transferStat.retire(download->impl_->gid);
-        download->finishStopping();
-        download->impl_->nativeState = BtNativeState::Detached;
-        download->impl_->handle = {};
-        impl_->handles.erase(removed->handle);
-        for (auto it = impl_->downloads.begin();
-             it != impl_->downloads.end();) {
-          if (it->second.get() == download) {
-            it = impl_->downloads.erase(it);
-          }
-          else {
-            ++it;
-          }
+        if (download->impl_->handle == removed->handle) {
+          download->impl_->handle = {};
         }
+        impl_->handles.erase(removed->handle);
       }
       continue;
     }
 
+    if (auto* deleted = lt::alert_cast<lt::torrent_deleted_alert>(alert)) {
+      finishNativeDelete(hashKey(deleted->info_hashes));
+      continue;
+    }
+
+    if (auto* failed =
+            lt::alert_cast<lt::torrent_delete_failed_alert>(alert)) {
+      finishNativeDelete(hashKey(failed->info_hashes),
+                         failed->error.message());
+      continue;
+    }
+
     if (auto* error = lt::alert_cast<lt::file_error_alert>(alert)) {
-      auto* download = findDownload(error->handle);
+      auto download = findDownload(error->handle);
       if (download) {
-        failFilePriorityUpdate(download);
         BtErrorSnapshot snapshot;
         snapshot.present = true;
         snapshot.recoverable = true;
@@ -1587,6 +1819,14 @@ void BtSession::poll()
         snapshot.message = error->error.message();
         snapshot.operation = lt::operation_name(error->op);
         snapshot.file = error->filename();
+        const auto managed = impl_->downloads.find(download->impl_->gid);
+        if (managed != impl_->downloads.end() &&
+            recoverPartfile(managed->second, snapshot)) {
+          A2_LOG_WARN(error->message());
+          continue;
+        }
+        failFilePriorityUpdate(download.get());
+        snapshot.recoverable = false;
         download->setError(std::move(snapshot));
         impl_->transferStat.suspend(download->impl_->gid);
       }
@@ -1595,7 +1835,7 @@ void BtSession::poll()
     }
 
     if (auto* error = lt::alert_cast<lt::torrent_error_alert>(alert)) {
-      auto* download = findDownload(error->handle);
+      auto download = findDownload(error->handle);
       if (download && download->snapshot().error.kind != "storage") {
         BtErrorSnapshot snapshot;
         snapshot.present = true;
@@ -1611,17 +1851,17 @@ void BtSession::poll()
     }
 
     if (auto* moved = lt::alert_cast<lt::storage_moved_alert>(alert)) {
-      auto* download = findDownload(moved->handle);
+      auto download = findDownload(moved->handle);
       if (download && download->group()) {
         download->impl_->params.save_path = moved->storage_path();
         download->impl_->previousSavePath.clear();
-        requestResumeCheckpoint(download, true);
+        requestResumeCheckpoint(download.get(), true);
       }
       continue;
     }
 
     if (auto* moved = lt::alert_cast<lt::storage_moved_failed_alert>(alert)) {
-      auto* download = findDownload(moved->handle);
+      auto download = findDownload(moved->handle);
       if (download && download->group()) {
         auto& option = download->group()->getOption();
         option->put(PREF_DIR, download->impl_->previousSavePath);
@@ -1738,8 +1978,8 @@ void BtSession::poll()
       impl_->droppedAlerts += dropped->dropped_alerts.count();
       if (dropped->dropped_alerts.test(lt::file_prio_alert::alert_type)) {
         for (const auto& entry : impl_->handles) {
-          auto* download = entry.second;
-          if (download->impl_->filePriorityUpdatePending &&
+          const auto download = entry.second.lock();
+          if (download && download->impl_->filePriorityUpdatePending &&
               download->impl_->handle.is_valid() &&
               download->impl_->handle.in_session()) {
             download->impl_->handle.post_file_priorities();
@@ -1830,6 +2070,12 @@ void BtSession::requestStop(const std::shared_ptr<BtDownload>& download,
 {
   impl_->transferStat.suspend(download->impl_->gid);
   download->requestStop(reason);
+  if (reason == BtDownload::StopReason::Stop &&
+      download->shutdownStage() == BtDownload::ShutdownStage::PendingHandle &&
+      download->impl_->handle.is_valid()) {
+    beginNativeDelete(download, DeleteIntent::Permanent);
+    return;
+  }
   if (download->shutdownStage() != BtDownload::ShutdownStage::PendingHandle) {
     return;
   }
@@ -1844,11 +2090,8 @@ void BtSession::requestStop(const std::shared_ptr<BtDownload>& download,
     return;
   }
   download->impl_->resumeSaveOutstanding = true;
-  auto flags = lt::torrent_handle::save_info_dict;
-  if (reason == BtDownload::StopReason::Stop) {
-    flags |= lt::torrent_handle::flush_disk_cache;
-  }
-  download->impl_->handle.save_resume_data(flags);
+  download->impl_->handle.save_resume_data(
+      lt::torrent_handle::save_info_dict);
 }
 
 void BtSession::applyGlobalOptions(const Option* option)
@@ -2117,12 +2360,12 @@ void BtSession::discard(const std::shared_ptr<BtDownload>& download)
   }
   const auto handle = download->impl_->handle;
   if (!handle.is_valid() || !handle.in_session()) {
+    forgetHandles(download.get());
     impl_->downloads.erase(download->impl_->gid);
     download->impl_->nativeState = BtNativeState::Detached;
     return;
   }
-  download->impl_->nativeState = BtNativeState::Removing;
-  impl_->session->remove_torrent(handle, lt::session::delete_partfile);
+  beginNativeDelete(download, DeleteIntent::Permanent);
 }
 
 void BtSession::suspend(a2_gid_t gid)

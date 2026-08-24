@@ -109,13 +109,13 @@ public:
 
 private:
   enum class AttachMode { Running, RestorePaused };
+  enum class DeleteIntent { Replace, Permanent };
 
   std::unique_ptr<Impl> impl_;
   void attach(const std::shared_ptr<BtDownload>& download,
               RequestGroup* group, AttachMode mode);
   void requestResumeCheckpoint(BtDownload* download, bool force = false);
   void finishResumeSave(BtDownload* download);
-  void discardRemovedResume(BtDownload* download);
   bool applyDownloadOptionsInternal(
       const std::shared_ptr<BtDownload>& download, const Option* option,
       bool synchronizeFileSelection);
@@ -125,6 +125,14 @@ private:
   void failFilePriorityUpdate(BtDownload* download);
   void requestProgressRefresh(BtDownload* download);
   void resumeTorrent(BtDownload* download);
+  void prepareFreshAdd(BtDownload* download);
+  void beginNativeDelete(const std::shared_ptr<BtDownload>& download,
+                         DeleteIntent intent);
+  void forgetHandles(BtDownload* download);
+  void finishNativeDelete(const std::string& key,
+                          const std::string& error = {});
+  bool recoverPartfile(const std::shared_ptr<BtDownload>& download,
+                       const BtErrorSnapshot& error);
   void refreshAutomaticRoute(bool reopenSockets);
 
 public:
