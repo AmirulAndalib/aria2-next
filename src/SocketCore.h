@@ -82,9 +82,6 @@ private:
   bool wantWrite_;
 
 #ifdef ENABLE_SSL
-  // TLS context for client side
-  static std::shared_ptr<TLSContext> clTlsContext_;
-  // TLS context for server side
   static std::shared_ptr<TLSContext> svTlsContext_;
 
   std::shared_ptr<TLSSession> tlsSession_;
@@ -93,9 +90,8 @@ private:
    * Makes this socket secure. The connection must be established
    * before calling this method.
    *
-   * If you are going to verify peer's certificate, hostname must be supplied.
    */
-  bool tlsHandshake(TLSContext* tlsctx, const std::string& hostname);
+  bool tlsHandshake();
 #endif // ENABLE_SSL
 
   void init();
@@ -280,12 +276,6 @@ public:
   // returns true. If handshake has not been done yet, returns false.
   bool tlsAccept();
 
-  // Performs TLS client side handshake. If handshake is completed,
-  // returns true. If handshake has not been done yet, returns false.
-  //
-  // If you are going to verify peer's certificate, hostname must be
-  // supplied.
-  bool tlsConnect(const std::string& hostname);
 #endif // ENABLE_SSL
 
   bool operator==(const SocketCore& s) { return sockfd_ == s.sockfd_; }
@@ -315,8 +305,6 @@ public:
   size_t getRecvBufferedLength() const;
 
 #ifdef ENABLE_SSL
-  static void
-  setClientTLSContext(const std::shared_ptr<TLSContext>& tlsContext);
   static void
   setServerTLSContext(const std::shared_ptr<TLSContext>& tlsContext);
 #endif // ENABLE_SSL

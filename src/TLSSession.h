@@ -63,11 +63,6 @@ public:
   // succeeds, or TLS_ERR_ERROR.
   virtual int init(sock_t sockfd) = 0;
 
-  // Sets |hostname| for TLS SNI extension. This is only meaningful for
-  // client side session. This function returns TLS_ERR_OK if it
-  // succeeds, or TLS_ERR_ERROR.
-  virtual int setSNIHostname(const std::string& hostname) = 0;
-
   // Closes the SSL/TLS session. Don't close underlying transport
   // socket. This function returns TLS_ERR_OK if it succeeds, or
   // TLS_ERR_ERROR.
@@ -89,15 +84,6 @@ public:
   // the number of bytes received if it succeeds, or TLS_ERR_WOULDBLOCK
   // if the underlying transport blocks, or TLS_ERR_ERROR.
   virtual ssize_t readData(void* data, size_t len) = 0;
-
-  // Performs client side handshake. The |hostname| is the hostname of
-  // the remote endpoint and is used to verify its certificate. This
-  // function returns TLS_ERR_OK if it succeeds, or TLS_ERR_WOULDBLOCK
-  // if the underlying transport blocks, or TLS_ERR_ERROR.
-  // When returning TLS_ERR_ERROR, provide certificate validation error
-  // in |handshakeErr|.
-  virtual int tlsConnect(const std::string& hostname, TLSVersion& version,
-                         std::string& handshakeErr) = 0;
 
   // Performs server side handshake. This function returns TLS_ERR_OK
   // if it succeeds, or TLS_ERR_WOULDBLOCK if the underlying transport

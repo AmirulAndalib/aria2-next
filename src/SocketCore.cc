@@ -133,14 +133,7 @@ std::vector<std::vector<SockAddr>>::iterator SocketCore::bindAddrsListIt_;
 int SocketCore::socketRecvBufferSize_ = 0;
 
 #ifdef ENABLE_SSL
-std::shared_ptr<TLSContext> SocketCore::clTlsContext_;
 std::shared_ptr<TLSContext> SocketCore::svTlsContext_;
-
-void SocketCore::setClientTLSContext(
-    const std::shared_ptr<TLSContext>& tlsContext)
-{
-  clTlsContext_ = tlsContext;
-}
 
 void SocketCore::setServerTLSContext(
     const std::shared_ptr<TLSContext>& tlsContext)
@@ -871,14 +864,9 @@ void SocketCore::readData(void* data, size_t& len)
 
 #ifdef ENABLE_SSL
 
-bool SocketCore::tlsAccept() { return tlsHandshake(svTlsContext_.get(), ""); }
+bool SocketCore::tlsAccept() { return tlsHandshake(); }
 
-bool SocketCore::tlsConnect(const std::string& hostname)
-{
-  return tlsHandshake(clTlsContext_.get(), hostname);
-}
-
-bool SocketCore::tlsHandshake(TLSContext* tlsctx, const std::string& hostname)
+bool SocketCore::tlsHandshake()
 {
   wantRead_ = false;
   wantWrite_ = false;
@@ -891,19 +879,12 @@ bool SocketCore::tlsHandshake(TLSContext* tlsctx, const std::string& hostname)
   if (secure_ == A2_TLS_NONE) {
     // Do some initial setup
     A2_LOG_TRACE("Creating TLS session");
-    tlsSession_.reset(TLSSession::make(tlsctx));
+    tlsSession_.reset(TLSSession::make(svTlsContext_.get()));
     auto rv = tlsSession_->init(sockfd_);
     if (rv != TLS_ERR_OK) {
       std::string error = tlsSession_->getLastErrorString();
       tlsSession_.reset();
       throw DL_ABORT_EX(fmt(EX_SSL_INIT_FAILURE, error.c_str()));
-    }
-    if (tlsctx->getSide() == TLS_CLIENT && !util::isNumericHost(hostname)) {
-      rv = tlsSession_->setSNIHostname(hostname);
-      if (rv != TLS_ERR_OK) {
-        throw DL_ABORT_EX(fmt(EX_SSL_INIT_FAILURE,
-                              tlsSession_->getLastErrorString().c_str()));
-      }
     }
     // Done with the setup, now let handshaking begin immediately.
     secure_ = A2_TLS_HANDSHAKING;
@@ -913,28 +894,14 @@ bool SocketCore::tlsHandshake(TLSContext* tlsctx, const std::string& hostname)
   if (secure_ == A2_TLS_HANDSHAKING) {
     // Starting handshake after initial setup or still handshaking.
     TLSVersion ver = TLS_PROTO_NONE;
-    int rv = 0;
-    std::string handshakeError;
-
-    if (tlsctx->getSide() == TLS_CLIENT) {
-      rv = tlsSession_->tlsConnect(hostname, ver, handshakeError);
-    }
-    else {
-      rv = tlsSession_->tlsAccept(ver);
-    }
+    const auto rv = tlsSession_->tlsAccept(ver);
 
     if (rv == TLS_ERR_OK) {
       // We're good, more or less.
       // 1. Construct peerinfo
       std::stringstream ss;
-      if (!hostname.empty()) {
-        ss << hostname << " (";
-      }
       auto peerEndpoint = getPeerInfo();
       ss << peerEndpoint.addr << ":" << peerEndpoint.port;
-      if (!hostname.empty()) {
-        ss << ")";
-      }
 
       std::string tlsVersion;
       switch (ver) {
@@ -977,14 +944,8 @@ bool SocketCore::tlsHandshake(TLSContext* tlsctx, const std::string& hostname)
     }
 
     if (rv == TLS_ERR_ERROR) {
-      auto error =
-          fmt("SSL/TLS handshake failure: %s",
-              handshakeError.empty() ? tlsSession_->getLastErrorString().c_str()
-                                     : handshakeError.c_str());
-      if (tlsctx->getSide() == TLS_CLIENT) {
-        throw DL_RETRY_EX(error);
-      }
-      throw DL_ABORT_EX(error);
+      throw DL_ABORT_EX(fmt("SSL/TLS handshake failure: %s",
+                            tlsSession_->getLastErrorString().c_str()));
     }
 
     // Some implementation passed back an invalid result.

@@ -508,13 +508,6 @@ set(ARIA2_SOURCES_ENABLE_SSL
   src/TLSSession.h
 )
 
-set(ARIA2_SOURCES_HAVE_WINTLS
-  src/WinTLSContext.cc
-  src/WinTLSContext.h
-  src/WinTLSSession.cc
-  src/WinTLSSession.h
-)
-
 set(ARIA2_SOURCES_OPENSSL_CRYPTO
   src/LibsslDHKeyExchange.cc
   src/LibsslDHKeyExchange.h
@@ -526,11 +519,6 @@ set(ARIA2_SOURCES_HAVE_OPENSSL_TLS
   src/LibsslTLSContext.h
   src/LibsslTLSSession.cc
   src/LibsslTLSSession.h
-)
-
-set(ARIA2_SOURCES_APPLE_TRUST
-  src/AppleTrustVerifier.cc
-  src/AppleTrustVerifier.h
 )
 
 set(ARIA2_SOURCES_APPLE_STATE_PATH

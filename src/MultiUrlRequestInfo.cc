@@ -187,8 +187,8 @@ int MultiUrlRequestInfo::prepare()
       // DownloadEngine instance.
       auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
       std::shared_ptr<TLSContext> svTlsContext(
-          TLSContext::make(TLS_SERVER, minTLSVer));
-      if (!svTlsContext->addCredentialFile(
+          TLSContext::make(minTLSVer));
+      if (!svTlsContext->good() || !svTlsContext->addCredentialFile(
               option_->get(PREF_RPC_CERTIFICATE),
               option_->get(PREF_RPC_PRIVATE_KEY))) {
         throw DL_ABORT_EX("Loading private key and/or certificate for secure "
@@ -209,32 +209,6 @@ int MultiUrlRequestInfo::prepare()
           e_->getWebSocketSessionMan().get());
     }
 #endif // ENABLE_WEBSOCKET
-
-#ifdef ENABLE_SSL
-    auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
-    std::shared_ptr<TLSContext> clTlsContext(
-        TLSContext::make(TLS_CLIENT, minTLSVer));
-    if (!option_->blank(PREF_CERTIFICATE)) {
-      clTlsContext->addCredentialFile(option_->get(PREF_CERTIFICATE),
-                                      option_->get(PREF_PRIVATE_KEY));
-    }
-
-    auto verification = TLSVerification::Disabled;
-    auto caFile = std::string{};
-    if (option_->getAsBool(PREF_CHECK_CERTIFICATE)) {
-      if (option_->blank(PREF_CA_CERTIFICATE)) {
-        verification = TLSVerification::System;
-      }
-      else {
-        verification = TLSVerification::CustomCA;
-        caFile = option_->get(PREF_CA_CERTIFICATE);
-      }
-    }
-    if (!clTlsContext->configurePeerVerification(verification, caFile)) {
-      throw DL_ABORT_EX(MSG_TRUSTED_CA_CONFIGURATION_FAILED);
-    }
-    SocketCore::setClientTLSContext(clTlsContext);
-#endif
 
     e_->setStatCalc(getStatCalc(option_));
     if (uriListParser_) {

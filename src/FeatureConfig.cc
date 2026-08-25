@@ -34,7 +34,7 @@
 /* copyright --> */
 #include "FeatureConfig.h"
 
-#include <curl/curlver.h>
+#include <curl/curl.h>
 #include <nghttp2/nghttp2ver.h>
 #include <spdlog/version.h>
 
@@ -133,11 +133,7 @@ const char* strSupportedFeature(int feature)
     break;
 
   case (FEATURE_HTTPS):
-#ifdef ENABLE_SSL
     return "HTTPS";
-#else  // !ENABLE_SSL
-    return nullptr;
-#endif // !ENABLE_SSL
     break;
 
   case (FEATURE_MESSAGE_DIGEST):
@@ -174,7 +170,14 @@ std::string usedLibs()
   std::string res;
   res += fmt("spdlog/%d.%d.%d ", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR,
              SPDLOG_VER_PATCH);
-  res += "libcurl/" LIBCURL_VERSION " ";
+  res += "libcurl/" LIBCURL_VERSION;
+  if (const auto version = curl_version_info(CURLVERSION_NOW);
+      version && version->ssl_version) {
+    res += "(";
+    res += version->ssl_version;
+    res += ")";
+  }
+  res += " ";
   res += "nghttp2/" NGHTTP2_VERSION " ";
 #ifdef HAVE_ZLIB
   res += "zlib/" ZLIB_VERSION " ";
@@ -186,9 +189,6 @@ std::string usedLibs()
 #ifdef HAVE_SQLITE3
   res += "sqlite3/" SQLITE_VERSION " ";
 #endif // HAVE_SQLITE3
-#ifdef HAVE_WINTLS
-  res += "WinTLS ";
-#endif // HAVE_WINTLS
 #ifdef HAVE_OPENSSL_CRYPTO
   res += "OpenSSL/" OPENSSL_VERSION_STR " ";
 #endif // HAVE_OPENSSL_CRYPTO

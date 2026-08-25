@@ -32,12 +32,7 @@ void FeatureConfigTest::testGetDefaultPort()
 
 void FeatureConfigTest::testStrSupportedFeature()
 {
-  const char* https = strSupportedFeature(FEATURE_HTTPS);
-#ifdef ENABLE_SSL
-  REQUIRE(https);
-#else
-  REQUIRE(!https);
-#endif // ENABLE_SSL
+  REQUIRE(strSupportedFeature(FEATURE_HTTPS));
   REQUIRE(!strSupportedFeature(MAX_FEATURE));
 
   REQUIRE(strSupportedFeature(FEATURE_SFTP));
@@ -61,9 +56,7 @@ void FeatureConfigTest::testFeatureSummary()
       "GZip",
 #endif // HAVE_ZLIB
 
-#ifdef ENABLE_SSL
       "HTTPS",
-#endif // ENABLE_SSL
 
       "Message Digest",
 

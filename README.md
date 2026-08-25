@@ -113,7 +113,7 @@ cmake --build build/default
 ctest --test-dir build/default --output-on-failure
 ```
 
-Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, `ARIA2_RELEASE_LTO`, `ARIA2_WITH_WINTLS`, and `ARIA2_WITH_OPENSSL`.
+Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, and `ARIA2_RELEASE_LTO`.
 
 The default superbuild compiles every library dependency from `third_party`.
 Only CMake, Ninja, Make, Perl, and a C11/C++17 platform toolchain are required.
@@ -169,7 +169,7 @@ PUID="$(id -u)" PGID="$(id -g)" \
 
 The container requires `PUID` and `PGID`. The entrypoint assigns writable mounts to those IDs and creates the configuration and session files when absent. Non-root IDs are recommended. UID or GID `0` is supported for environments that require elevated access and emits a startup warning. The default configuration enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
 
-Release binaries verify HTTPS certificates by default. Windows uses WinTLS and the Windows trust store, macOS uses SecTrust, and Linux uses the OpenSSL system trust paths. Android honors `SSL_CERT_FILE` and `SSL_CERT_DIR`, then loads the Termux CA bundle from `$PREFIX/etc/tls/cert.pem`. Explicit CA files remain available through `--ca-certificate`.
+Release binaries verify HTTPS certificates through libcurl by default. Windows uses libcurl's Schannel backend and the native certificate store. macOS uses Apple SecTrust with OpenSSL, while Linux and Android use OpenSSL trust configuration. Explicit CA files remain available through `--ca-certificate`.
 
 ## Maintenance Audit
 

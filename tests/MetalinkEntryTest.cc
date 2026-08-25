@@ -68,13 +68,11 @@ void MetalinkEntryTest::testDropUnsupportedResource()
   auto entry = createTestEntry();
 
   entry->dropUnsupportedResource();
-#if defined(ENABLE_SSL) && defined(ENABLE_BITTORRENT)
+#ifdef ENABLE_BITTORRENT
   REQUIRE_EQ((size_t)4, entry->resources.size());
-#elif defined(ENABLE_SSL) || defined(ENABLE_BITTORRENT)
+#else
   REQUIRE_EQ((size_t)3, entry->resources.size());
-#else  // defined(ENABLE_SSL) || defined(ENABLE_BITTORRENT)
-  REQUIRE_EQ((size_t)2, entry->resources.size());
-#endif // defined(ENABLE_SSL) || defined(ENABLE_BITTORRENT)
+#endif // ENABLE_BITTORRENT
 
   auto itr = std::begin(entry->resources);
   REQUIRE_EQ(MetalinkResource::TYPE_SFTP, (*itr++)->type);
@@ -82,9 +80,7 @@ void MetalinkEntryTest::testDropUnsupportedResource()
 #ifdef ENABLE_BITTORRENT
   REQUIRE_EQ(MetalinkResource::TYPE_BITTORRENT, (*itr++)->type);
 #endif // ENABLE_BITTORRENT
-#ifdef ENABLE_SSL
   REQUIRE_EQ(MetalinkResource::TYPE_HTTPS, (*itr++)->type);
-#endif // ENABLE_SSL
 }
 
 void MetalinkEntryTest::testReorderResourcesByPriority()

@@ -48,7 +48,7 @@ namespace aria2 {
 
 class OpenSSLTLSContext : public TLSContext {
 public:
-  OpenSSLTLSContext(TLSSessionSide side, TLSVersion minVer);
+  explicit OpenSSLTLSContext(TLSVersion minVer);
 
   ~OpenSSLTLSContext();
 
@@ -57,27 +57,13 @@ public:
                                  const std::string& keyfile) override;
   bool addP12CredentialFile(const std::string& p12file);
 
-  bool configurePeerVerification(TLSVerification verification,
-                                 const std::string& caFile) override;
-
   virtual bool good() const override;
-
-  virtual TLSSessionSide getSide() const override { return side_; }
-
-  bool isPeerVerificationEnabled() const
-  {
-    return verification_ != TLSVerification::Disabled;
-  }
-
-  TLSVerification getVerification() const { return verification_; }
 
   SSL_CTX* getSSLCtx() const { return sslCtx_; }
 
 private:
   SSL_CTX* sslCtx_;
-  TLSSessionSide side_;
   bool good_;
-  TLSVerification verification_;
 };
 
 } // namespace aria2

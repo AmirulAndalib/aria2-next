@@ -50,22 +50,17 @@ public:
   OpenSSLTLSSession(OpenSSLTLSContext* tlsContext);
   virtual ~OpenSSLTLSSession();
   virtual int init(sock_t sockfd) override;
-  virtual int setSNIHostname(const std::string& hostname) override;
   virtual int closeConnection() override;
   virtual int checkDirection() override;
   virtual ssize_t writeData(const void* data, size_t len) override;
   virtual ssize_t readData(void* data, size_t len) override;
-  virtual int tlsConnect(const std::string& hostname, TLSVersion& version,
-                         std::string& handshakeErr) override;
   virtual int tlsAccept(TLSVersion& version) override;
   virtual std::string getLastErrorString() override;
-  virtual size_t getRecvBufferedLength() override { return 0; }
+  virtual size_t getRecvBufferedLength() override;
 
 private:
-  int handshake(TLSVersion& version);
   SSL* ssl_;
   OpenSSLTLSContext* tlsContext_;
-  bool peerVerificationConfigured_;
   // Last error code from openSSL library functions
   int rv_;
 };

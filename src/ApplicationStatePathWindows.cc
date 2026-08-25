@@ -32,7 +32,7 @@ std::string defaultDirectory()
     throw DL_ABORT_EX(
         "Unable to resolve the Windows application state directory");
   }
-  const auto root = util::toForwardSlash(util::wCharToUtf8(path));
+  const auto root = toForwardSlash(wCharToUtf8(path));
   CoTaskMemFree(path);
   return util::applyDir(root, "aria2-next");
 }

@@ -140,7 +140,7 @@
 // For Windows, we share files for reading and writing.
 #  define a2open(path, flags, mode) _wsopen(path, flags, _SH_DENYNO, mode)
 #  define a2fopen(path, mode) _wfsopen(path, mode, _SH_DENYNO)
-// # define a2ftruncate(fd, length): We don't use ftruncate in Mingw build
+#  define a2ftruncate(fd, length) _chsize_s(fd, length)
 #  define a2_off_t int64_t
 #elif defined(__ANDROID__) || defined(ANDROID)
 #  define a2lseek(fd, offset, origin) lseek64(fd, offset, origin)

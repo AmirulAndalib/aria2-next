@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
 option(ARIA2_SUPERBUILD "Build the vendored dependency stack" ON)
-option(ARIA2_ENABLE_SSL "Enable SSL/TLS support" ON)
 option(ARIA2_ENABLE_BITTORRENT "Enable BitTorrent support" ON)
 option(ARIA2_ENABLE_WEBSOCKET "Enable WebSocket support" ON)
-option(ARIA2_WITH_WINTLS "Use Windows native TLS where available" ON)
-option(ARIA2_WITH_OPENSSL "Use OpenSSL where available" ON)
 
 if(ARIA2_SUPERBUILD)
   project(aria2-superbuild LANGUAGES NONE)

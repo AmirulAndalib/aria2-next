@@ -290,17 +290,8 @@ HTTP Specific Options
   certificates.
   Use :option:`--check-certificate` option to enable verification.
 
-  .. note::
-
-    If you build with OpenSSL and the library is properly configured to
-    locate the system-wide CA certificates store, aria2 will
-    automatically load those certificates at the startup. If the backend cannot locate usable system
-    trust, provide a PEM CA file explicitly with this option.
-
-  .. note::
-
-    *WinTLS* does not support this option. Instead you will
-    have to import the certificate into the OS trust store.
+  Without this option, libcurl uses the platform trust configuration. Windows
+  builds use the native certificate store through Schannel.
 
 .. option:: --certificate=<FILE>
 
@@ -314,18 +305,11 @@ HTTP Specific Options
   When using PEM, you have to specify the private key via :option:`--private-key`
   as well.
 
-  .. note::
-    *WinTLS* does not support PEM files at the moment. Users have to use PKCS12
-    files.
-
 .. option:: --check-certificate [true|false]
 
   Verify the peer using trusted certificate authorities.
 
-  On Windows, WinTLS checks the complete certificate chain for revocation. A
-  certificate confirmed as revoked is rejected. An unavailable revocation
-  service does not disable trust, hostname, validity, or other certificate
-  checks and does not prevent the connection.
+  Windows builds use libcurl with Schannel and the native certificate policy.
 
   Default: ``true``
 
@@ -1041,10 +1025,6 @@ RPC Options
 
   When using PEM, you have to specify the private key via :option:`--rpc-private-key`
   as well. Use :option:`--rpc-secure` option to enable encryption.
-
-  .. note::
-    *WinTLS* does not support PEM files at the moment. Users have to use PKCS12
-    files.
 
 .. option:: --rpc-listen-all [true|false]
 
@@ -4507,11 +4487,8 @@ Verify SSL/TLS servers using given CA certificates
 
   $ aria2-next --ca-certificate=/path/to/ca-certificates.crt --check-certificate https://host/file
 
-.. note::
-
-  This option is only available when aria2 was compiled against OpenSSL.
-  WinTLS will always use the system certificate store. Instead of
-  ``--ca-certificate`` install the certificate in that store.
+The libcurl TLS backend validates the supplied CA file instead of the default
+platform trust configuration for this transfer.
 
 RPC
 ~~~

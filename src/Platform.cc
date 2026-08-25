@@ -107,7 +107,6 @@ bool Platform::tearDown()
   initialized_ = false;
 
 #ifdef ENABLE_SSL
-  SocketCore::setClientTLSContext(nullptr);
   SocketCore::setServerTLSContext(nullptr);
 #endif // ENABLE_SSL
 

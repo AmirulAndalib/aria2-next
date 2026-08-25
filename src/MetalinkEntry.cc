@@ -109,9 +109,7 @@ public:
     switch (res->type) {
     case MetalinkResource::TYPE_SFTP:
     case MetalinkResource::TYPE_HTTP:
-#ifdef ENABLE_SSL
     case MetalinkResource::TYPE_HTTPS:
-#endif // ENABLE_SSL
 #ifdef ENABLE_BITTORRENT
     case MetalinkResource::TYPE_BITTORRENT:
 #endif // ENABLE_BITTORRENT
@@ -131,9 +129,7 @@ void MetalinkEntry::dropUnsupportedResource()
                        switch (res->type) {
                        case MetalinkResource::TYPE_SFTP:
                        case MetalinkResource::TYPE_HTTP:
-#ifdef ENABLE_SSL
                        case MetalinkResource::TYPE_HTTPS:
-#endif // ENABLE_SSL
 #ifdef ENABLE_BITTORRENT
                        case MetalinkResource::TYPE_BITTORRENT:
 #endif // ENABLE_BITTORRENT

@@ -45,7 +45,6 @@ build() {
 case "$1" in
   *)
     build default
-    build nossl -DARIA2_ENABLE_SSL=OFF
     build nobt -DARIA2_ENABLE_BITTORRENT=OFF
     build noml -DARIA2_ENABLE_METALINK=OFF
     build nobt_noml -DARIA2_ENABLE_BITTORRENT=OFF -DARIA2_ENABLE_METALINK=OFF

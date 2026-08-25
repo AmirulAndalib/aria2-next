@@ -35,15 +35,6 @@
 #include "LibsslTLSSession.h"
 
 #include <openssl/err.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
-
-#include "Log.h"
-#include "util.h"
-#ifdef __APPLE__
-#  include "AppleTrustVerifier.h"
-#endif // __APPLE__
-
 namespace aria2 {
 
 TLSSession* TLSSession::make(TLSContext* ctx)
@@ -52,8 +43,7 @@ TLSSession* TLSSession::make(TLSContext* ctx)
 }
 
 OpenSSLTLSSession::OpenSSLTLSSession(OpenSSLTLSContext* tlsContext)
-    : ssl_(nullptr), tlsContext_(tlsContext),
-      peerVerificationConfigured_(false), rv_(1)
+    : ssl_(nullptr), tlsContext_(tlsContext), rv_(1)
 {
 }
 
@@ -75,19 +65,7 @@ int OpenSSLTLSSession::init(sock_t sockfd)
   if (rv_ == 0) {
     return TLS_ERR_ERROR;
   }
-  return TLS_ERR_OK;
-}
-
-int OpenSSLTLSSession::setSNIHostname(const std::string& hostname)
-{
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-  ERR_clear_error();
-  if (!util::isNumericHost(hostname) &&
-      SSL_set_tlsext_host_name(ssl_, hostname.c_str()) != 1) {
-    return TLS_ERR_ERROR;
-  }
-#endif // SSL_CTRL_SET_TLSEXT_HOSTNAME
-
+  SSL_set_accept_state(ssl_);
   return TLS_ERR_OK;
 }
 
@@ -163,15 +141,10 @@ ssize_t OpenSSLTLSSession::readData(void* data, size_t len)
   return ret;
 }
 
-int OpenSSLTLSSession::handshake(TLSVersion& version)
+int OpenSSLTLSSession::tlsAccept(TLSVersion& version)
 {
   ERR_clear_error();
-  if (tlsContext_->getSide() == TLS_CLIENT) {
-    rv_ = SSL_connect(ssl_);
-  }
-  else {
-    rv_ = SSL_accept(ssl_);
-  }
+  rv_ = SSL_accept(ssl_);
   if (rv_ <= 0) {
     int sslError = SSL_get_error(ssl_, rv_);
     switch (sslError) {
@@ -216,56 +189,9 @@ int OpenSSLTLSSession::handshake(TLSVersion& version)
   return TLS_ERR_OK;
 }
 
-int OpenSSLTLSSession::tlsConnect(const std::string& hostname,
-                                  TLSVersion& version,
-                                  std::string& handshakeErr)
+size_t OpenSSLTLSSession::getRecvBufferedLength()
 {
-  handshakeErr = "";
-#ifdef __APPLE__
-  auto useOpenSSLVerification =
-      tlsContext_->getVerification() != TLSVerification::System;
-#else  // !__APPLE__
-  constexpr auto useOpenSSLVerification = true;
-#endif // !__APPLE__
-  if (!peerVerificationConfigured_ &&
-      tlsContext_->isPeerVerificationEnabled() &&
-      useOpenSSLVerification &&
-      (util::isNumericHost(hostname)
-           ? X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl_),
-                                           hostname.c_str()) != 1
-           : SSL_set1_host(ssl_, hostname.c_str()) != 1)) {
-    handshakeErr = "failed to configure certificate hostname verification";
-    return TLS_ERR_ERROR;
-  }
-  peerVerificationConfigured_ = true;
-  int ret;
-  ret = handshake(version);
-  if (ret != TLS_ERR_OK) {
-    return ret;
-  }
-  if (tlsContext_->getSide() == TLS_CLIENT &&
-      tlsContext_->isPeerVerificationEnabled()) {
-#ifdef __APPLE__
-    if (tlsContext_->getVerification() == TLSVerification::System) {
-      if (!verifyAppleSystemTrust(ssl_, hostname, handshakeErr)) {
-        return TLS_ERR_ERROR;
-      }
-      return TLS_ERR_OK;
-    }
-#endif // __APPLE__
-    long verifyResult = SSL_get_verify_result(ssl_);
-    if (verifyResult != X509_V_OK) {
-      handshakeErr = X509_verify_cert_error_string(verifyResult);
-      return TLS_ERR_ERROR;
-    }
-  }
-
-  return TLS_ERR_OK;
-}
-
-int OpenSSLTLSSession::tlsAccept(TLSVersion& version)
-{
-  return handshake(version);
+  return ssl_ ? static_cast<size_t>(SSL_pending(ssl_)) : 0;
 }
 
 std::string OpenSSLTLSSession::getLastErrorString()

@@ -41,8 +41,6 @@
 
 namespace aria2 {
 
-enum TLSSessionSide { TLS_CLIENT, TLS_SERVER };
-
 enum TLSVersion {
   TLS_PROTO_NONE,
   TLS_PROTO_TLS11,
@@ -50,23 +48,16 @@ enum TLSVersion {
   TLS_PROTO_TLS13,
 };
 
-enum class TLSVerification { Disabled, System, CustomCA };
-
 class TLSContext {
 public:
-  static TLSContext* make(TLSSessionSide side, TLSVersion minVer);
+  static TLSContext* make(TLSVersion minVer);
   virtual ~TLSContext() = default;
 
   // private key `keyfile' must be decrypted.
   virtual bool addCredentialFile(const std::string& certfile,
                                  const std::string& keyfile) = 0;
 
-  virtual bool configurePeerVerification(TLSVerification verification,
-                                         const std::string& caFile) = 0;
-
   virtual bool good() const = 0;
-
-  virtual TLSSessionSide getSide() const = 0;
 };
 
 } // namespace aria2

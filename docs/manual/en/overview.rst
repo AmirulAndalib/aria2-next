@@ -108,7 +108,7 @@ Dependency
 ======================== ========================================
 features                  dependency
 ======================== ========================================
-HTTPS                    OpenSSL or Windows TLS (Schannel)
+Secure RPC               OpenSSL
 HTTP/HTTPS/SFTP          libcurl with nghttp2 and libssh2
 BitTorrent               None (OpenSSL is used when present)
 ED2K                     None
@@ -123,21 +123,10 @@ JSON-RPC over WebSocket  None (bundled wslay)
 
 .. note::
 
-  On Windows, the native Schannel-based TLS implementation (WinTLS) is
-  preferred, so OpenSSL is not required on that platform. To use OpenSSL
-  instead, configure CMake with ``-DARIA2_WITH_WINTLS=OFF``. On every
-  other platform OpenSSL 3.0 or newer provides TLS, message digests, and
-  the DH key exchange.
-
-  Without OpenSSL (WinTLS builds), a bundled implementation provides the
-  message digests and bignum arithmetic, so BitTorrent, ED2K, and
-  checksum validation work on every configuration.
-
-A user can have one of the following configurations for SSL and crypto
-libraries:
-
-* OpenSSL
-* Windows TLS (Windows only)
+  HTTP, HTTPS, and SFTP client security is provided by libcurl. Windows
+  builds use libcurl's Schannel backend and the native certificate store.
+  OpenSSL 3.0 or newer provides secure RPC server TLS and cryptographic
+  primitives on every platform.
 
 You can disable BitTorrent and Metalink support with
 ``-DARIA2_ENABLE_BITTORRENT=OFF`` and ``-DARIA2_ENABLE_METALINK=OFF``.
@@ -179,13 +168,11 @@ preset.
 The CMake configure step validates the vendored dependency stack and enables
 the maintained feature set.
 
-Since 1.1.0, aria2 checks the certificate of HTTPS servers by default. OpenSSL
-builds load the system-wide CA certificate store at startup; if the library
-cannot locate usable system trust, provide a PEM CA file explicitly with
-``--ca-certificate``.
-
-Using WinTLS automatically uses the system certificate store, so an explicit CA
-bundle is not necessary for that backend.
+Aria2 Next checks HTTPS server certificates through libcurl by default. Windows
+uses Schannel and the native certificate store. Other platforms use the trust
+configuration of their maintained libcurl TLS backend. A PEM CA file supplied
+with ``--ca-certificate`` replaces the default trust configuration for that
+transfer.
 
 By default, the bash completion file named ``aria2-next`` is installed to the
 default documentation directory. To change that directory, set
