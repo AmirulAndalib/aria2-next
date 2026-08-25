@@ -297,7 +297,7 @@ void DownloadEngine::onEndOfRun()
 {
   requestGroupMan_->removeStoppedGroup(this);
   requestGroupMan_->closeFile();
-  requestGroupMan_->save();
+  requestGroupMan_->checkpointActiveDownloads();
 }
 
 void DownloadEngine::afterEachIteration()

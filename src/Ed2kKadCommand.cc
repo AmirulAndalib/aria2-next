@@ -1512,9 +1512,9 @@ void Ed2kKadCommand::handlePacket(
 bool Ed2kKadCommand::execute()
 {
   auto session = e_->getRequestGroupMan()->getEd2kSession();
-  session->unregisterStoppedDownloads();
+  session->detachStoppedDownloads();
   if (e_->isHaltRequested()) {
-    session->unregisterAllDownloads();
+    session->detachAllDownloads();
     return true;
   }
   if (session->empty()) {

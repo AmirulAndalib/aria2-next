@@ -45,7 +45,7 @@ Ed2kSession::Ed2kSession(UploadQueue* uploadQueue, std::string databasePath)
       databasePath_(std::move(databasePath)),
       store_(make_unique<Ed2kStore>(databasePath_))
 {
-  load();
+  restoreRuntime();
 }
 
 Ed2kSession::~Ed2kSession()
@@ -53,9 +53,9 @@ Ed2kSession::~Ed2kSession()
   if (!downloads_.empty()) {
     for (auto group : downloads_) {
       captureNetworkState(group);
-      saveDownloadState(group);
+      checkpointDownload(group);
     }
-    save();
+    checkpointRuntime();
   }
   for (auto group : downloads_) {
     group->decreaseNumCommand();
@@ -118,22 +118,7 @@ void Ed2kSession::registerDownload(RequestGroup* group)
   synchronizeNetworkState();
 }
 
-void Ed2kSession::unregisterDownload(RequestGroup* group)
-{
-  auto i = std::find(downloads_.begin(), downloads_.end(), group);
-  if (i == downloads_.end()) {
-    return;
-  }
-  captureNetworkState(*i);
-  saveDownloadState(*i);
-  (*i)->decreaseNumCommand();
-  downloads_.erase(i);
-  if (downloads_.empty()) {
-    save();
-  }
-}
-
-void Ed2kSession::unregisterStoppedDownloads()
+void Ed2kSession::detachStoppedDownloads()
 {
   bool removed = false;
   for (auto i = downloads_.begin(); i != downloads_.end();) {
@@ -142,28 +127,26 @@ void Ed2kSession::unregisterStoppedDownloads()
       continue;
     }
     captureNetworkState(*i);
-    saveDownloadState(*i);
     (*i)->decreaseNumCommand();
     i = downloads_.erase(i);
     removed = true;
   }
   if (removed && downloads_.empty()) {
-    save();
+    checkpointRuntime();
   }
 }
 
-void Ed2kSession::unregisterAllDownloads()
+void Ed2kSession::detachAllDownloads()
 {
   if (downloads_.empty()) {
     return;
   }
   for (auto group : downloads_) {
     captureNetworkState(group);
-    saveDownloadState(group);
     group->decreaseNumCommand();
   }
   downloads_.clear();
-  save();
+  checkpointRuntime();
 }
 
 RequestGroup* Ed2kSession::networkDownload() const
@@ -340,9 +323,20 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
     return false;
   }
 
-  storage->setBitfield(
-      reinterpret_cast<const unsigned char*>(state.bitfield.data()),
-      state.bitfield.size());
+  const auto hasPersistedProgress =
+      std::any_of(state.bitfield.begin(), state.bitfield.end(),
+                  [](char value) { return value != 0; }) ||
+      !state.pieces.empty();
+  File content(state.path);
+  const auto contentSize = content.isFile() ? content.size() : -1;
+  if (hasPersistedProgress &&
+      (contentSize <= 0 || contentSize > state.fileSize ||
+       (state.complete && contentSize != state.fileSize))) {
+    A2_LOG_WARN(fmt("Ignored ED2K progress without matching payload for GID %s.",
+                    state.gid.c_str()));
+    return false;
+  }
+
   std::vector<std::shared_ptr<Piece>> pieces;
   pieces.reserve(state.pieces.size());
   for (const auto& persisted : state.pieces) {
@@ -363,13 +357,25 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
         persisted.bitfield.size());
     pieces.push_back(std::move(piece));
   }
+  storage->setBitfield(
+      reinterpret_cast<const unsigned char*>(state.bitfield.data()),
+      state.bitfield.size());
+  if (state.complete != storage->downloadFinished()) {
+    const std::string emptyBitfield(state.bitfield.size(), '\0');
+    storage->setBitfield(
+        reinterpret_cast<const unsigned char*>(emptyBitfield.data()),
+        emptyBitfield.size());
+    A2_LOG_WARN(fmt("Ignored inconsistent ED2K completion state for GID %s.",
+                    state.gid.c_str()));
+    return false;
+  }
   storage->addInFlightPiece(pieces);
   A2_LOG_DEBUG(fmt("Loaded ED2K download state for GID %s from %s.",
                    state.gid.c_str(), databasePath_.c_str()));
   return true;
 }
 
-bool Ed2kSession::saveDownloadState(RequestGroup* group)
+bool Ed2kSession::checkpointDownload(RequestGroup* group)
 {
   if (!store_ || !store_->available() || !group || !group->getPieceStorage()) {
     return false;
@@ -416,7 +422,7 @@ bool Ed2kSession::saveDownloadState(RequestGroup* group)
   return store_->saveDownload(state);
 }
 
-bool Ed2kSession::removeDownloadState(RequestGroup* group)
+bool Ed2kSession::discardDownload(RequestGroup* group)
 {
   return store_ && store_->available() && group &&
          store_->removeDownload(GroupId::toHex(group->getGID()));
@@ -459,8 +465,13 @@ size_t Ed2kSession::restoreDownloads(
       taskOption->put(PREF_OUT, content.getBasename());
       taskOption->put(PREF_GID, state.gid);
       taskOption->put(PREF_PAUSE, state.paused ? A2_V_TRUE : A2_V_FALSE);
-      requestGroups.push_back(
-          createEd2kFileRequestGroup(state.link, taskOption));
+      auto group = createEd2kFileRequestGroup(state.link, taskOption);
+      group->initPieceStorage();
+      if (!loadDownloadState(group.get())) {
+        A2_LOG_WARN(fmt("Restored ED2K task without persisted progress for GID %s.",
+                        state.gid.c_str()));
+      }
+      requestGroups.push_back(std::move(group));
       ++restored;
     }
     catch (const RecoverableException& ex) {
@@ -508,7 +519,7 @@ RequestGroup* Ed2kSession::findAlternativeDownload(
   return selected;
 }
 
-void Ed2kSession::load()
+void Ed2kSession::restoreRuntime()
 {
   if (!store_->open()) {
     return;
@@ -546,7 +557,7 @@ void Ed2kSession::load()
                    databasePath_.c_str()));
 }
 
-void Ed2kSession::save()
+void Ed2kSession::checkpointRuntime()
 {
   if (!store_ || !store_->available() || clientHash_.size() != HASH_LENGTH) {
     return;

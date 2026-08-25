@@ -12,6 +12,7 @@
 #include "Ed2kAttribute.h"
 #include "Ed2kKadCommand.h"
 #include "Ed2kListenCommand.h"
+#include "Ed2kSession.h"
 #include "DefaultPieceStorage.h"
 #include "DiskAdaptor.h"
 #include "DownloadResult.h"
@@ -315,6 +316,7 @@ public:
   void testCompleteLocalEd2kFileStartsAsSeed();
   void testInvalidLocalEd2kFileUsesSafetyRename();
   void testCompletedEd2kSeedServesIncomingPeer();
+  void testEd2kShutdownPreservesCompletedState();
   void testEd2kSeedTimeStopsSeedOnlyGroup();
   void testEd2kSeedRatioStopsSeedOnlyGroup();
   void testEd2kListenerKeepsMultipleTasks();
@@ -344,6 +346,7 @@ A2_TEST(Ed2kCommandTest, testFinishedEd2kGroupEntersSeedOnly)
 A2_TEST(Ed2kCommandTest, testCompleteLocalEd2kFileStartsAsSeed)
 A2_TEST(Ed2kCommandTest, testInvalidLocalEd2kFileUsesSafetyRename)
 A2_TEST(Ed2kCommandTest, testCompletedEd2kSeedServesIncomingPeer)
+A2_TEST(Ed2kCommandTest, testEd2kShutdownPreservesCompletedState)
 A2_TEST(Ed2kCommandTest, testEd2kSeedTimeStopsSeedOnlyGroup)
 A2_TEST(Ed2kCommandTest, testEd2kSeedRatioStopsSeedOnlyGroup)
 A2_TEST(Ed2kCommandTest, testEd2kListenerKeepsMultipleTasks)
@@ -1647,6 +1650,47 @@ void Ed2kCommandTest::testCompletedEd2kSeedServesIncomingPeer()
   runEngineTicks(engine, 1);
 }
 
+void Ed2kCommandTest::testEd2kShutdownPreservesCompletedState()
+{
+  const std::string stateDirectory = A2_TEST_OUT_DIR "/ed2k-shutdown-state";
+  const std::string database = stateDirectory + "/ed2k/state.db";
+  File(database).remove();
+  File(database + "-wal").remove();
+  File(database + "-shm").remove();
+
+  {
+    auto option = createOption();
+    option->put(PREF_STATE_DIR, stateDirectory);
+    auto group = createRequestGroup(option, createEd2kContext());
+    group->initPieceStorage();
+    group->getPieceStorage()->markAllPiecesDone();
+
+    DownloadEngine engine(make_unique<SelectEventPoll>());
+    engine.setOption(option.get());
+    engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+        std::vector<std::shared_ptr<RequestGroup>>{}, 5, option.get()));
+    auto manager = engine.getRequestGroupMan().get();
+    manager->addRequestGroup(group);
+    group->setRequestGroupMan(manager);
+    group->setState(RequestGroup::STATE_ACTIVE);
+
+    auto session = manager->getEd2kSession();
+    REQUIRE(session->checkpointDownload(group.get()));
+    REQUIRE(session->hasDownloadState(group.get()));
+
+    group->setHaltRequested(true, RequestGroup::SHUTDOWN_SIGNAL);
+    manager->removeStoppedGroup(&engine);
+
+    REQUIRE_EQ((size_t)0, manager->countRequestGroup());
+    REQUIRE(session->hasDownloadState(group.get()));
+    REQUIRE(session->discardDownload(group.get()));
+  }
+
+  File(database).remove();
+  File(database + "-wal").remove();
+  File(database + "-shm").remove();
+}
+
 void Ed2kCommandTest::testEd2kSeedTimeStopsSeedOnlyGroup()
 {
   auto option = createOption();
@@ -1672,6 +1716,7 @@ void Ed2kCommandTest::testEd2kSeedTimeStopsSeedOnlyGroup()
   engine.getRequestGroupMan()->removeStoppedGroup(&engine);
 
   REQUIRE(group->isHaltRequested());
+  REQUIRE(group->isShareComplete());
   REQUIRE_EQ((size_t)0,
                        engine.getRequestGroupMan()->countRequestGroup());
   REQUIRE_EQ((size_t)1,
@@ -1706,6 +1751,7 @@ void Ed2kCommandTest::testEd2kSeedRatioStopsSeedOnlyGroup()
   engine.getRequestGroupMan()->removeStoppedGroup(&engine);
 
   REQUIRE(group->isHaltRequested());
+  REQUIRE(group->isShareComplete());
   REQUIRE_EQ((size_t)0,
                        engine.getRequestGroupMan()->countRequestGroup());
   REQUIRE_EQ((size_t)1,

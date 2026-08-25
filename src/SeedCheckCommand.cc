@@ -75,7 +75,8 @@ bool SeedCheckCommand::execute()
   if (checkStarted_) {
     if (seedCriteria_->evaluate()) {
       A2_LOG_INFO(MSG_SEEDING_END);
-      requestGroup_->setForceHaltRequested(true);
+      requestGroup_->setForceHaltRequested(true,
+                                           RequestGroup::SHARE_COMPLETE);
       e_->setRefreshInterval(std::chrono::milliseconds(0));
       return true;
     }

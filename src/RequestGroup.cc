@@ -977,22 +977,6 @@ bool RequestGroup::doesUploadSpeedExceed()
   return maxUploadSpeedLimit_ > 0 && maxUploadSpeedLimit_ < spd;
 }
 
-void RequestGroup::checkpointState() const
-{
-  if (downloadContext_->hasAttribute(CTX_ATTR_ED2K) && requestGroupMan_) {
-    requestGroupMan_->getEd2kSession()->saveDownloadState(
-        const_cast<RequestGroup*>(this));
-  }
-}
-
-void RequestGroup::removeState() const
-{
-  if (downloadContext_->hasAttribute(CTX_ATTR_ED2K) && requestGroupMan_) {
-    requestGroupMan_->getEd2kSession()->removeDownloadState(
-        const_cast<RequestGroup*>(this));
-  }
-}
-
 void RequestGroup::setDownloadContext(
     const std::shared_ptr<DownloadContext>& downloadContext)
 {

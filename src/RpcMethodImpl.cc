@@ -58,6 +58,7 @@
 #include "DownloadContext.h"
 #include "DiskAdaptor.h"
 #include "Ed2kAttribute.h"
+#include "Ed2kSession.h"
 #include "Ed2kUploadQueue.h"
 #include "FileEntry.h"
 #include "prefs.h"
@@ -553,7 +554,10 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
         if (group->getCurlDownload() && e->getCurlSession()) {
           e->getCurlSession()->stop(group->getCurlDownload(), false);
         }
-        group->removeState();
+        if (group->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K)) {
+          e->getRequestGroupMan()->getEd2kSession()->discardDownload(
+              group.get());
+        }
         e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {

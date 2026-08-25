@@ -1973,6 +1973,9 @@ Persistent State
 HTTP(S), SFTP, and Metalink progress is stored in ``stream/state.db`` under
 :option:`--state-dir`. BitTorrent keeps native session and fast-resume data in
 ``bittorrent``. ED2K keeps network and transfer state in ``ed2k/state.db``.
+Active and paused ED2K sharing tasks resume with the same GID and immediately
+expose their persisted progress after restart. Their transfer records are
+removed only when the task is deleted or its sharing criteria are satisfied.
 Downloads never create adjacent sidecar files.
 
 .. _input-file:

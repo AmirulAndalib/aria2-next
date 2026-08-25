@@ -11,6 +11,11 @@ state, server metadata, peer credits, useful source seeds, and per-download
 piece and block progress. ED2K does not use adjacent `.aria2` control files or
 migrate retired state formats.
 
+Download persistence follows explicit lifecycle intent. Pausing and shutting
+down checkpoint the task, including completed sharing tasks. Restored paused
+tasks hydrate their piece map before RPC exposure. User removal and satisfied
+sharing criteria are the only terminal paths that discard a download record.
+
 The interoperability baseline is aMule. TCP and UDP obfuscation use aMule's key
 derivation and datagram framing. Server source requests use the persistent TCP
 connection and the complete UDP server pool. The server connector keeps two
@@ -30,5 +35,5 @@ links are trusted immediately; roots learned from peers use aMule's ten-peer,
 one hour and active slots rotate after one hour or 10 MiB.
 
 The controlled runtime fixture directory is
-`/Users/sekiro/Desktop/aria2-next-ed2k-debug`. Its frozen `server.met` and
-`nodes.dat` inputs are used for aMule and aria2-next comparison runs.
+`/Users/sekiro/Desktop/aria2-next-ed2k-lifecycle-debug`. It contains isolated
+macOS binaries, payloads, state databases, logs, and lifecycle run reports.

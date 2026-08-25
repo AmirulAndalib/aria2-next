@@ -37,9 +37,8 @@ public:
   ~Ed2kSession();
 
   void registerDownload(RequestGroup* group);
-  void unregisterDownload(RequestGroup* group);
-  void unregisterAllDownloads();
-  void unregisterStoppedDownloads();
+  void detachAllDownloads();
+  void detachStoppedDownloads();
   void synchronizeNetworkState();
 
   const std::vector<RequestGroup*>& downloads() const { return downloads_; }
@@ -49,8 +48,8 @@ public:
   const std::string& databasePath() const { return databasePath_; }
   bool hasDownloadState(RequestGroup* group) const;
   bool loadDownloadState(RequestGroup* group);
-  bool saveDownloadState(RequestGroup* group);
-  bool removeDownloadState(RequestGroup* group);
+  bool checkpointDownload(RequestGroup* group);
+  bool discardDownload(RequestGroup* group);
   size_t restoreDownloads(
       const Option* option,
       std::vector<std::shared_ptr<RequestGroup>>& requestGroups);
@@ -72,8 +71,8 @@ private:
 
   void captureNetworkState(RequestGroup* group);
   void applyPersistedState(RequestGroup* group);
-  void load();
-  void save();
+  void restoreRuntime();
+  void checkpointRuntime();
 };
 
 } // namespace ed2k

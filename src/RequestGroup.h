@@ -75,7 +75,7 @@ class BtDownload;
 
 class RequestGroup {
 public:
-  enum HaltReason { NONE, SHUTDOWN_SIGNAL, USER_REQUEST };
+  enum HaltReason { NONE, SHUTDOWN_SIGNAL, USER_REQUEST, SHARE_COMPLETE };
   enum FileOpenMode { DEFAULT_FILE_OPEN, RESTART_FROM_SCRATCH };
   enum State {
     // Waiting in the reserved queue
@@ -366,6 +366,11 @@ public:
     return haltRequested_ && haltReason_ == SHUTDOWN_SIGNAL;
   }
 
+  bool isShareComplete() const
+  {
+    return haltRequested_ && haltReason_ == SHARE_COMPLETE;
+  }
+
   void setPauseRequested(bool f);
 
   bool isPauseRequested() const { return pauseRequested_; }
@@ -451,10 +456,6 @@ public:
   }
 
   error_code::Value getLastErrorCode() const { return lastErrorCode_; }
-
-  void checkpointState() const;
-
-  void removeState() const;
 
   template <typename InputIterator>
   void followedBy(InputIterator groupFirst, InputIterator groupLast)

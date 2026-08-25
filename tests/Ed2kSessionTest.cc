@@ -3,6 +3,7 @@
 #include "a2doctest.h"
 
 #include "DownloadContext.h"
+#include "DiskAdaptor.h"
 #include "Ed2kAttribute.h"
 #include "Ed2kUploadQueue.h"
 #include "File.h"
@@ -45,12 +46,12 @@ std::shared_ptr<RequestGroup> createEd2kGroup(const std::string& clientHash)
 class Ed2kSessionTest {
 public:
   void testRestoresRuntimeStateAcrossRestart();
-  void testPersistsDownloadProgressWithoutControlFile();
+  void testRestoresSharingLifecycleWithoutControlFile();
   void testSelectsAlternativeDownloadForPeer();
 };
 
 A2_TEST(Ed2kSessionTest, testRestoresRuntimeStateAcrossRestart)
-A2_TEST(Ed2kSessionTest, testPersistsDownloadProgressWithoutControlFile)
+A2_TEST(Ed2kSessionTest, testRestoresSharingLifecycleWithoutControlFile)
 A2_TEST(Ed2kSessionTest, testSelectsAlternativeDownloadForPeer)
 
 void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
@@ -137,7 +138,7 @@ void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
   File(stateFile).remove();
 }
 
-void Ed2kSessionTest::testPersistsDownloadProgressWithoutControlFile()
+void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
 {
   const std::string database = A2_TEST_OUT_DIR "/ed2k-progress.db";
   const std::string output = A2_TEST_OUT_DIR "/ed2k-progress.bin";
@@ -156,39 +157,61 @@ void Ed2kSessionTest::testPersistsDownloadProgressWithoutControlFile()
   const auto gid = GroupId::toHex(group->getGID());
   group->initPieceStorage();
   auto storage = group->getPieceStorage();
-  storage->markPiecesDone(PIECE_LENGTH);
-  auto partial = storage->getMissingPiece(1, 1);
-  REQUIRE(partial);
-  partial->completeBlock(0);
+  storage->getDiskAdaptor()->openFile();
+  const unsigned char zero = 0;
+  storage->getDiskAdaptor()->writeData(&zero, 1, 9999999);
+  storage->getDiskAdaptor()->closeFile();
+  storage->markAllPiecesDone();
+  group->setPauseRequested(true);
 
   {
     UploadQueue queue;
     Ed2kSession session(&queue, database);
-    REQUIRE(session.saveDownloadState(group.get()));
+    REQUIRE(session.checkpointDownload(group.get()));
   }
   REQUIRE(File(database).isFile());
   REQUIRE(!File(output + ".aria2").exists());
 
   group.reset();
   auto restoredOption = std::make_shared<Option>();
-  restoredOption->put(PREF_DIR, A2_TEST_OUT_DIR);
-  restoredOption->put(PREF_OUT, "ed2k-progress.bin");
-  restoredOption->put(PREF_GID, gid);
   restoredOption->put(PREF_ENABLE_RPC, A2_V_TRUE);
-  auto restored = createEd2kFileRequestGroup(uri, restoredOption);
-  restored->initPieceStorage();
+  std::vector<std::shared_ptr<RequestGroup>> restoredGroups;
   {
     UploadQueue queue;
     Ed2kSession session(&queue, database);
-    REQUIRE(session.hasDownloadState(restored.get()));
-    REQUIRE(session.loadDownloadState(restored.get()));
-  }
-  REQUIRE(restored->getPieceStorage()->hasPiece(0));
-  auto restoredPartial = restored->getPieceStorage()->getPiece(1);
-  REQUIRE(restoredPartial);
-  REQUIRE(restoredPartial->hasBlock(0));
+    REQUIRE_EQ((size_t)1,
+               session.restoreDownloads(restoredOption.get(), restoredGroups));
+    REQUIRE_EQ((size_t)1, restoredGroups.size());
+    auto restored = restoredGroups.front();
+    REQUIRE_EQ(gid, GroupId::toHex(restored->getGID()));
+    REQUIRE(restored->isPauseRequested());
+    REQUIRE_EQ((int64_t)10000000, restored->getTotalLength());
+    REQUIRE_EQ((int64_t)10000000, restored->getCompletedLength());
+    REQUIRE(restored->isSeeder());
 
-  restored.reset();
+    restored->setPauseRequested(false);
+    REQUIRE(session.checkpointDownload(restored.get()));
+  }
+
+  restoredGroups.clear();
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE_EQ((size_t)1,
+               session.restoreDownloads(restoredOption.get(), restoredGroups));
+    auto restored = restoredGroups.front();
+    REQUIRE(!restored->isPauseRequested());
+    REQUIRE(restored->isSeeder());
+    REQUIRE(session.discardDownload(restored.get()));
+  }
+
+  restoredGroups.clear();
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE_EQ((size_t)0,
+               session.restoreDownloads(restoredOption.get(), restoredGroups));
+  }
   File(database).remove();
   File(output).remove();
 }

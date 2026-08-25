@@ -159,7 +159,7 @@ public:
 
   bool downloadFinished();
 
-  void save();
+  void checkpointActiveDownloads();
 
   void closeFile();
 

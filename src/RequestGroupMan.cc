@@ -299,6 +299,23 @@ private:
   DownloadEngine* e_;
   RequestGroupList& reservedGroups_;
 
+  void persistEd2kDownload(const std::shared_ptr<RequestGroup>& group)
+  {
+    if (!group->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K)) {
+      return;
+    }
+    auto session = e_->getRequestGroupMan()->getEd2kSession();
+    const auto discarded =
+        group->isUserRequestedHalt() || group->isShareComplete();
+    const auto saved = discarded ? session->discardDownload(group.get())
+                                 : session->checkpointDownload(group.get());
+    if (!saved && !session->databasePath().empty()) {
+      A2_LOG_ERROR(fmt("Failed to %s ED2K state for GID %s.",
+                       discarded ? "discard" : "checkpoint",
+                       GroupId::toHex(group->getGID()).c_str()));
+    }
+  }
+
   void saveSignature(const std::shared_ptr<RequestGroup>& group)
   {
     auto& sig = group->getDownloadContext()->getSignature();
@@ -386,7 +403,6 @@ public:
             A2_LOG_INFO(fmt(_("Download GID#%s paused"),
                             GroupId::toHex(group->getGID()).c_str()));
           }
-          group->checkpointState();
         }
         else if (group->downloadFinished() &&
                  !group->getDownloadContext()->isChecksumVerificationNeeded()) {
@@ -394,11 +410,7 @@ public:
           group->reportDownloadFinished();
           if (group->allDownloadFinished() &&
               !group->getOption()->getAsBool(PREF_FORCE_SAVE)) {
-            group->removeState();
             saveSignature(group);
-          }
-          else {
-            group->checkpointState();
           }
           std::vector<std::shared_ptr<RequestGroup>> nextGroups;
           group->postDownloadProcessing(nextGroups);
@@ -413,13 +425,8 @@ public:
           A2_LOG_INFO(fmt(_("Download GID#%s not complete: %s"),
                           GroupId::toHex(group->getGID()).c_str(),
                           group->getDownloadContext()->getBasePath().c_str()));
-          if (group->isUserRequestedHalt()) {
-            group->removeState();
-          }
-          else {
-            group->checkpointState();
-          }
         }
+        persistEd2kDownload(group);
       }
       catch (RecoverableException& ex) {
         A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, ex);
@@ -467,7 +474,7 @@ public:
 
 void RequestGroupMan::removeStoppedGroup(DownloadEngine* e)
 {
-  ed2kSession_->unregisterStoppedDownloads();
+  ed2kSession_->detachStoppedDownloads();
   size_t numPrev = requestGroups_.size();
   requestGroups_.remove_if(ProcessStoppedRequestGroup(e, reservedGroups_));
   size_t numRemoved = numPrev - requestGroups_.size();
@@ -609,17 +616,16 @@ void RequestGroupMan::reduceActiveDownloadsToLimit(DownloadEngine* e)
   }
 }
 
-void RequestGroupMan::save()
+void RequestGroupMan::checkpointActiveDownloads()
 {
   for (auto& rg : requestGroups_) {
-    if (rg->allDownloadFinished() &&
-        !rg->getDownloadContext()->isChecksumVerificationNeeded() &&
-        !rg->getOption()->getAsBool(PREF_FORCE_SAVE)) {
-      rg->removeState();
-    }
-    else {
+    if (rg->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K)) {
       try {
-        rg->checkpointState();
+        if (!ed2kSession_->checkpointDownload(rg.get()) &&
+            !ed2kSession_->databasePath().empty()) {
+          A2_LOG_ERROR(fmt("Failed to checkpoint ED2K state for GID %s.",
+                           GroupId::toHex(rg->getGID()).c_str()));
+        }
       }
       catch (RecoverableException& e) {
         A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, e);

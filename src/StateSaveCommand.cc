@@ -56,7 +56,7 @@ void StateSaveCommand::preProcess()
 
 void StateSaveCommand::process()
 {
-  getDownloadEngine()->getRequestGroupMan()->save();
+  getDownloadEngine()->getRequestGroupMan()->checkpointActiveDownloads();
 }
 
 } // namespace aria2
