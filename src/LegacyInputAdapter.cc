@@ -42,8 +42,10 @@ struct LegacyOptionSpec {
   bool sensitive = false;
 };
 
-constexpr std::array<LegacyOptionSpec, 69> LEGACY_OPTIONS{{
+constexpr std::array<LegacyOptionSpec, 72> LEGACY_OPTIONS{{
     {"allow-piece-length-change", ArgumentKind::OptionalBoolean},
+    {"async-dns", ArgumentKind::OptionalBoolean},
+    {"async-dns-server", ArgumentKind::Required},
     {"auto-save-interval", ArgumentKind::Required},
     {"bt-detach-seed-only", ArgumentKind::OptionalBoolean},
     {"bt-enable-hook-after-hash-check", ArgumentKind::OptionalBoolean},
@@ -79,6 +81,7 @@ constexpr std::array<LegacyOptionSpec, 69> LEGACY_OPTIONS{{
     {"dht-listen-addr6", ArgumentKind::Required},
     {"dht-listen-port", ArgumentKind::Required},
     {"dht-message-timeout", ArgumentKind::Required},
+    {"enable-async-dns6", ArgumentKind::OptionalBoolean},
     {"enable-dht6", ArgumentKind::OptionalBoolean},
     {"enable-http-pipelining", ArgumentKind::OptionalBoolean},
     {"ftp-passwd", ArgumentKind::Required, true},
@@ -334,6 +337,18 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
                               target + '=' + value);
     }
   };
+
+  for (const auto* name : {"async-dns", "enable-async-dns6"}) {
+    const auto item = legacy.find(name);
+    if (item != legacy.end()) {
+      parseBoolean(item->first, item->second);
+      ignore(item->first, "the system resolver is always asynchronous");
+    }
+  }
+  if (legacy.count("async-dns-server") != 0) {
+    ignore("async-dns-server",
+           "DNS servers are managed by the operating system");
+  }
 
   if (const auto item = legacy.find("auto-save-interval");
       item != legacy.end()) {

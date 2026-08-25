@@ -73,6 +73,21 @@ TEST_CASE("LegacyInputAdapter normalizes retired port and Metalink values")
                                     LegacyInputSource::Configuration));
 }
 
+TEST_CASE("LegacyInputAdapter accepts retired DNS controls")
+{
+  const auto output = normalizeLegacyInput(
+      {{"async-dns", "false"},
+       {"async-dns-server", "1.1.1.1,8.8.8.8"},
+       {"enable-async-dns6", "true"},
+       {"dir", "/tmp/downloads"}},
+      LegacyInputSource::Configuration);
+
+  CHECK_EQ(1, output.size());
+  CHECK_EQ("/tmp/downloads", valueFor(output, "dir"));
+  CHECK_THROWS(normalizeLegacyInput({{"async-dns", "invalid"}},
+                                    LegacyInputSource::Configuration));
+}
+
 TEST_CASE("LegacyInputAdapter rewrites legacy command-line forms")
 {
   char executable[] = "aria2-next";
@@ -80,11 +95,12 @@ TEST_CASE("LegacyInputAdapter rewrites legacy command-line forms")
   char perServer[] = "-x";
   char perServerValue[] = "4";
   char retired[] = "--enable-http-pipelining=true";
+  char resolver[] = "--async-dns=false";
   char password[] = "--ftp-passwd=secret";
   char current[] = "--dir=/tmp/downloads";
   char uri[] = "https://example.com/file";
-  char* argv[]{executable, split,    perServer, perServerValue,
-               retired,    password, current,   uri};
+  char* argv[]{executable, split,   perServer, perServerValue, retired,
+               resolver,   password, current,   uri};
 
   const auto output = normalizeLegacyCommandLine(
       static_cast<int>(std::size(argv)), argv, LegacyInputSource::CommandLine);
@@ -94,7 +110,8 @@ TEST_CASE("LegacyInputAdapter rewrites legacy command-line forms")
   CHECK(std::find(output.begin(), output.end(), current) != output.end());
   CHECK(std::find(output.begin(), output.end(), uri) != output.end());
   CHECK(std::none_of(output.begin(), output.end(), [](const auto& item) {
-    return item.find("enable-http-pipelining") != std::string::npos;
+    return item.find("enable-http-pipelining") != std::string::npos ||
+           item.find("async-dns") != std::string::npos;
   }));
   CHECK_EQ("--ftp-passwd=******", std::string(password));
 }
