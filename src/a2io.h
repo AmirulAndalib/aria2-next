@@ -144,7 +144,7 @@
 #  define a2_off_t int64_t
 #elif defined(__ANDROID__) || defined(ANDROID)
 #  define a2lseek(fd, offset, origin) lseek64(fd, offset, origin)
-// # define a2fseek(fp, offset, origin): No fseek64 and not used in aria2
+#  define a2fseek(fp, offset, origin) fseeko64(fp, offset, origin)
 #  define a2fstat(fd, buf) fstat64(fd, buf)
 // # define a2ftell(fd): No ftell64 and not used in aria2
 #  define a2_struct_stat struct stat64
