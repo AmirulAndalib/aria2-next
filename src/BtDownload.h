@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "BtSnapshot.h"
+#include "RecoverableException.h"
 
 namespace aria2 {
 
@@ -27,6 +28,41 @@ class DownloadContext;
 class Option;
 class RequestGroup;
 class BtSession;
+
+class BtMetainfoError : public RecoverableException {
+private:
+  std::string kind_;
+  std::string category_;
+  int nativeCode_;
+
+protected:
+  std::shared_ptr<Exception> copy() const override;
+
+public:
+  BtMetainfoError(const char* file, int line, std::string message,
+                  std::string kind, std::string category, int nativeCode);
+
+  const std::string& kind() const { return kind_; }
+  const std::string& category() const { return category_; }
+  int nativeCode() const { return nativeCode_; }
+};
+
+struct BtMetainfoFile {
+  size_t index = 0;
+  std::string path;
+  int64_t length = 0;
+};
+
+struct BtMetainfo {
+  enum class Mode { Single, Multi };
+
+  std::string name;
+  Mode mode = Mode::Single;
+  std::string infoHashV1;
+  std::string infoHashV2;
+  std::vector<BtMetainfoFile> files;
+  int64_t totalLength = 0;
+};
 
 class BtDownload {
 public:
@@ -72,6 +108,10 @@ public:
   fromBuffer(const std::string& data, const std::vector<std::string>& webSeeds);
 
   static std::shared_ptr<BtDownload> fromMagnet(const std::string& uri);
+
+  static size_t maxMetainfoSize();
+
+  BtMetainfo metainfo() const;
 
   void configure(const Option* option);
   void populateDownloadContext(const std::shared_ptr<DownloadContext>& context,

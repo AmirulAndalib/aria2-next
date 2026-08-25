@@ -75,6 +75,8 @@ public:
   void testAddTorrent_withoutTorrent();
   void testAddTorrent_notBase64Torrent();
   void testAddTorrent_withPosition();
+  void testInspectTorrent();
+  void testInspectTorrentErrors();
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_METALINK
   void testAddMetalink();
@@ -141,6 +143,8 @@ A2_TEST(RpcMethodTest, testAddTorrent)
 A2_TEST(RpcMethodTest, testAddTorrent_withoutTorrent)
 A2_TEST(RpcMethodTest, testAddTorrent_notBase64Torrent)
 A2_TEST(RpcMethodTest, testAddTorrent_withPosition)
+A2_TEST(RpcMethodTest, testInspectTorrent)
+A2_TEST(RpcMethodTest, testInspectTorrentErrors)
 #endif // ENABLE_BITTORRENT
 #ifdef ENABLE_METALINK
 A2_TEST(RpcMethodTest, testAddMetalink)
@@ -529,6 +533,74 @@ void RpcMethodTest::testAddTorrent_withPosition()
                             ->getDownloadContext()
                             ->getFileEntries()
                             .size());
+}
+
+void RpcMethodTest::testInspectTorrent()
+{
+  const std::string output =
+      A2_TEST_OUT_DIR "/aria2_RpcMethodTest_inspectTorrent";
+  const std::string state = output + "/state";
+  option_->put(PREF_DIR, output);
+  option_->put(PREF_STATE_DIR, state);
+  REQUIRE(!File(output).exists());
+  REQUIRE(!File(state).exists());
+  REQUIRE(!e_->getBtSession());
+
+  InspectTorrentRpcMethod method;
+  auto request = createReq(InspectTorrentRpcMethod::getMethodName());
+  const auto torrent = readFile(A2_TEST_DIR "/single.torrent");
+  request.params->append(base64::encode(torrent.begin(), torrent.end()));
+  request.jsonRpc = true;
+  const auto response = method.execute(std::move(request), e_.get());
+
+  REQUIRE_EQ(0, response.code);
+  const auto result = downcast<Dict>(response.param);
+  REQUIRE_EQ(std::string("aria2-0.8.2.tar.bz2"), getString(result, "name"));
+  REQUIRE_EQ(std::string("single"), getString(result, "mode"));
+  REQUIRE_EQ((size_t)40, getString(result, "infoHashV1").size());
+  REQUIRE(getString(result, "infoHashV2").empty());
+  REQUIRE_EQ(std::string("384"), getString(result, "totalLength"));
+  const auto files = downcast<List>(result->get("files"));
+  REQUIRE_EQ((size_t)1, files->size());
+  const auto file = downcast<Dict>(files->get(0));
+  REQUIRE_EQ(std::string("1"), getString(file, "index"));
+  REQUIRE_EQ(std::string("aria2-0.8.2.tar.bz2"), getString(file, "path"));
+  REQUIRE_EQ(std::string("384"), getString(file, "length"));
+
+  const auto manager = e_->getRequestGroupMan().get();
+  REQUIRE_EQ((size_t)0, manager->getRequestGroups().size());
+  REQUIRE_EQ((size_t)0, manager->getReservedGroups().size());
+  REQUIRE_EQ((size_t)0, manager->getDownloadResults().size());
+  REQUIRE(!e_->getBtSession());
+  REQUIRE(!File(output).exists());
+  REQUIRE(!File(state).exists());
+}
+
+void RpcMethodTest::testInspectTorrentErrors()
+{
+  InspectTorrentRpcMethod method;
+  const auto inspect = [&method, this](std::string payload) {
+    auto request = createReq(InspectTorrentRpcMethod::getMethodName());
+    request.params->append(std::move(payload));
+    request.jsonRpc = true;
+    return method.execute(std::move(request), e_.get());
+  };
+
+  auto response = inspect("%%%");
+  REQUIRE_EQ(1, response.code);
+  auto error = downcast<Dict>(response.param);
+  auto data = downcast<Dict>(error->get("data"));
+  REQUIRE_EQ(std::string("invalidBase64"), getString(data, "kind"));
+  REQUIRE_EQ(std::string("rpc"), getString(data, "category"));
+
+  const std::string corrupt = "not torrent metadata";
+  response = inspect(base64::encode(corrupt.begin(), corrupt.end()));
+  REQUIRE_EQ(1, response.code);
+  error = downcast<Dict>(response.param);
+  data = downcast<Dict>(error->get("data"));
+  REQUIRE_EQ(std::string("invalidTorrent"), getString(data, "kind"));
+  REQUIRE(!getString(data, "category").empty());
+  REQUIRE(downcast<Integer>(data->get("code"))->i() != 0);
 }
 
 #endif // ENABLE_BITTORRENT

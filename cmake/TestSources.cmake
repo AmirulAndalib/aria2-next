@@ -121,6 +121,7 @@ set(ARIA2_TEST_SOURCES_HAVE_SQLITE3
 )
 
 set(ARIA2_TEST_SOURCES_ENABLE_BITTORRENT
+  tests/BtDownloadTest.cc
   tests/BtPeerBlocklistTest.cc
   tests/BtSessionTest.cc
 )

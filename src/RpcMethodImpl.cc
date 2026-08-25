@@ -40,6 +40,10 @@
 #include <limits>
 #include <sstream>
 
+#ifdef ENABLE_BITTORRENT
+#  include <openssl/evp.h>
+#endif // ENABLE_BITTORRENT
+
 #include "Log.h"
 #include "LegacyInputAdapter.h"
 #include "DlAbortEx.h"
@@ -459,6 +463,104 @@ std::unique_ptr<ValueBase> AddTorrentRpcMethod::process(const RpcRequest& req,
   }
   else {
     throw DL_ABORT_EX("No Torrent to download.");
+  }
+}
+
+namespace {
+std::string decodeTorrentBase64(const std::string& encoded)
+{
+  const auto maxEncodedSize = ((BtDownload::maxMetainfoSize() + 2) / 3) * 4;
+  if (encoded.size() > maxEncodedSize) {
+    throw BtMetainfoError(__FILE__, __LINE__, "Torrent metadata is too large.",
+                          "torrentTooLarge", "aria2", 0);
+  }
+
+  using DecodeContext =
+      std::unique_ptr<EVP_ENCODE_CTX, decltype(&EVP_ENCODE_CTX_free)>;
+  DecodeContext context(EVP_ENCODE_CTX_new(), EVP_ENCODE_CTX_free);
+  if (!context) {
+    throw DL_ABORT_EX("Unable to allocate Base64 decoder.");
+  }
+
+  std::string decoded((encoded.size() / 4 + 1) * 3, '\0');
+  int updateLength = 0;
+  int finalLength = 0;
+  EVP_DecodeInit(context.get());
+  if (EVP_DecodeUpdate(
+          context.get(), reinterpret_cast<unsigned char*>(decoded.data()),
+          &updateLength, reinterpret_cast<const unsigned char*>(encoded.data()),
+          static_cast<int>(encoded.size())) < 0 ||
+      EVP_DecodeFinal(context.get(),
+                      reinterpret_cast<unsigned char*>(decoded.data()) +
+                          updateLength,
+                      &finalLength) < 0) {
+    throw BtMetainfoError(__FILE__, __LINE__, "Invalid Base64 torrent data.",
+                          "invalidBase64", "rpc", 0);
+  }
+  decoded.resize(static_cast<size_t>(updateLength + finalLength));
+  return decoded;
+}
+
+std::unique_ptr<ValueBase>
+createTorrentInspectionError(const BtMetainfoError& error,
+                             const RpcRequest& req)
+{
+  auto response = Dict::g();
+  response->put(req.jsonRpc ? "code" : "faultCode", Integer::g(1));
+  response->put(req.jsonRpc ? "message" : "faultString", error.what());
+  auto data = Dict::g();
+  data->put("kind", error.kind());
+  data->put("category", error.category());
+  data->put("code", Integer::g(error.nativeCode()));
+  response->put("data", std::move(data));
+  return response;
+}
+} // namespace
+
+std::unique_ptr<ValueBase>
+InspectTorrentRpcMethod::process(const RpcRequest& req, DownloadEngine*)
+{
+  const String* torrentParam = checkRequiredParam<String>(req, 0);
+  const auto data =
+      req.jsonRpc ? decodeTorrentBase64(torrentParam->s()) : torrentParam->s();
+  const auto metainfo = BtDownload::fromBuffer(data, {})->metainfo();
+
+  auto result = Dict::g();
+  result->put("name", metainfo.name);
+  result->put("mode",
+              metainfo.mode == BtMetainfo::Mode::Multi ? "multi" : "single");
+  result->put("infoHashV1", metainfo.infoHashV1);
+  result->put("infoHashV2", metainfo.infoHashV2);
+  result->put("totalLength", util::itos(metainfo.totalLength));
+  auto files = List::g();
+  for (const auto& file : metainfo.files) {
+    auto entry = Dict::g();
+    entry->put("index", util::uitos(file.index));
+    entry->put("path", file.path);
+    entry->put("length", util::itos(file.length));
+    files->append(std::move(entry));
+  }
+  result->put("files", std::move(files));
+  return result;
+}
+
+RpcResponse InspectTorrentRpcMethod::execute(RpcRequest req, DownloadEngine* e)
+{
+  auto authorized = RpcResponse::NOTAUTHORIZED;
+  try {
+    authorize(req, e);
+    authorized = RpcResponse::AUTHORIZED;
+    return RpcResponse(0, authorized, process(req, e), std::move(req.id));
+  }
+  catch (BtMetainfoError& error) {
+    A2_LOG_TRACE_EX(EX_EXCEPTION_CAUGHT, error);
+    return RpcResponse(1, authorized, createTorrentInspectionError(error, req),
+                       std::move(req.id));
+  }
+  catch (RecoverableException& error) {
+    A2_LOG_TRACE_EX(EX_EXCEPTION_CAUGHT, error);
+    return RpcResponse(1, authorized, createErrorResponse(error, req),
+                       std::move(req.id));
   }
 }
 #endif // ENABLE_BITTORRENT

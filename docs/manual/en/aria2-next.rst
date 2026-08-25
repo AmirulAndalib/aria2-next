@@ -2319,6 +2319,39 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     >>> s.aria2.addTorrent(xmlrpc.client.Binary(open('file.torrent', mode='rb').read()))
     '2089b05ecca3d829'
 
+.. function:: aria2.inspectTorrent([secret], torrent)
+
+  This read-only method inspects a ".torrent" file without creating a
+  download.  For JSON-RPC, *torrent* must be a base64-encoded string containing
+  the file contents.  XML-RPC clients pass the contents as a binary value.
+
+  The result contains ``name``, ``mode``, ``infoHashV1``, ``infoHashV2``,
+  ``totalLength``, and ``files``.  ``mode`` is either ``single`` or ``multi``.
+  Each file contains a 1-based ``index``, its relative ``path``, and its
+  ``length``.  Lengths and indexes are decimal strings.  A missing protocol
+  hash is returned as an empty string.
+
+  Torrent parsing is performed entirely in memory by libtorrent.  The method
+  does not create a GID or request group, persist state, write payload or
+  metadata files, or start network activity.  Parse failures include a
+  structured ``data`` object with ``kind``, ``category``, and native ``code``
+  fields.  ``kind`` is ``invalidBase64``, ``torrentTooLarge``, or
+  ``invalidTorrent``.
+
+  **JSON-RPC Example**
+
+  ::
+
+    >>> import base64, json
+    >>> import urllib.request
+    >>> torrent = base64.b64encode(open('file.torrent', 'rb').read()).decode()
+    >>> jsonreq = json.dumps({'jsonrpc':'2.0', 'id':'inspect',
+    ...                       'method':'aria2.inspectTorrent',
+    ...                       'params':[torrent]})
+    >>> c = urllib.request.urlopen('http://localhost:6800/jsonrpc', jsonreq.encode())
+    >>> json.loads(c.read().decode())['result']['mode']
+    'multi'
+
 .. function:: aria2.addMetalink([secret], metalink[, options[, position]])
 
   This method adds a Metalink download by uploading a ".metalink" file.

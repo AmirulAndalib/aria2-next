@@ -213,6 +213,22 @@ size_t normalizeTrackerTiers(std::vector<BtTrackerSpec>& trackers,
 
 } // namespace
 
+std::shared_ptr<Exception> BtMetainfoError::copy() const
+{
+  return std::make_shared<BtMetainfoError>(*this);
+}
+
+BtMetainfoError::BtMetainfoError(const char* file, int line,
+                                 std::string message, std::string kind,
+                                 std::string category, int nativeCode)
+    : RecoverableException(file, line, std::move(message),
+                           error_code::BITTORRENT_PARSE_ERROR),
+      kind_(std::move(kind)),
+      category_(std::move(category)),
+      nativeCode_(nativeCode)
+{
+}
+
 BtDownload::BtDownload(std::unique_ptr<Impl> impl, Source source)
     : impl_(std::move(impl)), source_(source)
 {
@@ -247,15 +263,29 @@ std::shared_ptr<BtDownload>
 BtDownload::fromBuffer(const std::string& data,
                        const std::vector<std::string>& webSeeds)
 {
+  const lt::load_torrent_limits limits;
+  if (data.size() > static_cast<size_t>(limits.max_buffer_size)) {
+    const auto error =
+        lt::errors::make_error_code(lt::errors::metadata_too_large);
+    throw BtMetainfoError(__FILE__, __LINE__, error.message(),
+                          "torrentTooLarge", error.category().name(),
+                          error.value());
+  }
   lt::error_code error;
   auto params = lt::load_torrent_buffer(
       {data.data(), static_cast<lt::span<char const>::index_type>(data.size())},
-      error, {});
+      error, limits);
   if (error) {
-    throw DL_ABORT_EX("Unable to decode torrent data: " + error.message());
+    throw BtMetainfoError(__FILE__, __LINE__, error.message(), "invalidTorrent",
+                          error.category().name(), error.value());
   }
   return std::shared_ptr<BtDownload>(
       new BtDownload(makeImpl(std::move(params), webSeeds), Source::Metainfo));
+}
+
+size_t BtDownload::maxMetainfoSize()
+{
+  return static_cast<size_t>(lt::load_torrent_limits{}.max_buffer_size);
 }
 
 std::shared_ptr<BtDownload> BtDownload::fromMagnet(const std::string& uri)
@@ -267,6 +297,31 @@ std::shared_ptr<BtDownload> BtDownload::fromMagnet(const std::string& uri)
   }
   return std::shared_ptr<BtDownload>(
       new BtDownload(makeImpl(std::move(params), {}), Source::Magnet));
+}
+
+BtMetainfo BtDownload::metainfo() const
+{
+  if (!impl_->params.ti) {
+    throw BtMetainfoError(__FILE__, __LINE__, "Torrent metadata is missing.",
+                          "invalidTorrent", "aria2", 0);
+  }
+
+  const auto& info = *impl_->params.ti;
+  const auto& layout = info.layout();
+  BtMetainfo result;
+  result.name = info.name();
+  result.mode = layout.num_files() > 1 ? BtMetainfo::Mode::Multi
+                                       : BtMetainfo::Mode::Single;
+  result.infoHashV1 = snapshot_.infoHashV1;
+  result.infoHashV2 = snapshot_.infoHashV2;
+  result.totalLength = info.total_size();
+  result.files.reserve(static_cast<size_t>(layout.num_files()));
+  size_t rpcIndex = 1;
+  for (lt::file_index_t index{0}; index < layout.end_file(); ++index) {
+    result.files.push_back(
+        {rpcIndex++, layout.file_path(index), layout.file_size(index)});
+  }
+  return result;
 }
 
 void BtDownload::configure(const Option* option)
