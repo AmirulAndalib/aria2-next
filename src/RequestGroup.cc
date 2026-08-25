@@ -69,8 +69,9 @@
 #include "SeedCheckCommand.h"
 #include "SeedCriteria.h"
 #include "ShareRatioSeedCriteria.h"
-#include "TimeSeedCriteria.h"
+#include "Ed2kSharingTimeSeedCriteria.h"
 #include "UnionSeedCriteria.h"
+#include "wallclock.h"
 #include "MemoryBufferPreDownloadHandler.h"
 #include "DownloadHandlerConstants.h"
 #include "Option.h"
@@ -139,13 +140,14 @@ bool validateCompleteEd2kFile(PieceStorage* pieceStorage,
 std::unique_ptr<SeedCriteria>
 createEd2kSeedCriteria(const std::shared_ptr<Option>& option,
                        const std::shared_ptr<DownloadContext>& dctx,
-                       const std::shared_ptr<PieceStorage>& pieceStorage)
+                       const std::shared_ptr<PieceStorage>& pieceStorage,
+                       RequestGroup* group)
 {
   auto unionCri = make_unique<UnionSeedCriteria>();
   if (option->defined(PREF_SEED_TIME)) {
-    unionCri->addSeedCriteria(
-        make_unique<TimeSeedCriteria>(std::chrono::seconds(
-            static_cast<int>(option->getAsDouble(PREF_SEED_TIME) * 60))));
+    unionCri->addSeedCriteria(make_unique<Ed2kSharingTimeSeedCriteria>(
+        group, std::chrono::seconds(static_cast<int64_t>(
+                   option->getAsDouble(PREF_SEED_TIME) * 60))));
   }
   const auto ratio = option->getAsDouble(PREF_SEED_RATIO);
   if (ratio > 0.0) {
@@ -345,8 +347,8 @@ void RequestGroup::createInitialCommand(
     if (!e->isEd2kUdpActive()) {
       commands.push_back(make_unique<Ed2kKadCommand>(e->newCUID(), this, e));
     }
-    if (auto seedCriteria =
-            createEd2kSeedCriteria(option_, downloadContext_, pieceStorage_)) {
+    if (auto seedCriteria = createEd2kSeedCriteria(option_, downloadContext_,
+                                                   pieceStorage_, this)) {
       auto seedCheck = make_unique<SeedCheckCommand>(e->newCUID(), this, e,
                                                      std::move(seedCriteria));
       seedCheck->setPieceStorage(pieceStorage_);
@@ -708,6 +710,7 @@ void RequestGroup::setHaltRequested(bool f, HaltReason haltReason)
       requestGroupMan_->requestQueueCheck();
     }
   }
+  synchronizeEd2kSharingTime();
 }
 
 void RequestGroup::setForceHaltRequested(bool f, HaltReason haltReason)
@@ -716,15 +719,46 @@ void RequestGroup::setForceHaltRequested(bool f, HaltReason haltReason)
   forceHaltRequested_ = f;
 }
 
-void RequestGroup::setPauseRequested(bool f) { pauseRequested_ = f; }
+void RequestGroup::setPauseRequested(bool f)
+{
+  pauseRequested_ = f;
+  synchronizeEd2kSharingTime();
+}
+
+void RequestGroup::setState(int state)
+{
+  state_ = state;
+  synchronizeEd2kSharingTime();
+}
+
+void RequestGroup::synchronizeEd2kSharingTime()
+{
+  auto attrs = getEd2kAttrs(downloadContext_);
+  if (!attrs) {
+    return;
+  }
+  const auto active = state_ == STATE_ACTIVE && !haltRequested_ &&
+                      !pauseRequested_ && downloadFinished();
+  attrs->sharingTime.synchronize(active, global::wallclock());
+}
+
+int64_t RequestGroup::getEd2kSharingTime()
+{
+  auto attrs = getEd2kAttrs(downloadContext_);
+  if (!attrs) {
+    return 0;
+  }
+  synchronizeEd2kSharingTime();
+  return attrs->sharingTime.seconds(global::wallclock());
+}
 
 void RequestGroup::setRestartRequested(bool f) { restartRequested_ = f; }
 
 void RequestGroup::releaseRuntimeResource(DownloadEngine* e)
 {
   if (curlDownload_ && !curlDownload_->stopped()) {
-    e->getCurlSession()->stop(
-        curlDownload_, isPauseRequested() || isShutdownRequested());
+    e->getCurlSession()->stop(curlDownload_,
+                              isPauseRequested() || isShutdownRequested());
   }
   if (pieceStorage_) {
     pieceStorage_->removeAdvertisedPiece(Timer::zero());
@@ -1000,6 +1034,7 @@ bool RequestGroup::p2pInvolved() const
 
 void RequestGroup::enableSeedOnly()
 {
+  synchronizeEd2kSharingTime();
   if (seedOnly_ || !option_->getAsBool(PREF_DETACH_SHARE_ONLY)) {
     return;
   }

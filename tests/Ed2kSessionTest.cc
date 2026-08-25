@@ -16,6 +16,7 @@
 #include "download_helper.h"
 #include "ed2k_constants.h"
 #include "ed2k_hash.h"
+#include "wallclock.h"
 
 namespace aria2 {
 
@@ -26,9 +27,9 @@ namespace {
 std::shared_ptr<RequestGroup> createEd2kGroup(const std::string& clientHash)
 {
   auto group = std::make_shared<RequestGroup>(GroupId::create(),
-                                               std::make_shared<Option>());
+                                              std::make_shared<Option>());
   auto context = std::make_shared<DownloadContext>(PIECE_LENGTH, 1,
-                                                    A2_TEST_OUT_DIR "/state");
+                                                   A2_TEST_OUT_DIR "/state");
   auto attrs = std::make_shared<Ed2kAttribute>();
   attrs->link.hash = std::string(HASH_LENGTH, '\x71');
   attrs->link.size = 1;
@@ -128,7 +129,8 @@ void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
     REQUIRE_EQ(std::string("203.0.113.20"),
                attrs->peerStates.front().endpoint.host);
     REQUIRE_EQ((uint16_t)4662, attrs->peerStates.front().endpoint.port);
-    REQUIRE((attrs->peerStates.front().sourceFlags & PEER_SOURCE_PERSISTED) != 0);
+    REQUIRE((attrs->peerStates.front().sourceFlags & PEER_SOURCE_PERSISTED) !=
+            0);
     REQUIRE_EQ((size_t)1, queue.credits().list().size());
     REQUIRE_EQ(peerHash, queue.credits().list().front().userHash);
     REQUIRE_EQ((uint64_t)1234, queue.credits().list().front().uploaded);
@@ -140,15 +142,15 @@ void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
 
 void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
 {
+  global::wallclock().reset(24_h);
   const std::string database = A2_TEST_OUT_DIR "/ed2k-progress.db";
   const std::string output = A2_TEST_OUT_DIR "/ed2k-progress.bin";
   File(database).remove();
   File(output).remove();
   File(output + ".aria2").remove();
 
-  const std::string uri =
-      "ed2k://|file|ed2k-progress.bin|10000000|"
-      "0123456789abcdef0123456789abcdef|/";
+  const std::string uri = "ed2k://|file|ed2k-progress.bin|10000000|"
+                          "0123456789abcdef0123456789abcdef|/";
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, A2_TEST_OUT_DIR);
   option->put(PREF_OUT, "ed2k-progress.bin");
@@ -162,7 +164,10 @@ void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
   storage->getDiskAdaptor()->writeData(&zero, 1, 9999999);
   storage->getDiskAdaptor()->closeFile();
   storage->markAllPiecesDone();
+  group->setState(RequestGroup::STATE_ACTIVE);
+  global::wallclock().advance(7_s);
   group->setPauseRequested(true);
+  REQUIRE_EQ((int64_t)7, group->getEd2kSharingTime());
 
   {
     UploadQueue queue;
@@ -188,8 +193,14 @@ void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
     REQUIRE_EQ((int64_t)10000000, restored->getTotalLength());
     REQUIRE_EQ((int64_t)10000000, restored->getCompletedLength());
     REQUIRE(restored->isSeeder());
+    REQUIRE_EQ((int64_t)7, restored->getEd2kSharingTime());
 
+    global::wallclock().advance(5_s);
+    REQUIRE_EQ((int64_t)7, restored->getEd2kSharingTime());
     restored->setPauseRequested(false);
+    restored->setState(RequestGroup::STATE_ACTIVE);
+    global::wallclock().advance(3_s);
+    REQUIRE_EQ((int64_t)10, restored->getEd2kSharingTime());
     REQUIRE(session.checkpointDownload(restored.get()));
   }
 
@@ -202,6 +213,10 @@ void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
     auto restored = restoredGroups.front();
     REQUIRE(!restored->isPauseRequested());
     REQUIRE(restored->isSeeder());
+    REQUIRE_EQ((int64_t)10, restored->getEd2kSharingTime());
+    restored->setState(RequestGroup::STATE_ACTIVE);
+    global::wallclock().advance(2_s);
+    REQUIRE_EQ((int64_t)12, restored->getEd2kSharingTime());
     REQUIRE(session.discardDownload(restored.get()));
   }
 
@@ -214,6 +229,7 @@ void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
   }
   File(database).remove();
   File(output).remove();
+  global::wallclock().reset();
 }
 
 void Ed2kSessionTest::testSelectsAlternativeDownloadForPeer()
@@ -231,9 +247,9 @@ void Ed2kSessionTest::testSelectsAlternativeDownloadForPeer()
   peer.port = 4662;
   REQUIRE(addEd2kPeer(getEd2kAttrs(alternative->getDownloadContext()), peer,
                       PEER_SOURCE_EXCHANGE));
-  REQUIRE(updateEd2kPeerPartStatus(
-      getEd2kAttrs(alternative->getDownloadContext()), peer,
-      std::vector<bool>{true}));
+  REQUIRE(
+      updateEd2kPeerPartStatus(getEd2kAttrs(alternative->getDownloadContext()),
+                               peer, std::vector<bool>{true}));
 
   UploadQueue queue;
   Ed2kSession session(&queue, "");

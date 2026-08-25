@@ -130,6 +130,8 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kPeerTransfer.h
   src/Ed2kSession.cc
   src/Ed2kSession.h
+  src/Ed2kSharingTimeSeedCriteria.cc
+  src/Ed2kSharingTimeSeedCriteria.h
   src/Ed2kStore.cc
   src/Ed2kStore.h
   src/Ed2kShareIndex.cc
@@ -392,8 +394,6 @@ set(ARIA2_SOURCES_BASE
   src/TimeA2.h
   src/TimeBasedCommand.cc
   src/TimeBasedCommand.h
-  src/TimeSeedCriteria.cc
-  src/TimeSeedCriteria.h
   src/TimedHaltCommand.cc
   src/TimedHaltCommand.h
   src/TimerA2.cc

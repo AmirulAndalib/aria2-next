@@ -894,7 +894,8 @@ size_t countEd2kCallbackWaitingPeers(const Ed2kAttribute* attrs)
 }
 
 std::unique_ptr<Dict> createEd2kStatusEntry(const Ed2kAttribute* attrs,
-                                            RequestGroupMan* rgman)
+                                            RequestGroupMan* rgman,
+                                            int64_t sharingTime)
 {
   auto dict = Dict::g();
   if (!attrs->link.hash.empty()) {
@@ -940,6 +941,7 @@ std::unique_ptr<Dict> createEd2kStatusEntry(const Ed2kAttribute* attrs,
   dict->put("searchMoreResults",
             attrs->searchMoreResults ? Bool::gTrue() : Bool::gFalse());
   dict->put("searchResultCount", util::uitos(attrs->searchResults.size()));
+  dict->put("sharingTime", util::itos(sharingTime));
   if (rgman && rgman->getEd2kUploadQueue()) {
     auto uploadQueue = rgman->getEd2kUploadQueue();
     dict->put("uploadingPeerCount", util::uitos(uploadQueue->uploadingCount()));
@@ -1057,7 +1059,8 @@ void gatherProgressCommon(Dict* entryDict,
     if (dctx->hasAttribute(CTX_ATTR_ED2K)) {
       auto attrs = getEd2kAttrs(dctx);
       entryDict->put(KEY_ED2K,
-                     createEd2kStatusEntry(attrs, group->getRequestGroupMan()));
+                     createEd2kStatusEntry(attrs, group->getRequestGroupMan(),
+                                           group->getEd2kSharingTime()));
     }
   }
 }
@@ -1395,12 +1398,11 @@ std::unique_ptr<ValueBase> GetFilesRpcMethod::process(const RpcRequest& req,
                           dctx->getFirstFileEntry());
     }
     else {
-      createFileEntry(
-          files.get(),
-          std::begin(group->getDownloadContext()->getFileEntries()),
-          std::end(group->getDownloadContext()->getFileEntries()),
-          dctx->getTotalLength(), dctx->getPieceLength(),
-          group->getPieceStorage());
+      createFileEntry(files.get(),
+                      std::begin(group->getDownloadContext()->getFileEntries()),
+                      std::end(group->getDownloadContext()->getFileEntries()),
+                      dctx->getTotalLength(), dctx->getPieceLength(),
+                      group->getPieceStorage());
     }
   }
   return std::move(files);

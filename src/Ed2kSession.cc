@@ -64,9 +64,8 @@ Ed2kSession::~Ed2kSession()
 
 void Ed2kSession::registerDownload(RequestGroup* group)
 {
-  if (!group ||
-      std::find(downloads_.begin(), downloads_.end(), group) !=
-          downloads_.end()) {
+  if (!group || std::find(downloads_.begin(), downloads_.end(), group) !=
+                    downloads_.end()) {
     return;
   }
   auto attrs = getEd2kAttrs(group->getDownloadContext());
@@ -157,8 +156,8 @@ RequestGroup* Ed2kSession::networkDownload() const
 void Ed2kSession::synchronizeNetworkState()
 {
   auto primary = networkDownload();
-  auto primaryAttrs = primary ? getEd2kAttrs(primary->getDownloadContext())
-                              : nullptr;
+  auto primaryAttrs =
+      primary ? getEd2kAttrs(primary->getDownloadContext()) : nullptr;
   if (!primaryAttrs) {
     return;
   }
@@ -227,12 +226,11 @@ void Ed2kSession::captureNetworkState(RequestGroup* group)
       break;
     }
   }
-  auto existing = std::find_if(
-      fileSources_.begin(), fileSources_.end(),
-      [&](const PersistedFileSources& item) {
-        return item.fileHash == persisted.fileHash &&
-               item.fileSize == persisted.fileSize;
-      });
+  auto existing = std::find_if(fileSources_.begin(), fileSources_.end(),
+                               [&](const PersistedFileSources& item) {
+                                 return item.fileHash == persisted.fileHash &&
+                                        item.fileSize == persisted.fileSize;
+                               });
   if (existing == fileSources_.end()) {
     fileSources_.push_back(std::move(persisted));
   }
@@ -262,31 +260,29 @@ void Ed2kSession::applyPersistedState(RequestGroup* group)
     state.connecting = false;
     state.connected = false;
     state.handshakeCompleted = false;
-    auto existing = std::find_if(
-        attrs->serverStates.begin(), attrs->serverStates.end(),
-        [&](const ServerState& item) {
-          return item.endpoint.host == state.endpoint.host &&
-                 item.endpoint.port == state.endpoint.port;
-        });
+    auto existing =
+        std::find_if(attrs->serverStates.begin(), attrs->serverStates.end(),
+                     [&](const ServerState& item) {
+                       return item.endpoint.host == state.endpoint.host &&
+                              item.endpoint.port == state.endpoint.port;
+                     });
     if (existing == attrs->serverStates.end()) {
       attrs->serverStates.push_back(state);
     }
-    auto endpoint = std::find_if(
-        attrs->servers.begin(), attrs->servers.end(),
-        [&](const Endpoint& item) {
-          return item.host == state.endpoint.host &&
-                 item.port == state.endpoint.port;
-        });
+    auto endpoint = std::find_if(attrs->servers.begin(), attrs->servers.end(),
+                                 [&](const Endpoint& item) {
+                                   return item.host == state.endpoint.host &&
+                                          item.port == state.endpoint.port;
+                                 });
     if (endpoint == attrs->servers.end()) {
       attrs->servers.push_back(state.endpoint);
     }
   }
-  auto persisted = std::find_if(
-      fileSources_.begin(), fileSources_.end(),
-      [&](const PersistedFileSources& item) {
-        return item.fileHash == attrs->link.hash &&
-               item.fileSize == attrs->link.size;
-      });
+  auto persisted = std::find_if(fileSources_.begin(), fileSources_.end(),
+                                [&](const PersistedFileSources& item) {
+                                  return item.fileHash == attrs->link.hash &&
+                                         item.fileSize == attrs->link.size;
+                                });
   if (persisted != fileSources_.end()) {
     for (const auto& source : persisted->sources) {
       addEd2kPeer(attrs, source, PEER_SOURCE_PERSISTED);
@@ -332,8 +328,9 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
   if (hasPersistedProgress &&
       (contentSize <= 0 || contentSize > state.fileSize ||
        (state.complete && contentSize != state.fileSize))) {
-    A2_LOG_WARN(fmt("Ignored ED2K progress without matching payload for GID %s.",
-                    state.gid.c_str()));
+    A2_LOG_WARN(
+        fmt("Ignored ED2K progress without matching payload for GID %s.",
+            state.gid.c_str()));
     return false;
   }
 
@@ -370,6 +367,7 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
     return false;
   }
   storage->addInFlightPiece(pieces);
+  attrs->sharingTime.restore(state.sharingTime);
   A2_LOG_DEBUG(fmt("Loaded ED2K download state for GID %s from %s.",
                    state.gid.c_str(), databasePath_.c_str()));
   return true;
@@ -400,9 +398,9 @@ bool Ed2kSession::checkpointDownload(RequestGroup* group)
   }
   state.paused = group->isPauseRequested();
   state.complete = group->downloadFinished();
-  state.bitfield.assign(
-      reinterpret_cast<const char*>(storage->getBitfield()),
-      storage->getBitfieldLength());
+  state.sharingTime = group->getEd2kSharingTime();
+  state.bitfield.assign(reinterpret_cast<const char*>(storage->getBitfield()),
+                        storage->getBitfieldLength());
 
   std::vector<std::shared_ptr<Piece>> pieces;
   storage->getInFlightPieces(pieces);
@@ -468,8 +466,9 @@ size_t Ed2kSession::restoreDownloads(
       auto group = createEd2kFileRequestGroup(state.link, taskOption);
       group->initPieceStorage();
       if (!loadDownloadState(group.get())) {
-        A2_LOG_WARN(fmt("Restored ED2K task without persisted progress for GID %s.",
-                        state.gid.c_str()));
+        A2_LOG_WARN(
+            fmt("Restored ED2K task without persisted progress for GID %s.",
+                state.gid.c_str()));
       }
       requestGroups.push_back(std::move(group));
       ++restored;
@@ -486,8 +485,8 @@ size_t Ed2kSession::restoreDownloads(
   return restored;
 }
 
-RequestGroup* Ed2kSession::findAlternativeDownload(
-    RequestGroup* current, const Endpoint& peer) const
+RequestGroup* Ed2kSession::findAlternativeDownload(RequestGroup* current,
+                                                   const Endpoint& peer) const
 {
   RequestGroup* selected = nullptr;
   size_t selectedSourceCount = std::numeric_limits<size_t>::max();
@@ -530,8 +529,7 @@ void Ed2kSession::restoreRuntime()
   std::vector<PersistedFileSources> fileSources;
   std::vector<PeerCreditState> credits;
   if (!store_->loadIdentity(clientHash, kadState) ||
-      !store_->loadServers(servers) ||
-      !store_->loadFileSources(fileSources) ||
+      !store_->loadServers(servers) || !store_->loadFileSources(fileSources) ||
       !store_->loadCredits(credits)) {
     A2_LOG_ERROR(fmt("Failed to load ED2K database state from %s.",
                      databasePath_.c_str()));
@@ -553,8 +551,8 @@ void Ed2kSession::restoreRuntime()
   if (uploadQueue_) {
     uploadQueue_->credits().restore(credits);
   }
-  A2_LOG_DEBUG(fmt("Loaded ED2K runtime state from %s.",
-                   databasePath_.c_str()));
+  A2_LOG_DEBUG(
+      fmt("Loaded ED2K runtime state from %s.", databasePath_.c_str()));
 }
 
 void Ed2kSession::checkpointRuntime()
@@ -562,19 +560,18 @@ void Ed2kSession::checkpointRuntime()
   if (!store_ || !store_->available() || clientHash_.size() != HASH_LENGTH) {
     return;
   }
-  const auto kadState =
-      hasKadSnapshot_ ? createKadRoutingStatePayload(kadSnapshot_)
-                      : std::string();
+  const auto kadState = hasKadSnapshot_
+                            ? createKadRoutingStatePayload(kadSnapshot_)
+                            : std::string();
   const auto credits = uploadQueue_ ? uploadQueue_->credits().list()
                                     : std::vector<PeerCreditState>();
   if (!store_->saveRuntime(clientHash_, kadState, serverStates_, fileSources_,
                            credits)) {
-    A2_LOG_ERROR(fmt("Failed to save ED2K runtime state to %s.",
-                     databasePath_.c_str()));
+    A2_LOG_ERROR(
+        fmt("Failed to save ED2K runtime state to %s.", databasePath_.c_str()));
   }
   else {
-    A2_LOG_DEBUG(fmt("Saved ED2K runtime state to %s.",
-                     databasePath_.c_str()));
+    A2_LOG_DEBUG(fmt("Saved ED2K runtime state to %s.", databasePath_.c_str()));
   }
 }
 

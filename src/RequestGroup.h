@@ -501,7 +501,10 @@ public:
 
   int getState() const { return state_; }
 
-  void setState(int state) { state_ = state; }
+  void setState(int state);
+
+  void synchronizeEd2kSharingTime();
+  int64_t getEd2kSharingTime();
 
   bool isSeedOnlyEnabled() { return seedOnly_; }
 

@@ -49,6 +49,7 @@ struct PersistedDownloadState {
   std::string link;
   std::string path;
   int64_t modifiedTime = 0;
+  int64_t sharingTime = 0;
   bool paused = false;
   bool complete = false;
   std::string bitfield;
@@ -68,8 +69,7 @@ public:
   const std::string& path() const { return path_; }
 
   bool loadIdentity(std::string& clientHash, std::string& kadState) const;
-  bool saveIdentity(const std::string& clientHash,
-                    const std::string& kadState);
+  bool saveIdentity(const std::string& clientHash, const std::string& kadState);
 
   bool loadServers(std::vector<ServerState>& servers) const;
   bool replaceServers(const std::vector<ServerState>& servers);
@@ -80,8 +80,7 @@ public:
   bool loadFileSources(std::vector<PersistedFileSources>& files) const;
   bool replaceFileSources(const std::vector<PersistedFileSources>& files);
 
-  bool saveRuntime(const std::string& clientHash,
-                   const std::string& kadState,
+  bool saveRuntime(const std::string& clientHash, const std::string& kadState,
                    const std::vector<ServerState>& servers,
                    const std::vector<PersistedFileSources>& files,
                    const std::vector<PeerCreditState>& credits);

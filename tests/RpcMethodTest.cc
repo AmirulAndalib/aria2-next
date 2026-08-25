@@ -1154,6 +1154,7 @@ void RpcMethodTest::testGatherProgressEd2kStatus()
   attrs->searchActive = true;
   attrs->searchMoreResults = true;
   attrs->searchResults.resize(2);
+  attrs->sharingTime.restore(23);
   attrs->pieceHashes.push_back(std::string(ed2k::HASH_LENGTH, '\x11'));
   attrs->aichRootHash = std::string(ed2k::AICH_HASH_LENGTH, '\x22');
 
@@ -1247,6 +1248,7 @@ void RpcMethodTest::testGatherProgressEd2kStatus()
   REQUIRE_EQ(std::string("1"), getString(ed2kStatus, "kadRouterCount"));
   REQUIRE(!downcast<Bool>(ed2kStatus->get("kadFirewalled"))->val());
   REQUIRE_EQ(std::string("2"), getString(ed2kStatus, "searchResultCount"));
+  REQUIRE_EQ(std::string("23"), getString(ed2kStatus, "sharingTime"));
   REQUIRE(downcast<Bool>(ed2kStatus->get("searchActive"))->val());
   REQUIRE(downcast<Bool>(ed2kStatus->get("searchMoreResults"))->val());
   REQUIRE_EQ(std::string("0"), getString(ed2kStatus, "uploadingPeerCount"));

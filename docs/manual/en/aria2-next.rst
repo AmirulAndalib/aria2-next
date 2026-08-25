@@ -545,7 +545,9 @@ P2P Sharing Options
 .. option:: --seed-time=<MINUTES>
 
   Specify sharing time in (fractional) minutes. Also see the
-  :option:`--seed-ratio` option.
+  :option:`--seed-ratio` option. ED2K sharing time is accumulated only while
+  the completed task is active, persists in ``ed2k/state.db``, and continues
+  across pauses and restarts.
 
   .. note::
 
@@ -2721,6 +2723,11 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
     ``searchResultCount``
       Number of accumulated ED2K search results.
+
+    ``sharingTime``
+      Total whole seconds for which this completed ED2K task has actively
+      remained available for sharing. The value persists across pauses and
+      restarts.
 
     ``uploadingPeerCount``
       Number of ED2K peers currently occupying upload slots.

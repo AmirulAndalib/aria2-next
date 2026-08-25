@@ -15,6 +15,7 @@
 
 #include "ContextAttribute.h"
 #include "Ed2kKadState.h"
+#include "TimerA2.h"
 #include "ed2k_aich.h"
 #include "ed2k_kad_search.h"
 #include "ed2k_link.h"
@@ -38,6 +39,18 @@ class DownloadContext;
 struct Ed2kAichHashVote {
   std::string rootHash;
   std::vector<std::string> voters;
+};
+
+class Ed2kSharingTime {
+public:
+  void restore(int64_t seconds);
+  void synchronize(bool active, const Timer& now);
+  int64_t seconds(const Timer& now) const;
+
+private:
+  int64_t accumulatedSeconds_ = 0;
+  Timer startedAt_ = Timer::zero();
+  bool active_ = false;
 };
 
 struct Ed2kAttribute : public ContextAttribute {
@@ -72,6 +85,7 @@ struct Ed2kAttribute : public ContextAttribute {
   size_t nextServerIndex = 0;
   bool searchActive = false;
   bool searchMoreResults = false;
+  Ed2kSharingTime sharingTime;
 };
 
 Ed2kAttribute* getEd2kAttrs(DownloadContext* dctx);
@@ -98,41 +112,37 @@ std::string normalizeEd2kClientHash(std::string clientHash);
 std::string createEd2kClientHash();
 uint32_t createEd2kKadUdpVerifyKey();
 bool markEd2kPeerQueued(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-                        uint16_t rank,
-                        const std::vector<bool>& partStatus);
-bool markEd2kPeerUdpReaskSent(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer, int64_t now);
-bool markEd2kPeerUdpReaskAck(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& peer, uint16_t rank,
-                             const std::vector<bool>& partStatus,
+                        uint16_t rank, const std::vector<bool>& partStatus);
+bool markEd2kPeerUdpReaskSent(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                              int64_t now);
+bool markEd2kPeerUdpReaskAck(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                             uint16_t rank, const std::vector<bool>& partStatus,
                              int64_t now);
 bool markEd2kPeerQueueFull(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                            int64_t now, int64_t baseRetrySeconds);
 bool markEd2kPeerConnecting(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
-bool markEd2kPeerDisconnected(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer);
+bool markEd2kPeerDisconnected(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
 bool markEd2kCallbackRequestSent(Ed2kAttribute* attrs, uint32_t clientId,
                                  int64_t now, int64_t timeoutSeconds);
 bool markEd2kCallbackAccepted(Ed2kAttribute* attrs, uint32_t clientId,
                               const ed2k::Endpoint& peer, int64_t now);
 bool markEd2kDirectCallbackAccepted(Ed2kAttribute* attrs,
-                                    const ed2k::Endpoint& peer,
-                                    int64_t now);
+                                    const ed2k::Endpoint& peer, int64_t now);
 bool markEd2kCallbackCompleted(Ed2kAttribute* attrs,
                                const ed2k::Endpoint& peer);
 bool markEd2kCallbackFailed(Ed2kAttribute* attrs, uint32_t clientId);
 bool markEd2kCallbackFailed(Ed2kAttribute* attrs, uint32_t clientId,
                             int64_t now, int64_t baseRetrySeconds);
 size_t expireEd2kCallbackWaits(Ed2kAttribute* attrs, int64_t now);
-bool updateEd2kPeerPartStatus(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer,
+bool updateEd2kPeerPartStatus(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                               const std::vector<bool>& partStatus);
-bool updateEd2kPeerRequestedParts(
-    Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-    const std::vector<ed2k::PartRange>& ranges);
-bool updateEd2kPeerRequestedParts(
-    Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-    const std::vector<ed2k::PartRange>& ranges, int64_t now);
+bool updateEd2kPeerRequestedParts(Ed2kAttribute* attrs,
+                                  const ed2k::Endpoint& peer,
+                                  const std::vector<ed2k::PartRange>& ranges);
+bool updateEd2kPeerRequestedParts(Ed2kAttribute* attrs,
+                                  const ed2k::Endpoint& peer,
+                                  const std::vector<ed2k::PartRange>& ranges,
+                                  int64_t now);
 bool markEd2kRequestedRanges(Ed2kAttribute* attrs,
                              const std::vector<ed2k::PartRange>& ranges);
 size_t removeEd2kPeerCompletedRequestedRange(Ed2kAttribute* attrs,
@@ -155,15 +165,13 @@ bool activelyReclaimEd2kStalledRequestedRange(
     Ed2kAttribute* attrs, const ed2k::Endpoint& requester,
     const std::vector<bool>& requesterPartStatus, int64_t now,
     ed2k::PartRange& reclaimed);
-bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs,
-                                   SegmentMan* segmentMan,
-                                   const ed2k::Endpoint& peer,
-                                   int64_t cuid, int64_t now,
-                                   int64_t timeoutSeconds,
+bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs, SegmentMan* segmentMan,
+                                   const ed2k::Endpoint& peer, int64_t cuid,
+                                   int64_t now, int64_t timeoutSeconds,
                                    int64_t baseRetrySeconds);
 bool markEd2kPeerAccepted(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
-bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs,
-                            const ed2k::Endpoint& peer, int64_t now);
+bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                            int64_t now);
 bool markEd2kPeerCancelled(Ed2kAttribute* attrs, const ed2k::Endpoint& peer);
 bool markEd2kPeerFailure(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                          int64_t now, int64_t baseRetrySeconds);
@@ -179,17 +187,14 @@ ed2k::ServerState* updateEd2kServerConnected(Ed2kAttribute* attrs,
 void updateEd2kServerIdChange(Ed2kAttribute* attrs,
                               const ed2k::Endpoint& server,
                               const ed2k::ServerIdChange& idChange);
-void updateEd2kServerStatus(Ed2kAttribute* attrs,
-                            const ed2k::Endpoint& server,
+void updateEd2kServerStatus(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                             const ed2k::ServerStatus& status);
 void updateEd2kServerUdpStatus(Ed2kAttribute* attrs,
                                const ed2k::Endpoint& server,
                                const ed2k::ServerStatus& status, int64_t now);
-void updateEd2kServerMessage(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& server,
+void updateEd2kServerMessage(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                              const std::string& message);
-void updateEd2kServerIdent(Ed2kAttribute* attrs,
-                           const ed2k::Endpoint& server,
+void updateEd2kServerIdent(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                            const ed2k::ServerIdent& ident);
 void updateEd2kServerSourceRequestTime(Ed2kAttribute* attrs,
                                        const ed2k::Endpoint& server,
@@ -205,16 +210,14 @@ void updateEd2kServerSourceResponse(Ed2kAttribute* attrs,
                                     size_t sourceCount, int64_t now);
 void markEd2kServerSourceRequestFinished(Ed2kAttribute* attrs,
                                          const ed2k::Endpoint& server);
-void updateEd2kServerFailure(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& server, int64_t now,
-                             int64_t baseRetrySeconds);
+void updateEd2kServerFailure(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
+                             int64_t now, int64_t baseRetrySeconds);
 size_t addEd2kSearchResults(Ed2kAttribute* attrs,
                             const std::vector<ed2k::SearchResultEntry>& entries,
                             bool moreResults);
 void schedulePendingEd2kServers(RequestGroup* requestGroup, DownloadEngine* e);
 void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
-                                RequestGroup* requestGroup,
-                                DownloadEngine* e);
+                                RequestGroup* requestGroup, DownloadEngine* e);
 void schedulePendingEd2kPeers(RequestGroup* requestGroup, DownloadEngine* e);
 void scheduleEd2kPeerCheck(RequestGroup* requestGroup, DownloadEngine* e);
 ed2k::KadRoutingSnapshot createEd2kKadSnapshot(const Ed2kAttribute* attrs);
@@ -227,8 +230,7 @@ size_t expireEd2kPeerUdpReasks(Ed2kAttribute* attrs, int64_t now,
 size_t promoteEd2kTcpReasks(Ed2kAttribute* attrs, int64_t now);
 bool consumeEd2kKadFirewallCheckHost(Ed2kAttribute* attrs,
                                      const std::string& host);
-ed2k::PeerState* selectDueEd2kUdpReaskPeer(Ed2kAttribute* attrs,
-                                           int64_t now);
+ed2k::PeerState* selectDueEd2kUdpReaskPeer(Ed2kAttribute* attrs, int64_t now);
 
 } // namespace aria2
 

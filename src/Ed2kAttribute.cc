@@ -37,6 +37,42 @@
 
 namespace aria2 {
 
+void Ed2kSharingTime::restore(int64_t seconds)
+{
+  accumulatedSeconds_ = std::max<int64_t>(0, seconds);
+  startedAt_ = Timer::zero();
+  active_ = false;
+}
+
+int64_t Ed2kSharingTime::seconds(const Timer& now) const
+{
+  if (!active_) {
+    return accumulatedSeconds_;
+  }
+  const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                           startedAt_.difference(now))
+                           .count();
+  if (elapsed >= std::numeric_limits<int64_t>::max() - accumulatedSeconds_) {
+    return std::numeric_limits<int64_t>::max();
+  }
+  return accumulatedSeconds_ + elapsed;
+}
+
+void Ed2kSharingTime::synchronize(bool active, const Timer& now)
+{
+  if (active == active_) {
+    return;
+  }
+  if (active) {
+    startedAt_ = now;
+    active_ = true;
+    return;
+  }
+  accumulatedSeconds_ = seconds(now);
+  startedAt_ = Timer::zero();
+  active_ = false;
+}
+
 namespace {
 class Ed2kPeerScheduleCommand : public Command {
 public:
@@ -49,7 +85,8 @@ public:
 
   bool execute() override
   {
-    if (!requestGroup_->downloadFinished() && !requestGroup_->isHaltRequested()) {
+    if (!requestGroup_->downloadFinished() &&
+        !requestGroup_->isHaltRequested()) {
       schedulePendingEd2kPeers(requestGroup_, e_);
     }
     return true;
@@ -109,11 +146,10 @@ bool addUniqueEndpoint(std::vector<ed2k::Endpoint>& endpoints,
   if (endpoint.host.empty() || endpoint.port == 0) {
     return false;
   }
-  auto i = std::find_if(endpoints.begin(), endpoints.end(),
-                        [&](const ed2k::Endpoint& item) {
-                          return item.host == endpoint.host &&
-                                 item.port == endpoint.port;
-                        });
+  auto i = std::find_if(
+      endpoints.begin(), endpoints.end(), [&](const ed2k::Endpoint& item) {
+        return item.host == endpoint.host && item.port == endpoint.port;
+      });
   if (i != endpoints.end()) {
     return false;
   }
@@ -126,8 +162,7 @@ bool sameEndpoint(const ed2k::Endpoint& lhs, const ed2k::Endpoint& rhs)
   return lhs.host == rhs.host && lhs.port == rhs.port;
 }
 
-bool invalidPeerEndpoint(const Ed2kAttribute* attrs,
-                         const ed2k::Endpoint& peer)
+bool invalidPeerEndpoint(const Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
 {
   if (!attrs || peer.host.empty() || peer.port == 0 ||
       (!peer.userHash.empty() && peer.userHash.size() != ed2k::HASH_LENGTH) ||
@@ -145,8 +180,7 @@ bool invalidPeerEndpoint(const Ed2kAttribute* attrs,
 bool canReceiveEd2kDirectCallback(const Ed2kAttribute* attrs,
                                   const ed2k::Endpoint& peer)
 {
-  if (!attrs ||
-      (peer.cryptOptions & ed2k::SOURCE_CRYPT_DIRECT_CALLBACK) == 0) {
+  if (!attrs || (peer.cryptOptions & ed2k::SOURCE_CRYPT_DIRECT_CALLBACK) == 0) {
     return false;
   }
   if (!attrs->kadFirewalled) {
@@ -222,21 +256,21 @@ bool addEd2kPeer(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
     return false;
   }
   if (!peer.userHash.empty()) {
-    auto identity = std::find_if(
-        attrs->peerStates.begin(), attrs->peerStates.end(),
-        [&](const ed2k::PeerState& state) {
-          return state.endpoint.userHash == peer.userHash;
-        });
+    auto identity =
+        std::find_if(attrs->peerStates.begin(), attrs->peerStates.end(),
+                     [&](const ed2k::PeerState& state) {
+                       return state.endpoint.userHash == peer.userHash;
+                     });
     if (identity != attrs->peerStates.end()) {
       identity->sourceFlags |= sourceFlag;
       identity->endpoint.cryptOptions |= peer.cryptOptions;
       if (!identity->connecting && !identity->accepted &&
           !sameEndpoint(identity->endpoint, peer)) {
-        auto endpoint = std::find_if(
-            attrs->peers.begin(), attrs->peers.end(),
-            [&](const ed2k::Endpoint& item) {
-              return sameEndpoint(item, identity->endpoint);
-            });
+        auto endpoint =
+            std::find_if(attrs->peers.begin(), attrs->peers.end(),
+                         [&](const ed2k::Endpoint& item) {
+                           return sameEndpoint(item, identity->endpoint);
+                         });
         if (endpoint != attrs->peers.end()) {
           *endpoint = peer;
         }
@@ -327,11 +361,9 @@ bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
       source.sourceType != 5 && source.sourceType != 6) {
     return false;
   }
-  const bool buddyCallback =
-      source.sourceType == 3 || source.sourceType == 5;
+  const bool buddyCallback = source.sourceType == 3 || source.sourceType == 5;
   const bool directCallback = source.sourceType == 6;
-  if (directCallback &&
-      !canReceiveEd2kDirectCallback(attrs, source.endpoint)) {
+  if (directCallback && !canReceiveEd2kDirectCallback(attrs, source.endpoint)) {
     return false;
   }
   const bool callbackOnly = buddyCallback || directCallback;
@@ -358,9 +390,9 @@ bool addEd2kKadSourcePeer(Ed2kAttribute* attrs,
       if (buddyCallback) {
         state->callbackBuddy.host = ed2k::ipv4FromEndpoint(source.buddyIp);
         state->callbackBuddy.port = source.buddyPort;
-        state->callbackBuddyId =
-            source.buddyId.empty() ? ed2k::ed2kHashToKadId(source.buddyHash)
-                                   : source.buddyId;
+        state->callbackBuddyId = source.buddyId.empty()
+                                     ? ed2k::ed2kHashToKadId(source.buddyHash)
+                                     : source.buddyId;
       }
       else {
         state->callbackBuddy = ed2k::Endpoint();
@@ -387,8 +419,7 @@ bool addEd2kFoundSource(Ed2kAttribute* attrs, const ed2k::FoundSource& source,
   if (!source.endpoint.userHash.empty() && state->endpoint.userHash.empty()) {
     state->endpoint.userHash = source.endpoint.userHash;
   }
-  if (source.endpoint.cryptOptions != 0 &&
-      state->endpoint.cryptOptions == 0) {
+  if (source.endpoint.cryptOptions != 0 && state->endpoint.cryptOptions == 0) {
     state->endpoint.cryptOptions = source.endpoint.cryptOptions;
   }
   state->sourceFlags |= sourceFlag;
@@ -481,8 +512,7 @@ ed2k::PeerState* getEd2kPeerState(Ed2kAttribute* attrs,
 }
 
 bool markEd2kPeerQueued(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-                        uint16_t rank,
-                        const std::vector<bool>& partStatus)
+                        uint16_t rank, const std::vector<bool>& partStatus)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
@@ -499,8 +529,8 @@ bool markEd2kPeerQueued(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
   return true;
 }
 
-bool markEd2kPeerUdpReaskSent(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer, int64_t now)
+bool markEd2kPeerUdpReaskSent(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                              int64_t now)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
@@ -512,9 +542,8 @@ bool markEd2kPeerUdpReaskSent(Ed2kAttribute* attrs,
   return true;
 }
 
-bool markEd2kPeerUdpReaskAck(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& peer, uint16_t rank,
-                             const std::vector<bool>& partStatus,
+bool markEd2kPeerUdpReaskAck(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
+                             uint16_t rank, const std::vector<bool>& partStatus,
                              int64_t now)
 {
   auto state = findEd2kPeerStateByEndpointOrUdp(attrs, peer);
@@ -570,8 +599,7 @@ bool markEd2kPeerConnecting(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
   return true;
 }
 
-bool markEd2kPeerDisconnected(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer)
+bool markEd2kPeerDisconnected(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
@@ -657,21 +685,20 @@ bool markEd2kCallbackAccepted(Ed2kAttribute* attrs, uint32_t clientId,
 }
 
 bool markEd2kDirectCallbackAccepted(Ed2kAttribute* attrs,
-                                    const ed2k::Endpoint& peer,
-                                    int64_t now)
+                                    const ed2k::Endpoint& peer, int64_t now)
 {
   if (!attrs || peer.host.empty() || peer.port == 0 ||
       peer.userHash.size() != ed2k::HASH_LENGTH) {
     return false;
   }
-  auto i = std::find_if(attrs->peerStates.begin(), attrs->peerStates.end(),
-                        [&](const ed2k::PeerState& state) {
-                          return state.callbackKind ==
-                                     ed2k::CallbackKind::DIRECT &&
-                                 state.endpoint.host == peer.host &&
-                                 state.endpoint.port == peer.port &&
-                                 state.endpoint.userHash == peer.userHash;
-                        });
+  auto i =
+      std::find_if(attrs->peerStates.begin(), attrs->peerStates.end(),
+                   [&](const ed2k::PeerState& state) {
+                     return state.callbackKind == ed2k::CallbackKind::DIRECT &&
+                            state.endpoint.host == peer.host &&
+                            state.endpoint.port == peer.port &&
+                            state.endpoint.userHash == peer.userHash;
+                   });
   if (i == attrs->peerStates.end()) {
     return false;
   }
@@ -696,8 +723,7 @@ bool markEd2kDirectCallbackAccepted(Ed2kAttribute* attrs,
   return true;
 }
 
-bool markEd2kCallbackCompleted(Ed2kAttribute* attrs,
-                               const ed2k::Endpoint& peer)
+bool markEd2kCallbackCompleted(Ed2kAttribute* attrs, const ed2k::Endpoint& peer)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
@@ -785,8 +811,7 @@ size_t expireEd2kCallbackWaits(Ed2kAttribute* attrs, int64_t now)
   return expired;
 }
 
-bool updateEd2kPeerPartStatus(Ed2kAttribute* attrs,
-                              const ed2k::Endpoint& peer,
+bool updateEd2kPeerPartStatus(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
                               const std::vector<bool>& partStatus)
 {
   auto state = getEd2kPeerState(attrs, peer);
@@ -797,16 +822,17 @@ bool updateEd2kPeerPartStatus(Ed2kAttribute* attrs,
   return true;
 }
 
-bool updateEd2kPeerRequestedParts(
-    Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-    const std::vector<ed2k::PartRange>& ranges)
+bool updateEd2kPeerRequestedParts(Ed2kAttribute* attrs,
+                                  const ed2k::Endpoint& peer,
+                                  const std::vector<ed2k::PartRange>& ranges)
 {
   return updateEd2kPeerRequestedParts(attrs, peer, ranges, 0);
 }
 
-bool updateEd2kPeerRequestedParts(
-    Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
-    const std::vector<ed2k::PartRange>& ranges, int64_t now)
+bool updateEd2kPeerRequestedParts(Ed2kAttribute* attrs,
+                                  const ed2k::Endpoint& peer,
+                                  const std::vector<ed2k::PartRange>& ranges,
+                                  int64_t now)
 {
   auto state = getEd2kPeerState(attrs, peer);
   if (!state) {
@@ -841,12 +867,11 @@ void releaseEd2kRequestedRanges(Ed2kAttribute* attrs,
     return;
   }
   for (const auto& range : ranges) {
-    auto i = std::find_if(attrs->requestedPartRanges.begin(),
-                          attrs->requestedPartRanges.end(),
-                          [&](const ed2k::PartRange& item) {
-                            return item.begin == range.begin &&
-                                   item.end == range.end;
-                          });
+    auto i = std::find_if(
+        attrs->requestedPartRanges.begin(), attrs->requestedPartRanges.end(),
+        [&](const ed2k::PartRange& item) {
+          return item.begin == range.begin && item.end == range.end;
+        });
     if (i != attrs->requestedPartRanges.end()) {
       attrs->requestedPartRanges.erase(i);
     }
@@ -892,12 +917,12 @@ size_t removeEd2kPeerCompletedRequestedRange(Ed2kAttribute* attrs,
     }
     ++updated;
   }
-  state->requestedParts.erase(
-      std::remove_if(state->requestedParts.begin(), state->requestedParts.end(),
-                     [](const ed2k::PartRange& range) {
-                       return range.end <= range.begin;
-                     }),
-      state->requestedParts.end());
+  state->requestedParts.erase(std::remove_if(state->requestedParts.begin(),
+                                             state->requestedParts.end(),
+                                             [](const ed2k::PartRange& range) {
+                                               return range.end <= range.begin;
+                                             }),
+                              state->requestedParts.end());
   releaseEd2kRequestedRanges(attrs, removedRanges);
   markEd2kRequestedRanges(attrs, addedRanges);
   if (updated != 0) {
@@ -934,9 +959,9 @@ bool reclaimEd2kStalledRequestedRange(
         state.requestedParts.empty() || state.cancelTransferSent) {
       continue;
     }
-    const auto lastProgress =
-        state.lastTransferProgressTime != 0 ? state.lastTransferProgressTime
-                                            : state.lastPartRequestTime;
+    const auto lastProgress = state.lastTransferProgressTime != 0
+                                  ? state.lastTransferProgressTime
+                                  : state.lastPartRequestTime;
     if (lastProgress == 0 || now - lastProgress < staleSeconds) {
       continue;
     }
@@ -949,13 +974,12 @@ bool reclaimEd2kStalledRequestedRange(
            !requesterPartStatus[pieceIndex])) {
         continue;
       }
-      if (requesterState &&
-          std::any_of(requesterState->requestedParts.begin(),
-                      requesterState->requestedParts.end(),
-                      [&](const ed2k::PartRange& existing) {
-                        return existing.begin < range->end &&
-                               range->begin < existing.end;
-                      })) {
+      if (requesterState && std::any_of(requesterState->requestedParts.begin(),
+                                        requesterState->requestedParts.end(),
+                                        [&](const ed2k::PartRange& existing) {
+                                          return existing.begin < range->end &&
+                                                 range->begin < existing.end;
+                                        })) {
         continue;
       }
       reclaimed = *range;
@@ -983,9 +1007,9 @@ bool canReclaimEd2kStalledRequestedRange(
         state.requestedParts.empty() || state.cancelTransferSent) {
       continue;
     }
-    const auto lastProgress =
-        state.lastTransferProgressTime != 0 ? state.lastTransferProgressTime
-                                            : state.lastPartRequestTime;
+    const auto lastProgress = state.lastTransferProgressTime != 0
+                                  ? state.lastTransferProgressTime
+                                  : state.lastPartRequestTime;
     if (lastProgress == 0 || now - lastProgress < staleSeconds) {
       continue;
     }
@@ -997,13 +1021,12 @@ bool canReclaimEd2kStalledRequestedRange(
            !requesterPartStatus[pieceIndex])) {
         continue;
       }
-      if (requesterState &&
-          std::any_of(requesterState->requestedParts.begin(),
-                      requesterState->requestedParts.end(),
-                      [&](const ed2k::PartRange& existing) {
-                        return existing.begin < range.end &&
-                               range.begin < existing.end;
-                      })) {
+      if (requesterState && std::any_of(requesterState->requestedParts.begin(),
+                                        requesterState->requestedParts.end(),
+                                        [&](const ed2k::PartRange& existing) {
+                                          return existing.begin < range.end &&
+                                                 range.begin < existing.end;
+                                        })) {
         continue;
       }
       return true;
@@ -1022,11 +1045,9 @@ bool activelyReclaimEd2kStalledRequestedRange(
       ed2k::ACTIVE_ENDGAME_RECLAIM_STALL_SECONDS, reclaimed);
 }
 
-bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs,
-                                   SegmentMan* segmentMan,
-                                   const ed2k::Endpoint& peer,
-                                   int64_t cuid, int64_t now,
-                                   int64_t timeoutSeconds,
+bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs, SegmentMan* segmentMan,
+                                   const ed2k::Endpoint& peer, int64_t cuid,
+                                   int64_t now, int64_t timeoutSeconds,
                                    int64_t baseRetrySeconds)
 {
   auto state = getEd2kPeerState(attrs, peer);
@@ -1034,9 +1055,9 @@ bool expireEd2kStalledPeerTransfer(Ed2kAttribute* attrs,
       state->requestedParts.empty()) {
     return false;
   }
-  const auto lastProgress =
-      state->lastTransferProgressTime != 0 ? state->lastTransferProgressTime
-                                           : state->lastPartRequestTime;
+  const auto lastProgress = state->lastTransferProgressTime != 0
+                                ? state->lastTransferProgressTime
+                                : state->lastPartRequestTime;
   if (lastProgress == 0 || now - lastProgress < timeoutSeconds) {
     return false;
   }
@@ -1081,8 +1102,7 @@ bool markEd2kPeerOutOfParts(Ed2kAttribute* attrs, const ed2k::Endpoint& peer,
     return false;
   }
   state->outOfParts = true;
-  state->nextPartStatusRecheckTime =
-      now + ed2k::PEER_UDP_REASK_INTERVAL;
+  state->nextPartStatusRecheckTime = now + ed2k::PEER_UDP_REASK_INTERVAL;
   state->nextUdpReaskTime = state->nextPartStatusRecheckTime;
   state->connecting = false;
   state->accepted = false;
@@ -1152,8 +1172,7 @@ size_t expireEd2kDeadSources(Ed2kAttribute* attrs, int64_t now)
       state.nextPartStatusRecheckTime = 0;
       ++expired;
     }
-    if (!state.dead || state.nextRetryTime == 0 ||
-        state.nextRetryTime > now) {
+    if (!state.dead || state.nextRetryTime == 0 || state.nextRetryTime > now) {
       continue;
     }
     state.dead = false;
@@ -1235,8 +1254,7 @@ ed2k::PeerState* selectDueEd2kUdpReaskPeer(Ed2kAttribute* attrs, int64_t now)
   for (auto& state : attrs->peerStates) {
     if (!state.queued || state.dead || state.noFile || state.cancelled ||
         state.outOfParts || state.accepted || state.connecting ||
-        state.udpReaskPending || state.udpPort == 0 ||
-        state.udpVersion == 0) {
+        state.udpReaskPending || state.udpPort == 0 || state.udpVersion == 0) {
       continue;
     }
     if (state.nextUdpReaskTime != 0 && state.nextUdpReaskTime > now) {
@@ -1319,8 +1337,7 @@ void updateEd2kServerIdChange(Ed2kAttribute* attrs,
   state->nextRetryTime = 0;
 }
 
-void updateEd2kServerStatus(Ed2kAttribute* attrs,
-                            const ed2k::Endpoint& server,
+void updateEd2kServerStatus(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                             const ed2k::ServerStatus& status)
 {
   auto state = getEd2kServerState(attrs, server);
@@ -1353,8 +1370,7 @@ void updateEd2kServerUdpStatus(Ed2kAttribute* attrs,
   state->lastUdpStatusTime = now;
 }
 
-void updateEd2kServerMessage(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& server,
+void updateEd2kServerMessage(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                              const std::string& message)
 {
   auto state = getEd2kServerState(attrs, server);
@@ -1364,8 +1380,7 @@ void updateEd2kServerMessage(Ed2kAttribute* attrs,
   state->lastMessage = message;
 }
 
-void updateEd2kServerIdent(Ed2kAttribute* attrs,
-                           const ed2k::Endpoint& server,
+void updateEd2kServerIdent(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
                            const ed2k::ServerIdent& ident)
 {
   auto state = getEd2kServerState(attrs, server);
@@ -1436,9 +1451,8 @@ void markEd2kServerSourceRequestFinished(Ed2kAttribute* attrs,
   state->connecting = false;
 }
 
-void updateEd2kServerFailure(Ed2kAttribute* attrs,
-                             const ed2k::Endpoint& server, int64_t now,
-                             int64_t baseRetrySeconds)
+void updateEd2kServerFailure(Ed2kAttribute* attrs, const ed2k::Endpoint& server,
+                             int64_t now, int64_t baseRetrySeconds)
 {
   auto state = getEd2kServerState(attrs, server);
   if (!state) {
@@ -1465,12 +1479,11 @@ size_t addEd2kSearchResults(Ed2kAttribute* attrs,
     if (!matchesSearchQuery(entry, attrs->searchQuery)) {
       continue;
     }
-    auto i = std::find_if(attrs->searchResults.begin(),
-                          attrs->searchResults.end(),
-                          [&](const ed2k::SearchResultEntry& item) {
-                            return item.hash == entry.hash &&
-                                   item.size == entry.size;
-                          });
+    auto i = std::find_if(
+        attrs->searchResults.begin(), attrs->searchResults.end(),
+        [&](const ed2k::SearchResultEntry& item) {
+          return item.hash == entry.hash && item.size == entry.size;
+        });
     if (i == attrs->searchResults.end()) {
       attrs->searchResults.push_back(entry);
       ++added;
@@ -1531,8 +1544,7 @@ void schedulePendingEd2kServers(RequestGroup* requestGroup, DownloadEngine* e)
 }
 
 void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
-                                RequestGroup* requestGroup,
-                                DownloadEngine* e)
+                                RequestGroup* requestGroup, DownloadEngine* e)
 {
   auto attrs = getEd2kAttrs(requestGroup->getDownloadContext());
   if (attrs->servers.empty()) {
@@ -1544,9 +1556,7 @@ void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
   }
   const auto connected = std::find_if(
       attrs->serverStates.begin(), attrs->serverStates.end(),
-      [](const ed2k::ServerState& state) {
-        return state.connected;
-      });
+      [](const ed2k::ServerState& state) { return state.connected; });
   if (connected != attrs->serverStates.end()) {
     return;
   }
@@ -1561,8 +1571,8 @@ void schedulePendingEd2kServers(std::vector<std::unique_ptr<Command>>& commands,
   while (scanned < limit &&
          e->getEd2kServerConnectionCount() < MAX_SERVER_CONNECTION_ATTEMPTS) {
     auto server = attrs->servers[attrs->nextServerIndex];
-    attrs->nextServerIndex = (attrs->nextServerIndex + 1) %
-                             attrs->servers.size();
+    attrs->nextServerIndex =
+        (attrs->nextServerIndex + 1) % attrs->servers.size();
     ++scanned;
     auto state = getEd2kServerState(attrs, server);
     if (!state) {
@@ -1607,8 +1617,8 @@ void schedulePendingEd2kPeers(RequestGroup* requestGroup, DownloadEngine* e)
     auto peer = state->endpoint;
     state->dead = false;
     state->connecting = true;
-    e->addCommand(make_unique<Ed2kCommand>(e->newCUID(), requestGroup, e,
-                                           peer, false));
+    e->addCommand(
+        make_unique<Ed2kCommand>(e->newCUID(), requestGroup, e, peer, false));
   }
 }
 
@@ -1657,8 +1667,8 @@ bool shouldStartEd2kKadSourceSearch(const Ed2kAttribute* attrs, int64_t now)
   if (attrs->kadSourceTraversal && !attrs->kadSourceTraversal->done()) {
     return false;
   }
-  const auto count = std::max<uint32_t>(
-      1, std::min<uint32_t>(attrs->kadSourceSearchCount, 7));
+  const auto count =
+      std::max<uint32_t>(1, std::min<uint32_t>(attrs->kadSourceSearchCount, 7));
   const auto delay = static_cast<int64_t>(3600) * count;
   return attrs->lastKadSourceSearch == 0 ||
          now >= attrs->lastKadSourceSearch + delay;

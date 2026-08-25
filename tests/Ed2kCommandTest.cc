@@ -13,12 +13,12 @@
 #include "Ed2kKadCommand.h"
 #include "Ed2kListenCommand.h"
 #include "Ed2kSession.h"
+#include "Ed2kSharingTimeSeedCriteria.h"
 #include "DefaultPieceStorage.h"
 #include "DiskAdaptor.h"
 #include "DownloadResult.h"
 #include "SeedCheckCommand.h"
 #include "ShareRatioSeedCriteria.h"
-#include "TimeSeedCriteria.h"
 #include "FileEntry.h"
 #include "File.h"
 #include "MessageDigest.h"
@@ -76,9 +76,8 @@ std::vector<std::string> createPieceHashes()
 std::shared_ptr<DownloadContext> createEd2kContext()
 {
   auto dctx = std::make_shared<DownloadContext>();
-  const std::shared_ptr<FileEntry> entries[] = {
-      std::make_shared<FileEntry>(A2_TEST_OUT_DIR "/ed2k-command-test.bin",
-                                  ed2k::PIECE_LENGTH + 1, 0)};
+  const std::shared_ptr<FileEntry> entries[] = {std::make_shared<FileEntry>(
+      A2_TEST_OUT_DIR "/ed2k-command-test.bin", ed2k::PIECE_LENGTH + 1, 0)};
   dctx->setFileEntries(std::begin(entries), std::end(entries));
   dctx->setPieceLength(ed2k::PIECE_LENGTH);
 
@@ -87,8 +86,8 @@ std::shared_ptr<DownloadContext> createEd2kContext()
   attrs->link.name = "ed2k-command-test.bin";
   attrs->link.size = ed2k::PIECE_LENGTH + 1;
   attrs->link.hash = ed2k::rootHash(createPieceHashes());
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
   return dctx;
 }
@@ -137,8 +136,7 @@ std::string readPacket(const std::shared_ptr<SocketCore>& socket,
   std::array<char, 6> header;
   readFromSocket(socket, engine, header.data(), header.size());
   ed2k::PacketHeader packetHeader;
-  REQUIRE(ed2k::readPacketHeader(packetHeader, header.data(),
-                                        header.size()));
+  REQUIRE(ed2k::readPacketHeader(packetHeader, header.data(), header.size()));
   std::string body(packetHeader.payloadSize(), '\0');
   if (!body.empty()) {
     readFromSocket(socket, engine, &body[0], body.size());
@@ -153,10 +151,7 @@ ed2k::PacketHeader packetHeaderOf(const std::string& packet)
   return header;
 }
 
-std::string packetBodyOf(const std::string& packet)
-{
-  return packet.substr(6);
-}
+std::string packetBodyOf(const std::string& packet) { return packet.substr(6); }
 
 void runEngineTicks(DownloadEngine& engine, int ticks)
 {
@@ -194,16 +189,15 @@ std::string readDatagram(SocketCore& socket, DownloadEngine& engine)
 void writeDatagram(SocketCore& socket, const std::string& datagram,
                    uint16_t port)
 {
-  REQUIRE_EQ(static_cast<ssize_t>(datagram.size()),
-                       socket.writeData(datagram.data(), datagram.size(),
-                                        "127.0.0.1", port));
+  REQUIRE_EQ(
+      static_cast<ssize_t>(datagram.size()),
+      socket.writeData(datagram.data(), datagram.size(), "127.0.0.1", port));
 }
 
 ed2k::PacketHeader datagramHeaderOf(const std::string& datagram)
 {
   ed2k::PacketHeader header;
-  REQUIRE(
-      ed2k::readDatagramHeader(header, datagram.data(), datagram.size()));
+  REQUIRE(ed2k::readDatagramHeader(header, datagram.data(), datagram.size()));
   return header;
 }
 
@@ -363,10 +357,8 @@ void Ed2kCommandTest::testServerSourceDiscoveryFlow()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -396,11 +388,10 @@ void Ed2kCommandTest::testServerSourceDiscoveryFlow()
   REQUIRE_EQ(ed2k::PROTO_EDONKEY, loginHeader.protocol);
   REQUIRE_EQ(ed2k::OP_LOGINREQUEST, loginHeader.opcode);
 
-  serverSocket->writeData(
-      ed2k::createPacket(ed2k::PROTO_EDONKEY, ed2k::OP_IDCHANGE,
-                         ed2k::packUInt32(0x04030201) +
-                             ed2k::packUInt32(ed2k::SRV_TCPFLG_LARGEFILES) +
-                             ed2k::packUInt32(0)));
+  serverSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_IDCHANGE,
+      ed2k::packUInt32(0x04030201) +
+          ed2k::packUInt32(ed2k::SRV_TCPFLG_LARGEFILES) + ed2k::packUInt32(0)));
   runEngineTicks(engine, 1);
 
   auto getSources = readPacket(serverSocket, engine);
@@ -409,21 +400,18 @@ void Ed2kCommandTest::testServerSourceDiscoveryFlow()
   REQUIRE_EQ(ed2k::OP_GETSOURCES, getSourcesHeader.opcode);
   auto getSourcesBody = packetBodyOf(getSources);
   REQUIRE(getSourcesBody.size() >= ed2k::HASH_LENGTH + 4);
-  REQUIRE_EQ(attrs->link.hash,
-                       getSourcesBody.substr(0, ed2k::HASH_LENGTH));
+  REQUIRE_EQ(attrs->link.hash, getSourcesBody.substr(0, ed2k::HASH_LENGTH));
   REQUIRE_EQ(static_cast<uint32_t>(attrs->link.size),
-                       ed2k::readUInt32(getSourcesBody.data() +
-                                         ed2k::HASH_LENGTH));
+             ed2k::readUInt32(getSourcesBody.data() + ed2k::HASH_LENGTH));
 
   std::vector<ed2k::Endpoint> sources;
   ed2k::Endpoint source;
   source.host = "203.0.113.20";
   source.port = 4662;
   sources.push_back(source);
-  serverSocket->writeData(
-      ed2k::createPacket(ed2k::PROTO_EDONKEY, ed2k::OP_FOUNDSOURCES,
-                         ed2k::createFoundSourcesPayload(attrs->link.hash,
-                                                         sources)));
+  serverSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_FOUNDSOURCES,
+      ed2k::createFoundSourcesPayload(attrs->link.hash, sources)));
   runEngineTicks(engine, 1);
 
   REQUIRE_EQ((size_t)1, attrs->peers.size());
@@ -444,10 +432,8 @@ void Ed2kCommandTest::testServerObfuscationCompletesEncryptedLogin()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -493,8 +479,8 @@ void Ed2kCommandTest::testServerObfuscationCompletesEncryptedLogin()
   std::fill(serverPrivate.end() - 16, serverPrivate.end(), '\x33');
   DHKeyExchange serverDh(serverPrivate, ed2k::SERVER_DH_PRIME_HEX);
   const auto secret = serverDh.computeSecret(clientPublic);
-  const std::string sharedSecret(
-      reinterpret_cast<const char*>(secret.data()), secret.size());
+  const std::string sharedSecret(reinterpret_cast<const char*>(secret.data()),
+                                 secret.size());
   ARC4Encryptor encryptor;
   const auto responseKey = ed2k::createServerTcpObfuscationKey(
       sharedSecret, ED2K_OBFUSCATION_MAGIC_SERVER);
@@ -510,10 +496,9 @@ void Ed2kCommandTest::testServerObfuscationCompletesEncryptedLogin()
 
   std::string negotiation = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
   negotiation.append(3, '\0');
-  encryptor.encrypt(
-      negotiation.size(),
-      reinterpret_cast<unsigned char*>(&negotiation[0]),
-      reinterpret_cast<const unsigned char*>(negotiation.data()));
+  encryptor.encrypt(negotiation.size(),
+                    reinterpret_cast<unsigned char*>(&negotiation[0]),
+                    reinterpret_cast<const unsigned char*>(negotiation.data()));
   const auto& serverPublic = serverDh.getPublicKey();
   std::string response(reinterpret_cast<const char*>(serverPublic.data()),
                        serverPublic.size());
@@ -528,8 +513,7 @@ void Ed2kCommandTest::testServerObfuscationCompletesEncryptedLogin()
       clientResponse.size(),
       reinterpret_cast<unsigned char*>(clientResponse.data()),
       reinterpret_cast<const unsigned char*>(clientResponse.data()));
-  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC,
-             ed2k::readUInt32(clientResponse.data()));
+  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC, ed2k::readUInt32(clientResponse.data()));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(clientResponse[4]));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(clientResponse[5]));
 
@@ -557,10 +541,8 @@ void Ed2kCommandTest::testServerObfuscationFailureFallsBackToPlainPort()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -611,10 +593,8 @@ void Ed2kCommandTest::testPeerHandshakeQueuesFileRequestAndQueueRank()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -646,11 +626,10 @@ void Ed2kCommandTest::testPeerHandshakeQueuesFileRequestAndQueueRank()
   remoteInfo.miscOptions.multiPacket = false;
   remoteInfo.miscOptions2.supportsExtendedMultipacket = false;
   auto helloAnswerPayload = ed2k::createPeerHelloPayload(
-      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-      peerAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, false);
-  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                           ed2k::OP_HELLOANSWER,
-                                           helloAnswerPayload));
+      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201, peerAddr.port,
+      ed2k::Endpoint(), "test-peer", remoteInfo, false);
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER, helloAnswerPayload));
   runEngineTicks(engine, 1);
 
   auto fileRequest = readPacket(peerSocket, engine);
@@ -658,8 +637,7 @@ void Ed2kCommandTest::testPeerHandshakeQueuesFileRequestAndQueueRank()
   REQUIRE_EQ(ed2k::PROTO_EDONKEY, fileRequestHeader.protocol);
   REQUIRE_EQ(ed2k::OP_REQUESTFILENAME, fileRequestHeader.opcode);
   REQUIRE_EQ(attrs->link.hash,
-                       packetBodyOf(fileRequest).substr(0,
-                                                        ed2k::HASH_LENGTH));
+             packetBodyOf(fileRequest).substr(0, ed2k::HASH_LENGTH));
 
   auto statusRequest = readPacket(peerSocket, engine);
   auto statusRequestHeader = packetHeaderOf(statusRequest);
@@ -670,21 +648,19 @@ void Ed2kCommandTest::testPeerHandshakeQueuesFileRequestAndQueueRank()
   auto sourceExchange = readPacket(peerSocket, engine);
   auto sourceExchangeHeader = packetHeaderOf(sourceExchange);
   REQUIRE_EQ(ed2k::PROTO_EMULE, sourceExchangeHeader.protocol);
-  REQUIRE_EQ(ed2k::OP_REQUESTSOURCES2,
-                       sourceExchangeHeader.opcode);
+  REQUIRE_EQ(ed2k::OP_REQUESTSOURCES2, sourceExchangeHeader.opcode);
   REQUIRE_EQ(ed2k::createRequestSources2Payload(attrs->link.hash),
-                       packetBodyOf(sourceExchange));
+             packetBodyOf(sourceExchange));
 
   auto aichRequest = readPacket(peerSocket, engine);
   REQUIRE_EQ(ed2k::PROTO_EMULE, packetHeaderOf(aichRequest).protocol);
-  REQUIRE_EQ(ed2k::OP_AICHFILEHASHREQ,
-                       packetHeaderOf(aichRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_AICHFILEHASHREQ, packetHeaderOf(aichRequest).opcode);
   REQUIRE_EQ(attrs->link.hash, packetBodyOf(aichRequest));
 
-  peerSocket->writeData(ed2k::createPacket(
-      ed2k::PROTO_EDONKEY, ed2k::OP_FILESTATUS,
-      ed2k::createFileStatusPayload(attrs->link.hash,
-                                    std::vector<bool>{true, true})));
+  peerSocket->writeData(
+      ed2k::createPacket(ed2k::PROTO_EDONKEY, ed2k::OP_FILESTATUS,
+                         ed2k::createFileStatusPayload(
+                             attrs->link.hash, std::vector<bool>{true, true})));
   runEngineTicks(engine, 1);
 
   auto hashSetRequest = readPacket(peerSocket, engine);
@@ -705,9 +681,9 @@ void Ed2kCommandTest::testPeerHandshakeQueuesFileRequestAndQueueRank()
   REQUIRE_EQ(ed2k::OP_STARTUPLOADREQ, startUploadHeader.opcode);
   REQUIRE_EQ(attrs->link.hash, packetBodyOf(startUpload));
 
-  peerSocket->writeData(ed2k::createPacket(
-      ed2k::PROTO_EDONKEY, ed2k::OP_QUEUERANK,
-      ed2k::createQueueRankPayload(7)));
+  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
+                                           ed2k::OP_QUEUERANK,
+                                           ed2k::createQueueRankPayload(7)));
   runEngineTicks(engine, MAX_ENGINE_TICKS);
 
   auto state = getEd2kPeerState(attrs, peer);
@@ -725,10 +701,8 @@ void Ed2kCommandTest::testPeerHandshakeQueuesMultipacketRequest()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -756,11 +730,10 @@ void Ed2kCommandTest::testPeerHandshakeQueuesMultipacketRequest()
   remoteInfo.miscOptions.multiPacket = true;
   remoteInfo.miscOptions2.supportsExtendedMultipacket = true;
   auto helloAnswerPayload = ed2k::createPeerHelloPayload(
-      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-      peerAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, false);
-  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                           ed2k::OP_HELLOANSWER,
-                                           helloAnswerPayload));
+      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201, peerAddr.port,
+      ed2k::Endpoint(), "test-peer", remoteInfo, false);
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER, helloAnswerPayload));
   runEngineTicks(engine, 1);
 
   auto multipacket = readPacket(peerSocket, engine);
@@ -771,28 +744,26 @@ void Ed2kCommandTest::testPeerHandshakeQueuesMultipacketRequest()
   auto body = packetBodyOf(multipacket);
   REQUIRE_EQ(attrs->link.hash, body.substr(0, ed2k::HASH_LENGTH));
   REQUIRE_EQ(static_cast<uint64_t>(attrs->link.size),
-                       ed2k::readUInt64(body.data() + ed2k::HASH_LENGTH));
+             ed2k::readUInt64(body.data() + ed2k::HASH_LENGTH));
   REQUIRE(body.find(static_cast<char>(ed2k::OP_REQUESTFILENAME)) !=
-                 std::string::npos);
+          std::string::npos);
   REQUIRE(body.find(static_cast<char>(ed2k::OP_SETREQFILEID)) !=
-                 std::string::npos);
+          std::string::npos);
   REQUIRE(body.find(static_cast<char>(ed2k::OP_REQUESTSOURCES2)) !=
-                 std::string::npos);
+          std::string::npos);
   REQUIRE(body.find(static_cast<char>(ed2k::OP_AICHFILEHASHREQ)) !=
-                 std::string::npos);
+          std::string::npos);
 
   auto answer = attrs->link.hash;
   answer.push_back(static_cast<char>(ed2k::OP_FILESTATUS));
   answer += ed2k::packUInt16(2);
   answer.push_back(static_cast<char>(0x03));
   peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EMULE,
-                                           ed2k::OP_MULTIPACKETANSWER,
-                                           answer));
+                                           ed2k::OP_MULTIPACKETANSWER, answer));
   runEngineTicks(engine, 1);
 
   auto hashSetRequest = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_HASHSETREQUEST,
-                       packetHeaderOf(hashSetRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_HASHSETREQUEST, packetHeaderOf(hashSetRequest).opcode);
   REQUIRE_EQ(attrs->link.hash, packetBodyOf(hashSetRequest));
   engine.requestHalt();
 }
@@ -804,10 +775,8 @@ void Ed2kCommandTest::testPeerHandshakeFallbackQueuesFileStatusImmediately()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -835,19 +804,16 @@ void Ed2kCommandTest::testPeerHandshakeFallbackQueuesFileStatusImmediately()
   remoteInfo.miscOptions.multiPacket = false;
   remoteInfo.miscOptions2.supportsExtendedMultipacket = false;
   auto helloAnswerPayload = ed2k::createPeerHelloPayload(
-      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-      peerAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, false);
-  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                           ed2k::OP_HELLOANSWER,
-                                           helloAnswerPayload));
+      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201, peerAddr.port,
+      ed2k::Endpoint(), "test-peer", remoteInfo, false);
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER, helloAnswerPayload));
   runEngineTicks(engine, 1);
 
   auto fileRequest = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_REQUESTFILENAME,
-                       packetHeaderOf(fileRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_REQUESTFILENAME, packetHeaderOf(fileRequest).opcode);
   auto statusRequest = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_SETREQFILEID,
-                       packetHeaderOf(statusRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_SETREQFILEID, packetHeaderOf(statusRequest).opcode);
   REQUIRE_EQ(attrs->link.hash, packetBodyOf(statusRequest));
   engine.requestHalt();
 }
@@ -859,10 +825,8 @@ void Ed2kCommandTest::testPeerHandlesBuddyCallback()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -889,11 +853,10 @@ void Ed2kCommandTest::testPeerHandlesBuddyCallback()
 
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   auto helloAnswerPayload = ed2k::createPeerHelloPayload(
-      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-      peerAddr.port, ed2k::Endpoint(), "buddy-peer", remoteInfo, false);
-  buddySocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                            ed2k::OP_HELLOANSWER,
-                                            helloAnswerPayload));
+      std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201, peerAddr.port,
+      ed2k::Endpoint(), "buddy-peer", remoteInfo, false);
+  buddySocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER, helloAnswerPayload));
   runEngineTicks(engine, 1);
   readPacket(buddySocket, engine);
 
@@ -902,9 +865,9 @@ void Ed2kCommandTest::testPeerHandlesBuddyCallback()
   callbackSource.port = 4662;
   buddySocket->writeData(ed2k::createPacket(
       ed2k::PROTO_EMULE, ed2k::OP_CALLBACK,
-      ed2k::createBuddyCallbackPayload(
-          ed2k::ed2kHashToKadId(attrs->clientHash),
-          ed2k::ed2kHashToKadId(attrs->link.hash), callbackSource)));
+      ed2k::createBuddyCallbackPayload(ed2k::ed2kHashToKadId(attrs->clientHash),
+                                       ed2k::ed2kHashToKadId(attrs->link.hash),
+                                       callbackSource)));
   runEngineTicks(engine, 1);
 
   auto state = getEd2kPeerState(attrs, callbackSource);
@@ -930,8 +893,8 @@ void Ed2kCommandTest::testIncomingPeerMultipacketRequestGetsAnswer()
   attrs->link.name = "ed2k-incoming-multipacket.bin";
   attrs->link.size = data.size();
   attrs->link.hash = ed2k::md4Digest(data);
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
 
   auto group = createRequestGroup(option, dctx);
@@ -939,10 +902,8 @@ void Ed2kCommandTest::testIncomingPeerMultipacketRequestGetsAnswer()
   group->getPieceStorage()->markAllPiecesDone();
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
   group->enableSeedOnly();
@@ -970,9 +931,9 @@ void Ed2kCommandTest::testIncomingPeerMultipacketRequestGetsAnswer()
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   client.writeData(ed2k::createPacket(
       ed2k::PROTO_EDONKEY, ed2k::OP_HELLO,
-      ed2k::createPeerHelloPayload(
-          std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-          localAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, true)));
+      ed2k::createPeerHelloPayload(std::string(ed2k::HASH_LENGTH, '\x22'),
+                                   0x04030201, localAddr.port, ed2k::Endpoint(),
+                                   "test-peer", remoteInfo, true)));
   runEngineTicks(engine, 1);
 
   readPacket(clientRef, engine);
@@ -980,22 +941,20 @@ void Ed2kCommandTest::testIncomingPeerMultipacketRequestGetsAnswer()
   auto request = ed2k::createMultipacketFileRequestPayload(
       getEd2kAttrs(dctx)->link.hash, data.size(), std::vector<bool>{false},
       remoteInfo, true);
-  client.writeData(ed2k::createPacket(ed2k::PROTO_EMULE,
-                                      ed2k::OP_MULTIPACKET_EXT, request));
+  client.writeData(
+      ed2k::createPacket(ed2k::PROTO_EMULE, ed2k::OP_MULTIPACKET_EXT, request));
   runEngineTicks(engine, 1);
 
   auto answerPacket = readPacket(clientRef, engine);
   if (packetHeaderOf(answerPacket).opcode == ed2k::OP_ANSWERSOURCES2) {
     answerPacket = readPacket(clientRef, engine);
   }
-  REQUIRE_EQ(ed2k::OP_MULTIPACKETANSWER,
-                       packetHeaderOf(answerPacket).opcode);
+  REQUIRE_EQ(ed2k::OP_MULTIPACKETANSWER, packetHeaderOf(answerPacket).opcode);
   ed2k::MultipacketAnswer answer;
   REQUIRE(ed2k::parseMultipacketAnswerPayload(
       answer, packetBodyOf(answerPacket), getEd2kAttrs(dctx)->link.hash));
   REQUIRE(answer.hasFileName);
-  REQUIRE_EQ(std::string("ed2k-incoming-multipacket.bin"),
-                       answer.fileName);
+  REQUIRE_EQ(std::string("ed2k-incoming-multipacket.bin"), answer.fileName);
   engine.requestHalt();
 }
 
@@ -1006,10 +965,8 @@ void Ed2kCommandTest::testCryptPeerStartsWithObfuscatedHandshake()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1023,8 +980,7 @@ void Ed2kCommandTest::testCryptPeerStartsWithObfuscatedHandshake()
   peer.host = "127.0.0.1";
   peer.port = peerAddr.port;
   peer.userHash = std::string(ed2k::HASH_LENGTH, '\x22');
-  peer.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT |
-                      ed2k::SOURCE_CRYPT_REQUEST |
+  peer.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_REQUEST |
                       ed2k::SOURCE_CRYPT_HAS_USER_HASH;
   addEd2kPeer(getEd2kAttrs(dctx), peer, ed2k::PEER_SOURCE_INLINE);
 
@@ -1048,10 +1004,9 @@ void Ed2kCommandTest::testCryptPeerStartsWithObfuscatedHandshake()
 void Ed2kCommandTest::testTcpObfuscationKeyMatchesAMuleVector()
 {
   const auto key = ed2k::createTcpObfuscationKey(
-      std::string(ed2k::HASH_LENGTH, '\x22'),
-      ED2K_OBFUSCATION_MAGIC_REQUESTER, 0x01020304);
-  REQUIRE_EQ(std::string("b13280f234ea469301bfc1c073a4cae7"),
-             util::toHex(key));
+      std::string(ed2k::HASH_LENGTH, '\x22'), ED2K_OBFUSCATION_MAGIC_REQUESTER,
+      0x01020304);
+  REQUIRE_EQ(std::string("b13280f234ea469301bfc1c073a4cae7"), util::toHex(key));
 }
 
 void Ed2kCommandTest::testIncomingCryptPeerCompletesEncryptedHello()
@@ -1061,10 +1016,8 @@ void Ed2kCommandTest::testIncomingCryptPeerCompletesEncryptedHello()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1105,10 +1058,9 @@ void Ed2kCommandTest::testIncomingCryptPeerCompletesEncryptedHello()
 
   std::string negotiation = ed2k::packUInt32(ED2K_OBFUSCATION_SYNC);
   negotiation.append(3, '\0');
-  encryptor.encrypt(
-      negotiation.size(),
-      reinterpret_cast<unsigned char*>(&negotiation[0]),
-      reinterpret_cast<const unsigned char*>(negotiation.data()));
+  encryptor.encrypt(negotiation.size(),
+                    reinterpret_cast<unsigned char*>(&negotiation[0]),
+                    reinterpret_cast<const unsigned char*>(negotiation.data()));
   std::string request(1, '\x01');
   request += ed2k::packUInt32(randomKeyPart);
   request += negotiation;
@@ -1120,20 +1072,17 @@ void Ed2kCommandTest::testIncomingCryptPeerCompletesEncryptedHello()
   decryptor.encrypt(response.size(),
                     reinterpret_cast<unsigned char*>(response.data()),
                     reinterpret_cast<const unsigned char*>(response.data()));
-  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC,
-             ed2k::readUInt32(response.data()));
+  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC, ed2k::readUInt32(response.data()));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(response[4]));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(response[5]));
 
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   auto hello = ed2k::createPacket(
       ed2k::PROTO_EDONKEY, ed2k::OP_HELLO,
-      ed2k::createPeerHelloPayload(
-          std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-          localAddr.port, ed2k::Endpoint(), "encrypted-peer", remoteInfo,
-          true));
-  encryptor.encrypt(hello.size(),
-                    reinterpret_cast<unsigned char*>(&hello[0]),
+      ed2k::createPeerHelloPayload(std::string(ed2k::HASH_LENGTH, '\x22'),
+                                   0x04030201, localAddr.port, ed2k::Endpoint(),
+                                   "encrypted-peer", remoteInfo, true));
+  encryptor.encrypt(hello.size(), reinterpret_cast<unsigned char*>(&hello[0]),
                     reinterpret_cast<const unsigned char*>(hello.data()));
   client.writeData(hello);
   runEngineTicks(engine, 2);
@@ -1163,10 +1112,8 @@ void Ed2kCommandTest::testCryptPeerHandshakeMatchesAMuleKeys()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1181,8 +1128,7 @@ void Ed2kCommandTest::testCryptPeerHandshakeMatchesAMuleKeys()
   peer.host = "127.0.0.1";
   peer.port = peerAddr.port;
   peer.userHash = userHash;
-  peer.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT |
-                      ed2k::SOURCE_CRYPT_REQUEST |
+  peer.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_REQUEST |
                       ed2k::SOURCE_CRYPT_HAS_USER_HASH;
   addEd2kPeer(getEd2kAttrs(dctx), peer, ed2k::PEER_SOURCE_INLINE);
 
@@ -1206,8 +1152,7 @@ void Ed2kCommandTest::testCryptPeerHandshakeMatchesAMuleKeys()
                     reinterpret_cast<unsigned char*>(request.data() + 5),
                     reinterpret_cast<const unsigned char*>(request.data() + 5));
 
-  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC,
-                       ed2k::readUInt32(request.data() + 5));
+  REQUIRE_EQ(ED2K_OBFUSCATION_SYNC, ed2k::readUInt32(request.data() + 5));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(request[9]));
   REQUIRE_EQ((uint8_t)0, static_cast<uint8_t>(request[10]));
 
@@ -1221,10 +1166,8 @@ void Ed2kCommandTest::testCryptSupportOnlyPeerUsesPlainHandshake()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1238,8 +1181,8 @@ void Ed2kCommandTest::testCryptSupportOnlyPeerUsesPlainHandshake()
   peer.host = "127.0.0.1";
   peer.port = peerAddr.port;
   peer.userHash = std::string(ed2k::HASH_LENGTH, '\x22');
-  peer.cryptOptions = ed2k::SOURCE_CRYPT_SUPPORT |
-                      ed2k::SOURCE_CRYPT_HAS_USER_HASH;
+  peer.cryptOptions =
+      ed2k::SOURCE_CRYPT_SUPPORT | ed2k::SOURCE_CRYPT_HAS_USER_HASH;
   addEd2kPeer(getEd2kAttrs(dctx), peer, ed2k::PEER_SOURCE_INLINE);
 
   engine.addCommand(make_unique<Ed2kCommand>(engine.newCUID(), group.get(),
@@ -1267,8 +1210,8 @@ void Ed2kCommandTest::testLargePeerPartRequestUsesEmuleProtocol()
   attrs->link.name = "ed2k-large-command-test.bin";
   attrs->link.size = dctx->getTotalLength();
   attrs->link.hash = std::string(ed2k::HASH_LENGTH, '\x33');
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   attrs->pieceHashes.push_back(attrs->link.hash);
   dctx->setPieceLength(ed2k::PIECE_LENGTH);
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
@@ -1276,10 +1219,8 @@ void Ed2kCommandTest::testLargePeerPartRequestUsesEmuleProtocol()
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
   group->initPieceStorage();
@@ -1305,9 +1246,9 @@ void Ed2kCommandTest::testLargePeerPartRequestUsesEmuleProtocol()
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   peerSocket->writeData(ed2k::createPacket(
       ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER,
-      ed2k::createPeerHelloPayload(
-          std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-          peerAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, false)));
+      ed2k::createPeerHelloPayload(std::string(ed2k::HASH_LENGTH, '\x22'),
+                                   0x04030201, peerAddr.port, ed2k::Endpoint(),
+                                   "test-peer", remoteInfo, false)));
   runEngineTicks(engine, 1);
 
   readPacket(peerSocket, engine);
@@ -1315,22 +1256,18 @@ void Ed2kCommandTest::testLargePeerPartRequestUsesEmuleProtocol()
   answer.push_back(static_cast<char>(ed2k::OP_FILESTATUS));
   answer += ed2k::packUInt16(0);
   peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EMULE,
-                                           ed2k::OP_MULTIPACKETANSWER,
-                                           answer));
+                                           ed2k::OP_MULTIPACKETANSWER, answer));
   runEngineTicks(engine, 1);
 
   auto startUpload = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_STARTUPLOADREQ,
-                       packetHeaderOf(startUpload).opcode);
-  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                           ed2k::OP_ACCEPTUPLOADREQ,
-                                           std::string()));
+  REQUIRE_EQ(ed2k::OP_STARTUPLOADREQ, packetHeaderOf(startUpload).opcode);
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_ACCEPTUPLOADREQ, std::string()));
   runEngineTicks(engine, 1);
 
   auto partRequest = readPacket(peerSocket, engine);
   REQUIRE_EQ(ed2k::PROTO_EMULE, packetHeaderOf(partRequest).protocol);
-  REQUIRE_EQ(ed2k::OP_REQUESTPARTS_I64,
-                       packetHeaderOf(partRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_REQUESTPARTS_I64, packetHeaderOf(partRequest).opcode);
 
   engine.requestHalt();
 }
@@ -1349,8 +1286,8 @@ void Ed2kCommandTest::testPeerCommandFinishesGroupAfterLastPart()
   attrs->link.name = "ed2k-command-finished.bin";
   attrs->link.size = data.size();
   attrs->link.hash = ed2k::md4Digest(data);
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   attrs->pieceHashes.push_back(attrs->link.hash);
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
 
@@ -1359,10 +1296,8 @@ void Ed2kCommandTest::testPeerCommandFinishesGroupAfterLastPart()
   group->getPieceStorage()->getDiskAdaptor()->openFile();
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1387,55 +1322,46 @@ void Ed2kCommandTest::testPeerCommandFinishesGroupAfterLastPart()
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   peerSocket->writeData(ed2k::createPacket(
       ed2k::PROTO_EDONKEY, ed2k::OP_HELLOANSWER,
-      ed2k::createPeerHelloPayload(
-          std::string(ed2k::HASH_LENGTH, '\x22'), 0x04030201,
-          peerAddr.port, ed2k::Endpoint(), "test-peer", remoteInfo, false)));
+      ed2k::createPeerHelloPayload(std::string(ed2k::HASH_LENGTH, '\x22'),
+                                   0x04030201, peerAddr.port, ed2k::Endpoint(),
+                                   "test-peer", remoteInfo, false)));
   runEngineTicks(engine, 1);
 
   auto multipacket = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_MULTIPACKET_EXT,
-                       packetHeaderOf(multipacket).opcode);
+  REQUIRE_EQ(ed2k::OP_MULTIPACKET_EXT, packetHeaderOf(multipacket).opcode);
   auto answer = getEd2kAttrs(dctx)->link.hash;
   answer.push_back(static_cast<char>(ed2k::OP_FILESTATUS));
   answer += ed2k::packUInt16(0);
   peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EMULE,
-                                           ed2k::OP_MULTIPACKETANSWER,
-                                           answer));
+                                           ed2k::OP_MULTIPACKETANSWER, answer));
   runEngineTicks(engine, 1);
 
   auto startUpload = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_STARTUPLOADREQ,
-                       packetHeaderOf(startUpload).opcode);
-  peerSocket->writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
-                                           ed2k::OP_ACCEPTUPLOADREQ,
-                                           std::string()));
+  REQUIRE_EQ(ed2k::OP_STARTUPLOADREQ, packetHeaderOf(startUpload).opcode);
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_ACCEPTUPLOADREQ, std::string()));
   runEngineTicks(engine, 1);
 
   auto partRequest = readPacket(peerSocket, engine);
-  REQUIRE_EQ(ed2k::OP_REQUESTPARTS,
-                       packetHeaderOf(partRequest).opcode);
+  REQUIRE_EQ(ed2k::OP_REQUESTPARTS, packetHeaderOf(partRequest).opcode);
   const size_t split = 8;
   peerSocket->writeData(
       ed2k::createPacket(ed2k::PROTO_EDONKEY, ed2k::OP_SENDINGPART,
-                         getEd2kAttrs(dctx)->link.hash +
-                             ed2k::packUInt32(0) +
-                             ed2k::packUInt32(split) +
-                             data.substr(0, split)));
+                         getEd2kAttrs(dctx)->link.hash + ed2k::packUInt32(0) +
+                             ed2k::packUInt32(split) + data.substr(0, split)));
   runEngineTicks(engine, 1);
 
-  peerSocket->writeData(
-      ed2k::createPacket(ed2k::PROTO_EDONKEY, ed2k::OP_SENDINGPART,
-                         getEd2kAttrs(dctx)->link.hash +
-                             ed2k::packUInt32(split) +
-                             ed2k::packUInt32(data.size()) +
-                             data.substr(split)));
+  peerSocket->writeData(ed2k::createPacket(
+      ed2k::PROTO_EDONKEY, ed2k::OP_SENDINGPART,
+      getEd2kAttrs(dctx)->link.hash + ed2k::packUInt32(split) +
+          ed2k::packUInt32(data.size()) + data.substr(split)));
   runEngineTicks(engine, 2);
 
   REQUIRE(group->downloadFinished());
   REQUIRE_EQ((int32_t)0, group->getNumCommand());
   REQUIRE(group->isSeedOnlyEnabled());
   REQUIRE_EQ((size_t)0,
-                       engine.getRequestGroupMan()->getDownloadResults().size());
+             engine.getRequestGroupMan()->getDownloadResults().size());
   engine.requestHalt();
   runEngineTicks(engine, 1);
 }
@@ -1449,10 +1375,8 @@ void Ed2kCommandTest::testFinishedEd2kGroupEntersSeedOnly()
   group->getPieceStorage()->markAllPiecesDone();
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1460,10 +1384,9 @@ void Ed2kCommandTest::testFinishedEd2kGroupEntersSeedOnly()
 
   REQUIRE(group->isSeedOnlyEnabled());
   engine.getRequestGroupMan()->removeStoppedGroup(&engine);
-  REQUIRE_EQ((size_t)1,
-                       engine.getRequestGroupMan()->countRequestGroup());
+  REQUIRE_EQ((size_t)1, engine.getRequestGroupMan()->countRequestGroup());
   REQUIRE_EQ((size_t)0,
-                       engine.getRequestGroupMan()->getDownloadResults().size());
+             engine.getRequestGroupMan()->getDownloadResults().size());
 }
 
 void Ed2kCommandTest::testCompleteLocalEd2kFileStartsAsSeed()
@@ -1487,17 +1410,15 @@ void Ed2kCommandTest::testCompleteLocalEd2kFileStartsAsSeed()
   attrs->link.name = "ed2k-existing-seed.bin";
   attrs->link.size = data.size();
   attrs->link.hash = ed2k::md4Digest(data);
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
 
   auto group = createRequestGroup(option, dctx);
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1533,17 +1454,15 @@ void Ed2kCommandTest::testInvalidLocalEd2kFileUsesSafetyRename()
   attrs->link.name = "ed2k-invalid-seed.bin";
   attrs->link.size = data.size();
   attrs->link.hash.assign(ed2k::HASH_LENGTH, '\x55');
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
 
   auto group = createRequestGroup(option, dctx);
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1576,17 +1495,15 @@ void Ed2kCommandTest::testCompletedEd2kSeedServesIncomingPeer()
   attrs->link.name = "ed2k-incoming-seed.bin";
   attrs->link.size = data.size();
   attrs->link.hash = ed2k::md4Digest(data);
-  attrs->clientHash = normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH,
-                                                          '\x42'));
+  attrs->clientHash =
+      normalizeEd2kClientHash(std::string(ed2k::HASH_LENGTH, '\x42'));
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
 
   auto group = createRequestGroup(option, dctx);
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1605,15 +1522,14 @@ void Ed2kCommandTest::testCompletedEd2kSeedServesIncomingPeer()
   auto remoteInfo = ed2k::createLocalEmulePeerInfo();
   client.writeData(ed2k::createPacket(
       ed2k::PROTO_EDONKEY, ed2k::OP_HELLO,
-      ed2k::createPeerHelloPayload(
-          std::string(ed2k::HASH_LENGTH, '\x24'), 0x04030201, 4662,
-          ed2k::Endpoint(), "incoming-peer", remoteInfo, true)));
+      ed2k::createPeerHelloPayload(std::string(ed2k::HASH_LENGTH, '\x24'),
+                                   0x04030201, 4662, ed2k::Endpoint(),
+                                   "incoming-peer", remoteInfo, true)));
   runEngineTicks(engine, 1);
 
   auto helloAnswer = readPacket(
       std::shared_ptr<SocketCore>(&client, [](SocketCore*) {}), engine);
-  REQUIRE_EQ(ed2k::OP_HELLOANSWER,
-                       packetHeaderOf(helloAnswer).opcode);
+  REQUIRE_EQ(ed2k::OP_HELLOANSWER, packetHeaderOf(helloAnswer).opcode);
   const auto fileHash = getEd2kAttrs(dctx)->link.hash;
   client.writeData(ed2k::createPacket(ed2k::PROTO_EDONKEY,
                                       ed2k::OP_STARTUPLOADREQ, fileHash));
@@ -1635,16 +1551,16 @@ void Ed2kCommandTest::testCompletedEd2kSeedServesIncomingPeer()
   const auto body = packetBodyOf(part);
   REQUIRE_EQ(fileHash, body.substr(0, ed2k::HASH_LENGTH));
   REQUIRE_EQ(static_cast<uint32_t>(0),
-                       ed2k::readUInt32(body.data() + ed2k::HASH_LENGTH));
+             ed2k::readUInt32(body.data() + ed2k::HASH_LENGTH));
   REQUIRE_EQ(static_cast<uint32_t>(data.size()),
-                       ed2k::readUInt32(body.data() + ed2k::HASH_LENGTH + 4));
+             ed2k::readUInt32(body.data() + ed2k::HASH_LENGTH + 4));
   REQUIRE_EQ(data, body.substr(ed2k::HASH_LENGTH + 8));
   REQUIRE_EQ(static_cast<int64_t>(data.size()),
-                       group->calculateStat().allTimeUploadLength);
-  REQUIRE_EQ(static_cast<int64_t>(data.size()),
-                       static_cast<int64_t>(engine.getRequestGroupMan()
-                                                ->getNetStat()
-                                                .getSessionUploadLength()));
+             group->calculateStat().allTimeUploadLength);
+  REQUIRE_EQ(
+      static_cast<int64_t>(data.size()),
+      static_cast<int64_t>(
+          engine.getRequestGroupMan()->getNetStat().getSessionUploadLength()));
 
   engine.requestHalt();
   runEngineTicks(engine, 1);
@@ -1700,16 +1616,17 @@ void Ed2kCommandTest::testEd2kSeedTimeStopsSeedOnlyGroup()
   group->getPieceStorage()->markAllPiecesDone();
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
+  group->setState(RequestGroup::STATE_ACTIVE);
+  getEd2kAttrs(dctx)->sharingTime.restore(1);
   group->enableSeedOnly();
 
   auto seedCheck = make_unique<SeedCheckCommand>(
-      engine.newCUID(), group.get(), &engine, make_unique<TimeSeedCriteria>(0_s));
+      engine.newCUID(), group.get(), &engine,
+      make_unique<Ed2kSharingTimeSeedCriteria>(group.get(), 1_s));
   seedCheck->setPieceStorage(group->getPieceStorage());
   engine.addCommand(std::move(seedCheck));
   runEngineTicks(engine, 3);
@@ -1717,10 +1634,9 @@ void Ed2kCommandTest::testEd2kSeedTimeStopsSeedOnlyGroup()
 
   REQUIRE(group->isHaltRequested());
   REQUIRE(group->isShareComplete());
-  REQUIRE_EQ((size_t)0,
-                       engine.getRequestGroupMan()->countRequestGroup());
+  REQUIRE_EQ((size_t)0, engine.getRequestGroupMan()->countRequestGroup());
   REQUIRE_EQ((size_t)1,
-                       engine.getRequestGroupMan()->getDownloadResults().size());
+             engine.getRequestGroupMan()->getDownloadResults().size());
 }
 
 void Ed2kCommandTest::testEd2kSeedRatioStopsSeedOnlyGroup()
@@ -1730,13 +1646,12 @@ void Ed2kCommandTest::testEd2kSeedRatioStopsSeedOnlyGroup()
   auto group = createRequestGroup(option, dctx);
   group->initPieceStorage();
   group->getPieceStorage()->markAllPiecesDone();
-  dctx->getNetStat().updateUpload(group->getPieceStorage()->getCompletedLength());
+  dctx->getNetStat().updateUpload(
+      group->getPieceStorage()->getCompletedLength());
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
   group->enableSeedOnly();
@@ -1752,10 +1667,9 @@ void Ed2kCommandTest::testEd2kSeedRatioStopsSeedOnlyGroup()
 
   REQUIRE(group->isHaltRequested());
   REQUIRE(group->isShareComplete());
-  REQUIRE_EQ((size_t)0,
-                       engine.getRequestGroupMan()->countRequestGroup());
+  REQUIRE_EQ((size_t)0, engine.getRequestGroupMan()->countRequestGroup());
   REQUIRE_EQ((size_t)1,
-                       engine.getRequestGroupMan()->getDownloadResults().size());
+             engine.getRequestGroupMan()->getDownloadResults().size());
 }
 
 void Ed2kCommandTest::testEd2kListenerKeepsMultipleTasks()
@@ -1768,17 +1682,16 @@ void Ed2kCommandTest::testEd2kListenerKeepsMultipleTasks()
   auto group2 = createRequestGroup(option, dctx2);
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group1, group2}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group1, group2}, 5,
+      option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group1);
   engine.getRequestGroupMan()->addRequestGroup(group2);
   group1->setRequestGroupMan(engine.getRequestGroupMan().get());
   group2->setRequestGroupMan(engine.getRequestGroupMan().get());
 
-  auto command = make_unique<Ed2kListenCommand>(engine.newCUID(), &engine,
-                                                AF_INET);
+  auto command =
+      make_unique<Ed2kListenCommand>(engine.newCUID(), &engine, AF_INET);
   REQUIRE(command->bindPort(0));
   engine.addCommand(std::move(command));
   runEngineTicks(engine, 2);
@@ -1796,10 +1709,8 @@ void Ed2kCommandTest::testPendingConnectDrainsAfterHalt()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
@@ -1828,15 +1739,13 @@ void Ed2kCommandTest::testForceHaltDrainsIdleKadGroup()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
 
-  engine.addCommand(make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(),
-                                                &engine));
+  engine.addCommand(
+      make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(), &engine));
   runEngineTicks(engine, 1);
   REQUIRE_EQ((int32_t)1, group->getNumCommand());
 
@@ -1846,8 +1755,7 @@ void Ed2kCommandTest::testForceHaltDrainsIdleKadGroup()
   runEngineTicks(engine, 1);
   REQUIRE_EQ((int32_t)0, group->getNumCommand());
   engine.getRequestGroupMan()->removeStoppedGroup(&engine);
-  REQUIRE_EQ((size_t)0,
-                       engine.getRequestGroupMan()->countRequestGroup());
+  REQUIRE_EQ((size_t)0, engine.getRequestGroupMan()->countRequestGroup());
 }
 
 void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
@@ -1857,10 +1765,8 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->setKeepRunning(true);
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
@@ -1879,8 +1785,8 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
   routerEndpoint.port = routerAddr.port;
   attrs->kadRoutingTable->addRouterNode(routerEndpoint);
 
-  auto command = make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(),
-                                             &engine);
+  auto command =
+      make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(), &engine);
   auto commandPtr = command.get();
   engine.addCommand(std::move(command));
 
@@ -1893,12 +1799,11 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
   const auto remoteId = std::string(16, '\x33');
   writeDatagram(
       routerSocket,
-      ed2k::createDatagram(
-          ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
-          ed2k::createKadBootstrapResponsePayload(
-              remoteId, 4662, 8,
-              std::vector<ed2k::KadContact>{
-                  createKadContact(remoteId, routerAddr.port)})),
+      ed2k::createDatagram(ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
+                           ed2k::createKadBootstrapResponsePayload(
+                               remoteId, 4662, 8,
+                               std::vector<ed2k::KadContact>{createKadContact(
+                                   remoteId, routerAddr.port)})),
       kadUdpPort);
   runEngineTicks(engine, 1);
 
@@ -1907,29 +1812,24 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
   REQUIRE_EQ(ed2k::KAD_PROTOCOL, kadReqHeader.protocol);
   REQUIRE_EQ(ed2k::KAD_REQ, kadReqHeader.opcode);
   ed2k::KadRequest parsedKadReq;
-  REQUIRE(ed2k::parseKadRequestPayload(parsedKadReq,
-                                              datagramBodyOf(kadReq)));
-  REQUIRE_EQ((uint8_t)ed2k::KAD_FIND_VALUE,
-                       parsedKadReq.searchType);
+  REQUIRE(ed2k::parseKadRequestPayload(parsedKadReq, datagramBodyOf(kadReq)));
+  REQUIRE_EQ((uint8_t)ed2k::KAD_FIND_VALUE, parsedKadReq.searchType);
   REQUIRE_EQ(kadFileId, parsedKadReq.targetId);
 
   writeDatagram(
       routerSocket,
       ed2k::createDatagram(ed2k::KAD_PROTOCOL, ed2k::KAD_RES,
                            ed2k::createKadResponsePayload(
-                               kadFileId,
-                               std::vector<ed2k::KadContact>())),
+                               kadFileId, std::vector<ed2k::KadContact>())),
       kadUdpPort);
   runEngineTicks(engine, 1);
 
-  auto sourceSearchDatagram =
-      readKadDatagramWithOpcode(routerSocket, engine,
-                                ed2k::KAD_SEARCH_SOURCES_REQ, remoteId);
+  auto sourceSearchDatagram = readKadDatagramWithOpcode(
+      routerSocket, engine, ed2k::KAD_SEARCH_SOURCES_REQ, remoteId);
   REQUIRE_EQ(kadUdpPort, sourceSearchDatagram.sender.port);
   auto sourceSearchHeader = datagramHeaderOf(sourceSearchDatagram.data);
   REQUIRE_EQ(ed2k::KAD_PROTOCOL, sourceSearchHeader.protocol);
-  REQUIRE_EQ(ed2k::KAD_SEARCH_SOURCES_REQ,
-                       sourceSearchHeader.opcode);
+  REQUIRE_EQ(ed2k::KAD_SEARCH_SOURCES_REQ, sourceSearchHeader.opcode);
   ed2k::KadSearchSourcesRequest searchRequest;
   REQUIRE(ed2k::parseKadSearchSourcesRequestPayload(
       searchRequest, datagramBodyOf(sourceSearchDatagram.data)));
@@ -1943,8 +1843,7 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
   REQUIRE(ed2k::parseKadPublishSourceRequestPayload(
       publishRequest,
       ed2k::createKadPublishSourceRequestPayload(attrs->link.hash, source,
-                                                 sourceId,
-                                                 attrs->link.size)));
+                                                 sourceId, attrs->link.size)));
   ed2k::KadSearchResult localResult;
   REQUIRE(ed2k::parseKadSearchResultPayload(
       localResult,
@@ -1953,14 +1852,13 @@ void Ed2kCommandTest::testKadBootstrapSourceSearchAddsPeer()
           std::vector<ed2k::KadSearchEntry>{publishRequest.source})));
   auto localPeers = ed2k::extractKadSourceEndpoints(localResult);
   REQUIRE_EQ((size_t)1, localPeers.size());
-  writeDatagram(
-      routerSocket,
-      ed2k::createDatagram(
-          ed2k::KAD_PROTOCOL, ed2k::KAD_SEARCH_RES,
-          ed2k::createKadSearchResultPayload(
-              remoteId, kadFileId,
-              std::vector<ed2k::KadSearchEntry>{publishRequest.source})),
-      sourceSearchDatagram.sender.port);
+  writeDatagram(routerSocket,
+                ed2k::createDatagram(ed2k::KAD_PROTOCOL, ed2k::KAD_SEARCH_RES,
+                                     ed2k::createKadSearchResultPayload(
+                                         remoteId, kadFileId,
+                                         std::vector<ed2k::KadSearchEntry>{
+                                             publishRequest.source})),
+                sourceSearchDatagram.sender.port);
   for (int i = 0; i < MAX_ENGINE_TICKS && attrs->peers.empty(); ++i) {
     engine.run(true);
   }
@@ -1978,10 +1876,8 @@ void Ed2kCommandTest::testKadDecodesReceiverKeyObfuscatedResponse()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->setKeepRunning(true);
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
@@ -1998,28 +1894,27 @@ void Ed2kCommandTest::testKadDecodesReceiverKeyObfuscatedResponse()
   attrs->kadRoutingTable->addRouterNode(
       createKadContact(remoteId, routerAddr.port));
 
-  auto command = make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(),
-                                             &engine);
+  auto command =
+      make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(), &engine);
   auto commandPtr = command.get();
   engine.addCommand(std::move(command));
 
   auto bootstrapReq = readDatagramFrom(routerSocket, engine);
   ed2k::KadObfuscatedDatagram parsedReq;
-  REQUIRE(ed2k::parseKadObfuscatedDatagram(parsedReq, bootstrapReq.data,
-                                                  remoteId));
+  REQUIRE(
+      ed2k::parseKadObfuscatedDatagram(parsedReq, bootstrapReq.data, remoteId));
   REQUIRE(parsedReq.senderVerifyKey != 0);
 
-  writeDatagram(
-      routerSocket,
-      ed2k::createKadObfuscatedDatagram(
-          ed2k::createDatagram(
-              ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
-              ed2k::createKadBootstrapResponsePayload(
-                  remoteId, 4662, 8,
-                  std::vector<ed2k::KadContact>{
-                      createKadContact(remoteId, routerAddr.port)})),
-          parsedReq.senderVerifyKey, 0x55667788, 0x1234),
-      commandPtr->getLocalUdpPort());
+  writeDatagram(routerSocket,
+                ed2k::createKadObfuscatedDatagram(
+                    ed2k::createDatagram(
+                        ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
+                        ed2k::createKadBootstrapResponsePayload(
+                            remoteId, 4662, 8,
+                            std::vector<ed2k::KadContact>{
+                                createKadContact(remoteId, routerAddr.port)})),
+                    parsedReq.senderVerifyKey, 0x55667788, 0x1234),
+                commandPtr->getLocalUdpPort());
   runEngineTicks(engine, 1);
 
   auto kadReq = decodeKadDatagram(readDatagram(routerSocket, engine), remoteId);
@@ -2036,10 +1931,8 @@ void Ed2kCommandTest::testKadDecodesSelfIdObfuscatedResponse()
   engine.setOption(option.get());
   auto dctx = createEd2kContext();
   auto group = createRequestGroup(option, dctx);
-  engine.setRequestGroupMan(
-      make_unique<RequestGroupMan>(
-          std::vector<std::shared_ptr<RequestGroup>>{group}, 5,
-          option.get()));
+  engine.setRequestGroupMan(make_unique<RequestGroupMan>(
+      std::vector<std::shared_ptr<RequestGroup>>{group}, 5, option.get()));
   engine.getRequestGroupMan()->setKeepRunning(true);
   engine.getRequestGroupMan()->addRequestGroup(group);
   group->setRequestGroupMan(engine.getRequestGroupMan().get());
@@ -2057,23 +1950,22 @@ void Ed2kCommandTest::testKadDecodesSelfIdObfuscatedResponse()
   attrs->kadRoutingTable->addRouterNode(
       createKadContact(remoteId, routerAddr.port));
 
-  auto command = make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(),
-                                             &engine);
+  auto command =
+      make_unique<Ed2kKadCommand>(engine.newCUID(), group.get(), &engine);
   auto commandPtr = command.get();
   engine.addCommand(std::move(command));
 
   readDatagramFrom(routerSocket, engine);
-  writeDatagram(
-      routerSocket,
-      ed2k::createKadObfuscatedDatagram(
-          ed2k::createDatagram(
-              ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
-              ed2k::createKadBootstrapResponsePayload(
-                  remoteId, 4662, 8,
-                  std::vector<ed2k::KadContact>{
-                      createKadContact(remoteId, routerAddr.port)})),
-          localKadId, 0x1234),
-      commandPtr->getLocalUdpPort());
+  writeDatagram(routerSocket,
+                ed2k::createKadObfuscatedDatagram(
+                    ed2k::createDatagram(
+                        ed2k::KAD_PROTOCOL, ed2k::KAD_BOOTSTRAP_RES,
+                        ed2k::createKadBootstrapResponsePayload(
+                            remoteId, 4662, 8,
+                            std::vector<ed2k::KadContact>{
+                                createKadContact(remoteId, routerAddr.port)})),
+                    localKadId, 0x1234),
+                commandPtr->getLocalUdpPort());
   runEngineTicks(engine, 1);
 
   auto kadReq = decodeKadDatagram(readDatagram(routerSocket, engine), remoteId);
