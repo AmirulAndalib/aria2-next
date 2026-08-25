@@ -193,6 +193,11 @@ public:
   bool deleteSocketForWriteCheck(const std::shared_ptr<SocketCore>& socket,
                                  Command* command);
 
+  bool addSocketForReadCheck(sock_t socket, Command* command);
+  bool deleteSocketForReadCheck(sock_t socket, Command* command);
+  bool addSocketForWriteCheck(sock_t socket, Command* command);
+  bool deleteSocketForWriteCheck(sock_t socket, Command* command);
+
 #ifdef ENABLE_ASYNC_DNS
 
   bool addNameResolverCheck(const std::shared_ptr<AsyncNameResolver>& resolver,

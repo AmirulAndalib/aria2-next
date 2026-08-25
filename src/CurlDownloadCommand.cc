@@ -40,9 +40,12 @@ CurlDownloadCommand::~CurlDownloadCommand() { group_->decreaseNumCommand(); }
 
 bool CurlDownloadCommand::execute()
 {
-  engine_->setRefreshInterval(std::chrono::milliseconds(10));
+  session_->advance(download_);
+  session_->armTimeout();
   if (group_->isHaltRequested() && !download_->impl_->stopRequested) {
-    session_->stop(download_, group_->isPauseRequested());
+    session_->stop(
+        download_,
+        group_->isPauseRequested() || group_->isShutdownRequested());
   }
   if (download_->failed()) {
     group_->setLastErrorCode(error_code::NETWORK_PROBLEM,

@@ -64,6 +64,53 @@ std::string textColumn(sqlite3_stmt* statement, int index)
                            : std::string();
 }
 
+std::string encodeRanges(
+    const std::vector<std::pair<int64_t, int64_t>>& ranges)
+{
+  std::string result;
+  for (const auto& range : ranges) {
+    if (!result.empty()) {
+      result += ',';
+    }
+    result += std::to_string(range.first);
+    result += '-';
+    result += std::to_string(range.second);
+  }
+  return result;
+}
+
+bool decodeRanges(std::vector<std::pair<int64_t, int64_t>>& ranges,
+                  const std::string& value)
+{
+  ranges.clear();
+  size_t offset = 0;
+  while (offset < value.size()) {
+    const auto separator = value.find('-', offset);
+    const auto end = value.find(',', separator);
+    if (separator == std::string::npos) {
+      return false;
+    }
+    try {
+      const auto first = std::stoll(value.substr(offset, separator - offset));
+      const auto last = std::stoll(
+          value.substr(separator + 1, end - separator - 1));
+      if (first < 0 || last <= first ||
+          (!ranges.empty() && ranges.back().second > first)) {
+        return false;
+      }
+      ranges.emplace_back(first, last);
+    }
+    catch (const std::exception&) {
+      return false;
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    offset = end + 1;
+  }
+  return true;
+}
+
 } // namespace
 
 StreamStore::StreamStore(std::string path) : path_(std::move(path)) {}
@@ -99,6 +146,21 @@ bool StreamStore::open()
     return false;
   }
   sqlite3_busy_timeout(db_, 5000);
+  int version = 0;
+  {
+    Statement versionQuery(db_, "PRAGMA user_version");
+    if (versionQuery && sqlite3_step(versionQuery.get()) == SQLITE_ROW) {
+      version = sqlite3_column_int(versionQuery.get(), 0);
+    }
+  }
+  if (version != 0 && version != 2 &&
+      sqlite3_exec(db_, "DROP TABLE IF EXISTS downloads", nullptr, nullptr,
+                   nullptr) != SQLITE_OK) {
+    A2_LOG_ERROR("Unable to reset the stream state database");
+    sqlite3_close_v2(db_);
+    db_ = nullptr;
+    return false;
+  }
   const char* schema =
       "PRAGMA journal_mode=WAL;"
       "PRAGMA synchronous=NORMAL;"
@@ -107,8 +169,9 @@ bool StreamStore::open()
       "gid TEXT PRIMARY KEY, uri TEXT NOT NULL, path TEXT NOT NULL, "
       "etag TEXT NOT NULL, last_modified TEXT NOT NULL, "
       "total_length INTEGER NOT NULL, completed_length INTEGER NOT NULL, "
+      "completed_ranges TEXT NOT NULL, "
       "updated_at INTEGER NOT NULL DEFAULT (unixepoch()));"
-      "PRAGMA user_version=1;";
+      "PRAGMA user_version=2;";
   char* message = nullptr;
   if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
     A2_LOG_ERROR(fmt("Unable to initialize stream state database: %s",
@@ -155,6 +218,7 @@ bool StreamStore::load(StreamState& state, const std::string& gid,
   Statement statement(
       db_,
       "SELECT gid,uri,path,etag,last_modified,total_length,completed_length "
+      ",completed_ranges "
       "FROM downloads WHERE gid=?1 OR path=?2 "
       "ORDER BY gid=?1 DESC,updated_at DESC LIMIT 1");
   if (!statement || !bindText(statement.get(), 1, gid) ||
@@ -170,9 +234,20 @@ bool StreamStore::load(StreamState& state, const std::string& gid,
   value.lastModified = textColumn(statement.get(), 4);
   value.totalLength = sqlite3_column_int64(statement.get(), 5);
   value.completedLength = sqlite3_column_int64(statement.get(), 6);
+  if (!decodeRanges(value.completedRanges, textColumn(statement.get(), 7))) {
+    return false;
+  }
+  int64_t rangeLength = 0;
+  for (const auto& range : value.completedRanges) {
+    if (value.totalLength > 0 && range.second > value.totalLength) {
+      return false;
+    }
+    rangeLength += range.second - range.first;
+  }
   if (value.uri.empty() || value.path.empty() || value.totalLength < 0 ||
       value.completedLength < 0 ||
-      (value.totalLength > 0 && value.completedLength > value.totalLength)) {
+      (value.totalLength > 0 && value.completedLength > value.totalLength) ||
+      rangeLength != value.completedLength) {
     return false;
   }
   state = std::move(value);
@@ -194,11 +269,13 @@ bool StreamStore::save(const StreamState& state)
   Statement statement(
       db_,
       "INSERT INTO downloads(gid,uri,path,etag,last_modified,total_length,"
-      "completed_length,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,unixepoch()) "
+      "completed_length,completed_ranges,updated_at) "
+      "VALUES(?1,?2,?3,?4,?5,?6,?7,?8,unixepoch()) "
       "ON CONFLICT(gid) DO UPDATE SET uri=excluded.uri,path=excluded.path,"
       "etag=excluded.etag,last_modified=excluded.last_modified,"
       "total_length=excluded.total_length,"
-      "completed_length=excluded.completed_length,updated_at=excluded.updated_"
+      "completed_length=excluded.completed_length,"
+      "completed_ranges=excluded.completed_ranges,updated_at=excluded.updated_"
       "at");
   return statement && bindText(statement.get(), 1, state.gid) &&
          bindText(statement.get(), 2, state.uri) &&
@@ -209,6 +286,7 @@ bool StreamStore::save(const StreamState& state)
              SQLITE_OK &&
          sqlite3_bind_int64(statement.get(), 7, state.completedLength) ==
              SQLITE_OK &&
+         bindText(statement.get(), 8, encodeRanges(state.completedRanges)) &&
          sqlite3_step(statement.get()) == SQLITE_DONE;
 }
 

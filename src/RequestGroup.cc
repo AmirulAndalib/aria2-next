@@ -720,7 +720,8 @@ void RequestGroup::setRestartRequested(bool f) { restartRequested_ = f; }
 void RequestGroup::releaseRuntimeResource(DownloadEngine* e)
 {
   if (curlDownload_ && !curlDownload_->stopped()) {
-    e->getCurlSession()->stop(curlDownload_, isPauseRequested());
+    e->getCurlSession()->stop(
+        curlDownload_, isPauseRequested() || isShutdownRequested());
   }
 #ifdef ENABLE_BITTORRENT
   if (btDownload_) {

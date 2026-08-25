@@ -33,14 +33,16 @@ CurlDownload::CurlDownload(std::vector<std::string> uris)
 
 CurlDownload::~CurlDownload()
 {
-  if (impl_->headers) {
-    curl_slist_free_all(impl_->headers);
-  }
   if (impl_->file) {
     fclose(impl_->file);
   }
-  if (impl_->handle) {
-    curl_easy_cleanup(impl_->handle);
+  for (auto& handle : impl_->handles) {
+    if (handle->headers) {
+      curl_slist_free_all(handle->headers);
+    }
+    if (handle->value) {
+      curl_easy_cleanup(handle->value);
+    }
   }
 }
 

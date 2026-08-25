@@ -54,6 +54,8 @@
   _(" --retry-wait=SEC             Set the seconds to wait between retries. \n" \
     "                              With SEC > 0, aria2 will retry download when the\n" \
     "                              HTTP server returns 503 response.")
+#define TEXT_STREAM_MAX_CONNECTIONS                                     \
+  _(" --stream-max-connections=N  Set the per-file HTTP connection ceiling.")
 #define TEXT_TIMEOUT                                            \
   _(" -t, --timeout=SEC            Set timeout in seconds.")
 #define TEXT_MAX_TRIES                                                  \

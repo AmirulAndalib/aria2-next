@@ -257,9 +257,16 @@ HTTP/SFTP Options
 
 .. option:: --retry-wait=<SEC>
 
-  Set the seconds to wait between retries. When ``SEC > 0``, aria2 will
-  retry downloads when the HTTP server returns a 503 response. Default:
-  ``0``
+  Set the minimum number of seconds between retryable stream transfer
+  attempts. A valid HTTP ``Retry-After`` delay takes precedence when it is
+  longer. Default: ``0``
+
+.. option:: --stream-max-connections=<N>
+
+  Set the maximum number of native libcurl connections or HTTP/2 streams used
+  for one HTTP file. Aria2 Next first verifies byte-range support and reduces
+  the actual count for small files or servers that return a complete response.
+  SFTP remains single-stream. Default: ``4``
 
 .. option:: -t, --timeout=<SEC>
 

@@ -265,6 +265,27 @@ bool DownloadEngine::deleteSocketForWriteCheck(
                                   EventPoll::EVENT_WRITE);
 }
 
+bool DownloadEngine::addSocketForReadCheck(sock_t socket, Command* command)
+{
+  return eventPoll_->addEvents(socket, command, EventPoll::EVENT_READ);
+}
+
+bool DownloadEngine::deleteSocketForReadCheck(sock_t socket, Command* command)
+{
+  return eventPoll_->deleteEvents(socket, command, EventPoll::EVENT_READ);
+}
+
+bool DownloadEngine::addSocketForWriteCheck(sock_t socket, Command* command)
+{
+  return eventPoll_->addEvents(socket, command, EventPoll::EVENT_WRITE);
+}
+
+bool DownloadEngine::deleteSocketForWriteCheck(sock_t socket,
+                                               Command* command)
+{
+  return eventPoll_->deleteEvents(socket, command, EventPoll::EVENT_WRITE);
+}
+
 void DownloadEngine::calculateStatistics()
 {
   if (statCalc_) {

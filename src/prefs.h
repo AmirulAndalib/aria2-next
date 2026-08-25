@@ -256,6 +256,7 @@ extern PrefPtr PREF_ED2K_MIN_SPLIT_SIZE;
 extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
 // value: 1*digit
 extern PrefPtr PREF_RETRY_WAIT;
+extern PrefPtr PREF_STREAM_MAX_CONNECTIONS;
 // value: string
 extern PrefPtr PREF_ASYNC_DNS_SERVER;
 // value: true | false

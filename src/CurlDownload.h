@@ -33,6 +33,7 @@ struct CurlSnapshot {
   int64_t completedLength = 0;
   int64_t sessionDownloadLength = 0;
   int downloadSpeed = 0;
+  int connections = 0;
   std::string currentUri;
   std::string error;
 };

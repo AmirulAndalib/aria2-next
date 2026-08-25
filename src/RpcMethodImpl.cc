@@ -723,6 +723,23 @@ void createUriEntry(List* uriList, const std::shared_ptr<FileEntry>& file)
 } // namespace
 
 namespace {
+void createCurlFileEntry(List* files, const CurlSnapshot& snapshot,
+                         const std::shared_ptr<FileEntry>& file)
+{
+  auto entry = Dict::g();
+  entry->put(KEY_INDEX, "1");
+  entry->put(KEY_PATH, file->getPath());
+  entry->put(KEY_SELECTED, VLB_TRUE);
+  entry->put(KEY_LENGTH, util::itos(snapshot.totalLength));
+  entry->put(KEY_COMPLETED_LENGTH, util::itos(snapshot.completedLength));
+  auto uriList = List::g();
+  createUriEntry(uriList.get(), file);
+  entry->put(KEY_URIS, std::move(uriList));
+  files->append(std::move(entry));
+}
+} // namespace
+
+namespace {
 template <typename InputIterator>
 void createFileEntry(List* files, InputIterator first, InputIterator last,
                      const BitfieldMan* bf)
@@ -961,7 +978,11 @@ void gatherProgressCommon(Dict* entryDict,
     entryDict->put(KEY_SEEDER, group->isSeeder() ? VLB_TRUE : VLB_FALSE);
   }
   if (requested_key(keys, KEY_CONNECTIONS)) {
-    entryDict->put(KEY_CONNECTIONS, util::itos(group->getNumConnection()));
+    entryDict->put(
+        KEY_CONNECTIONS,
+        util::itos(group->getCurlDownload()
+                       ? group->getCurlDownload()->snapshot().connections
+                       : group->getNumConnection()));
   }
   if (requested_key(keys, KEY_BITFIELD)) {
 #ifdef ENABLE_BITTORRENT
@@ -1007,8 +1028,12 @@ void gatherProgressCommon(Dict* entryDict,
   }
   if (requested_key(keys, KEY_FILES)) {
     auto files = List::g();
+    if (group->getCurlDownload()) {
+      createCurlFileEntry(files.get(), group->getCurlDownload()->snapshot(),
+                          dctx->getFirstFileEntry());
+    }
 #ifdef ENABLE_BITTORRENT
-    if (group->getBtDownload()) {
+    else if (group->getBtDownload()) {
       createBtFileEntry(files.get(), group->getBtDownload()->snapshot());
     }
     else
@@ -1360,11 +1385,18 @@ std::unique_ptr<ValueBase> GetFilesRpcMethod::process(const RpcRequest& req,
   }
   else {
     auto& dctx = group->getDownloadContext();
-    createFileEntry(files.get(),
-                    std::begin(group->getDownloadContext()->getFileEntries()),
-                    std::end(group->getDownloadContext()->getFileEntries()),
-                    dctx->getTotalLength(), dctx->getPieceLength(),
-                    group->getPieceStorage());
+    if (group->getCurlDownload()) {
+      createCurlFileEntry(files.get(), group->getCurlDownload()->snapshot(),
+                          dctx->getFirstFileEntry());
+    }
+    else {
+      createFileEntry(
+          files.get(),
+          std::begin(group->getDownloadContext()->getFileEntries()),
+          std::end(group->getDownloadContext()->getFileEntries()),
+          dctx->getTotalLength(), dctx->getPieceLength(),
+          group->getPieceStorage());
+    }
   }
   return std::move(files);
 }

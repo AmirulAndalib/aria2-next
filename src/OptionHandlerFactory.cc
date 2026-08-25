@@ -928,6 +928,16 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
+    OptionHandler* op(new NumberOptionHandler(
+        PREF_STREAM_MAX_CONNECTIONS, TEXT_STREAM_MAX_CONNECTIONS, "4", 1,
+        32));
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
     OptionHandler* op(new ParameterOptionHandler(
         PREF_ED2K_PIECE_SELECTOR, TEXT_ED2K_PIECE_SELECTOR, A2_V_DEFAULT,
         {A2_V_DEFAULT, V_INORDER, A2_V_RANDOM, A2_V_GEOM}));

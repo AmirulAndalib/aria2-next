@@ -35,15 +35,18 @@ void StreamStoreTest::testResumeLookupAndCleanup()
   saved.etag = "\"revision-one\"";
   saved.totalLength = 4096;
   saved.completedLength = 1024;
+  saved.completedRanges = {{0, 512}, {2048, 2560}};
   REQUIRE(store.save(saved));
 
   StreamState restored;
   REQUIRE(store.load(restored, "0000000000000002", saved.path));
   REQUIRE_EQ(saved.gid, restored.gid);
   REQUIRE_EQ(saved.completedLength, restored.completedLength);
+  REQUIRE_EQ(saved.completedRanges, restored.completedRanges);
 
   saved.gid = "0000000000000002";
   saved.completedLength = 2048;
+  saved.completedRanges = {{0, 2048}};
   REQUIRE(store.save(saved));
   REQUIRE(!store.load(restored, "0000000000000001", ""));
   REQUIRE(store.removePath(saved.path));
@@ -70,6 +73,7 @@ void StreamStoreTest::testPrunesMissingPayloads()
     state.path = payload;
     state.totalLength = 2;
     state.completedLength = 1;
+    state.completedRanges = {{0, 1}};
     REQUIRE(store.save(state));
   }
   REQUIRE(File(payload).remove());

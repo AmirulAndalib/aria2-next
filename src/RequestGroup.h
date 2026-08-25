@@ -361,6 +361,11 @@ public:
     return haltRequested_ && haltReason_ == USER_REQUEST;
   }
 
+  bool isShutdownRequested() const
+  {
+    return haltRequested_ && haltReason_ == SHUTDOWN_SIGNAL;
+  }
+
   void setPauseRequested(bool f);
 
   bool isPauseRequested() const { return pauseRequested_; }

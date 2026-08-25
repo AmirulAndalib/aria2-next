@@ -15,6 +15,8 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 struct sqlite3;
 
@@ -28,6 +30,7 @@ struct StreamState {
   std::string lastModified;
   int64_t totalLength = 0;
   int64_t completedLength = 0;
+  std::vector<std::pair<int64_t, int64_t>> completedRanges;
 };
 
 class StreamStore {

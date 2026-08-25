@@ -303,6 +303,7 @@ PrefPtr PREF_ED2K_MIN_SPLIT_SIZE = makePref("ed2k-min-split-size");
 PrefPtr PREF_MAX_DOWNLOAD_RESULT = makePref("max-download-result");
 // value: 1*digit
 PrefPtr PREF_RETRY_WAIT = makePref("retry-wait");
+PrefPtr PREF_STREAM_MAX_CONNECTIONS = makePref("stream-max-connections");
 // value: string
 PrefPtr PREF_ASYNC_DNS_SERVER = makePref("async-dns-server");
 // value: true | false

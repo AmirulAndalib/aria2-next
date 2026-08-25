@@ -20,7 +20,7 @@ But upstream development has slowed dramatically in recent years. Dependencies g
 
 Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, HTTPS, SFTP, Metalink, ED2K, RPC, and libaria2 remain supported. HTTP, HTTPS, SFTP, and Metalink payload transfers use libcurl 8.21 with nghttp2. BitTorrent uses libtorrent-rasterbar 2.1. FTP and the former custom stream protocol stacks have been removed.
 
-Stream, BitTorrent, and ED2K resume state is stored under `--state-dir`. Payload directories no longer receive adjacent `.aria2` control files. HTTP cookies, authentication, proxies, TLS, SFTP, resume validation, and HTTP/2 use their native library implementations.
+Stream, BitTorrent, and ED2K resume state is stored under `--state-dir`. Payload directories no longer receive adjacent `.aria2` control files. HTTP cookies, authentication, proxies, TLS, SFTP, resume validation, and HTTP/2 use their native library implementations. HTTP and HTTPS transfers use libcurl's event-driven multi-socket API, adaptive verified byte ranges, HTTP/2 multiplexing, shared cookies and TLS sessions, and range-aware SQLite resume state.
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted. Aria2 Next then replaces the metadata-only native handle with a checked libtorrent handle that already contains the final file priorities. This prevents stale partfiles from entering the payload session.
 
