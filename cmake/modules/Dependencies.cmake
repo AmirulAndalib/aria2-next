@@ -44,24 +44,12 @@ aria2_import_dependency(aria2::sqlite sqlite3.h
 aria2_import_dependency(aria2::cares ares.h
   LIBRARIES cares cares_static
   DEFINITIONS $<$<BOOL:${WIN32}>:CARES_STATICLIB>)
-aria2_import_dependency(aria2::libssh2 libssh2.h
-  LIBRARIES ssh2 libssh2 libssh2_static
-  DEFINITIONS $<$<BOOL:${WIN32}>:LIBSSH2_STATIC>)
-
 unset(OpenSSL_DIR CACHE)
 set(OpenSSL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL")
 find_package(OpenSSL ${ARIA2_MIN_OPENSSL_VERSION} CONFIG REQUIRED
   PATHS "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL"
   NO_DEFAULT_PATH
   NO_CMAKE_FIND_ROOT_PATH)
-
-if(WIN32)
-  set_property(TARGET aria2::libssh2 PROPERTY
-    INTERFACE_LINK_LIBRARIES "bcrypt;crypt32")
-else()
-  set_property(TARGET aria2::libssh2 PROPERTY
-    INTERFACE_LINK_LIBRARIES OpenSSL::Crypto)
-endif()
 
 if(ARIA2_ENABLE_BITTORRENT)
   unset(LibtorrentRasterbar_DIR CACHE)
@@ -80,7 +68,27 @@ endif()
 
 unset(CURL_DIR CACHE)
 set(CURL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/CURL")
+set(CARES_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
+set(CARES_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libcares.a" CACHE FILEPATH "" FORCE)
+set(CARES_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(LIBSSH2_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
+set(LIBSSH2_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libssh2.a" CACHE FILEPATH "" FORCE)
+set(LIBSSH2_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(NGHTTP2_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
+set(NGHTTP2_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libnghttp2.a" CACHE FILEPATH "" FORCE)
+set(NGHTTP2_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(ZLIB_ROOT "${ARIA2_DEPENDENCY_ROOT}" CACHE PATH "" FORCE)
+set(ZLIB_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
+set(ZLIB_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libz.a" CACHE FILEPATH "" FORCE)
+set(ZLIB_LIBRARY_RELEASE "${ARIA2_DEPENDENCY_ROOT}/lib/libz.a" CACHE FILEPATH "" FORCE)
+set(ZLIB_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
 find_package(CURL CONFIG REQUIRED
   PATHS "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/CURL"
   NO_DEFAULT_PATH
   NO_CMAKE_FIND_ROOT_PATH)
+get_target_property(aria2_curl_link_libraries CURL::libcurl_static
+  INTERFACE_LINK_LIBRARIES)
+list(FILTER aria2_curl_link_libraries EXCLUDE REGEX
+  ".*(CURL::cares|ZLIB::ZLIB).*")
+set_property(TARGET CURL::libcurl_static PROPERTY INTERFACE_LINK_LIBRARIES
+  "${aria2_curl_link_libraries}")

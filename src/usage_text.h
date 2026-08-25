@@ -50,16 +50,6 @@
     "                              be changed to \"/\" and standard input, standard\n" \
     "                              output and standard error will be redirected to\n" \
     "                              \"/dev/null\". Requires RPC, an input file, or a URI.")
-#define TEXT_SPLIT                                                      \
-  _(" -s, --split=N                Download a file using N connections. If more\n" \
-    "                              than N URIs are given, first N URIs are used and\n" \
-    "                              remaining URLs are used for backup. If less than\n" \
-    "                              N URIs are given, those URLs are used more than\n" \
-    "                              once so that N connections total are made\n" \
-    "                              simultaneously. The number of connections to the\n" \
-    "                              same host is restricted by the \n"        \
-    "                              --max-connection-per-server option. See also the\n" \
-    "                              --min-split-size option.")
 #define TEXT_RETRY_WAIT                                                 \
   _(" --retry-wait=SEC             Set the seconds to wait between retries. \n" \
     "                              With SEC > 0, aria2 will retry download when the\n" \
@@ -221,7 +211,7 @@
 #define TEXT_MAX_CONCURRENT_DOWNLOADS                                   \
   _(" -j, --max-concurrent-downloads=N Set maximum number of parallel downloads for\n" \
     "                              every static HTTP(S)/SFTP URL, torrent and metalink.\n" \
-    "                              See also --split and --optimize-concurrent-downloads options.")
+    "                              See also --optimize-concurrent-downloads.")
 #define TEXT_OPTIMIZE_CONCURRENT_DOWNLOADS\
   _(" --optimize-concurrent-downloads[=true|false|A:B] Optimizes the number of\n" \
     "                              concurrent downloads according to the bandwidth\n" \
@@ -515,6 +505,8 @@
   _(" --ed2k-udp-listen-port=PORT Set UDP port number for ED2K Kad and peer reask packets.")
 #define TEXT_ED2K_UPLOAD_SLOTS                                          \
   _(" --ed2k-upload-slots=NUM     Set maximum active ED2K upload slots.")
+#define TEXT_ED2K_MAX_CONNECTIONS                                      \
+  _(" --ed2k-max-connections=NUM  Set maximum concurrent ED2K peer connections.")
 #define TEXT_ED2K_PREVIEW_PRIORITY                                      \
   _(" --ed2k-preview-priority[=true|false] Prioritize first and last ED2K parts. (default: false)")
 #define TEXT_STATE_DIR                                                  \
@@ -669,20 +661,8 @@
     "                              as a file will not be saved. Downloads removed\n" \
     "                              using aria2.remove and aria2.forceRemove will not\n" \
     "                              be saved.")
-#define TEXT_MAX_CONNECTION_PER_SERVER          \
-  _(" -x, --max-connection-per-server=NUM The maximum number of connections to one\n" \
-    "                              server for each download.")
-#define TEXT_MIN_SPLIT_SIZE                     \
-  _(" -k, --min-split-size=SIZE    aria2 does not split less than 2*SIZE byte range.\n" \
-    "                              For example, let's consider downloading 20MiB\n" \
-    "                              file. If SIZE is 10M, aria2 can split file into 2\n" \
-    "                              range [0-10MiB) and [10MiB-20MiB) and download it\n" \
-    "                              using 2 sources(if --split >= 2, of course).\n" \
-    "                              If SIZE is 15M, since 2*15M > 20MiB, aria2 does\n" \
-    "                              not split file and download it using 1 source.\n" \
-    "                              Decimal values are allowed. You can append K or\n" \
-    "                              M(1K = 1024, 1M = 1024K). Fractional bytes are\n" \
-    "                              rounded down.")
+#define TEXT_ED2K_MIN_SPLIT_SIZE                                       \
+  _(" --ed2k-min-split-size=SIZE Keep at least SIZE bytes between parallel ED2K ranges.")
 #define TEXT_ON_BT_DOWNLOAD_COMPLETE            \
   _(" --on-bt-download-complete=COMMAND For BitTorrent, a command specified in\n" \
     "                              --on-download-complete is called after download\n" \
@@ -756,8 +736,8 @@
     "                              metalink:url and metalink:metaurl element in a\n" \
     "                              metalink file stored in local disk. If URI points\n" \
     "                              to a directory, URI must end with '/'.")
-#define TEXT_STREAM_PIECE_SELECTOR              \
-  _(" --stream-piece-selector=SELECTOR Specify piece selection algorithm\n" \
+#define TEXT_ED2K_PIECE_SELECTOR                \
+  _(" --ed2k-piece-selector=SELECTOR Specify piece selection algorithm\n" \
     "                              used in ED2K downloads. Piece means fixed\n" \
     "                              length segment which is downloaded in parallel\n" \
     "                              in segmented download. If 'default' is given,\n" \
@@ -770,11 +750,11 @@
     "                              has minimum index. Index=0 means first of the\n" \
     "                              file. This will be useful to view movie while\n" \
     "                              Please note that aria2 honors\n"     \
-    "                              --min-split-size option, so it will be necessary\n" \
+    "                              --ed2k-min-split-size option, so it will be necessary\n" \
     "                              to specify a reasonable value to\n"  \
-    "                              --min-split-size option.\n"          \
+    "                              --ed2k-min-split-size option.\n"     \
     "                              If 'random' is given, aria2 selects piece\n" \
-    "                              randomly. Like 'inorder', --min-split-size\n" \
+    "                              randomly. Like 'inorder', --ed2k-min-split-size\n" \
     "                              option is honored.\n"                \
     "                              If 'geom' is given, at the beginning aria2\n" \
     "                              selects piece which has minimum index like\n" \

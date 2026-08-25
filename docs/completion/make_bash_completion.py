@@ -102,7 +102,7 @@ _aria2_next()
                      '--log-level',
                      '--event-poll',
                      '--follow-torrent',
-                     '--stream-piece-selector',
+                     '--ed2k-piece-selector',
                      '--download-result',
                      '--min-tls-version',
                      '--console-log-level']:

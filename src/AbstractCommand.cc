@@ -701,7 +701,7 @@ int32_t AbstractCommand::calculateMinSplitSize() const
     return getDownloadContext()->getPieceLength();
   }
 
-  return getOption()->getAsInt(PREF_MIN_SPLIT_SIZE);
+  return getOption()->getAsInt(PREF_ED2K_MIN_SPLIT_SIZE);
 }
 
 void AbstractCommand::setRequest(const std::shared_ptr<Request>& request)

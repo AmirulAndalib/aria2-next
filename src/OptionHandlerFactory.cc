@@ -225,6 +225,16 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
+    OptionHandler* op(new NumberOptionHandler(PREF_ED2K_MAX_CONNECTIONS,
+                                              TEXT_ED2K_MAX_CONNECTIONS, "20",
+                                              1, 1024));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_ED2K);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
     OptionHandler* op(new BooleanOptionHandler(
         PREF_ED2K_PREVIEW_PRIORITY, TEXT_ED2K_PREVIEW_PRIORITY, A2_V_FALSE,
         OptionHandler::OPT_ARG));
@@ -485,18 +495,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(new NumberOptionHandler(PREF_MAX_CONNECTION_PER_SERVER,
-                                              TEXT_MAX_CONNECTION_PER_SERVER,
-                                              "1", 1, 1024, 'x'));
-    op->addTag(TAG_BASIC);
-    op->addTag(TAG_ED2K);
-    op->addTag(TAG_METALINK);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
-    handlers.push_back(op);
-  }
-  {
     OptionHandler* op(new UnitNumberOptionHandler(
         PREF_MAX_DOWNLOAD_LIMIT, TEXT_MAX_DOWNLOAD_LIMIT, "0", 0));
     op->addTag(TAG_BITTORRENT);
@@ -547,8 +545,8 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   }
   {
     OptionHandler* op(new UnitNumberOptionHandler(
-        PREF_MIN_SPLIT_SIZE, TEXT_MIN_SPLIT_SIZE, "20M", 1_m, 1_g, 'k'));
-    op->addTag(TAG_BASIC);
+        PREF_ED2K_MIN_SPLIT_SIZE, TEXT_ED2K_MIN_SPLIT_SIZE, "20M", 1_m,
+        1_g));
     op->addTag(TAG_ED2K);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);
@@ -930,24 +928,8 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(
-        new NumberOptionHandler(PREF_SPLIT, TEXT_SPLIT, "5", 1, -1, 's'));
-    op->addTag(TAG_BASIC);
-    op->addTag(TAG_ED2K);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new NumberOptionHandler(PREF_STARTUP_IDLE_TIME,
-                                              NO_DESCRIPTION, "10", 1, 60));
-    op->hide();
-    handlers.push_back(op);
-  }
-  {
     OptionHandler* op(new ParameterOptionHandler(
-        PREF_STREAM_PIECE_SELECTOR, TEXT_STREAM_PIECE_SELECTOR, A2_V_DEFAULT,
+        PREF_ED2K_PIECE_SELECTOR, TEXT_ED2K_PIECE_SELECTOR, A2_V_DEFAULT,
         {A2_V_DEFAULT, V_INORDER, A2_V_RANDOM, A2_V_GEOM}));
     op->addTag(TAG_ED2K);
     op->setInitialOption(true);
@@ -971,6 +953,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         /* acceptStdin = */ false, 0, /* mustExist = */ false));
     op->addTag(TAG_HTTP);
     op->addTag(TAG_HTTPS);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -978,6 +963,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         PREF_CERTIFICATE, TEXT_CERTIFICATE, NO_DEFAULT_VALUE, false));
     op->addTag(TAG_HTTP);
     op->addTag(TAG_HTTPS);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -986,6 +974,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
                                  A2_V_TRUE, OptionHandler::OPT_ARG));
     op->addTag(TAG_HTTP);
     op->addTag(TAG_HTTPS);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -1056,6 +1047,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->addTag(TAG_BASIC);
     op->addTag(TAG_HTTP);
     op->addTag(TAG_COOKIE);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -1073,6 +1067,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         /* acceptStdin = */ false, 0, /* mustExist = */ false));
     op->addTag(TAG_HTTP);
     op->addTag(TAG_HTTPS);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {
@@ -1089,7 +1086,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
         /* acceptStdin = */ false, 0, /* mustExist = */ false));
     op->addTag(TAG_HTTP);
     op->addTag(TAG_COOKIE);
+    op->setInitialOption(true);
     op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {

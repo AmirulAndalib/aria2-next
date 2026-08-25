@@ -45,21 +45,17 @@
 #include "DownloadContext.h"
 #include "metalink_helper.h"
 #include "BinaryStream.h"
-#include "MemoryBufferPreDownloadHandler.h"
 #include "MetalinkEntry.h"
 #include "MetalinkResource.h"
 #include "MetalinkMetaurl.h"
 #include "FileEntry.h"
-#include "a2functional.h"
 #include "download_helper.h"
 #include "fmt.h"
-#include "SegList.h"
 #include "DownloadFailureException.h"
 #include "Signature.h"
-#include "download_handlers.h"
-#include "RequestGroupCriteria.h"
 #include "Checksum.h"
 #include "ChunkChecksum.h"
+#include "CurlDownload.h"
 
 namespace aria2 {
 
@@ -83,23 +79,6 @@ public:
       break;
     default:
       break;
-    }
-  }
-};
-} // namespace
-
-namespace {
-class FindBitTorrentUri {
-public:
-  FindBitTorrentUri() = default;
-
-  bool operator()(const std::shared_ptr<MetalinkResource>& resource)
-  {
-    if (resource->type == MetalinkResource::TYPE_BITTORRENT) {
-      return true;
-    }
-    else {
-      return false;
     }
   }
 };
@@ -192,102 +171,48 @@ void Metalink2RequestGroup::createRequestGroup(
     }
     entries.resize(inspoint);
   }
-  std::for_each(std::begin(entries), std::end(entries),
-                std::mem_fn(&MetalinkEntry::reorderMetaurlsByPriority));
-  auto entryGroups = metalink::groupEntryByMetaurlName(entries);
-  for (auto& entryGroup : entryGroups) {
-    auto& metaurl = entryGroup.first;
-    auto& mes = entryGroup.second;
-    A2_LOG_DEBUG(fmt("Processing metaurl group metaurl=%s",
-                     logging::sanitizeUri(metaurl).c_str()));
+  for (auto& ownedEntry : entries) {
+    auto* entry = ownedEntry.get();
     auto option = util::copy(optionTemplate);
     auto rg = std::make_shared<RequestGroup>(GroupId::create(), option);
-    std::shared_ptr<DownloadContext> dctx;
-    int numSplit = option->getAsInt(PREF_SPLIT);
-    int maxConn = option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER);
-    if (mes.size() == 1) {
-      auto entry = mes[0];
-      A2_LOG_DEBUG(fmt(MSG_METALINK_QUEUEING, entry->getPath().c_str()));
-      entry->reorderResourcesByPriority();
-      for (auto& mr : entry->resources) {
-        A2_LOG_TRACE(fmt("priority=%d url=%s", mr->priority,
-                         logging::sanitizeUri(mr->url).c_str()));
-      }
-      std::vector<std::string> uris;
-      std::for_each(std::begin(entry->resources), std::end(entry->resources),
-                    AccumulateNonP2PUri(uris));
-      // If piece hash is specified in the metalink,
-      // make segment size equal to piece hash size.
-      int32_t pieceLength;
-      if (!entry->chunkChecksum) {
-        pieceLength = option->getAsInt(PREF_PIECE_LENGTH);
-      }
-      else {
-        pieceLength = entry->chunkChecksum->getPieceLength();
-      }
-      dctx = std::make_shared<DownloadContext>(
-          pieceLength, entry->getLength(),
-          util::applyDir(option->get(PREF_DIR), entry->file->getPath()));
-      dctx->getFirstFileEntry()->setUris(uris);
-      dctx->getFirstFileEntry()->setMaxConnectionPerServer(maxConn);
-      dctx->getFirstFileEntry()->setSuffixPath(entry->file->getPath());
-      if (!entry->metaurls.empty()) {
-        dctx->getFirstFileEntry()->setOriginalName(entry->metaurls[0]->name);
-      }
-
-      if (option->getAsBool(PREF_METALINK_ENABLE_UNIQUE_PROTOCOL)) {
-        dctx->getFirstFileEntry()->setUniqueProtocol(true);
-      }
-      if (entry->checksum) {
-        dctx->setDigest(entry->checksum->getHashType(),
-                        entry->checksum->getDigest());
-      }
-      if (entry->chunkChecksum) {
-        dctx->setPieceHashes(entry->chunkChecksum->getHashType(),
-                             std::begin(entry->chunkChecksum->getPieceHashes()),
-                             std::end(entry->chunkChecksum->getPieceHashes()));
-      }
-      dctx->setSignature(entry->popSignature());
-      rg->setNumConcurrentCommand(
-          entry->maxConnections < 0
-              ? numSplit
-              : std::min(numSplit, entry->maxConnections));
+    A2_LOG_DEBUG(fmt(MSG_METALINK_QUEUEING, entry->getPath().c_str()));
+    entry->reorderResourcesByPriority();
+    for (auto& resource : entry->resources) {
+      A2_LOG_TRACE(fmt("priority=%d url=%s", resource->priority,
+                       logging::sanitizeUri(resource->url).c_str()));
     }
-    else {
-      dctx = std::make_shared<DownloadContext>();
-      // piece length is overridden by the one in torrent file.
-      dctx->setPieceLength(option->getAsInt(PREF_PIECE_LENGTH));
-      std::vector<std::shared_ptr<FileEntry>> fileEntries;
-      int64_t offset = 0;
-      for (auto entry : mes) {
-        A2_LOG_DEBUG(fmt("Metalink: Queueing %s for download as a member.",
-                         entry->getPath().c_str()));
-        A2_LOG_TRACE(
-            fmt("originalName = %s", entry->metaurls[0]->name.c_str()));
-        entry->reorderResourcesByPriority();
-        std::vector<std::string> uris;
-        std::for_each(std::begin(entry->resources), std::end(entry->resources),
-                      AccumulateNonP2PUri(uris));
-        auto fe = std::make_shared<FileEntry>(
-            util::applyDir(option->get(PREF_DIR), entry->file->getPath()),
-            entry->file->getLength(), offset, uris);
-        fe->setMaxConnectionPerServer(maxConn);
-        if (option->getAsBool(PREF_METALINK_ENABLE_UNIQUE_PROTOCOL)) {
-          fe->setUniqueProtocol(true);
-        }
-        fe->setOriginalName(entry->metaurls[0]->name);
-        fe->setSuffixPath(entry->file->getPath());
-        fileEntries.push_back(fe);
-        if (offset >
-            std::numeric_limits<int64_t>::max() - entry->file->getLength()) {
-          throw DOWNLOAD_FAILURE_EXCEPTION(fmt(EX_TOO_LARGE_FILE, offset));
-        }
-        offset += entry->file->getLength();
-      }
-      dctx->setFileEntries(std::begin(fileEntries), std::end(fileEntries));
-      rg->setNumConcurrentCommand(numSplit);
+    std::vector<std::string> uris;
+    std::for_each(std::begin(entry->resources), std::end(entry->resources),
+                  AccumulateNonP2PUri(uris));
+    if (uris.empty()) {
+      continue;
     }
+    const auto pieceLength = entry->chunkChecksum
+                                 ? entry->chunkChecksum->getPieceLength()
+                                 : option->getAsInt(PREF_PIECE_LENGTH);
+    auto dctx = std::make_shared<DownloadContext>(
+        pieceLength, entry->getLength(),
+        util::applyDir(option->get(PREF_DIR), entry->file->getPath()));
+    dctx->getFirstFileEntry()->setUris(uris);
+    dctx->getFirstFileEntry()->setSuffixPath(entry->file->getPath());
+    if (!entry->metaurls.empty()) {
+      dctx->getFirstFileEntry()->setOriginalName(entry->metaurls[0]->name);
+    }
+    if (option->getAsBool(PREF_METALINK_ENABLE_UNIQUE_PROTOCOL)) {
+      dctx->getFirstFileEntry()->setUniqueProtocol(true);
+    }
+    if (entry->checksum) {
+      dctx->setDigest(entry->checksum->getHashType(),
+                      entry->checksum->getDigest());
+    }
+    if (entry->chunkChecksum) {
+      dctx->setPieceHashes(entry->chunkChecksum->getHashType(),
+                           std::begin(entry->chunkChecksum->getPieceHashes()),
+                           std::end(entry->chunkChecksum->getPieceHashes()));
+    }
+    dctx->setSignature(entry->popSignature());
     rg->setDownloadContext(dctx);
+    rg->setCurlDownload(std::make_shared<CurlDownload>(std::move(uris)));
 
     if (option->getAsBool(PREF_ENABLE_RPC)) {
       rg->setPauseRequested(option->getAsBool(PREF_PAUSE));

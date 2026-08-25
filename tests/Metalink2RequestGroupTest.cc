@@ -10,6 +10,7 @@
 #include "RequestGroup.h"
 #include "FileEntry.h"
 #include "Signature.h"
+#include "CurlDownload.h"
 
 namespace aria2 {
 
@@ -23,7 +24,6 @@ public:
   void setUp()
   {
     option_.reset(new Option());
-    option_->put(PREF_SPLIT, "1");
   }
 
   void testGenerate();
@@ -56,6 +56,7 @@ void Metalink2RequestGroupTest::testGenerate()
                uris[0]);
     REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
                uris[1]);
+    REQUIRE(rg->getCurlDownload());
 
     const std::shared_ptr<DownloadContext>& dctx = rg->getDownloadContext();
 
@@ -123,24 +124,28 @@ void Metalink2RequestGroupTest::testGenerate_groupByMetaurl()
   std::vector<std::shared_ptr<RequestGroup>> groups;
   Metalink2RequestGroup().generate(
       groups, A2_TEST_DIR "/metalink4-groupbymetaurl.xml", option_);
-  REQUIRE_EQ((size_t)2, groups.size());
+  REQUIRE_EQ((size_t)3, groups.size());
 
-  const auto& groupedFiles =
-      groups[0]->getDownloadContext()->getFileEntries();
-  REQUIRE_EQ((size_t)2, groupedFiles.size());
-  REQUIRE_EQ(std::string("./file1"), groupedFiles[0]->getPath());
+  const auto& firstFiles = groups[0]->getDownloadContext()->getFileEntries();
+  REQUIRE_EQ((size_t)1, firstFiles.size());
+  REQUIRE_EQ(std::string("./file1"), firstFiles[0]->getPath());
   REQUIRE_EQ(std::string("http://file1p1"),
-             groupedFiles[0]->getRemainingUris()[0]);
-  REQUIRE_EQ(std::string("./file3"), groupedFiles[1]->getPath());
-  REQUIRE_EQ(std::string("http://file3p1"),
-             groupedFiles[1]->getRemainingUris()[0]);
+             firstFiles[0]->getRemainingUris()[0]);
+  REQUIRE(groups[0]->getCurlDownload());
 
-  const auto& singleFiles =
-      groups[1]->getDownloadContext()->getFileEntries();
-  REQUIRE_EQ((size_t)1, singleFiles.size());
-  REQUIRE_EQ(std::string("./file2"), singleFiles[0]->getPath());
+  const auto& secondFiles = groups[1]->getDownloadContext()->getFileEntries();
+  REQUIRE_EQ((size_t)1, secondFiles.size());
+  REQUIRE_EQ(std::string("./file2"), secondFiles[0]->getPath());
   REQUIRE_EQ(std::string("http://file2p1"),
-             singleFiles[0]->getRemainingUris()[0]);
+             secondFiles[0]->getRemainingUris()[0]);
+  REQUIRE(groups[1]->getCurlDownload());
+
+  const auto& thirdFiles = groups[2]->getDownloadContext()->getFileEntries();
+  REQUIRE_EQ((size_t)1, thirdFiles.size());
+  REQUIRE_EQ(std::string("./file3"), thirdFiles[0]->getPath());
+  REQUIRE_EQ(std::string("http://file3p1"),
+             thirdFiles[0]->getRemainingUris()[0]);
+  REQUIRE(groups[2]->getCurlDownload());
 }
 #endif // ENABLE_BITTORRENT
 

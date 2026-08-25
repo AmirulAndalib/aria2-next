@@ -88,7 +88,7 @@ DefaultPieceStorage::DefaultPieceStorage(
       wrDiskCache_(nullptr)
 {
   const std::string& pieceSelectorOpt =
-      option_->get(PREF_STREAM_PIECE_SELECTOR);
+      option_->get(PREF_ED2K_PIECE_SELECTOR);
   if (pieceSelectorOpt.empty() || pieceSelectorOpt == A2_V_DEFAULT) {
     streamPieceSelector_ =
         make_unique<DefaultStreamPieceSelector>(bitfieldMan_.get());

@@ -171,15 +171,6 @@ void showUsage(const std::string& keyword,
                   " contains \"&\" or any characters that have special meaning "
                   "in shell."));
     out->printf("\n\n");
-    out->printf(
-        _("About the number of connections\n"
-          " Since 1.10.0 release, aria2 uses 1 connection per host by default "
-          "and has 20MiB\n"
-          " segment size restriction. So whatever value you specify using -s "
-          "option, it\n"
-          " uses 1 connection per host. To make it behave like 1.9.x, use\n"
-          " --max-connection-per-server=4 --min-split-size=1M.\n"
-          "\n"));
   }
   out->printf(_("Refer to man page for more information."));
   out->printf("\n");

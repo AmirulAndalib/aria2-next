@@ -77,6 +77,11 @@ std::string outputPath(RequestGroup* group, const std::string& uriValue)
   const auto option = group->getOption();
   std::string name = option->get(PREF_OUT);
   if (name.empty()) {
+    const auto& configured =
+        group->getDownloadContext()->getFirstFileEntry()->getPath();
+    if (!configured.empty()) {
+      return configured;
+    }
     uri::UriStruct parsed;
     if (uri::parse(parsed, uriValue)) {
       name = util::fixTaintedBasename(parsed.file);
@@ -392,12 +397,10 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download)
   curl_easy_setopt(impl.handle, CURLOPT_NOPROGRESS, 0L);
   curl_easy_setopt(impl.handle, CURLOPT_CONNECTTIMEOUT,
                    taskOption->getAsInt(PREF_CONNECT_TIMEOUT));
-  curl_easy_setopt(impl.handle, CURLOPT_TIMEOUT,
-                   taskOption->getAsInt(PREF_TIMEOUT));
   curl_easy_setopt(impl.handle, CURLOPT_LOW_SPEED_LIMIT,
-                   taskOption->getAsInt(PREF_LOWEST_SPEED_LIMIT));
+                   std::max(1, taskOption->getAsInt(PREF_LOWEST_SPEED_LIMIT)));
   curl_easy_setopt(impl.handle, CURLOPT_LOW_SPEED_TIME,
-                   taskOption->getAsInt(PREF_STARTUP_IDLE_TIME));
+                   taskOption->getAsInt(PREF_TIMEOUT));
   impl.appliedLimit = -1;
   curl_easy_setopt(impl.handle, CURLOPT_USERAGENT,
                    taskOption->get(PREF_USER_AGENT).c_str());
@@ -686,9 +689,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     File(impl.path).utime(Time(), Time(static_cast<time_t>(reportedFileTime)));
   }
   download->snapshot_.completedLength = length;
-  if (download->snapshot_.totalLength == 0) {
-    download->snapshot_.totalLength = length;
-  }
+  download->snapshot_.totalLength = length;
   auto context = impl.group->getDownloadContext();
   context->getFirstFileEntry()->setLength(download->snapshot_.totalLength);
   context->markTotalLengthIsKnown();

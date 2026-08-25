@@ -176,7 +176,6 @@ PrefPtr PREF_DIR = makePref("dir");
 // values: a string that your file system recognizes as a file name.
 PrefPtr PREF_OUT = makePref("out");
 // values: 1*digit
-PrefPtr PREF_SPLIT = makePref("split");
 // value: true | false
 PrefPtr PREF_DAEMON = makePref("daemon");
 // value: a string
@@ -191,7 +190,6 @@ PrefPtr PREF_MAX_OVERALL_DOWNLOAD_LIMIT =
 // value: 1*digit
 PrefPtr PREF_MAX_DOWNLOAD_LIMIT = makePref("max-download-limit");
 // value: 1*digit
-PrefPtr PREF_STARTUP_IDLE_TIME = makePref("startup-idle-time");
 // value: prealloc | fallc | none
 PrefPtr PREF_FILE_ALLOCATION = makePref("file-allocation");
 // value: 1*digit
@@ -297,9 +295,8 @@ PrefPtr PREF_MAX_RESUME_FAILURE_TRIES = makePref("max-resume-failure-tries");
 // value: string that your file system recognizes as a file name.
 PrefPtr PREF_SAVE_SESSION = makePref("save-session");
 // value: 1*digit
-PrefPtr PREF_MAX_CONNECTION_PER_SERVER = makePref("max-connection-per-server");
 // value: 1*digit
-PrefPtr PREF_MIN_SPLIT_SIZE = makePref("min-split-size");
+PrefPtr PREF_ED2K_MIN_SPLIT_SIZE = makePref("ed2k-min-split-size");
 // value: true | false
 // value: true | false
 // value: 1*digit
@@ -311,7 +308,7 @@ PrefPtr PREF_ASYNC_DNS_SERVER = makePref("async-dns-server");
 // value: true | false
 PrefPtr PREF_SHOW_CONSOLE_READOUT = makePref("show-console-readout");
 // value: default | inorder
-PrefPtr PREF_STREAM_PIECE_SELECTOR = makePref("stream-piece-selector");
+PrefPtr PREF_ED2K_PIECE_SELECTOR = makePref("ed2k-piece-selector");
 // value: true | false
 PrefPtr PREF_TRUNCATE_CONSOLE_READOUT = makePref("truncate-console-readout");
 // value: true | false
@@ -346,6 +343,8 @@ PrefPtr PREF_ED2K_LISTEN_PORT = makePref("ed2k-listen-port");
 PrefPtr PREF_ED2K_UDP_LISTEN_PORT = makePref("ed2k-udp-listen-port");
 // value: 1*digit
 PrefPtr PREF_ED2K_UPLOAD_SLOTS = makePref("ed2k-upload-slots");
+
+PrefPtr PREF_ED2K_MAX_CONNECTIONS = makePref("ed2k-max-connections");
 // value: true | false
 PrefPtr PREF_ED2K_PREVIEW_PRIORITY = makePref("ed2k-preview-priority");
 // value: string

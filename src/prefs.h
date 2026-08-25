@@ -133,7 +133,6 @@ extern PrefPtr PREF_DIR;
 // values: a string that your file system recognizes as a file name.
 extern PrefPtr PREF_OUT;
 // values: 1*digit
-extern PrefPtr PREF_SPLIT;
 // value: true | false
 extern PrefPtr PREF_DAEMON;
 // value: a string
@@ -145,7 +144,6 @@ extern PrefPtr PREF_PIECE_LENGTH;
 // value: 1*digit
 extern PrefPtr PREF_MAX_DOWNLOAD_LIMIT;
 // value: 1*digit
-extern PrefPtr PREF_STARTUP_IDLE_TIME;
 // value: prealloc | falloc | none
 extern PrefPtr PREF_FILE_ALLOCATION;
 // value: 1*digit
@@ -250,9 +248,8 @@ extern PrefPtr PREF_MAX_RESUME_FAILURE_TRIES;
 // value: string that your file system recognizes as a file name.
 extern PrefPtr PREF_SAVE_SESSION;
 // value: 1*digit
-extern PrefPtr PREF_MAX_CONNECTION_PER_SERVER;
 // value: 1*digit
-extern PrefPtr PREF_MIN_SPLIT_SIZE;
+extern PrefPtr PREF_ED2K_MIN_SPLIT_SIZE;
 // value: true | false
 // value: true | false
 // value: 1*digit
@@ -264,7 +261,7 @@ extern PrefPtr PREF_ASYNC_DNS_SERVER;
 // value: true | false
 extern PrefPtr PREF_SHOW_CONSOLE_READOUT;
 // value: default | inorder | geom
-extern PrefPtr PREF_STREAM_PIECE_SELECTOR;
+extern PrefPtr PREF_ED2K_PIECE_SELECTOR;
 // value: true | false
 extern PrefPtr PREF_TRUNCATE_CONSOLE_READOUT;
 // value: true | false
@@ -299,6 +296,8 @@ extern PrefPtr PREF_ED2K_LISTEN_PORT;
 extern PrefPtr PREF_ED2K_UDP_LISTEN_PORT;
 // value: 1*digit
 extern PrefPtr PREF_ED2K_UPLOAD_SLOTS;
+
+extern PrefPtr PREF_ED2K_MAX_CONNECTIONS;
 // value: true | false
 extern PrefPtr PREF_ED2K_PREVIEW_PRIORITY;
 // value: string

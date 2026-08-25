@@ -2251,20 +2251,10 @@ void changeOption(const std::shared_ptr<RequestGroup>& group,
     sgl.normalize();
     dctx->setFileFilter(std::move(sgl));
   }
-  if (option.defined(PREF_SPLIT)
-#ifdef ENABLE_BITTORRENT
-      && !group->getBtDownload()
-#endif
-  ) {
-    group->setNumConcurrentCommand(grOption->getAsInt(PREF_SPLIT));
-  }
-  if (option.defined(PREF_MAX_CONNECTION_PER_SERVER)) {
-    int maxConn = grOption->getAsInt(PREF_MAX_CONNECTION_PER_SERVER);
-    const std::vector<std::shared_ptr<FileEntry>>& files =
-        dctx->getFileEntries();
-    for (auto& file : files) {
-      (file)->setMaxConnectionPerServer(maxConn);
-    }
+  if (option.defined(PREF_ED2K_MAX_CONNECTIONS) &&
+      dctx->hasAttribute(CTX_ATTR_ED2K)) {
+    group->setNumConcurrentCommand(
+        grOption->getAsInt(PREF_ED2K_MAX_CONNECTIONS));
   }
   if (option.defined(PREF_DIR) || option.defined(PREF_OUT)) {
     if (!group->getMetadataInfo()) {

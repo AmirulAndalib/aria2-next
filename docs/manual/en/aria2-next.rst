@@ -52,15 +52,12 @@ Basic Options
 .. option:: -j, --max-concurrent-downloads=<N>
 
   Set the maximum number of parallel downloads for every queue item.
-  See also the :option:`--split <-s>` option.
   Default: ``5``
 
   .. note::
 
      :option:`--max-concurrent-downloads` limits the number of items
-     which are downloaded concurrently.  :option:`--split <-s>` and
-     :option:`--min-split-size <-k>` affect the number of connections
-     inside each item.  Imagine that you have an input file (see
+     which are downloaded concurrently. Imagine that you have an input file (see
      :option:`--input-file <-i>` option) like this:
 
      .. code-block:: text
@@ -70,9 +67,7 @@ Basic Options
 
      Here is 2 download items.  aria2 can download these items
      concurrently if the value more than or equal 2 is given to
-     :option:`--max-concurrent-downloads`.  In each download item, you
-     can configure the number of connections using :option:`--split
-     <-s>` and/or :option:`--min-split-size <-k>`, etc.
+     :option:`--max-concurrent-downloads`.
 
 .. option:: -V, --check-integrity [true|false]
 
@@ -181,11 +176,6 @@ HTTP/SFTP Options
   This option does not affect BitTorrent downloads.
   Default: ``0``
 
-.. option:: -x, --max-connection-per-server=<NUM>
-
-  The maximum number of connections to one server for each download.
-  Default: ``1``
-
 .. option:: --max-file-not-found=<NUM>
 
   If aria2 receives "file not found" status from the remote HTTP/SFTP
@@ -202,18 +192,6 @@ HTTP/SFTP Options
   Set number of tries. ``0`` means unlimited.
   See also :option:`--retry-wait`.
   Default: ``5``
-
-.. option:: -k, --min-split-size=<SIZE>
-
-  aria2 does not split less than 2*SIZE byte range.  For example,
-  let's consider downloading 20MiB file. If SIZE is 10M, aria2 can
-  split file into 2 range [0-10MiB) and [10MiB-20MiB) and download it
-  using 2 sources(if :option:`--split <-s>` >= 2, of course).  If SIZE is 15M,
-  since 2*15M > 20MiB, aria2 does not split file and download it using
-  1 source. Decimal values are allowed. You can append ``K`` or ``M``
-  (1K = 1024, 1M = 1024K). Fractional bytes are rounded down.
-  Possible Values: ``1M`` -``1024M`` Default: ``20M``
-
 
 .. option:: --netrc-path=<FILE>
 
@@ -282,36 +260,6 @@ HTTP/SFTP Options
   Set the seconds to wait between retries. When ``SEC > 0``, aria2 will
   retry downloads when the HTTP server returns a 503 response. Default:
   ``0``
-
-.. option:: -s, --split=<N>
-
-  Set ED2K transfer concurrency.
-  Default: ``5``
-
-.. option:: --stream-piece-selector=<SELECTOR>
-
-  Specify the ED2K piece selection algorithm.
-  Default: ``default``.
-
-  default
-    Select a piece to reduce the number of connections established.
-    This is reasonable default behavior because establishing a connection is an
-    expensive operation.
-  inorder
-    Select a piece closest to the beginning of the file. This is useful for
-    viewing media while downloading. Note that aria2 honors
-    :option:`--min-split-size <-k>` option, so it will be necessary to specify
-    a reasonable value to :option:`--min-split-size <-k>` option.
-  random
-    Select a piece randomly. Like ``inorder``, :option:`--min-split-size <-k>`
-    option is honored.
-  geom
-    When starting to download a file, select a piece closest to the beginning
-    of the file like ``inorder``, but then exponentially increases space
-    between pieces.
-    This reduces the number of connections established, while
-    at the same time downloads the beginning part of the file first. This is
-    useful for viewing movies while downloading.
 
 .. option:: -t, --timeout=<SEC>
 
@@ -539,6 +487,31 @@ ED2K Specific Options
 .. option:: --ed2k-upload-slots=<NUM>
 
   Set the maximum number of active ED2K upload slots. Default: ``3``
+
+.. option:: --ed2k-max-connections=<N>
+
+  Set the maximum number of concurrent ED2K peer connections.
+  Default: ``20``
+
+.. option:: --ed2k-min-split-size=<SIZE>
+
+  Keep at least SIZE bytes between parallel ED2K ranges.
+  Decimal values are allowed. You can append ``K`` or ``M``
+  (1K = 1024, 1M = 1024K). Fractional bytes are rounded down.
+  Possible Values: ``1M`` -``1024M`` Default: ``20M``
+
+.. option:: --ed2k-piece-selector=<SELECTOR>
+
+  Specify the ED2K piece selection algorithm. Default: ``default``.
+
+  default
+    Select a piece to reduce the number of connections established.
+  inorder
+    Select the earliest piece while honoring :option:`--ed2k-min-split-size`.
+  random
+    Select a piece randomly while honoring :option:`--ed2k-min-split-size`.
+  geom
+    Start near the beginning and increase the distance between selected pieces.
 
 .. option:: --ed2k-preview-priority[=true|false]
 
@@ -2038,6 +2011,7 @@ of URIs. These optional lines must start with white space(s).
   * :option:`ed2k-server <--ed2k-server>`
   * :option:`ed2k-server-list <--ed2k-server-list>`
   * :option:`ed2k-upload-slots <--ed2k-upload-slots>`
+  * :option:`ed2k-max-connections <--ed2k-max-connections>`
   * :option:`enable-http-keep-alive <--enable-http-keep-alive>`
   * :option:`enable-mmap <--enable-mmap>`
   * :option:`enable-peer-exchange <--enable-peer-exchange>`
@@ -2060,7 +2034,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`https-proxy-user <--https-proxy-user>`
   * :option:`index-out <-O>`
   * :option:`lowest-speed-limit <--lowest-speed-limit>`
-  * :option:`max-connection-per-server <-x>`
   * :option:`max-download-limit <--max-download-limit>`
   * :option:`max-file-not-found <--max-file-not-found>`
   * :option:`max-mmap-limit <--max-mmap-limit>`
@@ -2074,7 +2047,7 @@ of URIs. These optional lines must start with white space(s).
   * :option:`metalink-os <--metalink-os>`
   * :option:`metalink-preferred-protocol <--metalink-preferred-protocol>`
   * :option:`metalink-version <--metalink-version>`
-  * :option:`min-split-size <-k>`
+  * :option:`ed2k-min-split-size <--ed2k-min-split-size>`
   * :option:`no-file-allocation-limit <--no-file-allocation-limit>`
   * :option:`no-netrc <-n>`
   * :option:`no-proxy <--no-proxy>`
@@ -2091,11 +2064,10 @@ of URIs. These optional lines must start with white space(s).
   * :option:`seed-ratio <--seed-ratio>`
   * :option:`seed-time <--seed-time>`
   * :option:`select-file <--select-file>`
-  * :option:`split <-s>`
   * :option:`sftp-passwd <--sftp-passwd>`
   * :option:`sftp-user <--sftp-user>`
   * :option:`ssh-host-key-sha256 <--ssh-host-key-sha256>`
-  * :option:`stream-piece-selector <--stream-piece-selector>`
+  * :option:`ed2k-piece-selector <--ed2k-piece-selector>`
   * :option:`timeout <-t>`
   * :option:`user-agent <-U>`
 

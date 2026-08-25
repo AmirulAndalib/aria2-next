@@ -68,7 +68,6 @@
 #include "ed2k_hash.h"
 #include "ed2k_kad.h"
 #include "ed2k_link.h"
-#include "ed2k_policy.h"
 #include "ed2k_search.h"
 #include "ed2k_server.h"
 #include "SimpleRandomizer.h"
@@ -94,27 +93,6 @@ void unfoldURI(std::vector<std::string>& result,
   for (const auto& i : args) {
     paramed_string::expand(std::begin(i), std::end(i),
                            std::back_inserter(result));
-  }
-}
-} // namespace
-
-namespace {
-template <typename InputIterator>
-void splitURI(std::vector<std::string>& result, InputIterator begin,
-              InputIterator end, size_t numSplit, size_t maxIter)
-{
-  size_t numURIs = std::distance(begin, end);
-  if (numURIs >= numSplit) {
-    result.insert(std::end(result), begin, end);
-  }
-  else if (numURIs > 0) {
-    size_t num = std::min(numSplit / numURIs, maxIter);
-    for (size_t i = 0; i < num; ++i) {
-      result.insert(std::end(result), begin, end);
-    }
-    if (num < maxIter) {
-      result.insert(std::end(result), begin, begin + (numSplit % numURIs));
-    }
   }
 }
 } // namespace
@@ -354,8 +332,6 @@ createEd2kRequestGroup(const std::string& ed2kUri,
   auto dctx = std::make_shared<DownloadContext>(
       ed2k::PIECE_LENGTH, link.size,
       util::applyDir(option->get(PREF_DIR), outputName));
-  dctx->getFirstFileEntry()->setMaxConnectionPerServer(
-      option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER));
   auto attrs = std::make_shared<Ed2kAttribute>();
   attrs->link = std::move(link);
   attrs->clientHash = createEd2kClientHash();
@@ -366,11 +342,7 @@ createEd2kRequestGroup(const std::string& ed2kUri,
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
   dctx->setAcceptMetalink(false);
   rg->setDownloadContext(dctx);
-  const auto peerConnections =
-      option->definedLocal(PREF_SPLIT)
-          ? option->getAsInt(PREF_SPLIT)
-          : ed2k::DEFAULT_PEER_CONNECTIONS;
-  rg->setNumConcurrentCommand(peerConnections);
+  rg->setNumConcurrentCommand(option->getAsInt(PREF_ED2K_MAX_CONNECTIONS));
 
   if (option->getAsBool(PREF_ENABLE_RPC)) {
     rg->setPauseRequested(option->getAsBool(PREF_PAUSE));
@@ -402,8 +374,6 @@ createRequestGroup(const std::shared_ptr<Option>& optionTemplate,
           ? util::applyDir(option->get(PREF_DIR), option->get(PREF_OUT))
           : "");
   dctx->getFirstFileEntry()->setUris(uris);
-  dctx->getFirstFileEntry()->setMaxConnectionPerServer(
-      option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER));
   const std::string& checksum = option->get(PREF_CHECKSUM);
   if (!checksum.empty()) {
     auto p = util::divide(std::begin(checksum), std::end(checksum), '=');
@@ -458,7 +428,7 @@ createEd2kSearchRequestGroup(const ed2k::SearchQuery& query,
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
   dctx->setAcceptMetalink(false);
   rg->setDownloadContext(dctx);
-  rg->setNumConcurrentCommand(option->getAsInt(PREF_SPLIT));
+  rg->setNumConcurrentCommand(option->getAsInt(PREF_ED2K_MAX_CONNECTIONS));
   if (option->getAsBool(PREF_ENABLE_RPC)) {
     rg->setPauseRequested(option->getAsBool(PREF_PAUSE));
   }
@@ -667,16 +637,7 @@ public:
       return;
     }
     if (detector_.isStreamProtocol(normalizedUri)) {
-      std::vector<std::string> streamURIs;
-      size_t numIter = option_->getAsInt(PREF_MAX_CONNECTION_PER_SERVER);
-      size_t numSplit = option_->getAsInt(PREF_SPLIT);
-      size_t num = std::min(numIter, numSplit);
-      for (size_t i = 0; i < num; ++i) {
-        streamURIs.push_back(normalizedUri);
-      }
-      auto rg = createRequestGroup(option_, streamURIs);
-      rg->setNumConcurrentCommand(numSplit);
-      requestGroups_.push_back(rg);
+      requestGroups_.push_back(createRequestGroup(option_, {normalizedUri}));
     }
 #ifdef ENABLE_BITTORRENT
     else if (detector_.guessTorrentMagnet(normalizedUri)) {
@@ -806,21 +767,14 @@ void createRequestGroupForUri(
         std::begin(nargs), std::end(nargs), StreamProtocolFilter());
     // Process stream protocols first.
     if (std::begin(nargs) != strmProtoEnd) {
-      size_t numIter = option->getAsInt(PREF_MAX_CONNECTION_PER_SERVER);
-      size_t numSplit = option->getAsInt(PREF_SPLIT);
-      std::vector<std::string> streamURIs;
       std::vector<std::string> normalizedStreamUris;
       normalizedStreamUris.reserve(std::distance(std::begin(nargs), strmProtoEnd));
       if (!normalizeStreamUris(normalizedStreamUris, std::begin(nargs),
                                strmProtoEnd, throwOnError)) {
         return;
       }
-      splitURI(streamURIs, std::begin(normalizedStreamUris),
-               std::end(normalizedStreamUris), numSplit, numIter);
       try {
-        auto rg = createRequestGroup(option, streamURIs, true);
-        rg->setNumConcurrentCommand(numSplit);
-        result.push_back(rg);
+        result.push_back(createRequestGroup(option, normalizedStreamUris, true));
       }
       catch (RecoverableException& e) {
         if (throwOnError) {

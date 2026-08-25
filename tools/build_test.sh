@@ -22,8 +22,7 @@ cmake -E remove_directory "$dependency_build"
 cmake --fresh -S . -B "$dependency_build" -G "$GENERATOR" \
   -DCMAKE_BUILD_TYPE=Debug
 cmake --build "$dependency_build" -j"$JOBS" --target \
-  zlib_project expat_project sqlite_project cares_project \
-  openssl_project libssh2_project libtorrent_project
+  expat_project sqlite_project curl_project libtorrent_project
 
 dependency_root="$dependency_build/dependencies"
 

@@ -204,8 +204,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri()
 {
   std::vector<std::string> uris{"http://alpha/file", "http://bravo/file",
                                 "http://charlie/file"};
-  option_->put(PREF_SPLIT, "7");
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "2");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
   {
@@ -214,37 +212,10 @@ void DownloadHelperTest::testCreateRequestGroupForUri()
     REQUIRE_EQ((size_t)1, result.size());
     std::shared_ptr<RequestGroup> group = result[0];
     auto xuris = group->getDownloadContext()->getFirstFileEntry()->getUris();
-    REQUIRE_EQ((size_t)6, xuris.size());
-    for (size_t i = 0; i < 6; ++i) {
-      REQUIRE_EQ(uris[i % 3], xuris[i]);
-    }
-    REQUIRE_EQ(7, group->getNumConcurrentCommand());
+    REQUIRE_EQ(uris, xuris);
+    REQUIRE(group->getCurlDownload());
     std::shared_ptr<DownloadContext> ctx = group->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/file.out"), ctx->getBasePath());
-  }
-  option_->put(PREF_SPLIT, "5");
-  {
-    std::vector<std::shared_ptr<RequestGroup>> result;
-    createRequestGroupForUri(result, option_, uris);
-    REQUIRE_EQ((size_t)1, result.size());
-    std::shared_ptr<RequestGroup> group = result[0];
-    auto xuris = group->getDownloadContext()->getFirstFileEntry()->getUris();
-    REQUIRE_EQ((size_t)5, xuris.size());
-    for (size_t i = 0; i < 5; ++i) {
-      REQUIRE_EQ(uris[i % 3], xuris[i]);
-    }
-  }
-  option_->put(PREF_SPLIT, "2");
-  {
-    std::vector<std::shared_ptr<RequestGroup>> result;
-    createRequestGroupForUri(result, option_, uris);
-    REQUIRE_EQ((size_t)1, result.size());
-    std::shared_ptr<RequestGroup> group = result[0];
-    auto xuris = group->getDownloadContext()->getFirstFileEntry()->getUris();
-    REQUIRE_EQ((size_t)3, xuris.size());
-    for (size_t i = 0; i < 3; ++i) {
-      REQUIRE_EQ(uris[i % 3], xuris[i]);
-    }
   }
   option_->put(PREF_FORCE_SEQUENTIAL, A2_V_TRUE);
   {
@@ -255,11 +226,8 @@ void DownloadHelperTest::testCreateRequestGroupForUri()
     std::shared_ptr<RequestGroup> alphaGroup = result[0];
     auto alphaURIs =
         alphaGroup->getDownloadContext()->getFirstFileEntry()->getUris();
-    REQUIRE_EQ((size_t)2, alphaURIs.size());
-    for (size_t i = 0; i < 2; ++i) {
-      REQUIRE_EQ(uris[0], alphaURIs[i]);
-    }
-    REQUIRE_EQ(2, alphaGroup->getNumConcurrentCommand());
+    REQUIRE_EQ((size_t)1, alphaURIs.size());
+    REQUIRE_EQ(uris[0], alphaURIs[0]);
     std::shared_ptr<DownloadContext> alphaCtx =
         alphaGroup->getDownloadContext();
     // See filename is not assigned yet
@@ -276,8 +244,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_Thunder()
       "thunder://" + base64::encode(payload.begin(), payload.end());
   thunder.erase(thunder.find_last_not_of('=') + 1);
   std::vector<std::string> uris{thunder};
-  option_->put(PREF_SPLIT, "2");
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "2");
 
   std::vector<std::shared_ptr<RequestGroup>> result;
   createRequestGroupForUri(result, option_, uris, false, false, true);
@@ -285,9 +251,8 @@ void DownloadHelperTest::testCreateRequestGroupForUri_Thunder()
   REQUIRE_EQ((size_t)1, result.size());
   const auto xuris =
       result[0]->getDownloadContext()->getFirstFileEntry()->getUris();
-  REQUIRE_EQ((size_t)2, xuris.size());
+  REQUIRE_EQ((size_t)1, xuris.size());
   REQUIRE_EQ(url, xuris[0]);
-  REQUIRE_EQ(url, xuris[1]);
 }
 
 void DownloadHelperTest::testCreateRequestGroupForUri_BadThunder()
@@ -307,8 +272,7 @@ void DownloadHelperTest::testCreateRequestGroupForUri_ED2K()
       "0123456789abcdef0123456789abcdef|"
       "p=11111111111111111111111111111111:"
       "22222222222222222222222222222222|/"};
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "2");
-  option_->put(PREF_SPLIT, "4");
+  option_->put(PREF_ED2K_MAX_CONNECTIONS, "4");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_ED2K_SERVER, "203.0.113.10:4661,203.0.113.11:4661");
 
@@ -341,7 +305,8 @@ void DownloadHelperTest::testCreateRequestGroupForUri_ED2K()
   REQUIRE_EQ(std::string("203.0.113.10"), attrs->servers[0].host);
   REQUIRE_EQ((uint16_t)4661, attrs->servers[0].port);
 
-  option_->remove(PREF_SPLIT);
+  option_->put(PREF_ED2K_MAX_CONNECTIONS,
+               util::itos(ed2k::DEFAULT_PEER_CONNECTIONS));
   result.clear();
   createRequestGroupForUri(result, option_, uris);
   REQUIRE_EQ(ed2k::DEFAULT_PEER_CONNECTIONS,
@@ -2405,8 +2370,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_parameterized()
 {
   std::vector<std::string> uris{"http://{alpha, bravo}/file",
                                 "http://charlie/file"};
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "1");
-  option_->put(PREF_SPLIT, "3");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
   option_->put(PREF_PARAMETERIZED_URI, A2_V_TRUE);
@@ -2424,7 +2387,7 @@ void DownloadHelperTest::testCreateRequestGroupForUri_parameterized()
     REQUIRE_EQ(std::string("http://bravo/file"), uris[1]);
     REQUIRE_EQ(std::string("http://charlie/file"), uris[2]);
 
-    REQUIRE_EQ(3, group->getNumConcurrentCommand());
+    REQUIRE(group->getCurlDownload());
     std::shared_ptr<DownloadContext> ctx = group->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/file.out"), ctx->getBasePath());
   }
@@ -2436,8 +2399,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_BitTorrent()
   std::vector<std::string> uris{"http://alpha/file",
                                 A2_TEST_DIR "/test.torrent",
                                 "http://bravo/file", "http://charlie/file"};
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "1");
-  option_->put(PREF_SPLIT, "3");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
   {
@@ -2454,7 +2415,7 @@ void DownloadHelperTest::testCreateRequestGroupForUri_BitTorrent()
     REQUIRE_EQ(uris[2], xuris[1]);
     REQUIRE_EQ(uris[3], xuris[2]);
 
-    REQUIRE_EQ(3, group->getNumConcurrentCommand());
+    REQUIRE(group->getCurlDownload());
     std::shared_ptr<DownloadContext> ctx = group->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/file.out"), ctx->getBasePath());
 
@@ -2497,8 +2458,6 @@ void DownloadHelperTest::testCreateRequestGroupForUri_Metalink()
 {
   std::vector<std::string> uris{"http://alpha/file", "http://bravo/file",
                                 "http://charlie/file", A2_TEST_DIR "/test.xml"};
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "1");
-  option_->put(PREF_SPLIT, "2");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
   {
@@ -2516,28 +2475,24 @@ void DownloadHelperTest::testCreateRequestGroupForUri_Metalink()
     for (size_t i = 0; i < 3; ++i) {
       REQUIRE_EQ(uris[i], xuris[i]);
     }
-    REQUIRE_EQ(2, group->getNumConcurrentCommand());
+    REQUIRE(group->getCurlDownload());
     std::shared_ptr<DownloadContext> ctx = group->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/file.out"), ctx->getBasePath());
 
     std::shared_ptr<RequestGroup> aria2052Group = result[1];
-    REQUIRE_EQ(1, // because of maxconnections attribute
-                         aria2052Group->getNumConcurrentCommand());
+    REQUIRE(aria2052Group->getCurlDownload());
     std::shared_ptr<DownloadContext> aria2052Ctx =
         aria2052Group->getDownloadContext();
     REQUIRE_EQ(std::string("/tmp/aria2-0.5.2.tar.bz2"),
                          aria2052Ctx->getBasePath());
 
-    std::shared_ptr<RequestGroup> aria2051Group = result[2];
-    REQUIRE_EQ(2, aria2051Group->getNumConcurrentCommand());
+    REQUIRE(result[2]->getCurlDownload());
   }
 }
 #endif // ENABLE_METALINK
 
 void DownloadHelperTest::testCreateRequestGroupForUriList()
 {
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "3");
-  option_->put(PREF_SPLIT, "3");
   option_->put(PREF_INPUT_FILE, A2_TEST_DIR "/input_uris.txt");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
@@ -2554,7 +2509,7 @@ void DownloadHelperTest::testCreateRequestGroupForUriList()
   REQUIRE_EQ(std::string("http://alpha/file"), fileURIs[0]);
   REQUIRE_EQ(std::string("http://bravo/file"), fileURIs[1]);
   REQUIRE_EQ(std::string("http://charlie/file"), fileURIs[2]);
-  REQUIRE_EQ(3, fileGroup->getNumConcurrentCommand());
+  REQUIRE(fileGroup->getCurlDownload());
   std::shared_ptr<DownloadContext> fileCtx = fileGroup->getDownloadContext();
   REQUIRE_EQ(std::string("/mydownloads/myfile.out"),
                        fileCtx->getBasePath());
@@ -2572,8 +2527,6 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
   std::vector<std::string> auxURIs{"http://alpha/file", "http://bravo/file",
                                    "http://charlie/file"};
 
-  option_->put(PREF_MAX_CONNECTION_PER_SERVER, "2");
-  option_->put(PREF_SPLIT, "5");
   option_->put(PREF_TORRENT_FILE, A2_TEST_DIR "/test.torrent");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
@@ -2645,7 +2598,6 @@ void DownloadHelperTest::testCreateRequestGroupForBitTorrent()
 #ifdef ENABLE_METALINK
 void DownloadHelperTest::testCreateRequestGroupForMetalink()
 {
-  option_->put(PREF_SPLIT, "5");
   option_->put(PREF_METALINK_FILE, A2_TEST_DIR "/test.xml");
   option_->put(PREF_DIR, "/tmp");
   option_->put(PREF_OUT, "file.out");
@@ -2663,8 +2615,7 @@ void DownloadHelperTest::testCreateRequestGroupForMetalink()
                uris[0]);
     REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
                uris[1]);
-    // See numConcurrentCommand is 1 because of maxconnections attribute.
-    REQUIRE_EQ(1, group->getNumConcurrentCommand());
+    REQUIRE(group->getCurlDownload());
   }
 }
 #endif // ENABLE_METALINK

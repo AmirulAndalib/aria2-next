@@ -182,7 +182,6 @@ void Aria2ApiTest::testChangeOption()
                            KeyVals::value_type("dir", "mydownload")) !=
                  retopts.end());
   // Don't return hidden option
-  REQUIRE(hd->getOption(PREF_STARTUP_IDLE_TIME->k).empty());
   deleteDownloadHandle(hd);
   // failure with null gid
   REQUIRE_EQ(-1, changeOption(session_, (A2Gid)0, options));
@@ -211,7 +210,6 @@ void Aria2ApiTest::testChangeGlobalOption()
   REQUIRE_EQ(std::string("none"),
                        getGlobalOption(session_, PREF_FILE_ALLOCATION->k));
   // Don't return hidden option
-  REQUIRE(getGlobalOption(session_, PREF_STARTUP_IDLE_TIME->k).empty());
   // failure with bad option value
   options.clear();
   options.push_back(KeyVals::value_type(PREF_FILE_ALLOCATION->k, "foo"));
@@ -235,7 +233,6 @@ void Aria2ApiTest::testDownloadResultDH()
   REQUIRE_EQ((int)error_code::TIME_OUT, hd->getErrorCode());
   REQUIRE_EQ(std::string("mydownload"), hd->getOption(PREF_DIR->k));
   // Don't return hidden option
-  REQUIRE(hd->getOption(PREF_STARTUP_IDLE_TIME->k).empty());
   KeyVals retopts = hd->getOptions();
   REQUIRE(std::find(retopts.begin(), retopts.end(),
                            KeyVals::value_type(PREF_DIR->k, "mydownload")) !=
