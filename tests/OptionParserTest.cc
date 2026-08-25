@@ -9,6 +9,7 @@
 #include "Exception.h"
 #include "util.h"
 #include "Option.h"
+#include "UnknownOptionException.h"
 #include "array_fun.h"
 #include "prefs.h"
 #include "help_tags.h"
@@ -266,12 +267,14 @@ void OptionParserTest::testParse()
 {
   Option option;
   std::istringstream in("timeout=Hello\n"
-                        "UNKNOWN=x\n"
                         "\n"
                         "dir=World");
   oparser_->parse(option, in);
   REQUIRE_EQ(std::string("Hello"), option.get(PREF_TIMEOUT));
   REQUIRE_EQ(std::string("World"), option.get(PREF_DIR));
+
+  std::istringstream unknown("UNKNOWN=x\n");
+  CHECK_THROWS_AS(oparser_->parse(option, unknown), UnknownOptionException);
 }
 
 void OptionParserTest::testParseInternal()
@@ -289,11 +292,13 @@ void OptionParserTest::testParseKeyVals()
   Option option;
   KeyVals kv;
   kv.push_back(std::make_pair("timeout", "Hello"));
-  kv.push_back(std::make_pair("UNKNOWN", "x"));
   kv.push_back(std::make_pair("dir", "World"));
   oparser_->parse(option, kv);
   REQUIRE_EQ(std::string("Hello"), option.get(PREF_TIMEOUT));
   REQUIRE_EQ(std::string("World"), option.get(PREF_DIR));
+
+  CHECK_THROWS_AS(oparser_->parse(option, {{"UNKNOWN", "x"}}),
+                  UnknownOptionException);
 }
 
 } // namespace aria2

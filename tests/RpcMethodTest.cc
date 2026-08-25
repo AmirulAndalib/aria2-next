@@ -88,6 +88,8 @@ public:
   void testChangeOption_withNotAllowedOption();
   void testChangeOption_withoutGid();
   void testChangeGlobalOption();
+  void testChangeGlobalOption_withLegacyOptions();
+  void testChangeGlobalOption_withUnknownOption();
   void testChangeGlobalOption_withBadOption();
   void testChangeGlobalOption_withNotAllowedOption();
   void testTellStatus_withoutGid();
@@ -152,6 +154,8 @@ A2_TEST(RpcMethodTest, testChangeOption_withBadOption)
 A2_TEST(RpcMethodTest, testChangeOption_withNotAllowedOption)
 A2_TEST(RpcMethodTest, testChangeOption_withoutGid)
 A2_TEST(RpcMethodTest, testChangeGlobalOption)
+A2_TEST(RpcMethodTest, testChangeGlobalOption_withLegacyOptions)
+A2_TEST(RpcMethodTest, testChangeGlobalOption_withUnknownOption)
 A2_TEST(RpcMethodTest, testChangeGlobalOption_withBadOption)
 A2_TEST(RpcMethodTest, testChangeGlobalOption_withNotAllowedOption)
 A2_TEST(RpcMethodTest, testTellStatus_withoutGid)
@@ -778,6 +782,38 @@ void RpcMethodTest::testChangeGlobalOption()
              e_->getOption()->get(PREF_MAX_OVERALL_UPLOAD_LIMIT));
   REQUIRE_EQ(V_PREFERRED, e_->getOption()->get(PREF_BT_ENCRYPTION));
 #endif // ENABLE_BITTORRENT
+}
+
+void RpcMethodTest::testChangeGlobalOption_withLegacyOptions()
+{
+  ChangeGlobalOptionRpcMethod method;
+  auto request = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  auto options = Dict::g();
+  options->put("split", "8");
+  options->put("max-connection-per-server", "3");
+  options->put("ftp-user", "anonymous");
+  options->put(PREF_MAX_CONCURRENT_DOWNLOADS->k, "7");
+  request.params->append(std::move(options));
+
+  const auto response = method.execute(std::move(request), e_.get());
+  CHECK_EQ(0, response.code);
+  CHECK_EQ("3", e_->getOption()->get(PREF_STREAM_MAX_CONNECTIONS));
+  CHECK_EQ("7", e_->getOption()->get(PREF_MAX_CONCURRENT_DOWNLOADS));
+}
+
+void RpcMethodTest::testChangeGlobalOption_withUnknownOption()
+{
+  e_->getOption()->put(PREF_MAX_CONCURRENT_DOWNLOADS, "7");
+  ChangeGlobalOptionRpcMethod method;
+  auto request = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  auto options = Dict::g();
+  options->put("definitely-not-an-aria2-option", "1");
+  options->put(PREF_MAX_CONCURRENT_DOWNLOADS->k, "9");
+  request.params->append(std::move(options));
+
+  const auto response = method.execute(std::move(request), e_.get());
+  CHECK_EQ(1, response.code);
+  CHECK_EQ("7", e_->getOption()->get(PREF_MAX_CONCURRENT_DOWNLOADS));
 }
 
 void RpcMethodTest::testChangeGlobalOption_withBadOption()

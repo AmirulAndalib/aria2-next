@@ -37,13 +37,17 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 | Surface | Current contract |
 | --- | --- |
 | Executable | `aria2-next` |
-| CLI | Maintained aria2-next options |
-| Configuration | aria2 key-value format |
-| Sessions | aria2 input/session files and libtorrent resume data |
-| RPC | Maintained aria2 JSON-RPC methods plus native endpoint and blocklist methods |
-| Library | public libaria2 headers under `src/includes/aria2/` |
+| CLI | Maintained aria2-next options with retired aria2 input normalization |
+| Configuration | aria2 key-value format with retired input normalization |
+| Sessions | Canonical aria2-next task files and native engine resume data |
+| RPC | Maintained aria2 JSON-RPC methods, retired option normalization, and native extensions |
+| Library | Public libaria2 headers with retired option normalization |
 
 Motrix Next embeds this engine, and release artifacts are standalone binaries.
+Recognized retired aria2 options are mapped when a current equivalent exists or
+skipped with one warning when the native engine owns or removed the behavior.
+Unknown option names remain errors. Legacy task state and adjacent `.aria2`
+control files are not imported.
 
 ## Quick Start
 

@@ -53,6 +53,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/DirectDiskAdaptorTest.cc
   tests/TimeTest.cc
   tests/TimeSeedCriteriaTest.cc
+  tests/LegacyInputAdapterTest.cc
   tests/OptionParserTest.cc
   tests/DNSCacheTest.cc
   tests/DownloadHelperTest.cc

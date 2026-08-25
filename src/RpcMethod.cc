@@ -38,6 +38,7 @@
 #include "RecoverableException.h"
 #include "message.h"
 #include "OptionParser.h"
+#include "LegacyInputAdapter.h"
 #include "OptionHandler.h"
 #include "Option.h"
 #include "array_fun.h"
@@ -137,6 +138,24 @@ KeyVals collectScalarOptions(const Dict* options)
   return result;
 }
 
+void validateOptionNames(const Dict* options,
+                         const std::shared_ptr<OptionParser>& optionParser)
+{
+  if (!options) {
+    return;
+  }
+  for (const auto& item : *options) {
+    if (isLegacyInputOption(item.first)) {
+      continue;
+    }
+    const auto pref = option::k2p(item.first);
+    if (!optionParser->find(pref)) {
+      throw DL_ABORT_EX2("Unknown option: " + item.first,
+                         error_code::OPTION_ERROR);
+    }
+  }
+}
+
 template <typename Pred>
 void gatherOption(const Dict* options, Pred pred, Option* option,
                   const std::shared_ptr<OptionParser>& optionParser)
@@ -144,7 +163,9 @@ void gatherOption(const Dict* options, Pred pred, Option* option,
   if (!options) {
     return;
   }
-  for (const auto& item : collectScalarOptions(options)) {
+  validateOptionNames(options, optionParser);
+  for (const auto& item : normalizeLegacyInput(collectScalarOptions(options),
+                                               LegacyInputSource::Rpc)) {
     PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
     if (!handler || !pred(handler)) {
@@ -186,7 +207,9 @@ void RpcMethod::gatherChangeableOption(Option* option, Option* pendingOption,
     return;
   }
 
-  const auto scalarOptions = collectScalarOptions(optionsDict);
+  validateOptionNames(optionsDict, optionParser_);
+  const auto scalarOptions = normalizeLegacyInput(
+      collectScalarOptions(optionsDict), LegacyInputSource::Rpc);
   for (const auto& item : scalarOptions) {
     auto pref = option::k2p(item.first);
     auto handler = optionParser_->find(pref);

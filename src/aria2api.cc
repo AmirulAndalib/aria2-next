@@ -40,6 +40,7 @@
 #include "Context.h"
 #include "DownloadEngine.h"
 #include "OptionParser.h"
+#include "LegacyInputAdapter.h"
 #include "Option.h"
 #include "DlAbortEx.h"
 #include "fmt.h"
@@ -196,11 +197,16 @@ void apiGatherOption(InputIterator first, InputIterator last, Pred pred,
                      Option* option,
                      const std::shared_ptr<OptionParser>& optionParser)
 {
-  for (auto current = first; current != last; ++current) {
-    const auto& item = *current;
+  const KeyVals raw(first, last);
+  for (const auto& item :
+       normalizeLegacyInput(raw, LegacyInputSource::Library)) {
     PrefPtr pref = option::k2p(item.first);
     const OptionHandler* handler = optionParser->find(pref);
-    if (!handler || !pred(handler)) {
+    if (!handler) {
+      throw DL_ABORT_EX2("Unknown option: " + item.first,
+                         error_code::OPTION_ERROR);
+    }
+    if (!pred(handler)) {
       continue;
     }
     handler->parse(*option, item.second);
@@ -488,7 +494,12 @@ const std::string& getGlobalOption(Session* session, const std::string& name)
   if (OptionParser::getInstance()->find(pref)) {
     return e->getOption()->get(pref);
   }
-  return "";
+  static thread_local std::string projected;
+  if (projectLegacyOption(e->getOption(), name, projected)) {
+    return projected;
+  }
+  static const std::string empty;
+  return empty;
 }
 
 KeyVals getGlobalOptions(Session* session)
@@ -504,6 +515,8 @@ KeyVals getGlobalOptions(Session* session)
       options.push_back(KeyVals::value_type(pref->k, option->get(pref)));
     }
   }
+  const auto projected = projectLegacyOptions(option);
+  options.insert(options.end(), projected.begin(), projected.end());
   return options;
 }
 
@@ -685,7 +698,12 @@ const std::string& getRequestOption(const std::shared_ptr<Option>& option,
   if (OptionParser::getInstance()->find(pref)) {
     return option->get(pref);
   }
-  return "";
+  static thread_local std::string projected;
+  if (projectLegacyOption(option.get(), name, projected)) {
+    return projected;
+  }
+  static const std::string empty;
+  return empty;
 }
 } // namespace
 
@@ -695,6 +713,8 @@ KeyVals getRequestOptions(const std::shared_ptr<Option>& option)
   KeyVals res;
   pushRequestOption(std::back_inserter(res), option,
                     OptionParser::getInstance());
+  const auto projected = projectLegacyOptions(option.get());
+  res.insert(res.end(), projected.begin(), projected.end());
   return res;
 }
 } // namespace
@@ -754,7 +774,8 @@ struct RequestGroupDH : public DownloadHandle {
           ->infoHash;
     }
 #endif // ENABLE_BITTORRENT
-    return "";
+    static const std::string empty;
+    return empty;
   }
   virtual size_t getPieceLength() override
   {

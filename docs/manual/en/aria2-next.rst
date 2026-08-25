@@ -20,6 +20,13 @@ Wireshark, and protocol documentation references. Core ED2K/eMule behavior has
 been ported where it fits aria2-next, including task-level sharing for active
 ED2K downloads and completed ED2K seed tasks.
 
+Retired aria2 option names are accepted at the command-line, configuration,
+task-input, RPC, and libaria2 boundaries. Options with a current equivalent are
+normalized before they reach the maintained engine. Options whose behavior is
+owned or removed by a native engine are skipped with one warning. Unknown
+option names remain errors. Legacy task state and adjacent ``.aria2`` control
+files are not imported.
+
 OPTIONS
 -------
 

@@ -41,6 +41,7 @@
 #include <sstream>
 
 #include "Log.h"
+#include "LegacyInputAdapter.h"
 #include "DlAbortEx.h"
 #include "Option.h"
 #include "OptionParser.h"
@@ -1872,6 +1873,9 @@ void pushRequestOption(Dict* dict, const std::shared_ptr<Option>& option,
       dict->put(pref->k, option->get(pref));
     }
   }
+  for (const auto& item : projectLegacyOptions(option.get())) {
+    dict->put(item.first, item.second);
+  }
 }
 } // namespace
 
@@ -1910,6 +1914,9 @@ GetGlobalOptionRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
     if (h) {
       result->put(pref->k, e->getOption()->get(pref));
     }
+  }
+  for (const auto& item : projectLegacyOptions(e->getOption())) {
+    result->put(item.first, item.second);
   }
   return std::move(result);
 }
