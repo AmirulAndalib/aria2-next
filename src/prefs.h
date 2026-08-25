@@ -191,8 +191,6 @@ extern PrefPtr PREF_CONF_PATH;
 extern PrefPtr PREF_STOP;
 // value: true | false
 extern PrefPtr PREF_QUIET;
-// value: true | false
-extern PrefPtr PREF_ASYNC_DNS;
 // value: 1*digit
 extern PrefPtr PREF_SUMMARY_INTERVAL;
 // value: trace, debug, info, warn, error
@@ -257,8 +255,6 @@ extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
 // value: 1*digit
 extern PrefPtr PREF_RETRY_WAIT;
 extern PrefPtr PREF_STREAM_MAX_CONNECTIONS;
-// value: string
-extern PrefPtr PREF_ASYNC_DNS_SERVER;
 // value: true | false
 extern PrefPtr PREF_SHOW_CONSOLE_READOUT;
 // value: default | inorder | geom

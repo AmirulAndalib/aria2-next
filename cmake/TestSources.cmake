@@ -6,6 +6,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/TestUtil.cc
   tests/TestUtil.h
   tests/SocketCoreTest.cc
+  tests/SystemResolverTest.cc
   tests/array_funTest.cc
   tests/Base64Test.cc
   tests/Base32Test.cc
@@ -131,10 +132,6 @@ set(ARIA2_TEST_SOURCES_ENABLE_METALINK
   tests/MetalinkHelperTest.cc
   tests/MetalinkParserControllerTest.cc
   tests/MetalinkProcessorTest.cc
-)
-
-set(ARIA2_TEST_SOURCES_ENABLE_ASYNC_DNS
-  tests/AsyncNameResolverManTest.cc
 )
 
 set(ARIA2_TEST_SOURCES_NOT_HAVE_TIMEGM

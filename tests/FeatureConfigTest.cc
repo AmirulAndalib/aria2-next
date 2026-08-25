@@ -1,6 +1,7 @@
 #include "FeatureConfig.h"
 
 #include <algorithm>
+#include <curl/curl.h>
 
 #include "a2doctest.h"
 
@@ -16,11 +17,13 @@ public:
   void testGetDefaultPort();
   void testStrSupportedFeature();
   void testFeatureSummary();
+  void testCurlResolver();
 };
 
 A2_TEST(FeatureConfigTest, testGetDefaultPort)
 A2_TEST(FeatureConfigTest, testStrSupportedFeature)
 A2_TEST(FeatureConfigTest, testFeatureSummary)
+A2_TEST(FeatureConfigTest, testCurlResolver)
 
 void FeatureConfigTest::testGetDefaultPort()
 {
@@ -42,9 +45,7 @@ void FeatureConfigTest::testFeatureSummary()
 {
   const std::string features[] = {
 
-#ifdef ENABLE_ASYNC_DNS
       "Async DNS",
-#endif // ENABLE_ASYNC_DNS
 
 #ifdef ENABLE_BITTORRENT
       "BitTorrent",
@@ -74,6 +75,14 @@ void FeatureConfigTest::testFeatureSummary()
   std::string featuresString =
       strjoin(std::begin(features), std::end(features), ", ");
   REQUIRE_EQ(featuresString, featureSummary());
+}
+
+void FeatureConfigTest::testCurlResolver()
+{
+  const auto* version = curl_version_info(CURLVERSION_NOW);
+  REQUIRE(version != nullptr);
+  REQUIRE((version->features & CURL_VERSION_ASYNCHDNS) != 0);
+  REQUIRE(version->ares == nullptr);
 }
 
 } // namespace aria2

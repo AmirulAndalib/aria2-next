@@ -5,8 +5,7 @@ without downloading library dependencies during configuration or compilation.
 
 | Dependency | Version | Integration |
 | --- | --- | --- |
-| Boost | 1.91.0 | Headers used by libtorrent |
-| c-ares | 1.34.5 | Static async DNS library |
+| Boost | 1.91.0 | Header-only asynchronous networking used by the core and libtorrent |
 | curl | 8.21.0 | Static HTTP, HTTPS, and SFTP transfer engine |
 | doctest | 2.4.12 | Header-only unit test framework |
 | Expat | 2.8.1 | Static XML parser |
@@ -36,5 +35,6 @@ curl and nghttp2 contain only their library sources, public headers, CMake
 integration, release metadata, and license material. Their command-line tools,
 servers, examples, tests, fuzzers, and nested repository metadata are excluded.
 
-Boost is a header subset for the maintained libtorrent configuration. Disabled
-WebTorrent, I2P, and fallback cryptography include trees are excluded.
+Boost is a header subset for the maintained Boost.Asio and libtorrent
+configuration. Disabled WebTorrent, I2P, and fallback cryptography include
+trees are excluded.

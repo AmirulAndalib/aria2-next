@@ -58,16 +58,11 @@
 #include "Log.h"
 #include "DownloadContext.h"
 #include "wallclock.h"
-#include "NameResolver.h"
 #include "uri.h"
 #include "FileEntry.h"
 #include "error_code.h"
 #include "SocketRecvBuffer.h"
 #include "ChecksumCheckIntegrityEntry.h"
-#ifdef ENABLE_ASYNC_DNS
-#  include "AsyncNameResolver.h"
-#  include "AsyncNameResolverMan.h"
-#endif // ENABLE_ASYNC_DNS
 
 namespace aria2 {
 
@@ -82,9 +77,6 @@ AbstractCommand::AbstractCommand(
       fileEntry_(fileEntry),
       socket_(s),
       socketRecvBuffer_(socketRecvBuffer),
-#ifdef ENABLE_ASYNC_DNS
-      asyncNameResolverMan_(make_unique<AsyncNameResolverMan>()),
-#endif // ENABLE_ASYNC_DNS
       requestGroup_(requestGroup),
       e_(e),
       checkPoint_(global::wallclock()),
@@ -105,18 +97,12 @@ AbstractCommand::AbstractCommand(
     requestGroup_->increaseStreamCommand();
   }
   requestGroup_->increaseNumCommand();
-#ifdef ENABLE_ASYNC_DNS
-  configureAsyncNameResolverMan(asyncNameResolverMan_.get(), e_->getOption());
-#endif // ENABLE_ASYNC_DNS
 }
 
 AbstractCommand::~AbstractCommand()
 {
   disableReadCheckSocket();
   disableWriteCheckSocket();
-#ifdef ENABLE_ASYNC_DNS
-  asyncNameResolverMan_->disableNameResolverCheck(e_, this);
-#endif // ENABLE_ASYNC_DNS
   requestGroup_->decreaseNumCommand();
   if (incNumStreamCommand_) {
     requestGroup_->decreaseStreamCommand();
@@ -172,20 +158,9 @@ bool AbstractCommand::shouldProcess() const
     return true;
   }
 
-#ifdef ENABLE_ASYNC_DNS
-  const auto resolverChecked = asyncNameResolverMan_->resolverChecked();
-  if (resolverChecked && asyncNameResolverMan_->getStatus() != 0) {
-    return true;
-  }
-
-  if (!checkSocketIsReadable_ && !checkSocketIsWritable_ && !resolverChecked) {
-    return true;
-  }
-#else  // ENABLE_ASYNC_DNS
   if (!checkSocketIsReadable_ && !checkSocketIsWritable_) {
     return true;
   }
-#endif // ENABLE_ASYNC_DNS
 
   return noCheck();
 }
@@ -575,89 +550,6 @@ void AbstractCommand::swapSocket(std::shared_ptr<SocketCore>& socket)
   disableReadCheckSocket();
   disableWriteCheckSocket();
   socket_.swap(socket);
-}
-
-std::string AbstractCommand::resolveHostname(std::vector<std::string>& addrs,
-                                             const std::string& hostname,
-                                             uint16_t port)
-{
-  if (util::isNumericHost(hostname)) {
-    addrs.push_back(hostname);
-    return hostname;
-  }
-
-  e_->findAllCachedIPAddresses(std::back_inserter(addrs), hostname, port);
-  if (!addrs.empty()) {
-    auto ipaddr = addrs.front();
-    A2_LOG_DEBUG(
-        fmt(MSG_DNS_CACHE_HIT, getCuid(), hostname.c_str(),
-            strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
-    return ipaddr;
-  }
-
-  std::string ipaddr;
-  auto resolveWithSystemResolver = [&]() {
-    NameResolver res;
-    res.setSocktype(SOCK_STREAM);
-    if (e_->getOption()->getAsBool(PREF_DISABLE_IPV6)) {
-      res.setFamily(AF_INET);
-    }
-    res.resolve(addrs, hostname);
-  };
-#ifdef ENABLE_ASYNC_DNS
-  if (getOption()->getAsBool(PREF_ASYNC_DNS)) {
-    if (!asyncNameResolverMan_->started()) {
-      asyncNameResolverMan_->startAsync(hostname, e_, this);
-    }
-    switch (asyncNameResolverMan_->getStatus()) {
-    case -1:
-      if (asyncNameResolverMan_->shouldFallbackToSystemResolver()) {
-        try {
-          resolveWithSystemResolver();
-          A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                           " - Falling back to system name resolver for %s",
-                           getCuid(), hostname.c_str()));
-          break;
-        }
-        catch (const DlAbortEx& ex) {
-          throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
-                                 hostname.c_str(),
-                                 asyncNameResolverMan_->getLastError().c_str()),
-                             ex);
-        }
-      }
-      e_->getRequestGroupMan()
-          ->getOrCreateServerStat(req_->getHost(), req_->getProtocol())
-          ->setError();
-      throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
-                             hostname.c_str(),
-                             asyncNameResolverMan_->getLastError().c_str()),
-                         error_code::NAME_RESOLVE_ERROR);
-    case 0:
-      return "";
-
-    case 1:
-      asyncNameResolverMan_->getResolvedAddress(addrs);
-      if (addrs.empty()) {
-        throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
-                               hostname.c_str(), "No address returned"),
-                           error_code::NAME_RESOLVE_ERROR);
-      }
-      break;
-    }
-  }
-  else
-#endif // ENABLE_ASYNC_DNS
-  {
-    resolveWithSystemResolver();
-  }
-  A2_LOG_DEBUG(fmt(MSG_NAME_RESOLUTION_COMPLETE, getCuid(), hostname.c_str(),
-                   strjoin(std::begin(addrs), std::end(addrs), ", ").c_str()));
-  for (const auto& addr : addrs) {
-    e_->cacheIPAddress(hostname, addr, port);
-  }
-  ipaddr = e_->findCachedIPAddress(hostname, port);
-  return ipaddr;
 }
 
 bool AbstractCommand::checkIfConnectionEstablished(

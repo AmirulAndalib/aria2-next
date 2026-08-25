@@ -30,7 +30,7 @@ endif()
 if(NOT IS_DIRECTORY "${ARIA2_DEPENDENCY_ROOT}")
   message(FATAL_ERROR "ARIA2_DEPENDENCY_ROOT must reference the vendored dependency installation")
 endif()
-if(ARIA2_ENABLE_BITTORRENT AND NOT IS_DIRECTORY "${ARIA2_BOOST_ROOT}/boost")
+if(NOT IS_DIRECTORY "${ARIA2_BOOST_ROOT}/boost/asio")
   message(FATAL_ERROR "ARIA2_BOOST_ROOT must reference the vendored Boost source root")
 endif()
 

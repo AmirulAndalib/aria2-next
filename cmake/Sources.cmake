@@ -25,6 +25,8 @@ set(ARIA2_SOURCES_BASE
   src/array_fun.h
   src/StateSaveCommand.cc
   src/StateSaveCommand.h
+  src/SystemResolver.cc
+  src/SystemResolver.h
   src/base32.cc
   src/base32.h
   src/base64.h
@@ -268,8 +270,6 @@ set(ARIA2_SOURCES_BASE
   src/MultiFileAllocationIterator.h
   src/MultiUrlRequestInfo.cc
   src/MultiUrlRequestInfo.h
-  src/NameResolver.cc
-  src/NameResolver.h
   src/NetStat.cc
   src/NetStat.h
   src/Notifier.cc
@@ -545,13 +545,6 @@ set(ARIA2_SOURCES_HAVE_ZLIB
 )
 
 set(ARIA2_SOURCES_HAVE_SQLITE3
-)
-
-set(ARIA2_SOURCES_ENABLE_ASYNC_DNS
-  src/AsyncNameResolver.cc
-  src/AsyncNameResolver.h
-  src/AsyncNameResolverMan.cc
-  src/AsyncNameResolverMan.h
 )
 
 set(ARIA2_SOURCES_ENABLE_BITTORRENT

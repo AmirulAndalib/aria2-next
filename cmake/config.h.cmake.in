@@ -7,7 +7,6 @@
 #cmakedefine DEFAULT_DISK_CACHE "@DEFAULT_DISK_CACHE@"
 
 /* Define to 1 if asynchronous DNS support is enabled. */
-#cmakedefine ENABLE_ASYNC_DNS @ENABLE_ASYNC_DNS@
 
 /* Define to 1 if BitTorrent support is enabled. */
 #cmakedefine ENABLE_BITTORRENT @ENABLE_BITTORRENT@
@@ -72,8 +71,6 @@
 /* Define to 1 if you have the 'kqueue' function. */
 #cmakedefine HAVE_KQUEUE @HAVE_KQUEUE@
 
-/* Define to 1 if you have libcares. */
-#cmakedefine HAVE_LIBCARES @HAVE_LIBCARES@
 
 /* Define to 1 if you have libexpat. */
 #cmakedefine HAVE_LIBEXPAT @HAVE_LIBEXPAT@

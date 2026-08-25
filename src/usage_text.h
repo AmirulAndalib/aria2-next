@@ -464,8 +464,6 @@
     "                              http://host/file")
 #define TEXT_QUIET                                                      \
   _(" -q, --quiet[=true|false]     Make aria2 quiet(no console output).")
-#define TEXT_ASYNC_DNS                                          \
-  _(" --async-dns[=true|false]     Enable asynchronous DNS.")
 #define TEXT_SUMMARY_INTERVAL                                           \
   _(" --summary-interval=SEC       Set interval to output download progress summary.\n" \
     "                              Setting 0 suppresses the output.")
@@ -702,17 +700,6 @@
     "                              downloads are kept in memory regardless of this\n" \
     "                              option value. See\n" \
     "                              --keep-unfinished-download-result option.")
-#define TEXT_ASYNC_DNS_SERVER                   \
-  _(" --async-dns-server=IPADDRESS[,...] Comma separated list of DNS server address\n" \
-    "                              used in asynchronous DNS resolver. Usually\n" \
-    "                              asynchronous DNS resolver reads DNS server\n" \
-    "                              addresses from /etc/resolv.conf. When this option\n" \
-    "                              is used, it uses DNS servers specified in this\n" \
-    "                              option instead of ones in /etc/resolv.conf. You\n" \
-    "                              can specify both IPv4 and IPv6 address. This\n" \
-    "                              option is useful when the system does not have\n" \
-    "                              /etc/resolv.conf and user does not have the\n" \
-    "                              permission to create it.")
 #define TEXT_ENABLE_RPC                                               \
   _(" --enable-rpc[=true|false]    Enable JSON-RPC/XML-RPC server.\n" \
     "                              It is strongly recommended to set secret\n" \

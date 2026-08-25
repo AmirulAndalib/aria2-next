@@ -50,9 +50,6 @@
 #include "FileAllocationMan.h"
 #include "CheckIntegrityMan.h"
 #include "DNSCache.h"
-#ifdef ENABLE_ASYNC_DNS
-#  include "AsyncNameResolver.h"
-#endif // ENABLE_ASYNC_DNS
 
 namespace aria2 {
 
@@ -61,6 +58,7 @@ class RequestGroupMan;
 class StatCalc;
 class SocketCore;
 class CurlSession;
+class SystemResolver;
 class Request;
 class EventPoll;
 class Command;
@@ -136,6 +134,8 @@ private:
 
   std::unique_ptr<DNSCache> dnsCache_;
 
+  std::unique_ptr<SystemResolver> systemResolver_;
+
   std::unique_ptr<CurlSession> curlSession_;
 
 #ifdef ENABLE_WEBSOCKET
@@ -197,15 +197,6 @@ public:
   bool deleteSocketForReadCheck(sock_t socket, Command* command);
   bool addSocketForWriteCheck(sock_t socket, Command* command);
   bool deleteSocketForWriteCheck(sock_t socket, Command* command);
-
-#ifdef ENABLE_ASYNC_DNS
-
-  bool addNameResolverCheck(const std::shared_ptr<AsyncNameResolver>& resolver,
-                            Command* command);
-  bool
-  deleteNameResolverCheck(const std::shared_ptr<AsyncNameResolver>& resolver,
-                          Command* command);
-#endif // ENABLE_ASYNC_DNS
 
   void addCommand(std::vector<std::unique_ptr<Command>> commands);
 
@@ -360,6 +351,8 @@ public:
                         uint16_t port);
 
   void removeCachedIPAddress(const std::string& hostname, uint16_t port);
+
+  SystemResolver* getSystemResolver() const { return systemResolver_.get(); }
 
   void setRefreshInterval(std::chrono::milliseconds interval);
 

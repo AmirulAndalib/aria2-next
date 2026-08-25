@@ -37,6 +37,7 @@
 #include <curl/curl.h>
 #include <nghttp2/nghttp2ver.h>
 #include <spdlog/version.h>
+#include <boost/version.hpp>
 
 #include <sstream>
 #include <cstring>
@@ -53,9 +54,6 @@
 #ifdef HAVE_OPENSSL_CRYPTO
 #  include <openssl/opensslv.h>
 #endif // HAVE_OPENSSL_CRYPTO
-#ifdef HAVE_LIBCARES
-#  include <ares.h>
-#endif // HAVE_LIBCARES
 #ifdef HAVE_SYS_UTSNAME_H
 #  include <sys/utsname.h>
 #endif // HAVE_SYS_UTSNAME_H
@@ -105,11 +103,7 @@ const char* strSupportedFeature(int feature)
 {
   switch (feature) {
   case (FEATURE_ASYNC_DNS):
-#ifdef ENABLE_ASYNC_DNS
     return "Async DNS";
-#else  // !ENABLE_ASYNC_DNS
-    return nullptr;
-#endif // !ENABLE_ASYNC_DNS
     break;
 
   case (FEATURE_BITTORRENT):
@@ -171,13 +165,19 @@ std::string usedLibs()
   res += fmt("spdlog/%d.%d.%d ", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR,
              SPDLOG_VER_PATCH);
   res += "libcurl/" LIBCURL_VERSION;
-  if (const auto version = curl_version_info(CURLVERSION_NOW);
-      version && version->ssl_version) {
+  if (const auto version = curl_version_info(CURLVERSION_NOW); version) {
     res += "(";
-    res += version->ssl_version;
+    if (version->ssl_version) {
+      res += version->ssl_version;
+      res += ";";
+    }
+    res += (version->features & CURL_VERSION_ASYNCHDNS) ? "threaded DNS"
+                                                        : "sync DNS";
     res += ")";
   }
   res += " ";
+  res += fmt("Boost/%d.%d.%d ", BOOST_VERSION / 100000,
+             BOOST_VERSION / 100 % 1000, BOOST_VERSION % 100);
   res += "nghttp2/" NGHTTP2_VERSION " ";
 #ifdef HAVE_ZLIB
   res += "zlib/" ZLIB_VERSION " ";
@@ -192,10 +192,6 @@ std::string usedLibs()
 #ifdef HAVE_OPENSSL_CRYPTO
   res += "OpenSSL/" OPENSSL_VERSION_STR " ";
 #endif // HAVE_OPENSSL_CRYPTO
-#ifdef HAVE_LIBCARES
-  res += "c-ares/" ARES_VERSION_STR " ";
-#endif // HAVE_LIBCARES
-
 #ifdef ENABLE_BITTORRENT
   res += fmt("libtorrent/%d.%d.%d ", LIBTORRENT_VERSION_MAJOR,
              LIBTORRENT_VERSION_MINOR, LIBTORRENT_VERSION_TINY);

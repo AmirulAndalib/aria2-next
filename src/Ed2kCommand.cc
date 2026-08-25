@@ -43,8 +43,10 @@
 #include "RequestGroupMan.h"
 #include "Segment.h"
 #include "SegmentMan.h"
+#include "ServerStat.h"
 #include "SimpleRandomizer.h"
 #include "SocketCore.h"
+#include "SystemResolver.h"
 #include "ed2k_aich.h"
 #include "ed2k_compression.h"
 #include "ed2k_constants.h"
@@ -54,6 +56,7 @@
 #include "ed2k_policy.h"
 #include "ed2k_search.h"
 #include "ed2k_server.h"
+#include "error_code.h"
 #include "fmt.h"
 #include "prefs.h"
 #include "util.h"
@@ -225,6 +228,7 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       mode_(serverMode ? Mode::SERVER : Mode::PEER),
       endpoint_(std::move(endpoint)),
       state_(State::INIT),
+      resolveRequestId_(0),
       connectedPort_(0),
       headerRead_(0),
       bodyRead_(0),
@@ -285,6 +289,7 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
       mode_(Mode::PEER),
       endpoint_(std::move(endpoint)),
       state_(State::INCOMING_READ_MARKER),
+      resolveRequestId_(0),
       connectedPort_(endpoint_.port),
       headerRead_(0),
       bodyRead_(0),
@@ -324,6 +329,10 @@ Ed2kCommand::Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup,
 
 Ed2kCommand::~Ed2kCommand()
 {
+  if (resolveRequestId_ != 0 && getDownloadEngine()) {
+    getDownloadEngine()->getSystemResolver()->cancel(resolveRequestId_);
+    resolveRequestId_ = 0;
+  }
   if (mode_ == Mode::SERVER && getDownloadEngine()) {
     getDownloadEngine()->removeEd2kServerConnection();
     auto rgman = getDownloadEngine()->getRequestGroupMan().get();
@@ -1951,13 +1960,63 @@ void Ed2kCommand::startResolve()
     port = state->tcpObfuscationPort;
     serverObfuscation_ = true;
   }
-  auto ipaddr = resolveHostname(resolvedAddresses_, endpoint_.host,
-                                port);
-  if (ipaddr.empty()) {
-    state_ = State::RESOLVING;
-    addCommandSelf();
-    return;
+  auto* engine = getDownloadEngine();
+  if (resolveRequestId_ == 0) {
+    resolvedAddresses_.clear();
+    if (util::isNumericHost(endpoint_.host)) {
+      resolvedAddresses_.push_back(endpoint_.host);
+    }
+    else {
+      engine->findAllCachedIPAddresses(
+          std::back_inserter(resolvedAddresses_), endpoint_.host, port);
+    }
+    if (resolvedAddresses_.empty()) {
+      resolveRequestId_ = engine->getSystemResolver()->resolve(
+          endpoint_.host, port,
+          !getOption()->getAsBool(PREF_DISABLE_IPV6), getTimeout());
+      A2_LOG_DEBUG(fmt(MSG_RESOLVING_HOSTNAME, getCuid(),
+                       endpoint_.host.c_str()));
+      state_ = State::RESOLVING;
+      engine->setNoWait(true);
+      engine->setRefreshInterval(std::chrono::milliseconds(0));
+      addCommandSelf();
+      return;
+    }
   }
+  else {
+    std::string error;
+    const auto status = engine->getSystemResolver()->take(
+        resolveRequestId_, resolvedAddresses_, error);
+    if (status == SystemResolver::Status::Pending) {
+      addCommandSelf();
+      return;
+    }
+    resolveRequestId_ = 0;
+    if (status == SystemResolver::Status::Error) {
+      engine->getRequestGroupMan()
+          ->getOrCreateServerStat(endpoint_.host,
+                                  mode_ == Mode::SERVER ? "ed2k-server"
+                                                       : "ed2k-peer")
+          ->setError();
+      throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
+                             endpoint_.host.c_str(), error.c_str()),
+                         error_code::NAME_RESOLVE_ERROR);
+    }
+  }
+
+  for (const auto& address : resolvedAddresses_) {
+    engine->cacheIPAddress(endpoint_.host, address, port);
+  }
+  const auto& ipaddr = engine->findCachedIPAddress(endpoint_.host, port);
+  if (ipaddr.empty()) {
+    throw DL_ABORT_EX2(fmt(MSG_NAME_RESOLUTION_FAILED, getCuid(),
+                           endpoint_.host.c_str(), "No address returned"),
+                       error_code::NAME_RESOLVE_ERROR);
+  }
+  A2_LOG_DEBUG(fmt(MSG_NAME_RESOLUTION_COMPLETE, getCuid(),
+                   endpoint_.host.c_str(),
+                   strjoin(resolvedAddresses_.begin(),
+                           resolvedAddresses_.end(), ", ").c_str()));
   connectedHostname_ = endpoint_.host;
   connectedAddr_ = ipaddr;
   connectedPort_ = port;

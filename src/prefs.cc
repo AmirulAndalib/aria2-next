@@ -238,8 +238,6 @@ PrefPtr PREF_CONF_PATH = makePref("conf-path");
 PrefPtr PREF_STOP = makePref("stop");
 // value: true | false
 PrefPtr PREF_QUIET = makePref("quiet");
-// value: true | false
-PrefPtr PREF_ASYNC_DNS = makePref("async-dns");
 // value: 1*digit
 PrefPtr PREF_SUMMARY_INTERVAL = makePref("summary-interval");
 // value: trace, debug, info, warn, error
@@ -304,8 +302,6 @@ PrefPtr PREF_MAX_DOWNLOAD_RESULT = makePref("max-download-result");
 // value: 1*digit
 PrefPtr PREF_RETRY_WAIT = makePref("retry-wait");
 PrefPtr PREF_STREAM_MAX_CONNECTIONS = makePref("stream-max-connections");
-// value: string
-PrefPtr PREF_ASYNC_DNS_SERVER = makePref("async-dns-server");
 // value: true | false
 PrefPtr PREF_SHOW_CONSOLE_READOUT = makePref("show-console-readout");
 // value: default | inorder

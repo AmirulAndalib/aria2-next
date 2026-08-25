@@ -1092,21 +1092,6 @@ Advanced Options
   downloads file from scratch.  See :option:`--max-resume-failure-tries`
   option. Default: ``true``
 
-.. option:: --async-dns [true|false]
-
-  Enable asynchronous DNS.
-  Default: ``true``
-
-.. option:: --async-dns-server=<IPADDRESS>[,...]
-
-  Comma separated list of DNS server address used in asynchronous DNS
-  resolver. Usually asynchronous DNS resolver reads DNS server
-  addresses from ``/etc/resolv.conf``. When this option is used, it uses
-  DNS servers specified in this option instead of ones in
-  ``/etc/resolv.conf``. You can specify both IPv4 and IPv6 address. This
-  option is useful when the system does not have ``/etc/resolv.conf`` and
-  user does not have the permission to create it.
-
 .. option:: --auto-file-renaming [true|false]
 
   Rename file name if the same file already exists.
@@ -1988,7 +1973,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`all-proxy-user <--all-proxy-user>`
   * :option:`allow-overwrite <--allow-overwrite>`
   * :option:`always-resume <--always-resume>`
-  * :option:`async-dns <--async-dns>`
   * :option:`auto-file-renaming <--auto-file-renaming>`
   * :option:`bt-enable-lpd <--bt-enable-lpd>`
   * :option:`bt-encryption <--bt-encryption>`
@@ -3444,7 +3428,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
      'jsonrpc': '2.0',
      'result': {'allow-overwrite': 'false',
                  'always-resume': 'true',
-                 'async-dns': 'true',
      ...
 
   **XML-RPC Example**
@@ -3458,7 +3441,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     >>> pprint(r)
     {'allow-overwrite': 'false',
      'always-resume': 'true',
-     'async-dns': 'true',
      ....
 
 .. function:: aria2.changeOption([secret], gid, options)

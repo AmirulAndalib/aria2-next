@@ -42,7 +42,7 @@ struct LegacyOptionSpec {
   bool sensitive = false;
 };
 
-constexpr std::array<LegacyOptionSpec, 70> LEGACY_OPTIONS{{
+constexpr std::array<LegacyOptionSpec, 69> LEGACY_OPTIONS{{
     {"allow-piece-length-change", ArgumentKind::OptionalBoolean},
     {"auto-save-interval", ArgumentKind::Required},
     {"bt-detach-seed-only", ArgumentKind::OptionalBoolean},
@@ -79,7 +79,6 @@ constexpr std::array<LegacyOptionSpec, 70> LEGACY_OPTIONS{{
     {"dht-listen-addr6", ArgumentKind::Required},
     {"dht-listen-port", ArgumentKind::Required},
     {"dht-message-timeout", ArgumentKind::Required},
-    {"enable-async-dns6", ArgumentKind::OptionalBoolean},
     {"enable-dht6", ArgumentKind::OptionalBoolean},
     {"enable-http-pipelining", ArgumentKind::OptionalBoolean},
     {"ftp-passwd", ArgumentKind::Required, true},
@@ -480,7 +479,7 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
              value, true);
   }
 
-  static constexpr std::array<const char*, 36> RETIRED{{
+  static constexpr std::array<const char*, 35> RETIRED{{
       "allow-piece-length-change",
       "bt-enable-hook-after-hash-check",
       "bt-hash-check-seed",
@@ -498,7 +497,6 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
       "dht-file-path",
       "dht-file-path6",
       "dht-message-timeout",
-      "enable-async-dns6",
       "enable-http-pipelining",
       "http-auth-challenge",
       "max-http-pipelining",

@@ -114,7 +114,7 @@ BitTorrent               None (OpenSSL is used when present)
 ED2K                     None
 Metalink                 Expat
 gzip, deflate in HTTP    zlib
-Async DNS                c-ares
+Async DNS                libcurl and Boost.Asio system resolvers
 Firefox3/Chromium cookie libsqlite3
 XML-RPC                  Expat
 JSON-RPC over WebSocket  None (bundled wslay)
@@ -130,10 +130,6 @@ JSON-RPC over WebSocket  None (bundled wslay)
 
 You can disable BitTorrent and Metalink support with
 ``-DARIA2_ENABLE_BITTORRENT=OFF`` and ``-DARIA2_ENABLE_METALINK=OFF``.
-
-To enable async DNS support, you need c-ares 1.34.5 or newer.
-
-* c-ares: https://c-ares.org/
 
 How to build
 ------------
@@ -199,7 +195,6 @@ toolchain file or explicit ``CMAKE_SYSTEM_NAME``, compiler, prefix, and
 Windows cross-build implementation. It assumes the following libraries have been
 built for cross-compilation:
 
-* c-ares
 * expat
 * sqlite3
 * zlib
@@ -237,7 +232,6 @@ The maintained release workflow is the reference Android cross-build
 implementation. It assumes the following libraries have been built for
 cross-compilation:
 
-* c-ares
 * openssl
 * expat
 * zlib

@@ -41,9 +41,6 @@ aria2_import_dependency(aria2::expat expat.h
   LIBRARIES expat libexpat)
 aria2_import_dependency(aria2::sqlite sqlite3.h
   LIBRARIES sqlite3)
-aria2_import_dependency(aria2::cares ares.h
-  LIBRARIES cares cares_static
-  DEFINITIONS $<$<BOOL:${WIN32}>:CARES_STATICLIB>)
 unset(OpenSSL_DIR CACHE)
 set(OpenSSL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL")
 find_package(OpenSSL ${ARIA2_MIN_OPENSSL_VERSION} CONFIG REQUIRED
@@ -68,9 +65,6 @@ endif()
 
 unset(CURL_DIR CACHE)
 set(CURL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/CURL")
-set(CARES_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
-set(CARES_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libcares.a" CACHE FILEPATH "" FORCE)
-set(CARES_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
 set(LIBSSH2_INCLUDE_DIR "${ARIA2_DEPENDENCY_ROOT}/include" CACHE PATH "" FORCE)
 set(LIBSSH2_LIBRARY "${ARIA2_DEPENDENCY_ROOT}/lib/libssh2.a" CACHE FILEPATH "" FORCE)
 set(LIBSSH2_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
@@ -88,7 +82,6 @@ find_package(CURL CONFIG REQUIRED
   NO_CMAKE_FIND_ROOT_PATH)
 get_target_property(aria2_curl_link_libraries CURL::libcurl_static
   INTERFACE_LINK_LIBRARIES)
-list(FILTER aria2_curl_link_libraries EXCLUDE REGEX
-  ".*(CURL::cares|ZLIB::ZLIB).*")
+list(FILTER aria2_curl_link_libraries EXCLUDE REGEX ".*ZLIB::ZLIB.*")
 set_property(TARGET CURL::libcurl_static PROPERTY INTERFACE_LINK_LIBRARIES
   "${aria2_curl_link_libraries}")

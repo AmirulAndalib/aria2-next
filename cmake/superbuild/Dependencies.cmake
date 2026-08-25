@@ -91,18 +91,6 @@ ExternalProject_Add(sqlite_project
   UPDATE_COMMAND ""
   TEST_COMMAND "")
 
-ExternalProject_Add(cares_project
-  SOURCE_DIR "${ARIA2_VENDOR_ROOT}/c-ares"
-  BINARY_DIR "${CMAKE_BINARY_DIR}/vendor/c-ares"
-  CMAKE_ARGS
-    ${ARIA2_EXTERNAL_CMAKE_ARGS}
-    -DCARES_STATIC=ON
-    -DCARES_SHARED=OFF
-    -DCARES_BUILD_TESTS=OFF
-    -DCARES_BUILD_TOOLS=OFF
-  UPDATE_COMMAND ""
-  TEST_COMMAND "")
-
 if(APPLE)
   if(CMAKE_OSX_ARCHITECTURES MATCHES "^(arm64|aarch64)$" OR
       (NOT CMAKE_OSX_ARCHITECTURES AND
@@ -252,7 +240,6 @@ ExternalProject_Add(nghttp2_project
 
 set(ARIA2_CURL_DEPENDENCIES
   zlib_project
-  cares_project
   libssh2_project
   nghttp2_project)
 set(ARIA2_CURL_TLS_ARGS
@@ -287,10 +274,8 @@ ExternalProject_Add(curl_project
     -DCURL_DISABLE_INSTALL=OFF
     -DCURL_USE_PKGCONFIG=OFF
     -DCURL_USE_CMAKECONFIG=OFF
-    -DENABLE_ARES=ON
-    -DCARES_USE_STATIC_LIBS=ON
-    -DCARES_INCLUDE_DIR=${ARIA2_DEPENDENCY_PREFIX}/include
-    -DCARES_LIBRARY=${ARIA2_DEPENDENCY_PREFIX}/lib/libcares.a
+    -DENABLE_ARES=OFF
+    -DENABLE_THREADED_RESOLVER=ON
     -DCURL_USE_LIBSSH2=ON
     -DLIBSSH2_USE_STATIC_LIBS=ON
     -DLIBSSH2_INCLUDE_DIR=${ARIA2_DEPENDENCY_PREFIX}/include
@@ -397,7 +382,6 @@ set(ARIA2_PROJECT_DEPENDENCIES
   zlib_project
   expat_project
   sqlite_project
-  cares_project
   openssl_project
   libssh2_project
   nghttp2_project

@@ -57,10 +57,6 @@ class Segment;
 class SocketCore;
 class Option;
 class SocketRecvBuffer;
-#ifdef ENABLE_ASYNC_DNS
-class AsyncNameResolver;
-class AsyncNameResolverMan;
-#endif // ENABLE_ASYNC_DNS
 
 class AbstractCommand : public Command {
 private:
@@ -70,10 +66,6 @@ private:
   std::shared_ptr<SocketRecvBuffer> socketRecvBuffer_;
   std::shared_ptr<SocketCore> readCheckTarget_;
   std::shared_ptr<SocketCore> writeCheckTarget_;
-
-#ifdef ENABLE_ASYNC_DNS
-  std::unique_ptr<AsyncNameResolverMan> asyncNameResolverMan_;
-#endif // ENABLE_ASYNC_DNS
 
   RequestGroup* requestGroup_;
   DownloadEngine* e_;
@@ -131,14 +123,6 @@ public:
   {
     return segments_;
   }
-
-  // Resolves hostname.  The resolved addresses are stored in addrs
-  // and first element is returned.  If resolve is not finished,
-  // return empty string. In this case, call this function with same
-  // arguments until resolved address is returned.  Exception is
-  // thrown on error. port is used for retrieving cached addresses.
-  std::string resolveHostname(std::vector<std::string>& addrs,
-                              const std::string& hostname, uint16_t port);
 
   void tryReserved();
 

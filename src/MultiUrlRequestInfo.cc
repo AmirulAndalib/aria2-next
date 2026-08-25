@@ -69,9 +69,6 @@
 #ifdef ENABLE_SSL
 #  include "TLSContext.h"
 #endif // ENABLE_SSL
-#ifdef ENABLE_ASYNC_DNS
-#  include "AsyncNameResolver.h"
-#endif // ENABLE_ASYNC_DNS
 
 namespace aria2 {
 

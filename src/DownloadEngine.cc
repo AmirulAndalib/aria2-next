@@ -57,6 +57,7 @@
 #include "EventPoll.h"
 #include "Command.h"
 #include "CurlSession.h"
+#include "SystemResolver.h"
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityEntry.h"
 #include "DownloadContext.h"
@@ -96,6 +97,7 @@ DownloadEngine::DownloadEngine(std::unique_ptr<EventPoll> eventPoll)
       refreshInterval_(DEFAULT_REFRESH_INTERVAL),
       lastRefresh_(Timer::zero()),
       dnsCache_(make_unique<DNSCache>()),
+      systemResolver_(make_unique<SystemResolver>()),
       option_(nullptr)
 {
   unsigned char sessionId[20];
@@ -173,6 +175,10 @@ int DownloadEngine::run(bool oneshot)
     if (curlSession_) {
       curlSession_->poll();
     }
+    if (systemResolver_->poll()) {
+      setNoWait(true);
+      setRefreshInterval(std::chrono::milliseconds(0));
+    }
     calculateStatistics();
     if (lastRefresh_.difference(global::wallclock()) + A2_DELTA_MILLIS >=
         refreshInterval_) {
@@ -185,6 +191,10 @@ int DownloadEngine::run(bool oneshot)
     }
     executeCommand(routineCommands_, Command::STATUS_ALL);
     afterEachIteration();
+    if (systemResolver_->hasPending()) {
+      refreshInterval_ = std::min(refreshInterval_,
+                                  std::chrono::milliseconds(25));
+    }
     if (!noWait_ && oneshot) {
       return 1;
     }
@@ -351,20 +361,6 @@ void DownloadEngine::setCurlSession(std::unique_ptr<CurlSession> session)
 {
   curlSession_ = std::move(session);
 }
-
-#ifdef ENABLE_ASYNC_DNS
-bool DownloadEngine::addNameResolverCheck(
-    const std::shared_ptr<AsyncNameResolver>& resolver, Command* command)
-{
-  return eventPoll_->addNameResolver(resolver, command);
-}
-
-bool DownloadEngine::deleteNameResolverCheck(
-    const std::shared_ptr<AsyncNameResolver>& resolver, Command* command)
-{
-  return eventPoll_->deleteNameResolver(resolver, command);
-}
-#endif // ENABLE_ASYNC_DNS
 
 void DownloadEngine::setNoWait(bool b) { noWait_ = b; }
 

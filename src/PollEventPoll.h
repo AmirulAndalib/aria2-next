@@ -43,9 +43,6 @@
 
 #include "Event.h"
 #include "a2functional.h"
-#ifdef ENABLE_ASYNC_DNS
-#  include "AsyncNameResolver.h"
-#endif // ENABLE_ASYNC_DNS
 
 namespace aria2 {
 
@@ -55,11 +52,8 @@ private:
 
   typedef Event<KSocketEntry> KEvent;
   typedef CommandEvent<KSocketEntry, PollEventPoll> KCommandEvent;
-  typedef ADNSEvent<KSocketEntry, PollEventPoll> KADNSEvent;
-  typedef AsyncNameResolverEntry<PollEventPoll> KAsyncNameResolverEntry;
-  friend class AsyncNameResolverEntry<PollEventPoll>;
 
-  class KSocketEntry : public SocketEntry<KCommandEvent, KADNSEvent> {
+  class KSocketEntry : public SocketEntry<KCommandEvent> {
   public:
     KSocketEntry(sock_t socket);
 
@@ -74,12 +68,6 @@ private:
 private:
   typedef std::map<sock_t, KSocketEntry> KSocketEntrySet;
   KSocketEntrySet socketEntries_;
-#ifdef ENABLE_ASYNC_DNS
-  typedef std::map<std::pair<AsyncNameResolver*, Command*>,
-                   KAsyncNameResolverEntry>
-      KAsyncNameResolverEntrySet;
-  KAsyncNameResolverEntrySet nameResolverEntries_;
-#endif // ENABLE_ASYNC_DNS
 
   // Allocated the number of struct pollfd in pollfds_.
   int pollfdCapacity_;
@@ -92,12 +80,6 @@ private:
   bool addEvents(sock_t socket, const KEvent& event);
 
   bool deleteEvents(sock_t socket, const KEvent& event);
-
-  bool addEvents(sock_t socket, Command* command, int events,
-                 const std::shared_ptr<AsyncNameResolver>& rs);
-
-  bool deleteEvents(sock_t socket, Command* command,
-                    const std::shared_ptr<AsyncNameResolver>& rs);
 
   static int translateEvents(EventPoll::EventType events);
 
@@ -113,15 +95,6 @@ public:
 
   virtual bool deleteEvents(sock_t socket, Command* command,
                             EventPoll::EventType events) override;
-#ifdef ENABLE_ASYNC_DNS
-
-  virtual bool
-  addNameResolver(const std::shared_ptr<AsyncNameResolver>& resolver,
-                  Command* command) override;
-  virtual bool
-  deleteNameResolver(const std::shared_ptr<AsyncNameResolver>& resolver,
-                     Command* command) override;
-#endif // ENABLE_ASYNC_DNS
 
   static constexpr int IEV_READ = POLLIN;
   static constexpr int IEV_WRITE = POLLOUT;

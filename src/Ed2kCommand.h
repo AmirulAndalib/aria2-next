@@ -70,6 +70,7 @@ private:
   ed2k::Endpoint endpoint_;
   State state_;
   std::vector<std::string> resolvedAddresses_;
+  uint64_t resolveRequestId_;
   std::string connectedHostname_;
   std::string connectedAddr_;
   uint16_t connectedPort_;
