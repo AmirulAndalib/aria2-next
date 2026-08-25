@@ -273,7 +273,8 @@ HTTP/SFTP Options
   Set the maximum number of native libcurl connections or HTTP/2 streams used
   for one HTTP file. Aria2 Next first verifies byte-range support and reduces
   the actual count for small files or servers that return a complete response.
-  SFTP remains single-stream. Default: ``4``
+  SFTP remains single-stream. The accepted range is ``1`` to ``256``.
+  Default: ``6``
 
 .. option:: -t, --timeout=<SEC>
 
@@ -2513,10 +2514,13 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     this key will not be included in the response.
 
   ``downloadSpeed``
-    Download speed of this download measured in bytes/sec.
+    Current payload download speed in bytes/sec, measured over the same
+    two-second window and 250-millisecond refresh cadence for every protocol.
+    Paused and stopped downloads report zero immediately.
 
   ``uploadSpeed``
-    Upload speed of this download measured in bytes/sec.
+    Current payload upload speed in bytes/sec using the same measurement
+    window and lifecycle rules as ``downloadSpeed``.
 
   ``infoHash``
     InfoHash. BitTorrent only.
@@ -3585,10 +3589,12 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   keys. Values are strings.
 
   ``downloadSpeed``
-    Overall download speed across all enabled protocols (byte/sec).
+    Sum of the current payload download speeds of active tasks across all
+    enabled protocols (byte/sec).
 
   ``uploadSpeed``
-    Overall upload speed across all enabled protocols (byte/sec).
+    Sum of the current payload upload speeds of active tasks across all
+    enabled protocols (byte/sec).
 
   ``numActive``
     The number of active downloads.

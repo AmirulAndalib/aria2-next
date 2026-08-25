@@ -454,18 +454,6 @@ int CurlSession::updateProgress(void* userData, curl_off_t downloadTotal,
     download->snapshot_.totalLength = total;
   }
   (void)downloaded;
-  curl_off_t speed = 0;
-  if (handle->value &&
-      curl_easy_getinfo(handle->value, CURLINFO_SPEED_DOWNLOAD_T, &speed) ==
-          CURLE_OK) {
-    handle->speed = speed;
-    int64_t aggregate = 0;
-    for (const auto& entry : impl.handles) {
-      aggregate += entry->speed;
-    }
-    download->snapshot_.downloadSpeed = static_cast<int>(
-        std::min<int64_t>(aggregate, std::numeric_limits<int>::max()));
-  }
   return impl.stopRequested ? 1 : 0;
 }
 
@@ -617,7 +605,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     impl.resumeOffset = 0;
     download->snapshot_.completedLength = 0;
     download->snapshot_.sessionDownloadLength = 0;
-    download->snapshot_.downloadSpeed = 0;
     download->snapshot_.error.clear();
     download->snapshot_.state = CurlSnapshot::State::Active;
     return true;
@@ -643,7 +630,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   }
   download->snapshot_.completedLength = completedLength(impl);
   download->snapshot_.sessionDownloadLength = 0;
-  download->snapshot_.downloadSpeed = 0;
   download->snapshot_.error.clear();
   download->snapshot_.state = CurlSnapshot::State::Active;
   return true;
@@ -1024,7 +1010,6 @@ void CurlSession::finalize(const std::shared_ptr<CurlDownload>& download,
   context->resetDownloadStopTime();
   store_.removePath(impl.path);
   download->snapshot_.state = CurlSnapshot::State::Complete;
-  download->snapshot_.downloadSpeed = 0;
   if (context->isPieceHashVerificationAvailable()) {
     auto entry = std::unique_ptr<CurlCheckIntegrityEntry>(
         new CurlCheckIntegrityEntry(impl.group));
@@ -1107,7 +1092,6 @@ bool CurlSession::retry(const std::shared_ptr<CurlDownload>& download)
   impl.retryPending = true;
   impl.retryDeadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(wait);
-  download->snapshot_.downloadSpeed = 0;
   download->snapshot_.connections = 0;
   engine_->setNoWait(true);
   return true;
@@ -1218,7 +1202,6 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
             ? "HTTP " + std::to_string(responseCode) + ": " +
                   curl_easy_strerror(result)
             : curl_easy_strerror(result);
-    download->snapshot_.downloadSpeed = 0;
     return;
   }
 
@@ -1239,7 +1222,6 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   if (impl.dryRun) {
     download->snapshot_.totalLength = std::max<curl_off_t>(0, reportedLength);
     download->snapshot_.state = CurlSnapshot::State::Complete;
-    download->snapshot_.downloadSpeed = 0;
     store_.removePath(impl.path);
     return;
   }
@@ -1428,7 +1410,6 @@ void CurlSession::stop(const std::shared_ptr<CurlDownload>& download,
     }
     download->snapshot_.state = CurlSnapshot::State::Stopped;
   }
-  download->snapshot_.downloadSpeed = 0;
 }
 
 void CurlSession::rebalanceLimits()

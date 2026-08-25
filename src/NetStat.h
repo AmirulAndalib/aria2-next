@@ -75,10 +75,6 @@ public:
 
   void updateUpload(size_t bytes);
 
-  void updateUploadSpeed(size_t bytes);
-
-  void updateUploadLength(size_t bytes);
-
   int getMaxDownloadSpeed() const;
 
   int getMaxUploadSpeed() const;

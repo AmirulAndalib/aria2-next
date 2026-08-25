@@ -801,8 +801,6 @@ bool BtDownload::shouldPauseAfterMetadata() const
 
 void BtDownload::requestStop(StopReason reason)
 {
-  snapshot_.downloadSpeed = 0;
-  snapshot_.uploadSpeed = 0;
   if (shutdownStage_ != ShutdownStage::Idle) {
     if (reason == StopReason::Stop) {
       stopReason_ = reason;
@@ -979,8 +977,6 @@ void BtDownload::setError(BtErrorSnapshot error)
   snapshot_.error = std::move(error);
   snapshot_.state = BtSnapshot::State::Error;
   snapshot_.selectedComplete = false;
-  snapshot_.downloadSpeed = 0;
-  snapshot_.uploadSpeed = 0;
 }
 
 void BtDownload::clearError()
@@ -1008,6 +1004,8 @@ void BtDownload::prepareStart()
   }
   stopReason_ = StopReason::None;
   shutdownStage_ = ShutdownStage::Idle;
+  impl_->payloadDownloaded = 0;
+  impl_->payloadUploaded = 0;
   clearError();
   if (!fileSelectionApplying()) {
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::None;

@@ -136,8 +136,6 @@ struct BtSnapshot {
   int64_t allTimeUpload = 0;
   int64_t failedBytes = 0;
   int64_t redundantBytes = 0;
-  int downloadSpeed = 0;
-  int uploadSpeed = 0;
   int numPeers = 0;
   int connectingPeers = 0;
   int handshakingPeers = 0;

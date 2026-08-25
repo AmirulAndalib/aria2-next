@@ -47,8 +47,9 @@ class SpeedCalc {
 private:
   std::deque<std::pair<Timer, size_t>> timeSlots_;
   Timer start_;
+  Timer lastCalculation_ = Timer::zero();
   int64_t accumulatedLength_;
-  int64_t bytesWindow_;
+  int currentSpeed_;
   int maxSpeed_;
 
   void removeStaleTimeSlot(const Timer& now);

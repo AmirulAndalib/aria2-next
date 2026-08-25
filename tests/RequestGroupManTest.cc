@@ -25,6 +25,7 @@
 #include "SelectEventPoll.h"
 #include "UriListParser.h"
 #include "Command.h"
+#include "wallclock.h"
 
 namespace aria2 {
 
@@ -102,31 +103,30 @@ A2_TEST(RequestGroupManTest, testMergedTransferStat)
 
 void RequestGroupManTest::testMergedTransferStat()
 {
+  global::wallclock().reset(24_h);
   RequestGroupMan manager({}, 1, option_.get());
-  TransferStat bt;
-  bt.downloadSpeed = 2048;
-  bt.uploadSpeed = 512;
-  bt.sessionDownloadLength = 8192;
-  bt.sessionUploadLength = 1024;
-  bt.allTimeUploadLength = 4096;
-  manager.setBtTransferStat(&bt);
-  manager.getNetStat().addSessionDownloadLength(100);
-  manager.getNetStat().updateUploadLength(50);
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option_);
+  auto context = std::make_shared<DownloadContext>();
+  group->setDownloadContext(context);
+  group->setRequestGroupMan(&manager);
+  group->setState(RequestGroup::STATE_ACTIVE);
+  manager.addRequestGroup(group);
+  context->resetDownloadStartTime();
+  context->updateDownload(4096);
+  context->updateUpload(1024);
 
   const auto stat = manager.calculateStat();
   REQUIRE_EQ(2048, stat.downloadSpeed);
   REQUIRE_EQ(512, stat.uploadSpeed);
-  REQUIRE_EQ((int64_t)8292, stat.sessionDownloadLength);
-  REQUIRE_EQ((int64_t)1074, stat.sessionUploadLength);
-  REQUIRE_EQ((int64_t)4146, stat.allTimeUploadLength);
+  REQUIRE_EQ((int64_t)4096, stat.sessionDownloadLength);
+  REQUIRE_EQ((int64_t)1024, stat.sessionUploadLength);
 
   manager.setMaxOverallDownloadSpeedLimit(1024);
   manager.setMaxOverallUploadSpeedLimit(256);
   REQUIRE(manager.doesOverallDownloadSpeedExceed());
   REQUIRE(manager.doesOverallUploadSpeedExceed());
 
-  bt.downloadSpeed = 0;
-  bt.uploadSpeed = 0;
+  group->setPauseRequested(true);
   REQUIRE(!manager.doesOverallDownloadSpeedExceed());
   REQUIRE(!manager.doesOverallUploadSpeedExceed());
 }

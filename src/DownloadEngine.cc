@@ -203,7 +203,7 @@ void DownloadEngine::rebalanceGlobalDownloadLimit()
   auto btLimit = overall;
 #ifdef ENABLE_BITTORRENT
   const auto btActive =
-      btSession_ && btSession_->transferStat().downloadSpeed > 0;
+      btSession_ && btSession_->downloadSpeed() > 0;
 #else
   const auto btActive = false;
 #endif
@@ -685,20 +685,12 @@ void DownloadEngine::addCommand(std::unique_ptr<Command> command)
 void DownloadEngine::setRequestGroupMan(std::unique_ptr<RequestGroupMan> rgman)
 {
   requestGroupMan_ = std::move(rgman);
-#ifdef ENABLE_BITTORRENT
-  requestGroupMan_->setBtTransferStat(btSession_ ? &btSession_->transferStat()
-                                                 : nullptr);
-#endif // ENABLE_BITTORRENT
 }
 
 #ifdef ENABLE_BITTORRENT
 void DownloadEngine::setBtSession(std::unique_ptr<BtSession> session)
 {
   btSession_ = std::move(session);
-  if (requestGroupMan_) {
-    requestGroupMan_->setBtTransferStat(btSession_ ? &btSession_->transferStat()
-                                                   : nullptr);
-  }
 }
 #endif // ENABLE_BITTORRENT
 

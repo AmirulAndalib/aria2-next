@@ -39,7 +39,6 @@ namespace aria2 {
 class BtSessionTest {
 public:
   void testSessionStateRoundTrip();
-  void testTransferStatAggregation();
   void testFileSelectionResumeState();
   void testNativeFileSelectionApply();
   void testPausedRestoreHydration();
@@ -50,7 +49,6 @@ public:
 };
 
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
-A2_TEST(BtSessionTest, testTransferStatAggregation)
 A2_TEST(BtSessionTest, testFileSelectionResumeState)
 A2_TEST(BtSessionTest, testNativeFileSelectionApply)
 A2_TEST(BtSessionTest, testPausedRestoreHydration)
@@ -58,43 +56,6 @@ A2_TEST(BtSessionTest, testDesktopSettings)
 A2_TEST(BtSessionTest, testTrackerOwnership)
 A2_TEST(BtSessionTest, testTrackerTierNormalization)
 A2_TEST(BtSessionTest, testResumeStore)
-
-void BtSessionTest::testTransferStatAggregation()
-{
-  BtSessionTransferStat stat;
-  stat.updateSessionPayload(4000, 500);
-  stat.update(1, 100, 20, 1000, true);
-  stat.update(2, 300, 40, 2000, true);
-  REQUIRE_EQ(400, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(60, stat.snapshot().uploadSpeed);
-  REQUIRE_EQ((int64_t)4000, stat.snapshot().sessionDownloadLength);
-  REQUIRE_EQ((int64_t)500, stat.snapshot().sessionUploadLength);
-  REQUIRE_EQ((int64_t)3000, stat.snapshot().allTimeUploadLength);
-
-  stat.update(1, 150, 25, 1100, true);
-  REQUIRE_EQ(450, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(65, stat.snapshot().uploadSpeed);
-  REQUIRE_EQ((int64_t)3100, stat.snapshot().allTimeUploadLength);
-
-  stat.suspend(1);
-  REQUIRE_EQ(300, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(40, stat.snapshot().uploadSpeed);
-  stat.suspend(2);
-  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
-
-  stat.update(2, 200, 30, 2100, true);
-  stat.retire(2);
-  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
-  REQUIRE_EQ((int64_t)3200, stat.snapshot().allTimeUploadLength);
-
-  stat.update(1, 50, 10, 1200, true);
-  stat.clearSpeeds();
-  REQUIRE_EQ(0, stat.snapshot().downloadSpeed);
-  REQUIRE_EQ(0, stat.snapshot().uploadSpeed);
-  REQUIRE_EQ((int64_t)3300, stat.snapshot().allTimeUploadLength);
-}
 
 void BtSessionTest::testFileSelectionResumeState()
 {
@@ -382,8 +343,6 @@ void BtSessionTest::testPausedRestoreHydration()
   REQUIRE_EQ(BtSnapshot::State::Paused, download->snapshot().state);
   REQUIRE_EQ((int64_t)384, download->snapshot().completedLength);
   REQUIRE(download->snapshot().complete);
-  REQUIRE_EQ(0, download->snapshot().downloadSpeed);
-  REQUIRE_EQ(0, download->snapshot().uploadSpeed);
 
   DownloadEngine engine(make_unique<SelectEventPoll>());
   engine.setOption(option.get());

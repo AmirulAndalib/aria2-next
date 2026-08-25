@@ -169,9 +169,8 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
 
   pieceStorage_->getDiskAdaptor()->writeData(
       reinterpret_cast<const unsigned char*>(data.data()), data.size(), begin);
-  dctx_->updateDownload(
-      static_cast<size_t>(addReceivedRange(attrs->receivedPartRanges, begin,
-                                           end)));
+  addReceivedRange(attrs->receivedPartRanges, begin, end);
+  dctx_->updateDownload(data.size());
   for (auto block = firstBlock; block <= lastBlock; ++block) {
     const auto blockBegin =
         pieceBegin + static_cast<int64_t>(block) * blockLength;

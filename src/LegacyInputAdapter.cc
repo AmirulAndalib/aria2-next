@@ -34,6 +34,7 @@ namespace aria2 {
 namespace {
 
 enum class ArgumentKind { Required, OptionalBoolean };
+enum class ValueAction { Keep, Map, Skip };
 
 struct LegacyOptionSpec {
   const char* name;
@@ -155,19 +156,54 @@ void logAdaptation(LegacyInputSource source, const std::string& name,
                   name.c_str(), result.c_str()));
 }
 
-bool normalizeLegacyValue(const std::string& name, const std::string& value,
-                          std::string& normalized)
+std::string normalizeLegacyPort(const std::string& name,
+                                const std::string& value)
+{
+  try {
+    auto ports = util::parseIntSegments(value);
+    ports.normalize();
+    if (!ports.hasNext()) {
+      throw DL_ABORT_EX("Empty port range");
+    }
+    int first = -1;
+    while (ports.hasNext()) {
+      const auto port = ports.next();
+      if (port < 1024 || port > UINT16_MAX) {
+        throw DL_ABORT_EX("Port is out of range");
+      }
+      if (first < 0) {
+        first = port;
+      }
+    }
+    return std::to_string(first);
+  }
+  catch (Exception&) {
+    throw DL_ABORT_EX2(
+        fmt("Invalid legacy option value: %s=%s", name.c_str(), value.c_str()),
+        error_code::OPTION_ERROR);
+  }
+}
+
+ValueAction adaptLegacyValue(const std::string& name, const std::string& value,
+                             std::string& normalized)
 {
   if ((name == "log-level" || name == "console-log-level") &&
       value == "notice") {
     normalized = V_INFO;
-    return true;
+    return ValueAction::Map;
   }
   if (name == "bt-encryption" && value == "enabled") {
     normalized = V_PREFERRED;
-    return true;
+    return ValueAction::Map;
   }
-  return false;
+  if (name == "listen-port" && value.find_first_of("-,") != std::string::npos) {
+    normalized = normalizeLegacyPort(name, value);
+    return ValueAction::Map;
+  }
+  if (name == "metalink-preferred-protocol" && value == "ftp") {
+    return ValueAction::Skip;
+  }
+  return ValueAction::Keep;
 }
 
 bool parseBoolean(const std::string& name, const std::string& value)
@@ -239,10 +275,17 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
       continue;
     }
     std::string normalized;
-    if (normalizeLegacyValue(option.first, option.second, normalized)) {
+    const auto action =
+        adaptLegacyValue(option.first, option.second, normalized);
+    if (action == ValueAction::Map) {
       result.emplace_back(option.first, normalized);
       logAdaptation(source, option.first + '=' + option.second,
                     "mapped to " + option.first + '=' + normalized);
+    }
+    else if (action == ValueAction::Skip) {
+      logAdaptation(source, option.first + '=' + option.second,
+                    "accepted and skipped; FTP is not a maintained protocol");
+      continue;
     }
     else {
       result.push_back(option);
@@ -372,7 +415,8 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
     add(item->first, "bt-tracker-receive-timeout", item->second, true);
   }
   if (const auto item = legacy.find("dht-listen-port"); item != legacy.end()) {
-    add(item->first, "listen-port", item->second, true);
+    add(item->first, "listen-port",
+        normalizeLegacyPort(item->first, item->second), true);
   }
   if (const auto item = legacy.find("enable-dht6"); item != legacy.end()) {
     if (parseBoolean(item->first, item->second)) {
@@ -430,7 +474,7 @@ KeyVals normalizeLegacyInput(const KeyVals& options, LegacyInputSource source)
       util::parseLLIntNoThrow(connectionValue, value);
     }
     if (connectionValue > 0) {
-      value = std::to_string(std::min<int64_t>(connectionValue, 32));
+      value = std::to_string(std::min<int64_t>(connectionValue, 256));
     }
     addGroup({"split", "max-connection-per-server"}, "stream-max-connections",
              value, true);
@@ -537,7 +581,8 @@ std::vector<std::string> normalizeLegacyCommandLine(int argc, char* argv[],
       spec = findLegacyOption(name);
       if (!spec) {
         if (name != "log-level" && name != "console-log-level" &&
-            name != "bt-encryption") {
+            name != "bt-encryption" && name != "listen-port" &&
+            name != "metalink-preferred-protocol") {
           passthrough.push_back(std::move(argument));
           continue;
         }
@@ -548,7 +593,7 @@ std::vector<std::string> normalizeLegacyCommandLine(int argc, char* argv[],
           value = argv[++index];
         }
         std::string normalized;
-        if (!normalizeLegacyValue(name, value, normalized)) {
+        if (adaptLegacyValue(name, value, normalized) == ValueAction::Keep) {
           passthrough.push_back(std::move(argument));
           if (equals == std::string::npos) {
             passthrough.push_back(value);

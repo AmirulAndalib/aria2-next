@@ -1978,7 +1978,7 @@ std::unique_ptr<ValueBase> GetServersRpcMethod::process(const RpcRequest& req,
       server->put(KEY_URI, download->snapshot().currentUri);
       server->put(KEY_CURRENT_URI, download->snapshot().currentUri);
       server->put(KEY_DOWNLOAD_SPEED,
-                  util::itos(download->snapshot().downloadSpeed));
+                  util::itos(group->calculateStat().downloadSpeed));
       servers->append(std::move(server));
     }
     fileEntry->put(KEY_SERVERS, std::move(servers));

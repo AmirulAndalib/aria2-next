@@ -16,7 +16,6 @@
 #include "common.h"
 
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -24,7 +23,6 @@
 
 #include "BtDownload.h"
 #include "GroupId.h"
-#include "TransferStat.h"
 
 namespace aria2 {
 
@@ -32,31 +30,6 @@ class Command;
 class DownloadEngine;
 class Option;
 class RequestGroup;
-
-class BtSessionTransferStat {
-private:
-  struct TorrentStat {
-    int downloadSpeed = 0;
-    int uploadSpeed = 0;
-    int64_t allTimeUploadLength = 0;
-  };
-
-  std::map<a2_gid_t, TorrentStat> torrents_;
-  TransferStat snapshot_;
-  int64_t downloadSpeed_ = 0;
-  int64_t uploadSpeed_ = 0;
-
-  void refreshSpeeds();
-
-public:
-  const TransferStat& snapshot() const { return snapshot_; }
-  void update(a2_gid_t gid, int downloadSpeed, int uploadSpeed,
-              int64_t allTimeUploadLength, bool active);
-  void suspend(a2_gid_t gid);
-  void retire(a2_gid_t gid);
-  void updateSessionPayload(uint64_t downloaded, uint64_t uploaded);
-  void clearSpeeds();
-};
 
 struct BtSessionStatus {
   std::vector<std::pair<std::string, uint64_t>> performanceWarnings;
@@ -165,13 +138,12 @@ public:
   addPeers(const std::shared_ptr<BtDownload>& download,
            const std::vector<std::string>& peers);
   void discard(const std::shared_ptr<BtDownload>& download);
-  void suspend(a2_gid_t gid);
 
   uint16_t listenPort() const;
   uint16_t announcePort() const;
   std::string externalAddress() const;
   BtSessionStatus status() const;
-  const TransferStat& transferStat() const;
+  int downloadSpeed() const;
 
   bool replaceIpFilter(const std::vector<std::string>& rules,
                        std::string& error);

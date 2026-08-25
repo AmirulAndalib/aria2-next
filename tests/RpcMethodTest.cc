@@ -792,12 +792,15 @@ void RpcMethodTest::testChangeGlobalOption_withLegacyOptions()
   options->put("split", "8");
   options->put("max-connection-per-server", "3");
   options->put("ftp-user", "anonymous");
+  options->put("listen-port", "6881-6999");
+  options->put("metalink-preferred-protocol", "ftp");
   options->put(PREF_MAX_CONCURRENT_DOWNLOADS->k, "7");
   request.params->append(std::move(options));
 
   const auto response = method.execute(std::move(request), e_.get());
   CHECK_EQ(0, response.code);
   CHECK_EQ("3", e_->getOption()->get(PREF_STREAM_MAX_CONNECTIONS));
+  CHECK_EQ("6881", e_->getOption()->get(PREF_LISTEN_PORT));
   CHECK_EQ("7", e_->getOption()->get(PREF_MAX_CONCURRENT_DOWNLOADS));
 }
 
@@ -1532,16 +1535,9 @@ void RpcMethodTest::testBtGlobalStat()
   auto context = std::make_shared<DownloadContext>();
   download->populateDownloadContext(context, option_.get());
   group->setDownloadContext(context);
-  download->mutableSnapshot().downloadSpeed = 4096;
-  download->mutableSnapshot().uploadSpeed = 1024;
   group->setBtDownload(download);
   group->setPauseRequested(true);
   e_->getRequestGroupMan()->addReservedGroup(group);
-
-  TransferStat bt;
-  bt.downloadSpeed = 4096;
-  bt.uploadSpeed = 1024;
-  e_->getRequestGroupMan()->setBtTransferStat(&bt);
 
   TellStatusRpcMethod tellStatus;
   auto request = createReq(TellStatusRpcMethod::getMethodName());
@@ -1555,6 +1551,8 @@ void RpcMethodTest::testBtGlobalStat()
   const auto task = downcast<Dict>(response.param);
   const auto taskDownloadSpeed = getString(task, "downloadSpeed");
   const auto taskUploadSpeed = getString(task, "uploadSpeed");
+  REQUIRE_EQ(std::string("0"), taskDownloadSpeed);
+  REQUIRE_EQ(std::string("0"), taskUploadSpeed);
 
   GetGlobalStatRpcMethod globalStat;
   response = globalStat.execute(

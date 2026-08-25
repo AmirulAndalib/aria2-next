@@ -83,93 +83,27 @@ std::string hashKey(const lt::info_hash_t& hashes)
   return {};
 }
 
-int clampSpeed(int64_t speed)
+void updatePayloadCounter(DownloadContext* context, int64_t current,
+                          int64_t& previous, bool upload)
 {
-  return static_cast<int>(
-      std::min<int64_t>(std::max<int64_t>(0, speed), INT_MAX));
-}
-
-int64_t clampLength(uint64_t length)
-{
-  return static_cast<int64_t>(
-      std::min<uint64_t>(length, std::numeric_limits<int64_t>::max()));
-}
-
-int64_t addLength(int64_t lhs, int64_t rhs)
-{
-  return lhs > std::numeric_limits<int64_t>::max() - rhs
-             ? std::numeric_limits<int64_t>::max()
-             : lhs + rhs;
+  current = std::max<int64_t>(0, current);
+  const auto delta = current >= previous ? current - previous : current;
+  previous = current;
+  auto remaining = static_cast<uint64_t>(delta);
+  while (remaining > 0) {
+    const auto bytes = static_cast<size_t>(std::min<uint64_t>(
+        remaining, std::numeric_limits<size_t>::max()));
+    if (upload) {
+      context->updateUpload(bytes);
+    }
+    else {
+      context->updateDownload(bytes);
+    }
+    remaining -= bytes;
+  }
 }
 
 } // namespace
-
-void BtSessionTransferStat::refreshSpeeds()
-{
-  snapshot_.downloadSpeed = clampSpeed(downloadSpeed_);
-  snapshot_.uploadSpeed = clampSpeed(uploadSpeed_);
-}
-
-void BtSessionTransferStat::update(a2_gid_t gid, int downloadSpeed,
-                                   int uploadSpeed, int64_t allTimeUploadLength,
-                                   bool active)
-{
-  if (gid == 0) {
-    return;
-  }
-  auto& current = torrents_[gid];
-  downloadSpeed_ -= current.downloadSpeed;
-  uploadSpeed_ -= current.uploadSpeed;
-  const auto totalUpload = std::max<int64_t>(0, allTimeUploadLength);
-  if (totalUpload > current.allTimeUploadLength) {
-    snapshot_.allTimeUploadLength =
-        addLength(snapshot_.allTimeUploadLength,
-                  totalUpload - current.allTimeUploadLength);
-  }
-  current.downloadSpeed = active ? std::max(0, downloadSpeed) : 0;
-  current.uploadSpeed = active ? std::max(0, uploadSpeed) : 0;
-  current.allTimeUploadLength = totalUpload;
-  downloadSpeed_ += current.downloadSpeed;
-  uploadSpeed_ += current.uploadSpeed;
-  refreshSpeeds();
-}
-
-void BtSessionTransferStat::suspend(a2_gid_t gid)
-{
-  const auto found = torrents_.find(gid);
-  if (found == torrents_.end()) {
-    return;
-  }
-  downloadSpeed_ -= found->second.downloadSpeed;
-  uploadSpeed_ -= found->second.uploadSpeed;
-  found->second.downloadSpeed = 0;
-  found->second.uploadSpeed = 0;
-  refreshSpeeds();
-}
-
-void BtSessionTransferStat::retire(a2_gid_t gid)
-{
-  suspend(gid);
-  torrents_.erase(gid);
-}
-
-void BtSessionTransferStat::updateSessionPayload(uint64_t downloaded,
-                                                 uint64_t uploaded)
-{
-  snapshot_.sessionDownloadLength = clampLength(downloaded);
-  snapshot_.sessionUploadLength = clampLength(uploaded);
-}
-
-void BtSessionTransferStat::clearSpeeds()
-{
-  for (auto& entry : torrents_) {
-    entry.second.downloadSpeed = 0;
-    entry.second.uploadSpeed = 0;
-  }
-  downloadSpeed_ = 0;
-  uploadSpeed_ = 0;
-  refreshSpeeds();
-}
 
 struct BtSession::Impl {
   struct PendingDelete {
@@ -213,7 +147,8 @@ struct BtSession::Impl {
   std::map<a2_gid_t, std::shared_ptr<BtDownload>> downloads;
   std::map<lt::torrent_handle, std::weak_ptr<BtDownload>> handles;
   std::map<std::string, PendingDelete> pendingDeletes;
-  BtSessionTransferStat transferStat;
+  uint64_t payloadDownloaded = 0;
+  uint64_t payloadUploaded = 0;
   int downloadRateLimit = 0;
   BtPeerBlocklist blocklist;
   uint64_t filterRevision = 0;
@@ -1041,7 +976,6 @@ void BtSession::beginNativeDelete(
     download->impl_->nativeState = BtNativeState::Detached;
     if (intent == DeleteIntent::Permanent) {
       forgetHandles(download.get());
-      impl_->transferStat.retire(download->impl_->gid);
       download->finishStopping();
       impl_->downloads.erase(download->impl_->gid);
     }
@@ -1064,7 +998,6 @@ void BtSession::beginNativeDelete(
   }
 
   impl_->pendingDeletes[key] = {download, intent};
-  impl_->transferStat.suspend(download->impl_->gid);
   download->impl_->nativeState = BtNativeState::Removing;
   if (intent == DeleteIntent::Permanent) {
     download->beginRemoving();
@@ -1100,7 +1033,6 @@ void BtSession::finishNativeDelete(const std::string& key,
   download->impl_->nativeState = BtNativeState::Detached;
 
   if (!error.empty()) {
-    impl_->transferStat.retire(download->impl_->gid);
     if (pending.intent == DeleteIntent::Replace) {
       download->setError("Unable to reset BitTorrent partfile: " + error);
       download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
@@ -1121,7 +1053,6 @@ void BtSession::finishNativeDelete(const std::string& key,
     return;
   }
 
-  impl_->transferStat.retire(download->impl_->gid);
   download->finishStopping();
   impl_->downloads.erase(download->impl_->gid);
 }
@@ -1199,7 +1130,6 @@ BtSession::BtSession(const Option* option) : impl_(make_unique<Impl>(option))
 
 BtSession::~BtSession()
 {
-  impl_->transferStat.clearSpeeds();
   impl_->session->set_alert_notify({});
   saveSessionState(impl_.get());
 }
@@ -1228,8 +1158,6 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
   }
 
   impl_->downloads[group->getGID()] = download;
-  impl_->transferStat.update(group->getGID(), 0, 0,
-                             download->snapshot().allTimeUpload, false);
 
   if (download->impl_->nativeState == BtNativeState::Adding) {
     return;
@@ -1353,7 +1281,6 @@ void BtSession::poll()
         download->impl_->nativeState = BtNativeState::Detached;
         download->setError(added->error.message());
         forgetHandles(download.get());
-        impl_->transferStat.retire(download->impl_->gid);
         impl_->downloads.erase(download->impl_->gid);
         download->shutdownStage_ = BtDownload::ShutdownStage::Complete;
         continue;
@@ -1486,9 +1413,8 @@ void BtSession::poll()
           value(impl_->metrics.queuedTrackerAnnounces);
       impl_->connectionAttempts = value(impl_->metrics.connectionAttempts);
       impl_->connectionTimeouts = value(impl_->metrics.connectionTimeouts);
-      impl_->transferStat.updateSessionPayload(
-          value(impl_->metrics.payloadDownloaded),
-          value(impl_->metrics.payloadUploaded));
+      impl_->payloadDownloaded = value(impl_->metrics.payloadDownloaded);
+      impl_->payloadUploaded = value(impl_->metrics.payloadUploaded);
       impl_->trackerDownloaded = value(impl_->metrics.trackerDownloaded);
       impl_->trackerUploaded = value(impl_->metrics.trackerUploaded);
       impl_->ipOverheadDownloaded =
@@ -1538,13 +1464,13 @@ void BtSession::poll()
         snapshot.allTimeUpload = status.all_time_upload;
         snapshot.failedBytes = status.total_failed_bytes;
         snapshot.redundantBytes = status.total_redundant_bytes;
-        const bool transferring =
-            download->shutdownStage() == BtDownload::ShutdownStage::Idle &&
-            !download->failed() && !status.errc &&
-            !(status.flags & lt::torrent_flags::paused);
-        snapshot.downloadSpeed =
-            transferring ? status.download_payload_rate : 0;
-        snapshot.uploadSpeed = transferring ? status.upload_payload_rate : 0;
+        if (download->group()) {
+          auto context = download->group()->getDownloadContext().get();
+          updatePayloadCounter(context, status.total_payload_download,
+                               download->impl_->payloadDownloaded, false);
+          updatePayloadCounter(context, status.total_payload_upload,
+                               download->impl_->payloadUploaded, true);
+        }
         snapshot.numComplete = status.num_complete;
         snapshot.numIncomplete = status.num_incomplete;
         if (!status.pieces.empty()) {
@@ -1573,11 +1499,6 @@ void BtSession::poll()
             snapshot.selectedComplete = false;
           }
           snapshot.complete = status.is_seeding;
-        }
-        if (download->group()) {
-          impl_->transferStat.update(
-              download->impl_->gid, snapshot.downloadSpeed,
-              snapshot.uploadSpeed, snapshot.allTimeUpload, transferring);
         }
       }
       continue;
@@ -1832,7 +1753,6 @@ void BtSession::poll()
         failFilePriorityUpdate(download.get());
         snapshot.recoverable = false;
         download->setError(std::move(snapshot));
-        impl_->transferStat.suspend(download->impl_->gid);
       }
       A2_LOG_ERROR(error->message());
       continue;
@@ -1849,7 +1769,6 @@ void BtSession::poll()
         snapshot.category = error->error.category().name();
         snapshot.message = error->error.message();
         download->setError(std::move(snapshot));
-        impl_->transferStat.suspend(download->impl_->gid);
       }
       continue;
     }
@@ -2020,6 +1939,7 @@ void BtSession::poll()
       impl_->lastUpdate.difference(global::wallclock()) >= 1_s) {
     impl_->lastUpdate = global::wallclock();
     auto query =
+        lt::torrent_handle::query_accurate_download_counters |
         lt::torrent_handle::query_name | lt::torrent_handle::query_save_path;
     if (impl_->lastPieceUpdate.isZero() ||
         impl_->lastPieceUpdate.difference(global::wallclock()) >= 5_s) {
@@ -2072,7 +1992,6 @@ void BtSession::poll()
 void BtSession::requestStop(const std::shared_ptr<BtDownload>& download,
                             BtDownload::StopReason reason)
 {
-  impl_->transferStat.suspend(download->impl_->gid);
   download->requestStop(reason);
   if (reason == BtDownload::StopReason::Stop &&
       download->shutdownStage() == BtDownload::ShutdownStage::PendingHandle &&
@@ -2362,7 +2281,6 @@ void BtSession::discard(const std::shared_ptr<BtDownload>& download)
   if (!download) {
     return;
   }
-  impl_->transferStat.retire(download->impl_->gid);
   if (!download->impl_->resumePath.empty()) {
     File(download->impl_->resumePath).remove();
   }
@@ -2384,11 +2302,6 @@ void BtSession::discard(const std::shared_ptr<BtDownload>& download)
     return;
   }
   beginNativeDelete(download, DeleteIntent::Permanent);
-}
-
-void BtSession::suspend(a2_gid_t gid)
-{
-  impl_->transferStat.suspend(gid);
 }
 
 uint16_t BtSession::listenPort() const { return impl_->listenPort; }
@@ -2439,10 +2352,8 @@ BtSessionStatus BtSession::status() const
   result.queuedTrackerAnnounces = impl_->queuedTrackerAnnounces;
   result.connectionAttempts = impl_->connectionAttempts;
   result.connectionTimeouts = impl_->connectionTimeouts;
-  result.payloadDownloaded = static_cast<uint64_t>(
-      impl_->transferStat.snapshot().sessionDownloadLength);
-  result.payloadUploaded =
-      static_cast<uint64_t>(impl_->transferStat.snapshot().sessionUploadLength);
+  result.payloadDownloaded = impl_->payloadDownloaded;
+  result.payloadUploaded = impl_->payloadUploaded;
   result.trackerDownloaded = impl_->trackerDownloaded;
   result.trackerUploaded = impl_->trackerUploaded;
   result.ipOverheadDownloaded = impl_->ipOverheadDownloaded;
@@ -2470,9 +2381,15 @@ BtSessionStatus BtSession::status() const
   return result;
 }
 
-const TransferStat& BtSession::transferStat() const
+int BtSession::downloadSpeed() const
 {
-  return impl_->transferStat.snapshot();
+  int64_t speed = 0;
+  for (const auto& entry : impl_->downloads) {
+    if (entry.second->group()) {
+      speed += entry.second->group()->calculateStat().downloadSpeed;
+    }
+  }
+  return static_cast<int>(std::min<int64_t>(speed, INT_MAX));
 }
 
 bool BtSession::replaceIpFilter(const std::vector<std::string>& rules,

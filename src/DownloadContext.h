@@ -230,10 +230,9 @@ public:
   // RequestGroupMan via getOwnerRequestGroup().
   void updateDownload(size_t bytes);
 
-  // This method also updates global upload length held by
+  // This method also updates the global upload metrics held by
   // RequestGroupMan via getOwnerRequestGroup().
-  void updateUploadLength(size_t bytes);
-  void updateUploadSpeed(size_t bytes);
+  void updateUpload(size_t bytes);
 };
 
 } // namespace aria2

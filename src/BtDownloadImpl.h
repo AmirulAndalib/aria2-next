@@ -67,6 +67,8 @@ struct BtDownload::Impl {
   bool partfileRecoveryAttempted = false;
   bool filePriorityUpdatePending = false;
   bool resumeAfterFilePriorityUpdate = false;
+  int64_t payloadDownloaded = 0;
+  int64_t payloadUploaded = 0;
   std::vector<libtorrent::download_priority_t> desiredFilePriorities;
   std::vector<libtorrent::download_priority_t> appliedFilePriorities;
   std::vector<libtorrent::download_priority_t> desiredPiecePriorities;

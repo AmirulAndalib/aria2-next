@@ -40,9 +40,9 @@ TEST_CASE("LegacyInputAdapter normalizes exact and approximate options")
   CHECK_EQ("/tmp/downloads", valueFor(output, "dir"));
   CHECK(valueFor(output, "ftp-user").empty());
 
-  const auto clamped =
-      normalizeLegacyInput({{"split", "64"}}, LegacyInputSource::Configuration);
-  CHECK_EQ("32", valueFor(clamped, "stream-max-connections"));
+  const auto clamped = normalizeLegacyInput({{"split", "512"}},
+                                            LegacyInputSource::Configuration);
+  CHECK_EQ("256", valueFor(clamped, "stream-max-connections"));
 }
 
 TEST_CASE("LegacyInputAdapter gives canonical options precedence")
@@ -56,6 +56,21 @@ TEST_CASE("LegacyInputAdapter gives canonical options precedence")
   CHECK_EQ(1, std::count_if(output.begin(), output.end(), [](const auto& item) {
              return item.first == "stream-max-connections";
            }));
+}
+
+TEST_CASE("LegacyInputAdapter normalizes retired port and Metalink values")
+{
+  const auto output =
+      normalizeLegacyInput({{"listen-port", "6881-6999"},
+                            {"dht-listen-port", "7000-7010"},
+                            {"metalink-preferred-protocol", "ftp"},
+                            {"metalink-preferred-protocol", "https"}},
+                           LegacyInputSource::Configuration);
+
+  CHECK_EQ("6881", valueFor(output, "listen-port"));
+  CHECK_EQ("https", valueFor(output, "metalink-preferred-protocol"));
+  CHECK_THROWS(normalizeLegacyInput({{"listen-port", "80-90"}},
+                                    LegacyInputSource::Configuration));
 }
 
 TEST_CASE("LegacyInputAdapter rewrites legacy command-line forms")
@@ -105,6 +120,10 @@ TEST_CASE("LegacyInputAdapter projects only meaningful current values")
 TEST_CASE("LegacyInputAdapter is shared by configuration and task input")
 {
   auto parser = OptionParser::getInstance();
+  Option defaults;
+  parser->parseDefaultValues(defaults);
+  CHECK_EQ("6", defaults.get(PREF_STREAM_MAX_CONNECTIONS));
+
   Option configuration;
   std::istringstream configurationInput(
       "split=8\nmax-connection-per-server=3\nftp-user=anonymous\n");

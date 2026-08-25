@@ -673,25 +673,28 @@ void RequestGroup::decreaseNumCommand()
 
 TransferStat RequestGroup::calculateStat() const
 {
+  auto stat = downloadContext_->getNetStat().toTransferStat();
   if (curlDownload_) {
-    TransferStat stat;
-    stat.downloadSpeed = curlDownload_->snapshot().downloadSpeed;
     stat.sessionDownloadLength =
         curlDownload_->snapshot().sessionDownloadLength;
-    return stat;
   }
 #ifdef ENABLE_BITTORRENT
-  if (btDownload_) {
-    TransferStat stat;
-    stat.downloadSpeed = btDownload_->snapshot().downloadSpeed;
-    stat.uploadSpeed = btDownload_->snapshot().uploadSpeed;
+  else if (btDownload_) {
     stat.sessionDownloadLength = btDownload_->snapshot().allTimeDownload;
     stat.sessionUploadLength = btDownload_->snapshot().allTimeUpload;
     stat.allTimeUploadLength = btDownload_->snapshot().allTimeUpload;
-    return stat;
   }
 #endif // ENABLE_BITTORRENT
-  return downloadContext_->getNetStat().toTransferStat();
+  if (state_ != STATE_ACTIVE || haltRequested_ || pauseRequested_ ||
+      (curlDownload_ && curlDownload_->stopped())
+#ifdef ENABLE_BITTORRENT
+      || (btDownload_ && (btDownload_->stopped() || btDownload_->failed()))
+#endif // ENABLE_BITTORRENT
+  ) {
+    stat.downloadSpeed = 0;
+    stat.uploadSpeed = 0;
+  }
+  return stat;
 }
 
 void RequestGroup::setHaltRequested(bool f, HaltReason haltReason)
@@ -723,11 +726,6 @@ void RequestGroup::releaseRuntimeResource(DownloadEngine* e)
     e->getCurlSession()->stop(
         curlDownload_, isPauseRequested() || isShutdownRequested());
   }
-#ifdef ENABLE_BITTORRENT
-  if (btDownload_) {
-    e->getBtSession()->suspend(gid_->getNumericId());
-  }
-#endif // ENABLE_BITTORRENT
   if (pieceStorage_) {
     pieceStorage_->removeAdvertisedPiece(Timer::zero());
   }

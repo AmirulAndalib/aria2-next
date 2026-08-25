@@ -929,8 +929,8 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   }
   {
     OptionHandler* op(new NumberOptionHandler(
-        PREF_STREAM_MAX_CONNECTIONS, TEXT_STREAM_MAX_CONNECTIONS, "4", 1,
-        32));
+        PREF_STREAM_MAX_CONNECTIONS, TEXT_STREAM_MAX_CONNECTIONS, "6", 1,
+        256));
     op->addTag(TAG_HTTP);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);

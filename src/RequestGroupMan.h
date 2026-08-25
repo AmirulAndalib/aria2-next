@@ -104,7 +104,6 @@ private:
   int maxOverallUploadSpeedLimit_;
 
   NetStat netStat_;
-  const TransferStat* btTransferStat_ = nullptr;
 
   // true if download engine should keep running even if there is no
   // download to perform.
@@ -226,8 +225,6 @@ public:
   bool isSameFileBeingDownloaded(RequestGroup* requestGroup) const;
 
   TransferStat calculateStat();
-
-  void setBtTransferStat(const TransferStat* stat) { btTransferStat_ = stat; }
 
   class DownloadStat {
   private:

@@ -135,8 +135,7 @@ public:
     if (!dctx_ || bytes == 0) {
       return;
     }
-    dctx_->updateUploadSpeed(bytes);
-    dctx_->updateUploadLength(bytes);
+    dctx_->updateUpload(bytes);
   }
 };
 

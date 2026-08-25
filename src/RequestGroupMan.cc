@@ -917,8 +917,14 @@ void RequestGroupMan::forceHalt()
 TransferStat RequestGroupMan::calculateStat()
 {
   auto stat = netStat_.toTransferStat();
-  if (btTransferStat_) {
-    stat.add(*btTransferStat_);
+  stat.downloadSpeed = 0;
+  stat.uploadSpeed = 0;
+  for (const auto& group : requestGroups_) {
+    const auto task = group->calculateStat();
+    TransferStat active;
+    active.downloadSpeed = task.downloadSpeed;
+    active.uploadSpeed = task.uploadSpeed;
+    stat.add(active);
   }
   return stat;
 }

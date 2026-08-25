@@ -37,7 +37,6 @@ struct CurlHandle {
   int64_t rangeEnd = -1;
   int64_t writeOffset = 0;
   int64_t downloaded = 0;
-  int64_t speed = 0;
   int64_t appliedLimit = -1;
   long responseCode = 0;
   bool ranged = false;

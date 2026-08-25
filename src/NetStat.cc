@@ -90,13 +90,6 @@ void NetStat::updateUpload(size_t bytes)
   sessionUploadLength_ += bytes;
 }
 
-void NetStat::updateUploadSpeed(size_t bytes) { uploadSpeed_.update(bytes); }
-
-void NetStat::updateUploadLength(size_t bytes)
-{
-  sessionUploadLength_ += bytes;
-}
-
 int NetStat::getMaxDownloadSpeed() const
 {
   return downloadSpeed_.getMaxSpeed();
