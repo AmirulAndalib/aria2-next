@@ -43,8 +43,7 @@
 namespace aria2 {
 
 namespace {
-constexpr auto CURRENT_WINDOW = 2_s;
-constexpr auto HISTORY_WINDOW = 10_s;
+constexpr auto SPEED_WINDOW = 10_s;
 constexpr auto SLOT_TIME = std::chrono::milliseconds(250);
 
 int rateForWindow(
@@ -86,7 +85,7 @@ void SpeedCalc::reset()
 void SpeedCalc::removeStaleTimeSlot(const Timer& now)
 {
   while (!timeSlots_.empty()) {
-    if (timeSlots_[0].first.difference(now) < HISTORY_WINDOW) {
+    if (timeSlots_[0].first.difference(now) < SPEED_WINDOW) {
       break;
     }
     timeSlots_.pop_front();
@@ -108,7 +107,7 @@ int SpeedCalc::calculateSpeed()
   lastCalculation_ = now;
   currentSpeed_ = rateForWindow(
       timeSlots_, now,
-      std::chrono::duration_cast<std::chrono::milliseconds>(CURRENT_WINDOW));
+      std::chrono::duration_cast<std::chrono::milliseconds>(SPEED_WINDOW));
   maxSpeed_ = std::max(currentSpeed_, maxSpeed_);
   return currentSpeed_;
 }

@@ -2517,7 +2517,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   ``downloadSpeed``
     Current payload download speed in bytes/sec, measured over the same
-    two-second window and 250-millisecond refresh cadence for every protocol.
+    ten-second window and 250-millisecond refresh cadence for every protocol.
     Paused and stopped downloads report zero immediately.
 
   ``uploadSpeed``
