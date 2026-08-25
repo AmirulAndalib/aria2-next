@@ -295,9 +295,13 @@ void RequestGroup::createInitialCommand(
     initPieceStorage();
     auto ed2kSession = e->getRequestGroupMan()->getEd2kSession();
     auto attrs = getEd2kAttrs(downloadContext_);
-    if (ed2kSession->hasDownloadState(this)) {
-      ed2kSession->loadDownloadState(this);
+    const auto stateResult = ed2kSession->loadDownloadState(this);
+    if (stateResult == ed2k::DownloadStateLoadResult::Loaded) {
       pieceStorage_->getDiskAdaptor()->openFile();
+    }
+    else if (stateResult == ed2k::DownloadStateLoadResult::Error) {
+      throw DOWNLOAD_FAILURE_EXCEPTION(
+          "Failed to load persistent ED2K download state.");
     }
     else if (pieceStorage_->getDiskAdaptor()->fileExists()) {
       pieceStorage_->getDiskAdaptor()->enableReadOnly();

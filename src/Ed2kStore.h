@@ -56,6 +56,8 @@ struct PersistedDownloadState {
   std::vector<PersistedPieceState> pieces;
 };
 
+enum class DownloadStateLoadResult { Loaded, Missing, Error };
+
 class Ed2kStore {
 public:
   explicit Ed2kStore(std::string path);
@@ -85,9 +87,8 @@ public:
                    const std::vector<PersistedFileSources>& files,
                    const std::vector<PeerCreditState>& credits);
 
-  bool hasDownload(const std::string& gid) const;
-  bool loadDownload(PersistedDownloadState& state,
-                    const std::string& gid) const;
+  DownloadStateLoadResult loadDownload(PersistedDownloadState& state,
+                                       const std::string& gid) const;
   bool loadDownloads(std::vector<PersistedDownloadState>& states) const;
   bool saveDownload(const PersistedDownloadState& state);
   bool removeDownload(const std::string& gid);

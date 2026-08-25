@@ -47,11 +47,13 @@ std::shared_ptr<RequestGroup> createEd2kGroup(const std::string& clientHash)
 class Ed2kSessionTest {
 public:
   void testRestoresRuntimeStateAcrossRestart();
+  void testRestoresPartialDownloadAfterPause();
   void testRestoresSharingLifecycleWithoutControlFile();
   void testSelectsAlternativeDownloadForPeer();
 };
 
 A2_TEST(Ed2kSessionTest, testRestoresRuntimeStateAcrossRestart)
+A2_TEST(Ed2kSessionTest, testRestoresPartialDownloadAfterPause)
 A2_TEST(Ed2kSessionTest, testRestoresSharingLifecycleWithoutControlFile)
 A2_TEST(Ed2kSessionTest, testSelectsAlternativeDownloadForPeer)
 
@@ -138,6 +140,69 @@ void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
   }
 
   File(stateFile).remove();
+}
+
+void Ed2kSessionTest::testRestoresPartialDownloadAfterPause()
+{
+  const std::string database = A2_TEST_OUT_DIR "/ed2k-partial.db";
+  const std::string output = A2_TEST_OUT_DIR "/ed2k-partial.bin";
+  File(database).remove();
+  File(database + "-wal").remove();
+  File(database + "-shm").remove();
+  File(output).remove();
+  File(output + ".1").remove();
+
+  const std::string uri = "ed2k://|file|ed2k-partial.bin|10000000|"
+                          "0123456789abcdef0123456789abcdef|/";
+  auto option = std::make_shared<Option>();
+  option->put(PREF_DIR, A2_TEST_OUT_DIR);
+  option->put(PREF_OUT, "ed2k-partial.bin");
+  auto group = createEd2kFileRequestGroup(uri, option);
+  const auto gid = GroupId::toHex(group->getGID());
+  group->initPieceStorage();
+  auto storage = group->getPieceStorage();
+  storage->getDiskAdaptor()->openFile();
+  const unsigned char zero = 0;
+  storage->getDiskAdaptor()->writeData(&zero, 1, 9999999);
+  storage->getDiskAdaptor()->closeFile();
+  storage->markPiecesDone(PIECE_LENGTH);
+  auto partial = storage->getMissingPiece(1, 1);
+  REQUIRE(partial);
+  partial->completeBlock(0);
+  const auto completed = group->getCompletedLength();
+  REQUIRE(completed > 0);
+  REQUIRE(completed < group->getTotalLength());
+  group->setPauseRequested(true);
+
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE(session.checkpointDownload(group.get()));
+  }
+
+  group.reset();
+  auto restoredOption = std::make_shared<Option>();
+  restoredOption->put(PREF_DIR, A2_TEST_OUT_DIR);
+  restoredOption->put(PREF_OUT, "ed2k-partial.bin");
+  restoredOption->put(PREF_GID, gid);
+  auto restored = createEd2kFileRequestGroup(uri, restoredOption);
+  restored->initPieceStorage();
+  {
+    UploadQueue queue;
+    Ed2kSession session(&queue, database);
+    REQUIRE(session.loadDownloadState(restored.get()) ==
+            DownloadStateLoadResult::Loaded);
+  }
+  REQUIRE_EQ(gid, GroupId::toHex(restored->getGID()));
+  REQUIRE_EQ(output, restored->getDownloadContext()->getBasePath());
+  REQUIRE_EQ(completed, restored->getCompletedLength());
+  REQUIRE(!File(output + ".1").exists());
+
+  restored.reset();
+  File(database).remove();
+  File(database + "-wal").remove();
+  File(database + "-shm").remove();
+  File(output).remove();
 }
 
 void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()

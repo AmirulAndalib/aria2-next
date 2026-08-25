@@ -1570,15 +1570,22 @@ void Ed2kCommandTest::testEd2kShutdownPreservesCompletedState()
 {
   const std::string stateDirectory = A2_TEST_OUT_DIR "/ed2k-shutdown-state";
   const std::string database = stateDirectory + "/ed2k/state.db";
+  const std::string output = A2_TEST_OUT_DIR "/ed2k-command-test.bin";
   File(database).remove();
   File(database + "-wal").remove();
   File(database + "-shm").remove();
+  File(output).remove();
 
   {
     auto option = createOption();
     option->put(PREF_STATE_DIR, stateDirectory);
     auto group = createRequestGroup(option, createEd2kContext());
     group->initPieceStorage();
+    group->getPieceStorage()->getDiskAdaptor()->openFile();
+    const unsigned char zero = 0;
+    group->getPieceStorage()->getDiskAdaptor()->writeData(
+        &zero, 1, ed2k::PIECE_LENGTH);
+    group->getPieceStorage()->getDiskAdaptor()->closeFile();
     group->getPieceStorage()->markAllPiecesDone();
 
     DownloadEngine engine(make_unique<SelectEventPoll>());
@@ -1592,19 +1599,22 @@ void Ed2kCommandTest::testEd2kShutdownPreservesCompletedState()
 
     auto session = manager->getEd2kSession();
     REQUIRE(session->checkpointDownload(group.get()));
-    REQUIRE(session->hasDownloadState(group.get()));
+    REQUIRE(session->loadDownloadState(group.get()) ==
+            ed2k::DownloadStateLoadResult::Loaded);
 
     group->setHaltRequested(true, RequestGroup::SHUTDOWN_SIGNAL);
     manager->removeStoppedGroup(&engine);
 
     REQUIRE_EQ((size_t)0, manager->countRequestGroup());
-    REQUIRE(session->hasDownloadState(group.get()));
+    REQUIRE(session->loadDownloadState(group.get()) ==
+            ed2k::DownloadStateLoadResult::Loaded);
     REQUIRE(session->discardDownload(group.get()));
   }
 
   File(database).remove();
   File(database + "-wal").remove();
   File(database + "-shm").remove();
+  File(output).remove();
 }
 
 void Ed2kCommandTest::testEd2kSeedTimeStopsSeedOnlyGroup()

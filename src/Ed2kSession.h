@@ -46,8 +46,7 @@ public:
   bool empty() const { return downloads_.empty(); }
 
   const std::string& databasePath() const { return databasePath_; }
-  bool hasDownloadState(RequestGroup* group) const;
-  bool loadDownloadState(RequestGroup* group);
+  DownloadStateLoadResult loadDownloadState(RequestGroup* group);
   bool checkpointDownload(RequestGroup* group);
   bool discardDownload(RequestGroup* group);
   size_t restoreDownloads(

@@ -95,6 +95,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/Ed2kCommandTest.cc
   tests/Ed2kKadStateTest.cc
   tests/Ed2kSessionTest.cc
+  tests/Ed2kStoreTest.cc
   tests/Ed2kShareIndexTest.cc
   tests/Ed2kUploadQueueTest.cc
 )

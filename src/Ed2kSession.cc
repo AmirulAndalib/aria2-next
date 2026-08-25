@@ -290,22 +290,20 @@ void Ed2kSession::applyPersistedState(RequestGroup* group)
   }
 }
 
-bool Ed2kSession::hasDownloadState(RequestGroup* group) const
+DownloadStateLoadResult Ed2kSession::loadDownloadState(RequestGroup* group)
 {
-  if (!store_ || !store_->available() || !group) {
-    return false;
+  if (!group || !group->getPieceStorage()) {
+    return DownloadStateLoadResult::Error;
   }
-  return store_->hasDownload(GroupId::toHex(group->getGID()));
-}
-
-bool Ed2kSession::loadDownloadState(RequestGroup* group)
-{
-  if (!store_ || !store_->available() || !group || !group->getPieceStorage()) {
-    return false;
+  if (!store_ || !store_->available()) {
+    return databasePath_.empty() ? DownloadStateLoadResult::Missing
+                                 : DownloadStateLoadResult::Error;
   }
   PersistedDownloadState state;
-  if (!store_->loadDownload(state, GroupId::toHex(group->getGID()))) {
-    return false;
+  const auto result =
+      store_->loadDownload(state, GroupId::toHex(group->getGID()));
+  if (result != DownloadStateLoadResult::Loaded) {
+    return result;
   }
   const auto dctx = group->getDownloadContext();
   const auto attrs = getEd2kAttrs(dctx);
@@ -316,7 +314,7 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
       state.bitfield.size() != storage->getBitfieldLength()) {
     A2_LOG_WARN(fmt("Ignored mismatched ED2K database state for GID %s.",
                     state.gid.c_str()));
-    return false;
+    return DownloadStateLoadResult::Error;
   }
 
   const auto hasPersistedProgress =
@@ -331,7 +329,7 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
     A2_LOG_WARN(
         fmt("Ignored ED2K progress without matching payload for GID %s.",
             state.gid.c_str()));
-    return false;
+    return DownloadStateLoadResult::Error;
   }
 
   std::vector<std::shared_ptr<Piece>> pieces;
@@ -341,13 +339,13 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
         persisted.length != storage->getPieceLength(persisted.index)) {
       A2_LOG_WARN(fmt("Ignored invalid ED2K piece state for GID %s.",
                       state.gid.c_str()));
-      return false;
+      return DownloadStateLoadResult::Error;
     }
     auto piece = std::make_shared<Piece>(persisted.index, persisted.length);
     if (persisted.bitfield.size() != piece->getBitfieldLength()) {
       A2_LOG_WARN(fmt("Ignored invalid ED2K block state for GID %s.",
                       state.gid.c_str()));
-      return false;
+      return DownloadStateLoadResult::Error;
     }
     piece->setBitfield(
         reinterpret_cast<const unsigned char*>(persisted.bitfield.data()),
@@ -364,13 +362,13 @@ bool Ed2kSession::loadDownloadState(RequestGroup* group)
         emptyBitfield.size());
     A2_LOG_WARN(fmt("Ignored inconsistent ED2K completion state for GID %s.",
                     state.gid.c_str()));
-    return false;
+    return DownloadStateLoadResult::Error;
   }
   storage->addInFlightPiece(pieces);
   attrs->sharingTime.restore(state.sharingTime);
   A2_LOG_DEBUG(fmt("Loaded ED2K download state for GID %s from %s.",
                    state.gid.c_str(), databasePath_.c_str()));
-  return true;
+  return DownloadStateLoadResult::Loaded;
 }
 
 bool Ed2kSession::checkpointDownload(RequestGroup* group)
@@ -465,7 +463,7 @@ size_t Ed2kSession::restoreDownloads(
       taskOption->put(PREF_PAUSE, state.paused ? A2_V_TRUE : A2_V_FALSE);
       auto group = createEd2kFileRequestGroup(state.link, taskOption);
       group->initPieceStorage();
-      if (!loadDownloadState(group.get())) {
+      if (loadDownloadState(group.get()) != DownloadStateLoadResult::Loaded) {
         A2_LOG_WARN(
             fmt("Restored ED2K task without persisted progress for GID %s.",
                 state.gid.c_str()));

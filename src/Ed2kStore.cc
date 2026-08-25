@@ -31,6 +31,8 @@ namespace ed2k {
 
 namespace {
 
+constexpr int CURRENT_SCHEMA_VERSION = 2;
+
 class Statement {
 public:
   Statement(sqlite3* db, const char* sql) : db_(db)
@@ -142,32 +144,44 @@ bool Ed2kStore::open()
     db_ = nullptr;
     return false;
   }
-  Statement versionQuery(db_, "PRAGMA user_version");
-  if (!versionQuery || sqlite3_step(versionQuery.get()) != SQLITE_ROW) {
+  int version;
+  {
+    Statement versionQuery(db_, "PRAGMA user_version");
+    if (!versionQuery || sqlite3_step(versionQuery.get()) != SQLITE_ROW) {
+      sqlite3_close_v2(db_);
+      db_ = nullptr;
+      return false;
+    }
+    version = sqlite3_column_int(versionQuery.get(), 0);
+  }
+
+  if (!exec("BEGIN IMMEDIATE")) {
     sqlite3_close_v2(db_);
     db_ = nullptr;
     return false;
   }
-  const auto version = sqlite3_column_int(versionQuery.get(), 0);
-  if (version != 0 && version != 2) {
-    A2_LOG_WARN(fmt("Resetting incompatible ED2K database schema version %d.",
-                    version));
-    if (!exec("BEGIN IMMEDIATE") ||
-        !exec("DROP TABLE IF EXISTS download_pieces") ||
+  if (version != CURRENT_SCHEMA_VERSION) {
+    if (version != 0) {
+      A2_LOG_WARN(
+          fmt("Resetting incompatible ED2K database schema version %d.",
+              version));
+    }
+    if (!exec("DROP TABLE IF EXISTS download_pieces") ||
         !exec("DROP TABLE IF EXISTS downloads") ||
         !exec("DROP TABLE IF EXISTS source_seeds") ||
         !exec("DROP TABLE IF EXISTS credits") ||
         !exec("DROP TABLE IF EXISTS servers") ||
-        !exec("DROP TABLE IF EXISTS meta") || !exec("COMMIT")) {
+        !exec("DROP TABLE IF EXISTS meta")) {
       exec("ROLLBACK");
       sqlite3_close_v2(db_);
       db_ = nullptr;
       return false;
     }
   }
-  if (initializeSchema()) {
+  if (initializeSchema() && exec("COMMIT")) {
     return true;
   }
+  exec("ROLLBACK");
   sqlite3_close_v2(db_);
   db_ = nullptr;
   return false;
@@ -486,28 +500,25 @@ bool Ed2kStore::saveRuntime(const std::string& clientHash,
   return commit();
 }
 
-bool Ed2kStore::hasDownload(const std::string& gid) const
+DownloadStateLoadResult
+Ed2kStore::loadDownload(PersistedDownloadState& state,
+                        const std::string& gid) const
 {
   if (!db_) {
-    return false;
-  }
-  Statement stmt(db_, "SELECT 1 FROM downloads WHERE gid=?1");
-  return stmt && bindText(stmt.get(), 1, gid) &&
-         sqlite3_step(stmt.get()) == SQLITE_ROW;
-}
-
-bool Ed2kStore::loadDownload(PersistedDownloadState& state,
-                             const std::string& gid) const
-{
-  if (!db_) {
-    return false;
+    return DownloadStateLoadResult::Error;
   }
   Statement stmt(db_, "SELECT file_hash, file_size, link, path, modified_time, "
                       "paused, complete, sharing_time, bitfield "
                       "FROM downloads WHERE gid=?1");
-  if (!stmt || !bindText(stmt.get(), 1, gid) ||
-      sqlite3_step(stmt.get()) != SQLITE_ROW) {
-    return false;
+  if (!stmt || !bindText(stmt.get(), 1, gid)) {
+    return DownloadStateLoadResult::Error;
+  }
+  const auto rowResult = sqlite3_step(stmt.get());
+  if (rowResult == SQLITE_DONE) {
+    return DownloadStateLoadResult::Missing;
+  }
+  if (rowResult != SQLITE_ROW) {
+    return DownloadStateLoadResult::Error;
   }
   PersistedDownloadState loaded;
   loaded.gid = gid;
@@ -522,14 +533,14 @@ bool Ed2kStore::loadDownload(PersistedDownloadState& state,
   loaded.bitfield = columnBlob(stmt.get(), 8);
   if (loaded.fileHash.size() != HASH_LENGTH || loaded.fileSize <= 0 ||
       loaded.path.empty() || loaded.sharingTime < 0) {
-    return false;
+    return DownloadStateLoadResult::Error;
   }
 
   Statement pieces(
       db_, "SELECT piece_index, piece_length, bitfield FROM download_pieces "
            "WHERE gid=?1 ORDER BY piece_index");
   if (!pieces || !bindText(pieces.get(), 1, gid)) {
-    return false;
+    return DownloadStateLoadResult::Error;
   }
   int result;
   while ((result = sqlite3_step(pieces.get())) == SQLITE_ROW) {
@@ -538,15 +549,15 @@ bool Ed2kStore::loadDownload(PersistedDownloadState& state,
     piece.length = sqlite3_column_int64(pieces.get(), 1);
     piece.bitfield = columnBlob(pieces.get(), 2);
     if (piece.length <= 0 || piece.bitfield.empty()) {
-      return false;
+      return DownloadStateLoadResult::Error;
     }
     loaded.pieces.push_back(std::move(piece));
   }
   if (result != SQLITE_DONE) {
-    return false;
+    return DownloadStateLoadResult::Error;
   }
   state = std::move(loaded);
-  return true;
+  return DownloadStateLoadResult::Loaded;
 }
 
 bool Ed2kStore::loadDownloads(std::vector<PersistedDownloadState>& states) const
@@ -570,7 +581,7 @@ bool Ed2kStore::loadDownloads(std::vector<PersistedDownloadState>& states) const
   states.reserve(gids.size());
   for (const auto& gid : gids) {
     PersistedDownloadState state;
-    if (!loadDownload(state, gid)) {
+    if (loadDownload(state, gid) != DownloadStateLoadResult::Loaded) {
       return false;
     }
     states.push_back(std::move(state));
