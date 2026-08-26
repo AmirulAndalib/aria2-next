@@ -46,9 +46,9 @@ namespace {
 constexpr auto SPEED_WINDOW = 10_s;
 constexpr auto SLOT_TIME = std::chrono::milliseconds(250);
 
-int rateForWindow(
-    const std::deque<std::pair<Timer, size_t>>& timeSlots,
-    const Timer& now, std::chrono::milliseconds window)
+int rateForWindow(const std::deque<std::pair<Timer, size_t>>& timeSlots,
+                  const Timer& now, std::chrono::milliseconds window,
+                  std::chrono::milliseconds elapsed)
 {
   uint64_t bytes = 0;
   for (auto it = timeSlots.rbegin(); it != timeSlots.rend(); ++it) {
@@ -60,15 +60,15 @@ int rateForWindow(
                 ? std::numeric_limits<uint64_t>::max()
                 : bytes + sample;
   }
+  const auto denominator = std::max(SLOT_TIME, std::min(window, elapsed));
   const auto rate = static_cast<long double>(bytes) * 1000.0L /
-                    static_cast<long double>(window.count());
-  return static_cast<int>(std::min<long double>(
-      rate, std::numeric_limits<int>::max()));
+                    static_cast<long double>(denominator.count());
+  return static_cast<int>(
+      std::min<long double>(rate, std::numeric_limits<int>::max()));
 }
 } // namespace
 
-SpeedCalc::SpeedCalc()
-    : accumulatedLength_(0), currentSpeed_(0), maxSpeed_(0)
+SpeedCalc::SpeedCalc() : accumulatedLength_(0), currentSpeed_(0), maxSpeed_(0)
 {
 }
 
@@ -105,9 +105,12 @@ int SpeedCalc::calculateSpeed()
     return currentSpeed_;
   }
   lastCalculation_ = now;
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      start_.difference(now));
   currentSpeed_ = rateForWindow(
       timeSlots_, now,
-      std::chrono::duration_cast<std::chrono::milliseconds>(SPEED_WINDOW));
+      std::chrono::duration_cast<std::chrono::milliseconds>(SPEED_WINDOW),
+      elapsed);
   maxSpeed_ = std::max(currentSpeed_, maxSpeed_);
   return currentSpeed_;
 }
@@ -121,7 +124,9 @@ int SpeedCalc::calculateNewestSpeed(int seconds)
     return 0;
   }
   return rateForWindow(timeSlots_, now,
-                       std::chrono::milliseconds(seconds * 1000LL));
+                       std::chrono::milliseconds(seconds * 1000LL),
+                       std::chrono::duration_cast<std::chrono::milliseconds>(
+                           start_.difference(now)));
 }
 
 void SpeedCalc::update(size_t bytes)

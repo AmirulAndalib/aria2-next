@@ -328,6 +328,8 @@ set(ARIA2_SOURCES_BASE
   src/Request.h
   src/RequestGroup.cc
   src/RequestGroup.h
+  src/RangePlanner.cc
+  src/RangePlanner.h
   src/RequestGroupCriteria.h
   src/RequestGroupEntry.cc
   src/RequestGroupEntry.h

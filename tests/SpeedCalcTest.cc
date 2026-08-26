@@ -35,14 +35,14 @@ void SpeedCalcTest::testFixedWindow()
   calc.reset();
 
   calc.update(2000);
-  REQUIRE_EQ(200, calc.calculateSpeed());
+  REQUIRE_EQ(8000, calc.calculateSpeed());
 
   global::wallclock().advance(1_s);
   calc.update(2000);
-  REQUIRE_EQ(400, calc.calculateSpeed());
+  REQUIRE_EQ(4000, calc.calculateSpeed());
 
   global::wallclock().advance(1_s);
-  REQUIRE_EQ(400, calc.calculateSpeed());
+  REQUIRE_EQ(2000, calc.calculateSpeed());
 
   global::wallclock().advance(8_s);
   REQUIRE_EQ(200, calc.calculateSpeed());
@@ -57,13 +57,13 @@ void SpeedCalcTest::testRefreshCadence()
   SpeedCalc calc;
   calc.reset();
   calc.update(2000);
-  REQUIRE_EQ(200, calc.calculateSpeed());
+  REQUIRE_EQ(8000, calc.calculateSpeed());
 
   calc.update(2000);
-  REQUIRE_EQ(200, calc.calculateSpeed());
+  REQUIRE_EQ(8000, calc.calculateSpeed());
 
   global::wallclock().advance(std::chrono::milliseconds(250));
-  REQUIRE_EQ(400, calc.calculateSpeed());
+  REQUIRE_EQ(16000, calc.calculateSpeed());
 }
 
 } // namespace aria2

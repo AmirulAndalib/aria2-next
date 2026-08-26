@@ -22,6 +22,7 @@
 #include <curl/curl.h>
 
 #include "DiskWriter.h"
+#include "RangePlanner.h"
 #include "TimerA2.h"
 
 namespace aria2 {
@@ -33,47 +34,52 @@ struct CurlHandle {
   CurlDownload* download = nullptr;
   CURL* value = nullptr;
   curl_slist* headers = nullptr;
-  int64_t rangeStart = 0;
-  int64_t rangeEnd = -1;
+  RangeLease lease;
   int64_t writeOffset = 0;
   int64_t downloaded = 0;
   int64_t appliedLimit = -1;
+  int64_t bufferOffset = 0;
+  size_t bufferLimit = 0;
+  std::chrono::steady_clock::time_point startedAt;
+  int64_t responseRangeEnd = -1;
+  int64_t responseTotalLength = -1;
+  int64_t unsatisfiedTotalLength = -1;
   long responseCode = 0;
   bool ranged = false;
   bool rangeAccepted = false;
+  bool fullResponseAccepted = false;
   bool headersComplete = false;
   bool primary = false;
   bool validatorMismatch = false;
+  bool invalidRange = false;
+  std::string responseEtag;
+  std::string responseLastModified;
   std::string range;
+  std::vector<unsigned char> writeBuffer;
 };
 
 struct CurlDownloadImpl {
   std::vector<std::string> uris;
-  size_t uriIndex = 0;
-  size_t attempts = 0;
+  size_t preferredUriIndex = 0;
   std::string path;
   std::string currentUri;
   std::string etag;
   std::string lastModified;
   std::unique_ptr<DiskWriter> writer;
   std::vector<std::unique_ptr<CurlHandle>> handles;
-  std::vector<std::pair<int64_t, int64_t>> completedRanges;
+  RangePlanner planner;
   RequestGroup* group = nullptr;
-  int64_t resumeOffset = 0;
-  int64_t nextRangeOffset = 0;
   int64_t rangeChunkSize = 0;
+  int64_t referenceRangeSpeed = 0;
   int maxConnections = 1;
   int fileNotFoundCount = 0;
-  int64_t pendingRetryAfter = 0;
+  long httpVersion = 0;
   bool dryRun = false;
   bool http = false;
-  bool resumed = false;
-  bool scheduleRanges = false;
-  bool segmented = false;
-  bool restartAttempted = false;
-  bool retryPending = false;
+  bool rangeValidated = false;
+  bool plannerConfigured = false;
+  bool kickPending = false;
   bool stopRequested = false;
-  std::chrono::steady_clock::time_point retryDeadline;
   Timer lastCheckpoint = Timer::zero();
 };
 

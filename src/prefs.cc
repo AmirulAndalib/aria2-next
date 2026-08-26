@@ -286,10 +286,6 @@ PrefPtr PREF_DISABLE_IPV6 = makePref("disable-ipv6");
 // value: true | false
 PrefPtr PREF_HUMAN_READABLE = makePref("human-readable");
 // value: true | false
-// value: true | false
-PrefPtr PREF_ALWAYS_RESUME = makePref("always-resume");
-// value: 1*digit
-PrefPtr PREF_MAX_RESUME_FAILURE_TRIES = makePref("max-resume-failure-tries");
 // value: string that your file system recognizes as a file name.
 PrefPtr PREF_SAVE_SESSION = makePref("save-session");
 // value: 1*digit

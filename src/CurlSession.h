@@ -17,9 +17,11 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <curl/curl.h>
 
+#include "RangePlanner.h"
 #include "StreamStore.h"
 #include "error_code.h"
 
@@ -40,7 +42,7 @@ public:
 
   std::unique_ptr<Command> start(const std::shared_ptr<CurlDownload>& download,
                                  RequestGroup* group, DownloadEngine* engine);
-  size_t activeCount() const { return downloads_.size(); }
+  size_t activeCount() const { return tasks_.size(); }
   void setGlobalDownloadLimit(int64_t limit);
   void poll();
   void armTimeout();
@@ -56,6 +58,7 @@ private:
   StreamStore store_;
   std::map<CURL*, std::pair<std::shared_ptr<CurlDownload>, CurlHandle*>>
       downloads_;
+  std::map<CurlDownload*, std::shared_ptr<CurlDownload>> tasks_;
   std::map<curl_socket_t, CurlSocketCommand*> sockets_;
   std::chrono::steady_clock::time_point timeoutDeadline_;
   bool timeoutArmed_ = false;
@@ -64,17 +67,23 @@ private:
   bool prepare(const std::shared_ptr<CurlDownload>& download,
                RequestGroup* group);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
-                    int64_t rangeStart = 0, int64_t rangeEnd = -1,
-                    bool primary = false);
+                    const RangeLease& lease, bool primary, bool ranged);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
   void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
-  bool restartWithoutResume(const std::shared_ptr<CurlDownload>& download);
-  bool retry(const std::shared_ptr<CurlDownload>& download);
-  void processRetry(const std::shared_ptr<CurlDownload>& download);
-  void scheduleRanges(const std::shared_ptr<CurlDownload>& download);
+  void configurePlanner(const std::shared_ptr<CurlDownload>& download,
+                        const RangeLease* retainedLease = nullptr);
+  void schedule(const std::shared_ptr<CurlDownload>& download);
+  bool rebalanceTail(const std::shared_ptr<CurlDownload>& download);
+  bool retryRange(const std::shared_ptr<CurlDownload>& download,
+                  const RangeLease& lease, curl_off_t retryAfter);
+  std::vector<RangeLease>
+  activeLeases(const std::shared_ptr<CurlDownload>& download) const;
   void finalize(const std::shared_ptr<CurlDownload>& download,
                 curl_off_t reportedFileTime);
+  void failTask(const std::shared_ptr<CurlDownload>& download,
+                error_code::Value errorCode, const std::string& message,
+                bool retainState = true);
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
   bool openOutput(const std::shared_ptr<CurlDownload>& download,
                   bool preserveExisting);

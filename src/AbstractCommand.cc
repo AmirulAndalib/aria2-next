@@ -34,9 +34,6 @@
 /* copyright --> */
 #include "AbstractCommand.h"
 
-#include <algorithm>
-#include <functional>
-
 #include "Request.h"
 #include "DownloadEngine.h"
 #include "Option.h"
@@ -412,50 +409,6 @@ void AbstractCommand::onAbort()
   }
 
   getSegmentMan()->cancelSegment(getCuid());
-  // Don't do following process if BitTorrent is involved or files
-  // in DownloadContext is more than 1. The latter condition is
-  // limitation of current implementation.
-  if (getOption()->getAsBool(PREF_ALWAYS_RESUME) || !fileEntry_ ||
-      getDownloadContext()->getNetStat().getSessionDownloadLength() != 0 ||
-      requestGroup_->p2pInvolved() ||
-      getDownloadContext()->getFileEntries().size() != 1) {
-    return;
-  }
-
-  const int maxTries = getOption()->getAsInt(PREF_MAX_RESUME_FAILURE_TRIES);
-  if (!(maxTries > 0 && requestGroup_->getResumeFailureCount() >= maxTries) &&
-      !fileEntry_->emptyRequestUri()) {
-    return;
-  }
-  // Local file exists, but given servers(or at least contacted
-  // ones) doesn't support resume. Let's restart download from
-  // scratch.
-  A2_LOG_INFO(fmt(_("CUID#%" PRId64 " - Failed to resume download."
-                    " Download from scratch."),
-                  getCuid()));
-  A2_LOG_TRACE(fmt("CUID#%" PRId64 " - Gathering URIs that has CANNOT_RESUME"
-                   " error",
-                   getCuid()));
-  // Set PREF_ALWAYS_RESUME to A2_V_TRUE to avoid repeating this
-  // process.
-  getOption()->put(PREF_ALWAYS_RESUME, A2_V_TRUE);
-  std::deque<URIResult> res;
-  fileEntry_->extractURIResult(res, error_code::CANNOT_RESUME);
-  if (res.empty()) {
-    return;
-  }
-
-  getSegmentMan()->cancelAllSegments();
-  getSegmentMan()->eraseSegmentWrittenLengthMemo();
-  getPieceStorage()->markPiecesDone(0);
-  std::vector<std::string> uris;
-  uris.reserve(res.size());
-  std::transform(std::begin(res), std::end(res), std::back_inserter(uris),
-                 std::mem_fn(&URIResult::getURI));
-  A2_LOG_TRACE(fmt("CUID#%" PRId64 " - %lu URIs found.", getCuid(),
-                   static_cast<unsigned long int>(uris.size())));
-  fileEntry_->addUris(std::begin(uris), std::end(uris));
-  getSegmentMan()->recognizeSegmentFor(fileEntry_);
 }
 
 void AbstractCommand::disableReadCheckSocket()

@@ -657,7 +657,8 @@ void RequestGroup::decreaseStreamConnection() { --numStreamConnection_; }
 
 int RequestGroup::getNumConnection() const
 {
-  int numConnection = numStreamConnection_;
+  int numConnection = curlDownload_ ? curlDownload_->snapshot().connections
+                                    : numStreamConnection_;
 #ifdef ENABLE_BITTORRENT
   if (btDownload_) {
     numConnection += btDownload_->snapshot().numPeers;

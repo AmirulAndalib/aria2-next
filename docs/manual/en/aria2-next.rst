@@ -276,6 +276,12 @@ HTTP/SFTP Options
   SFTP remains single-stream. The accepted range is ``1`` to ``256``.
   Default: ``6``
 
+  Retryable failures are isolated to the unfinished suffix of the affected
+  byte range. Completed ranges remain available to concurrent transfers and
+  are preserved in the stream state database. If a server ignores a nonzero
+  Range request or the remote representation changes, Aria2 Next retains the
+  partial file and reports that the transfer cannot be resumed.
+
 .. option:: -t, --timeout=<SEC>
 
   Set timeout in seconds.
@@ -1082,16 +1088,6 @@ Advanced Options
   available. See also :option:`--auto-file-renaming`.
   Default: ``false``
 
-.. option:: --always-resume [true|false]
-
-  Always resume download. If ``true`` is given, aria2 always tries to
-  resume download and if resume is not possible, aborts download.  If
-  ``false`` is given, when all given URIs do not support resume or aria2
-  encounters ``N`` URIs which does not support resume (``N`` is the value
-  specified using :option:`--max-resume-failure-tries` option), aria2
-  downloads file from scratch.  See :option:`--max-resume-failure-tries`
-  option. Default: ``true``
-
 .. option:: --auto-file-renaming [true|false]
 
   Rename file name if the same file already exists.
@@ -1351,14 +1347,6 @@ Advanced Options
   append ``K`` or ``M`` (1K = 1024, 1M = 1024K). Fractional bytes are
   rounded down.
   Default: ``9223372036854775807``
-
-.. option:: --max-resume-failure-tries=<N>
-
-  When used with :option:`--always-resume=false, <--always-resume>` aria2 downloads file from
-  scratch when aria2 detects N number of URIs that does not support
-  resume. If N is ``0``, aria2 downloads file from scratch when all
-  given URIs do not support resume.  See :option:`--always-resume` option.
-  Default: ``0``
 
 .. option:: --min-tls-version=<VERSION>
 
@@ -1972,7 +1960,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`all-proxy-passwd <--all-proxy-passwd>`
   * :option:`all-proxy-user <--all-proxy-user>`
   * :option:`allow-overwrite <--allow-overwrite>`
-  * :option:`always-resume <--always-resume>`
   * :option:`auto-file-renaming <--auto-file-renaming>`
   * :option:`bt-enable-lpd <--bt-enable-lpd>`
   * :option:`bt-encryption <--bt-encryption>`
@@ -2021,7 +2008,6 @@ of URIs. These optional lines must start with white space(s).
   * :option:`max-download-limit <--max-download-limit>`
   * :option:`max-file-not-found <--max-file-not-found>`
   * :option:`max-mmap-limit <--max-mmap-limit>`
-  * :option:`max-resume-failure-tries <--max-resume-failure-tries>`
   * :option:`max-tries <-m>`
   * :option:`max-upload-limit <-u>`
   * :option:`metalink-base-uri <--metalink-base-uri>`
@@ -3460,7 +3446,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     {'id': 'qwer',
      'jsonrpc': '2.0',
      'result': {'allow-overwrite': 'false',
-                 'always-resume': 'true',
      ...
 
   **XML-RPC Example**
@@ -3473,7 +3458,6 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
     >>> r = s.aria2.getOption('2089b05ecca3d829')
     >>> pprint(r)
     {'allow-overwrite': 'false',
-     'always-resume': 'true',
      ....
 
 .. function:: aria2.changeOption([secret], gid, options)

@@ -239,10 +239,6 @@ extern PrefPtr PREF_DISABLE_IPV6;
 // value: true | false
 extern PrefPtr PREF_HUMAN_READABLE;
 // value: true | false
-// value: true | false
-extern PrefPtr PREF_ALWAYS_RESUME;
-// value: 1*digit
-extern PrefPtr PREF_MAX_RESUME_FAILURE_TRIES;
 // value: string that your file system recognizes as a file name.
 extern PrefPtr PREF_SAVE_SESSION;
 // value: 1*digit

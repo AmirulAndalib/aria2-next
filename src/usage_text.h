@@ -622,23 +622,6 @@
   _(" --https-proxy-user=USER      Set user for --https-proxy.")
 #define TEXT_HTTPS_PROXY_PASSWD                                         \
   _(" --https-proxy-passwd=PASSWD  Set password for --https-proxy.")
-#define TEXT_ALWAYS_RESUME                      \
-  _(" --always-resume[=true|false] Always resume download. If true is given, aria2\n" \
-    "                              always tries to resume download and if resume is\n" \
-    "                              not possible, aborts download. If false is given,\n" \
-    "                              when all given URIs do not support resume or\n" \
-    "                              aria2 encounters N URIs which does not support\n" \
-    "                              resume (N is the value specified using\n"   \
-    "                              --max-resume-failure-tries option), aria2\n" \
-    "                              downloads file from scratch.\n"       \
-    "                              See --max-resume-failure-tries option.")
-#define TEXT_MAX_RESUME_FAILURE_TRIES                                   \
-  _(" --max-resume-failure-tries=N When used with --always-resume=false, aria2\n" \
-    "                              downloads file from scratch when aria2 detects N\n" \
-    "                              number of URIs that does not support resume. If N\n" \
-    "                              is 0, aria2 downloads file from scratch when all\n" \
-    "                              given URIs do not support resume.\n" \
-    "                              See --always-resume option.")
 #define TEXT_BT_TRACKER_COMPLETION_TIMEOUT                              \
   _(" --bt-tracker-completion-timeout=SEC Set the total tracker request timeout.")
 #define TEXT_BT_TRACKER_RECEIVE_TIMEOUT                                 \

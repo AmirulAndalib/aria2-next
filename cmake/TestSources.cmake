@@ -20,6 +20,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/GrowSegmentTest.cc
   tests/SingleFileAllocationIteratorTest.cc
   tests/RequestGroupTest.cc
+  tests/RangePlannerTest.cc
   tests/UtilTest1.cc
   tests/UtilTest2.cc
   tests/UtilSecurityTest.cc

@@ -54,9 +54,10 @@ void CurlDownload::synchronizeUris(const std::vector<std::string>& uris)
   impl_->uris = std::move(next);
   const auto current =
       std::find(impl_->uris.begin(), impl_->uris.end(), impl_->currentUri);
-  impl_->uriIndex = current == impl_->uris.end()
-                        ? (impl_->uris.empty() ? 0 : impl_->uris.size() - 1)
-                        : static_cast<size_t>(current - impl_->uris.begin());
+  impl_->preferredUriIndex =
+      current == impl_->uris.end()
+          ? (impl_->uris.empty() ? 0 : impl_->uris.size() - 1)
+          : static_cast<size_t>(current - impl_->uris.begin());
 }
 
 } // namespace aria2

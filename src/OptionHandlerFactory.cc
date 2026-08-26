@@ -68,17 +68,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
-    OptionHandler* op(new BooleanOptionHandler(PREF_ALWAYS_RESUME,
-                                               TEXT_ALWAYS_RESUME, A2_V_TRUE,
-                                               OptionHandler::OPT_ARG));
-    op->addTag(TAG_ADVANCED);
-    op->addTag(TAG_ED2K);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
-    handlers.push_back(op);
-  }
-  {
     OptionHandler* op(new BooleanOptionHandler(
         PREF_AUTO_FILE_RENAMING, TEXT_AUTO_FILE_RENAMING, A2_V_TRUE,
         OptionHandler::OPT_ARG));
@@ -509,16 +498,6 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->addTag(TAG_ED2K);
     op->addTag(TAG_HTTP);
     op->setChangeGlobalOption(true);
-    handlers.push_back(op);
-  }
-  {
-    OptionHandler* op(new NumberOptionHandler(
-        PREF_MAX_RESUME_FAILURE_TRIES, TEXT_MAX_RESUME_FAILURE_TRIES, "0", 0));
-    op->addTag(TAG_ADVANCED);
-    op->addTag(TAG_ED2K);
-    op->setInitialOption(true);
-    op->setChangeGlobalOption(true);
-    op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
   {

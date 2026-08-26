@@ -116,8 +116,8 @@ void RequestGroupManTest::testMergedTransferStat()
   context->updateUpload(1024);
 
   const auto stat = manager.calculateStat();
-  REQUIRE_EQ(409, stat.downloadSpeed);
-  REQUIRE_EQ(102, stat.uploadSpeed);
+  REQUIRE_EQ(16384, stat.downloadSpeed);
+  REQUIRE_EQ(4096, stat.uploadSpeed);
   REQUIRE_EQ((int64_t)4096, stat.sessionDownloadLength);
   REQUIRE_EQ((int64_t)1024, stat.sessionUploadLength);
 

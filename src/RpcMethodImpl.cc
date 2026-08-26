@@ -1087,11 +1087,7 @@ void gatherProgressCommon(Dict* entryDict,
     entryDict->put(KEY_SEEDER, group->isSeeder() ? VLB_TRUE : VLB_FALSE);
   }
   if (requested_key(keys, KEY_CONNECTIONS)) {
-    entryDict->put(
-        KEY_CONNECTIONS,
-        util::itos(group->getCurlDownload()
-                       ? group->getCurlDownload()->snapshot().connections
-                       : group->getNumConnection()));
+    entryDict->put(KEY_CONNECTIONS, util::itos(group->getNumConnection()));
   }
   if (requested_key(keys, KEY_BITFIELD)) {
 #ifdef ENABLE_BITTORRENT
