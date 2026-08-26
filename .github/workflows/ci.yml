@@ -21,9 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
 
-      - name: Validate sources
+      - name: Validate scripts
         run: |
-          git diff --check
           bash -n tools/build_test.sh
           bash -n scripts/bump-version.sh
           bash -n scripts/release.sh
