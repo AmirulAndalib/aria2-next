@@ -8,12 +8,14 @@ class RangePlannerTest {
 public:
   void testRestoreAndScheduleGaps();
   void testLocalizedRetry();
-  void testTailSplit();
+  void testReadyRefill();
+  void testBalancedEnqueue();
 };
 
 A2_TEST(RangePlannerTest, testRestoreAndScheduleGaps)
 A2_TEST(RangePlannerTest, testLocalizedRetry)
-A2_TEST(RangePlannerTest, testTailSplit)
+A2_TEST(RangePlannerTest, testReadyRefill)
+A2_TEST(RangePlannerTest, testBalancedEnqueue)
 
 void RangePlannerTest::testRestoreAndScheduleGaps()
 {
@@ -54,21 +56,46 @@ void RangePlannerTest::testLocalizedRetry()
   CHECK_EQ(1, retry->attempts);
 }
 
-void RangePlannerTest::testTailSplit()
+void RangePlannerTest::testReadyRefill()
 {
   RangePlanner planner;
-  planner.splitAndEnqueue({40, 100, 2, 1}, 4, 10);
-  int64_t cursor = 40;
+  planner.enqueue({0, 80, 0, 1});
+  planner.enqueue({80, 120, 1, 2});
+
+  CHECK_EQ(4, planner.refillReady(4, 20, 10));
+  int64_t cursor = 0;
+  while (auto lease = planner.takeReady({})) {
+    CHECK_EQ(cursor, lease->begin);
+    CHECK(lease->end > lease->begin);
+    if (lease->begin < 80) {
+      CHECK_EQ(0, lease->attempts);
+      CHECK_EQ(1, lease->uriIndex);
+    }
+    else {
+      CHECK_EQ(1, lease->attempts);
+      CHECK_EQ(2, lease->uriIndex);
+    }
+    cursor = lease->end;
+  }
+  CHECK_EQ(120, cursor);
+}
+
+void RangePlannerTest::testBalancedEnqueue()
+{
+  RangePlanner planner;
+  planner.enqueueBalanced({10, 110, 2, 3}, 4, 10);
+
+  int64_t cursor = 10;
   size_t count = 0;
   while (auto lease = planner.takeReady({})) {
     CHECK_EQ(cursor, lease->begin);
     CHECK(lease->end > lease->begin);
     CHECK_EQ(2, lease->attempts);
-    CHECK_EQ(1, lease->uriIndex);
+    CHECK_EQ(3, lease->uriIndex);
     cursor = lease->end;
     ++count;
   }
-  CHECK_EQ(100, cursor);
+  CHECK_EQ(110, cursor);
   CHECK_EQ(4, count);
 }
 

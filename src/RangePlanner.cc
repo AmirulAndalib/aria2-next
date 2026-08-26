@@ -13,6 +13,7 @@
 #include "RangePlanner.h"
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 
 namespace aria2 {
@@ -218,7 +219,38 @@ bool RangePlanner::hasReady(TimePoint now) const
                                         });
 }
 
-void RangePlanner::splitAndEnqueue(RangeLease lease, size_t maxPieces,
+size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
+                                 int64_t minimumPieceSize)
+{
+  minimumPieceSize = std::max<int64_t>(1, minimumPieceSize);
+  preferredPieceSize = std::max<int64_t>(minimumPieceSize, preferredPieceSize);
+  while (ready_.size() < targetCount) {
+    auto candidate = std::max_element(
+        ready_.begin(), ready_.end(), [](const auto& lhs, const auto& rhs) {
+          const auto lhsLength = lhs.attempts == 0 ? lhs.length() : int64_t{0};
+          const auto rhsLength = rhs.attempts == 0 ? rhs.length() : int64_t{0};
+          return lhsLength < rhsLength;
+        });
+    if (candidate == ready_.end() || candidate->attempts != 0 ||
+        candidate->length() <= preferredPieceSize ||
+        candidate->length() < minimumPieceSize * 2) {
+      break;
+    }
+    const auto split =
+        candidate->begin +
+        (candidate->length() / 2 / minimumPieceSize) * minimumPieceSize;
+    if (split <= candidate->begin || split >= candidate->end) {
+      break;
+    }
+    auto suffix = *candidate;
+    suffix.begin = split;
+    candidate->end = split;
+    ready_.insert(std::next(candidate), std::move(suffix));
+  }
+  return ready_.size();
+}
+
+void RangePlanner::enqueueBalanced(RangeLease lease, size_t maxPieces,
                                    int64_t minimumPieceSize)
 {
   if (lease.empty()) {
@@ -226,23 +258,19 @@ void RangePlanner::splitAndEnqueue(RangeLease lease, size_t maxPieces,
   }
   maxPieces = std::max<size_t>(1, maxPieces);
   minimumPieceSize = std::max<int64_t>(1, minimumPieceSize);
-  const auto possible = static_cast<size_t>(
-      std::max<int64_t>(1, lease.length() / minimumPieceSize));
-  const auto pieces = std::min(maxPieces, possible);
-  const auto target = std::max<int64_t>(
-      minimumPieceSize, (lease.length() + static_cast<int64_t>(pieces) - 1) /
-                            static_cast<int64_t>(pieces));
+  const auto pieces =
+      std::min<size_t>(maxPieces, static_cast<size_t>(std::max<int64_t>(
+                                      1, lease.length() / minimumPieceSize)));
   auto begin = lease.begin;
-  for (size_t index = 0; index < pieces && begin < lease.end; ++index) {
+  for (size_t index = 0; index < pieces; ++index) {
     const auto remainingPieces = static_cast<int64_t>(pieces - index);
     const auto remaining = lease.end - begin;
     const auto length =
         index + 1 == pieces
             ? remaining
-            : std::max<int64_t>(
-                  minimumPieceSize,
-                  std::min(target, remaining - minimumPieceSize *
-                                                   (remainingPieces - 1)));
+            : std::max<int64_t>(minimumPieceSize, remaining / remainingPieces /
+                                                      minimumPieceSize *
+                                                      minimumPieceSize);
     const auto end = std::min(lease.end, begin + length);
     ready_.push_back({begin, end, lease.attempts, lease.uriIndex});
     begin = end;

@@ -58,7 +58,9 @@ public:
   bool hasReady(TimePoint now) const;
   bool hasPending() const { return !ready_.empty() || !deferred_.empty(); }
 
-  void splitAndEnqueue(RangeLease lease, size_t maxPieces,
+  size_t refillReady(size_t targetCount, int64_t preferredPieceSize,
+                     int64_t minimumPieceSize);
+  void enqueueBalanced(RangeLease lease, size_t maxPieces,
                        int64_t minimumPieceSize);
 
 private:

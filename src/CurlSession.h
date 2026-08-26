@@ -74,7 +74,8 @@ private:
   void configurePlanner(const std::shared_ptr<CurlDownload>& download,
                         const RangeLease* retainedLease = nullptr);
   void schedule(const std::shared_ptr<CurlDownload>& download);
-  bool rebalanceTail(const std::shared_ptr<CurlDownload>& download);
+  bool rebalanceEndgame(const std::shared_ptr<CurlDownload>& download,
+                        int64_t pieceLength);
   bool retryRange(const std::shared_ptr<CurlDownload>& download,
                   const RangeLease& lease, curl_off_t retryAfter);
   std::vector<RangeLease>
@@ -92,6 +93,8 @@ private:
                    const std::string& message) noexcept;
   void rebalanceLimits();
   void socketAction(curl_socket_t socket, int events);
+  void
+  refreshConnectionCount(const std::shared_ptr<CurlDownload>& download) const;
   void processMessages();
   void updateSocket(curl_socket_t socket, int action,
                     CurlSocketCommand* command);

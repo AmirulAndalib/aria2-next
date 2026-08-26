@@ -69,8 +69,6 @@ struct CurlDownloadImpl {
   std::vector<std::unique_ptr<CurlHandle>> handles;
   RangePlanner planner;
   RequestGroup* group = nullptr;
-  int64_t rangeChunkSize = 0;
-  int64_t referenceRangeSpeed = 0;
   int maxConnections = 1;
   int fileNotFoundCount = 0;
   long httpVersion = 0;

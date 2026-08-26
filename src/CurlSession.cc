@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <exception>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -132,6 +133,22 @@ private:
 };
 
 namespace {
+
+constexpr int64_t rangePipelineDepth = 2;
+
+int64_t adaptiveRangeSize(int64_t length, int maxConnections, int64_t quantum)
+{
+  length = std::max<int64_t>(0, length);
+  quantum = std::max<int64_t>(1, quantum);
+  if (maxConnections <= 1) {
+    return std::max(quantum, length);
+  }
+  const auto targetRanges =
+      static_cast<int64_t>(maxConnections) * rangePipelineDepth;
+  const auto target =
+      std::max<int64_t>(quantum, (length - 1) / targetRanges + 1);
+  return ((target + quantum - 1) / quantum) * quantum;
+}
 
 std::string trimHeader(std::string value)
 {
@@ -683,13 +700,14 @@ CurlSession::CurlSession(const Option* option)
   }
   store_.open();
   if (multi_) {
-    const auto maxTasks = option_->getAsInt(PREF_MAX_CONCURRENT_DOWNLOADS);
-    const auto perTask = option_->getAsInt(PREF_STREAM_MAX_CONNECTIONS);
+    const auto maxTasks =
+        static_cast<long>(option_->getAsInt(PREF_MAX_CONCURRENT_DOWNLOADS));
+    const auto perTask =
+        static_cast<long>(option_->getAsInt(PREF_STREAM_MAX_CONNECTIONS));
     const auto maxConnections = maxTasks * perTask;
     curl_multi_setopt(multi_, CURLMOPT_MAX_TOTAL_CONNECTIONS, maxConnections);
     curl_multi_setopt(multi_, CURLMOPT_MAX_HOST_CONNECTIONS, maxConnections);
     curl_multi_setopt(multi_, CURLMOPT_MAXCONNECTS, maxConnections * 2L);
-    curl_multi_setopt(multi_, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
     curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, socketCallback);
     curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, this);
     curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, timerCallback);
@@ -764,7 +782,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.fileNotFoundCount = 0;
   impl.httpVersion = 0;
   impl.rangeValidated = false;
-  impl.referenceRangeSpeed = 0;
   impl.maxConnections =
       group->getOption()->getAsInt(PREF_STREAM_MAX_CONNECTIONS);
   impl.preferredUriIndex %= impl.uris.size();
@@ -881,10 +898,10 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(easy, CURLOPT_FAILONERROR, 1L);
   curl_easy_setopt(easy, CURLOPT_MAXREDIRS, 10L);
-  curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
-  const bool multiplexed = impl.httpVersion == CURL_HTTP_VERSION_2_0 ||
-                           impl.httpVersion == CURL_HTTP_VERSION_3;
-  curl_easy_setopt(easy, CURLOPT_PIPEWAIT, !primary && multiplexed ? 1L : 0L);
+  curl_easy_setopt(easy, CURLOPT_HTTP_VERSION,
+                   transfer->ranged && impl.maxConnections > 1
+                       ? CURL_HTTP_VERSION_1_1
+                       : CURL_HTTP_VERSION_2TLS);
   curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(easy, CURLOPT_BUFFERSIZE, 1024L * 1024L);
   curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -1038,7 +1055,6 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   const auto result = curl_multi_add_handle(multi_, easy) == CURLM_OK;
   if (result) {
     impl.handles.push_back(std::move(transfer));
-    download->snapshot_.connections = static_cast<int>(impl.handles.size());
   }
   else {
     cleanupHandle(*transfer);
@@ -1139,16 +1155,12 @@ void CurlSession::configurePlanner(
   }
   const auto quantum = std::max<int64_t>(
       1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
-  const auto target =
-      (total + impl.maxConnections * 4 - 1) / (impl.maxConnections * 4);
-  impl.rangeChunkSize = std::max<int64_t>(4_m, std::min<int64_t>(32_m, target));
-  impl.rangeChunkSize =
-      ((impl.rangeChunkSize + quantum - 1) / quantum) * quantum;
+  const auto rangeSize = adaptiveRangeSize(total, impl.maxConnections, quantum);
   auto active = activeLeases(download);
   if (retainedLease && !retainedLease->empty()) {
     active.push_back(*retainedLease);
   }
-  impl.planner.configure(total, impl.rangeChunkSize, active);
+  impl.planner.configure(total, rangeSize, active);
   impl.plannerConfigured = true;
 
   const auto taskOption = impl.group->getOption();
@@ -1167,86 +1179,6 @@ void CurlSession::configurePlanner(
   catch (const std::exception& error) {
     failTask(download, error_code::FILE_IO_ERROR, error.what());
   }
-}
-
-bool CurlSession::rebalanceTail(const std::shared_ptr<CurlDownload>& download)
-{
-  auto& impl = *download->impl_;
-  const auto active = impl.handles.size();
-  if (!impl.plannerConfigured || active == 0 ||
-      active >= static_cast<size_t>(impl.maxConnections)) {
-    return false;
-  }
-  constexpr int64_t minimumPiece = 256_k;
-  CurlHandle* candidate = nullptr;
-  int64_t candidateEnd = 0;
-  int64_t candidateSpeed = std::numeric_limits<int64_t>::max();
-  const auto now = std::chrono::steady_clock::now();
-  for (const auto& handle : impl.handles) {
-    if (!handle->value || !handle->rangeAccepted) {
-      continue;
-    }
-    const auto end = handle->responseRangeEnd > 0 ? handle->responseRangeEnd
-                                                  : handle->lease.end;
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             now - handle->startedAt)
-                             .count();
-    if (elapsed < 1000) {
-      continue;
-    }
-    if (end - handle->writeOffset < minimumPiece * 2) {
-      continue;
-    }
-    const auto speed =
-        handle->downloaded > 0 ? handle->downloaded * 1000 / elapsed : 0;
-    if (!candidate || speed < candidateSpeed ||
-        (speed == candidateSpeed &&
-         end - handle->writeOffset > candidateEnd - candidate->writeOffset)) {
-      candidate = handle.get();
-      candidateEnd = end;
-      candidateSpeed = speed;
-    }
-  }
-  if (!candidate) {
-    return false;
-  }
-  if (impl.referenceRangeSpeed <= 0 ||
-      candidateSpeed >= impl.referenceRangeSpeed / 2) {
-    return false;
-  }
-
-  try {
-    flushWriteBuffer(impl, *candidate);
-    download->snapshot_.completedLength =
-        impl.planner.completedLength() + bufferedLength(impl);
-  }
-  catch (const Exception& error) {
-    failTask(download, error.getErrorCode(), error.what());
-    return false;
-  }
-  catch (const std::exception& error) {
-    failTask(download, error_code::FILE_IO_ERROR, error.what());
-    return false;
-  }
-
-  RangeLease remainder{candidate->writeOffset, candidateEnd,
-                       candidate->lease.attempts, candidate->lease.uriIndex};
-  auto found = downloads_.find(candidate->value);
-  if (found != downloads_.end()) {
-    curl_multi_remove_handle(multi_, candidate->value);
-    downloads_.erase(found);
-  }
-  cleanupHandle(*candidate);
-  eraseHandle(impl, candidate);
-  const auto slots = std::min<size_t>(
-      4, static_cast<size_t>(impl.maxConnections) - impl.handles.size());
-  impl.planner.splitAndEnqueue(remainder, slots, minimumPiece);
-  download->snapshot_.connections = static_cast<int>(impl.handles.size());
-  A2_LOG_DEBUG(fmt("Rebalanced stream tail range [%" PRId64 ",%" PRId64
-                   ") across %lu transfer(s)",
-                   remainder.begin, remainder.end,
-                   static_cast<unsigned long>(slots)));
-  return true;
 }
 
 void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
@@ -1286,21 +1218,21 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     return;
   }
 
+  const auto pieceLength = std::max<int64_t>(
+      1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
   bool scheduled = false;
   for (;;) {
+    const auto remaining =
+        std::max<int64_t>(0, download->snapshot_.totalLength -
+                                 download->snapshot_.completedLength);
+    const auto preferredPiece =
+        adaptiveRangeSize(remaining, impl.maxConnections, pieceLength);
+    impl.planner.refillReady(static_cast<size_t>(impl.maxConnections),
+                             preferredPiece, pieceLength);
     while (impl.handles.size() < static_cast<size_t>(impl.maxConnections)) {
       auto lease = impl.planner.takeReady(now);
       if (!lease) {
         break;
-      }
-      const auto available =
-          static_cast<size_t>(impl.maxConnections) - impl.handles.size();
-      const auto minimumPiece = std::max<int64_t>(
-          1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
-      if (lease->attempts > 0 && available > 1 &&
-          lease->length() >= minimumPiece * 2) {
-        impl.planner.splitAndEnqueue(*lease, available, minimumPiece);
-        continue;
       }
       if (!createHandle(download, *lease, false, true)) {
         failTask(download, error_code::NETWORK_PROBLEM,
@@ -1311,7 +1243,8 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
       downloads_[handle->value] = std::make_pair(download, handle);
       scheduled = true;
     }
-    if (!impl.planner.hasReady(now) && rebalanceTail(download)) {
+    if (!impl.planner.hasReady(now) &&
+        rebalanceEndgame(download, pieceLength)) {
       continue;
     }
     break;
@@ -1327,6 +1260,70 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     impl.kickPending = true;
     rebalanceLimits();
   }
+}
+
+bool CurlSession::rebalanceEndgame(
+    const std::shared_ptr<CurlDownload>& download, int64_t pieceLength)
+{
+  auto& impl = *download->impl_;
+  const auto active = impl.handles.size();
+  if (active == 0 || active >= static_cast<size_t>(impl.maxConnections)) {
+    return false;
+  }
+  const auto remaining = std::max<int64_t>(
+      0, download->snapshot_.totalLength - download->snapshot_.completedLength);
+  const auto window = pieceLength * static_cast<int64_t>(impl.maxConnections) *
+                      rangePipelineDepth;
+  if (remaining <= 0 || remaining > window) {
+    return false;
+  }
+
+  auto candidate = std::max_element(
+      impl.handles.begin(), impl.handles.end(),
+      [](const auto& lhs, const auto& rhs) {
+        const auto lhsRemaining =
+            lhs->rangeAccepted ? lhs->lease.end - lhs->writeOffset : int64_t{0};
+        const auto rhsRemaining =
+            rhs->rangeAccepted ? rhs->lease.end - rhs->writeOffset : int64_t{0};
+        return lhsRemaining < rhsRemaining;
+      });
+  if (candidate == impl.handles.end() || !(*candidate)->rangeAccepted ||
+      (*candidate)->lease.end - (*candidate)->writeOffset < pieceLength * 2) {
+    return false;
+  }
+
+  auto* handle = candidate->get();
+  try {
+    flushWriteBuffer(impl, *handle);
+    download->snapshot_.completedLength =
+        impl.planner.completedLength() + bufferedLength(impl);
+  }
+  catch (const Exception& error) {
+    failTask(download, error.getErrorCode(), error.what());
+    return false;
+  }
+  catch (const std::exception& error) {
+    failTask(download, error_code::FILE_IO_ERROR, error.what());
+    return false;
+  }
+
+  RangeLease remainder{handle->writeOffset, handle->lease.end,
+                       handle->lease.attempts, handle->lease.uriIndex};
+  auto found = downloads_.find(handle->value);
+  if (found != downloads_.end()) {
+    curl_multi_remove_handle(multi_, handle->value);
+    downloads_.erase(found);
+  }
+  cleanupHandle(*handle);
+  eraseHandle(impl, handle);
+  const auto available =
+      static_cast<size_t>(impl.maxConnections) - impl.handles.size();
+  impl.planner.enqueueBalanced(remainder, available, pieceLength);
+  A2_LOG_DEBUG(fmt("Rebalanced stream endgame range [%" PRId64 ",%" PRId64
+                   ") across %lu transfer(s)",
+                   remainder.begin, remainder.end,
+                   static_cast<unsigned long>(available)));
+  return true;
 }
 
 void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
@@ -1498,17 +1495,8 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   const bool primary = handle->primary;
   const bool outputFailure =
       download->snapshot_.errorCode != error_code::UNDEFINED;
-  if (result == CURLE_OK && reportedSpeed > 0 && rangeAccepted &&
-      (impl.rangeChunkSize == 0 || lease.length() >= impl.rangeChunkSize / 2)) {
-    impl.referenceRangeSpeed =
-        impl.referenceRangeSpeed == 0
-            ? reportedSpeed
-            : impl.referenceRangeSpeed +
-                  (reportedSpeed - impl.referenceRangeSpeed) / 8;
-  }
   cleanupHandle(*handle);
   eraseHandle(impl, handle);
-  download->snapshot_.connections = static_cast<int>(impl.handles.size());
   if (primary && rangeAccepted && !impl.plannerConfigured) {
     configurePlanner(download, &lease);
     if (download->failed()) {
@@ -1674,6 +1662,27 @@ void CurlSession::socketAction(curl_socket_t socket, int events)
                      curl_multi_strerror(result)));
   }
   processMessages();
+  for (const auto& entry : tasks_) {
+    refreshConnectionCount(entry.second);
+  }
+}
+
+void CurlSession::refreshConnectionCount(
+    const std::shared_ptr<CurlDownload>& download) const
+{
+  std::set<curl_off_t> connections;
+  for (const auto& handle : download->impl_->handles) {
+    if (!handle->value) {
+      continue;
+    }
+    curl_off_t connectionId = -1;
+    if (curl_easy_getinfo(handle->value, CURLINFO_CONN_ID, &connectionId) ==
+            CURLE_OK &&
+        connectionId >= 0) {
+      connections.insert(connectionId);
+    }
+  }
+  download->snapshot_.connections = static_cast<int>(connections.size());
 }
 
 void CurlSession::processMessages()
