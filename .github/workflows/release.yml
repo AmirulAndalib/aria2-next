@@ -280,6 +280,7 @@ jobs:
       contents: write
     env:
       ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.resolve-release.outputs.version }}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
