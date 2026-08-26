@@ -136,6 +136,11 @@ namespace {
 
 constexpr int64_t rangePipelineDepth = 2;
 
+int effectiveStreamMaxConnections(const Option* option)
+{
+  return std::clamp(option->getAsInt(PREF_STREAM_MAX_CONNECTIONS), 1, 256);
+}
+
 int64_t adaptiveRangeSize(int64_t length, int maxConnections, int64_t quantum)
 {
   length = std::max<int64_t>(0, length);
@@ -701,10 +706,10 @@ CurlSession::CurlSession(const Option* option)
   }
   store_.open();
   if (multi_) {
-    const auto maxTasks =
-        static_cast<long>(option_->getAsInt(PREF_MAX_CONCURRENT_DOWNLOADS));
+    const auto maxTasks = static_cast<long>(
+        std::max(1, option_->getAsInt(PREF_MAX_CONCURRENT_DOWNLOADS)));
     const auto perTask =
-        static_cast<long>(option_->getAsInt(PREF_STREAM_MAX_CONNECTIONS));
+        static_cast<long>(effectiveStreamMaxConnections(option_));
     const auto maxConnections = maxTasks * perTask;
     curl_multi_setopt(multi_, CURLMOPT_MAX_TOTAL_CONNECTIONS, maxConnections);
     curl_multi_setopt(multi_, CURLMOPT_MAX_HOST_CONNECTIONS, maxConnections);
@@ -783,8 +788,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.fileNotFoundCount = 0;
   impl.httpVersion = 0;
   impl.rangeValidated = false;
-  impl.maxConnections =
-      group->getOption()->getAsInt(PREF_STREAM_MAX_CONNECTIONS);
+  impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
   impl.preferredUriIndex %= impl.uris.size();
   const auto& uriValue = impl.uris[impl.preferredUriIndex];
   impl.currentUri = uriValue;

@@ -297,7 +297,8 @@ HTTP Specific Options
   Use :option:`--check-certificate` option to enable verification.
 
   Without this option, libcurl uses the platform trust configuration. Windows
-  builds use the native certificate store through Schannel.
+  uses Schannel, macOS uses Apple SecTrust, and Linux and Android use OpenSSL
+  default trust paths.
 
 .. option:: --certificate=<FILE>
 

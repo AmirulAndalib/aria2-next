@@ -165,10 +165,10 @@ The CMake configure step validates the vendored dependency stack and enables
 the maintained feature set.
 
 Aria2 Next checks HTTPS server certificates through libcurl by default. Windows
-uses Schannel and the native certificate store. Other platforms use the trust
-configuration of their maintained libcurl TLS backend. A PEM CA file supplied
-with ``--ca-certificate`` replaces the default trust configuration for that
-transfer.
+uses Schannel and the native certificate store. macOS uses Apple SecTrust.
+Linux and Android use OpenSSL default trust paths and honor ``SSL_CERT_FILE``
+and ``SSL_CERT_DIR``. A PEM CA file supplied with ``--ca-certificate`` replaces
+the default trust configuration for that transfer.
 
 By default, the bash completion file named ``aria2-next`` is installed to the
 default documentation directory. To change that directory, set

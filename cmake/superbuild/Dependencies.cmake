@@ -48,17 +48,25 @@ foreach(variable
     CMAKE_EXE_LINKER_FLAGS
     CMAKE_RC_COMPILER
     CMAKE_AR
-    CMAKE_RANLIB
+    CMAKE_RANLIB)
+  if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
+    list(APPEND ARIA2_EXTERNAL_CMAKE_ARGS -D${variable}=${${variable}})
+  endif()
+endforeach()
+
+if(CMAKE_CROSSCOMPILING)
+  foreach(variable
     CMAKE_SYSTEM_NAME
     CMAKE_SYSTEM_PROCESSOR
     CMAKE_SYSTEM_VERSION
     CMAKE_ANDROID_NDK
     CMAKE_ANDROID_ARCH_ABI
     CMAKE_ANDROID_STL_TYPE)
-  if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
-    list(APPEND ARIA2_EXTERNAL_CMAKE_ARGS -D${variable}=${${variable}})
-  endif()
-endforeach()
+    if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
+      list(APPEND ARIA2_EXTERNAL_CMAKE_ARGS -D${variable}=${${variable}})
+    endif()
+  endforeach()
+endif()
 
 ExternalProject_Add(zlib_project
   SOURCE_DIR "${ARIA2_VENDOR_ROOT}/zlib"
@@ -254,9 +262,20 @@ if(WIN32)
   set(ARIA2_CURL_TLS_ARGS
     -DCURL_USE_OPENSSL=OFF
     -DCURL_USE_SCHANNEL=ON)
+  set(ARIA2_CURL_TRUST_DEFINE USE_SCHANNEL)
   list(REMOVE_ITEM ARIA2_CURL_DEPENDENCIES openssl_project)
 elseif(APPLE)
-  list(APPEND ARIA2_CURL_TLS_ARGS -DUSE_APPLE_SECTRUST=ON)
+  list(APPEND ARIA2_CURL_TLS_ARGS
+    -DUSE_APPLE_SECTRUST=ON
+    -DCURL_CA_BUNDLE=none
+    -DCURL_CA_PATH=none)
+  set(ARIA2_CURL_TRUST_DEFINE USE_APPLE_SECTRUST)
+else()
+  list(APPEND ARIA2_CURL_TLS_ARGS
+    -DCURL_CA_BUNDLE=none
+    -DCURL_CA_PATH=none
+    -DCURL_CA_FALLBACK=ON)
+  set(ARIA2_CURL_TRUST_DEFINE CURL_CA_FALLBACK)
 endif()
 
 ExternalProject_Add(curl_project
@@ -317,6 +336,14 @@ ExternalProject_Add(curl_project
     ${ARIA2_CURL_TLS_ARGS}
   UPDATE_COMMAND ""
   TEST_COMMAND "")
+
+ExternalProject_Add_Step(curl_project verify-trust-policy
+  COMMAND ${CMAKE_COMMAND}
+    -DHEADER=<BINARY_DIR>/lib/curl_config.h
+    -DEXPECTED_DEFINE=${ARIA2_CURL_TRUST_DEFINE}
+    -P ${CMAKE_SOURCE_DIR}/cmake/scripts/VerifyCurlTrust.cmake
+  DEPENDEES configure
+  DEPENDERS build)
 
 if(ARIA2_ENABLE_BITTORRENT)
   ExternalProject_Add(libtorrent_project

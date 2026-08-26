@@ -168,20 +168,7 @@
 #define MSG_ESTABLISHING_CONNECTION_FAILED              \
   _("Failed to establish connection, cause: %s")
 #define MSG_NETWORK_PROBLEM _("Network problem has occurred. cause:%s")
-#define MSG_CERT_VERIFICATION_FAILED                    \
-  _("Certificate verification failed. Cause: %s See --ca-certificate and" \
-    " --check-certificate option.")
-#define MSG_NO_CERT_FOUND _("No certificate found.")
-#define MSG_HOSTNAME_NOT_MATCH _("Hostname not match.")
 #define MSG_NO_FILES_TO_DOWNLOAD _("No files to download.")
-#define MSG_WARN_UNKNOWN_TLS_CONNECTION \
-  _("Aria2 Next had to connect to the other side using an unknown TLS protocol. " \
-    "The integrity and confidentiality of the connection might be " \
-    "compromised.\nPeer: %s")
-#define MSG_WARN_OLD_TLS_CONNECTION \
-  _("Aria2 Next had to connect to the other side using an old and vulnerable TLS" \
-    " protocol. The integrity and confidentiality of the connection might be" \
-    " compromised.\nProtocol: %s, Peer: %s")
 #define MSG_SHOW_FILES _("Printing the contents of file '%s'...")
 #define MSG_NOT_TORRENT_METALINK _("This file is neither Torrent nor Metalink" \
                                    " file. Skipping.")
