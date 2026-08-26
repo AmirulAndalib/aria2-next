@@ -43,13 +43,15 @@ bool CurlDownloadCommand::execute()
   session_->advance(download_);
   session_->armTimeout();
   if (group_->isHaltRequested() && !download_->impl_->stopRequested) {
-    session_->stop(
-        download_,
-        group_->isPauseRequested() || group_->isShutdownRequested());
+    session_->stop(download_,
+                   group_->isPauseRequested() || group_->isShutdownRequested());
   }
   if (download_->failed()) {
-    group_->setLastErrorCode(error_code::NETWORK_PROBLEM,
-                             download_->snapshot().error.c_str());
+    const auto& snapshot = download_->snapshot();
+    group_->setLastErrorCode(snapshot.errorCode == error_code::UNDEFINED
+                                 ? error_code::NETWORK_PROBLEM
+                                 : snapshot.errorCode,
+                             snapshot.error.c_str());
   }
   if (download_->stopped()) {
     return true;

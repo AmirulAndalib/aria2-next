@@ -13,6 +13,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/a2functionalTest.cc
   tests/ApplicationStatePathTest.cc
   tests/StreamStoreTest.cc
+  tests/CurlSessionTest.cc
   tests/FileEntryTest.cc
   tests/PieceTest.cc
   tests/SegmentTest.cc

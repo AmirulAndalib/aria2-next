@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstring>
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <sstream>
 #include <utility>
@@ -30,7 +31,10 @@
 #include "Command.h"
 #include "DownloadContext.h"
 #include "DownloadEngine.h"
+#include "DefaultDiskWriterFactory.h"
 #include "DiskAdaptor.h"
+#include "DiskWriterFactory.h"
+#include "Exception.h"
 #include "File.h"
 #include "FileEntry.h"
 #include "GroupId.h"
@@ -41,7 +45,6 @@
 #include "RequestGroup.h"
 #include "RequestGroupMan.h"
 #include "TimeA2.h"
-#include "a2io.h"
 #include "fmt.h"
 #include "prefs.h"
 #include "uri.h"
@@ -85,8 +88,7 @@ public:
   void update(int action)
   {
     const bool nextRead = action == CURL_POLL_IN || action == CURL_POLL_INOUT;
-    const bool nextWrite =
-        action == CURL_POLL_OUT || action == CURL_POLL_INOUT;
+    const bool nextWrite = action == CURL_POLL_OUT || action == CURL_POLL_INOUT;
     if (read_ && !nextRead) {
       engine_->deleteSocketForReadCheck(socket_, this);
     }
@@ -307,8 +309,8 @@ void eraseHandle(CurlDownloadImpl& impl, CurlHandle* handle)
       impl.handles.end());
 }
 
-bool retryableFailure(CURLcode result, long responseCode,
-                      int fileNotFoundCount, int maxFileNotFound)
+bool retryableFailure(CURLcode result, long responseCode, int fileNotFoundCount,
+                      int maxFileNotFound)
 {
   if (result == CURLE_REMOTE_FILE_NOT_FOUND) {
     return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound;
@@ -317,9 +319,8 @@ bool retryableFailure(CURLcode result, long responseCode,
     if (responseCode == 404 || result == CURLE_REMOTE_FILE_NOT_FOUND) {
       return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound;
     }
-    return responseCode == 408 || responseCode == 425 ||
-           responseCode == 429 || responseCode == 500 ||
-           responseCode == 502 || responseCode == 503 ||
+    return responseCode == 408 || responseCode == 425 || responseCode == 429 ||
+           responseCode == 500 || responseCode == 502 || responseCode == 503 ||
            responseCode == 504;
   }
   switch (result) {
@@ -339,122 +340,257 @@ bool retryableFailure(CURLcode result, long responseCode,
   }
 }
 
+error_code::Value curlErrorCode(CURLcode result, long responseCode)
+{
+  if (responseCode == 401 || responseCode == 403) {
+    return error_code::HTTP_AUTH_FAILED;
+  }
+  if (responseCode == 404) {
+    return error_code::RESOURCE_NOT_FOUND;
+  }
+  if (responseCode >= 400) {
+    return error_code::HTTP_PROTOCOL_ERROR;
+  }
+  switch (result) {
+  case CURLE_OPERATION_TIMEDOUT:
+    return error_code::TIME_OUT;
+  case CURLE_COULDNT_RESOLVE_HOST:
+  case CURLE_COULDNT_RESOLVE_PROXY:
+    return error_code::NAME_RESOLVE_ERROR;
+  case CURLE_TOO_MANY_REDIRECTS:
+    return error_code::HTTP_TOO_MANY_REDIRECTS;
+  case CURLE_LOGIN_DENIED:
+  case CURLE_REMOTE_ACCESS_DENIED:
+    return error_code::HTTP_AUTH_FAILED;
+  case CURLE_REMOTE_FILE_NOT_FOUND:
+    return error_code::RESOURCE_NOT_FOUND;
+  default:
+    return error_code::NETWORK_PROBLEM;
+  }
+}
+
 } // namespace
 
 size_t CurlSession::writeData(char* data, size_t size, size_t count,
-                              void* userData)
+                              void* userData) noexcept
 {
   auto* handle = static_cast<CurlHandle*>(userData);
   auto* download = handle->download;
-  auto& impl = *download->impl_;
-  const auto length = size * count;
-  if (handle->validatorMismatch) {
-    return 0;
+  try {
+    auto& impl = *download->impl_;
+    if (size != 0 && count > std::numeric_limits<size_t>::max() / size) {
+      fail(download, error_code::FILE_IO_ERROR,
+           "Received an oversized output block");
+      return CURL_WRITEFUNC_ERROR;
+    }
+    const auto length = size * count;
+    if (handle->validatorMismatch ||
+        (handle->ranged && handle->headersComplete && !handle->rangeAccepted &&
+         handle->rangeStart > 0)) {
+      return CURL_WRITEFUNC_ERROR;
+    }
+    if (!impl.writer) {
+      fail(download, error_code::FILE_OPEN_ERROR,
+           "The output file is not open");
+      return CURL_WRITEFUNC_ERROR;
+    }
+    impl.writer->writeData(reinterpret_cast<unsigned char*>(data), length,
+                           handle->writeOffset);
+    const auto first = handle->writeOffset;
+    handle->writeOffset += static_cast<int64_t>(length);
+    handle->downloaded += static_cast<int64_t>(length);
+    addCompletedRange(impl, first, handle->writeOffset);
+    download->snapshot_.completedLength = completedLength(impl);
+    download->snapshot_.sessionDownloadLength += static_cast<int64_t>(length);
+    if (impl.group) {
+      impl.group->getDownloadContext()->updateDownload(length);
+    }
+    return length;
   }
-  if (handle->ranged && handle->headersComplete &&
-      !handle->rangeAccepted && handle->rangeStart > 0) {
-    return 0;
+  catch (const Exception& error) {
+    fail(download, error.getErrorCode(), error.what());
   }
-  if (!impl.file ||
-      a2fseek(impl.file, handle->writeOffset, SEEK_SET) != 0 ||
-      fwrite(data, 1, length, impl.file) != length) {
-    return 0;
+  catch (const std::exception& error) {
+    fail(download, error_code::FILE_IO_ERROR, error.what());
   }
-  const auto first = handle->writeOffset;
-  handle->writeOffset += static_cast<int64_t>(length);
-  handle->downloaded += static_cast<int64_t>(length);
-  addCompletedRange(impl, first, handle->writeOffset);
-  download->snapshot_.completedLength = completedLength(impl);
-  download->snapshot_.sessionDownloadLength += static_cast<int64_t>(length);
-  if (impl.group) {
-    impl.group->getDownloadContext()->updateDownload(length);
+  catch (...) {
+    fail(download, error_code::FILE_IO_ERROR, "Unable to write output data");
   }
-  return length;
+  return CURL_WRITEFUNC_ERROR;
 }
 
 size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
-                                  void* userData)
+                                  void* userData) noexcept
 {
   auto* handle = static_cast<CurlHandle*>(userData);
   auto* download = handle->download;
-  auto& impl = *download->impl_;
-  const auto length = size * count;
-  std::string line(data, length);
-  if (startsWithHeader(line, "http/")) {
-    std::istringstream status(line);
-    std::string version;
-    status >> version >> handle->responseCode;
-    handle->rangeAccepted = false;
-  }
-  else if (line == "\r\n" || line == "\n") {
-    handle->headersComplete = true;
-    if (handle->responseCode == 200 && handle->ranged &&
-        !handle->rangeAccepted &&
-        handle->rangeStart == 0) {
-      handle->ranged = false;
-      impl.segmented = false;
-      impl.scheduleRanges = false;
+  try {
+    auto& impl = *download->impl_;
+    const auto length = size * count;
+    std::string line(data, length);
+    if (startsWithHeader(line, "http/")) {
+      std::istringstream status(line);
+      std::string version;
+      status >> version >> handle->responseCode;
+      handle->rangeAccepted = false;
     }
-  }
-  else if (startsWithHeader(line, "etag:")) {
-    const auto value = trimHeader(line.substr(5));
-    if (!impl.etag.empty() && impl.etag != value) {
-      handle->validatorMismatch = true;
-    }
-    else {
-      impl.etag = value;
-    }
-  }
-  else if (startsWithHeader(line, "last-modified:")) {
-    const auto value = trimHeader(line.substr(14));
-    if (impl.etag.empty() && !impl.lastModified.empty() &&
-        impl.lastModified != value) {
-      handle->validatorMismatch = true;
-    }
-    else {
-      impl.lastModified = value;
-    }
-  }
-  else if (startsWithHeader(line, "content-range:")) {
-    long long first = -1;
-    long long last = -1;
-    long long total = -1;
-    const auto value = trimHeader(line.substr(14));
-    if (std::sscanf(value.c_str(), "bytes %lld-%lld/%lld", &first, &last,
-                    &total) == 3 &&
-        first == handle->rangeStart && last >= first && total > last &&
-        (handle->rangeEnd == std::numeric_limits<int64_t>::max() ||
-         last <= handle->rangeEnd)) {
-      handle->rangeAccepted = true;
-      download->snapshot_.totalLength = total;
-      if (handle->primary && impl.maxConnections > 1) {
-        impl.scheduleRanges = true;
-        impl.nextRangeOffset =
-            nextMissingOffset(impl, std::min<int64_t>(
-                                        total, handle->rangeEnd + 1));
+    else if (line == "\r\n" || line == "\n") {
+      handle->headersComplete = true;
+      if (handle->responseCode == 200 && handle->ranged &&
+          !handle->rangeAccepted && handle->rangeStart == 0) {
+        handle->ranged = false;
+        impl.segmented = false;
+        impl.scheduleRanges = false;
       }
     }
-    else {
-      handle->validatorMismatch = true;
+    else if (startsWithHeader(line, "etag:")) {
+      const auto value = trimHeader(line.substr(5));
+      if (!impl.etag.empty() && impl.etag != value) {
+        handle->validatorMismatch = true;
+      }
+      else {
+        impl.etag = value;
+      }
     }
+    else if (startsWithHeader(line, "last-modified:")) {
+      const auto value = trimHeader(line.substr(14));
+      if (impl.etag.empty() && !impl.lastModified.empty() &&
+          impl.lastModified != value) {
+        handle->validatorMismatch = true;
+      }
+      else {
+        impl.lastModified = value;
+      }
+    }
+    else if (startsWithHeader(line, "content-range:")) {
+      long long first = -1;
+      long long last = -1;
+      long long total = -1;
+      const auto value = trimHeader(line.substr(14));
+      if (std::sscanf(value.c_str(), "bytes %lld-%lld/%lld", &first, &last,
+                      &total) == 3 &&
+          first == handle->rangeStart && last >= first && total > last &&
+          (handle->rangeEnd == std::numeric_limits<int64_t>::max() ||
+           last <= handle->rangeEnd)) {
+        handle->rangeAccepted = true;
+        download->snapshot_.totalLength = total;
+        if (handle->primary && impl.maxConnections > 1) {
+          impl.scheduleRanges = true;
+          impl.nextRangeOffset = nextMissingOffset(
+              impl, std::min<int64_t>(total, handle->rangeEnd + 1));
+        }
+      }
+      else {
+        handle->validatorMismatch = true;
+      }
+    }
+    return length;
   }
-  return length;
+  catch (const std::exception& error) {
+    fail(download, error_code::UNKNOWN_ERROR, error.what());
+  }
+  catch (...) {
+    fail(download, error_code::UNKNOWN_ERROR,
+         "Unable to process response headers");
+  }
+  return CURL_WRITEFUNC_ERROR;
 }
 
 int CurlSession::updateProgress(void* userData, curl_off_t downloadTotal,
-                                curl_off_t downloaded, curl_off_t, curl_off_t)
+                                curl_off_t downloaded, curl_off_t,
+                                curl_off_t) noexcept
 {
-  auto* handle = static_cast<CurlHandle*>(userData);
-  auto* download = handle->download;
-  auto& impl = *download->impl_;
-  const auto total = handle->ranged
-                         ? 0
-                         : std::max<curl_off_t>(0, downloadTotal);
-  if (total > 0 && download->snapshot_.totalLength == 0) {
-    download->snapshot_.totalLength = total;
+  try {
+    auto* handle = static_cast<CurlHandle*>(userData);
+    auto* download = handle->download;
+    auto& impl = *download->impl_;
+    const auto total =
+        handle->ranged ? 0 : std::max<curl_off_t>(0, downloadTotal);
+    if (total > 0 && download->snapshot_.totalLength == 0) {
+      download->snapshot_.totalLength = total;
+    }
+    (void)downloaded;
+    return impl.stopRequested ? 1 : 0;
   }
-  (void)downloaded;
-  return impl.stopRequested ? 1 : 0;
+  catch (...) {
+    return 1;
+  }
+}
+
+void CurlSession::fail(CurlDownload* download, error_code::Value errorCode,
+                       const std::string& message) noexcept
+{
+  if (!download || download->snapshot_.errorCode != error_code::UNDEFINED) {
+    return;
+  }
+  download->snapshot_.errorCode = errorCode;
+  download->snapshot_.state = CurlSnapshot::State::Error;
+  try {
+    download->snapshot_.error = message;
+  }
+  catch (...) {
+  }
+}
+
+bool CurlSession::openOutput(const std::shared_ptr<CurlDownload>& download,
+                             bool preserveExisting)
+{
+  auto& impl = *download->impl_;
+  const auto fallbackError = preserveExisting ? error_code::FILE_OPEN_ERROR
+                                              : error_code::FILE_CREATE_ERROR;
+  impl.writer.reset();
+  try {
+    const auto& configuredFactory = impl.group->getDiskWriterFactory();
+    if (configuredFactory) {
+      impl.writer = configuredFactory->newDiskWriter(impl.path);
+    }
+    else {
+      impl.writer = DefaultDiskWriterFactory().newDiskWriter(impl.path);
+    }
+    if (!impl.writer) {
+      fail(download.get(), fallbackError,
+           "Unable to create the output writer");
+      return false;
+    }
+    if (preserveExisting) {
+      impl.writer->openExistingFile();
+    }
+    else {
+      impl.writer->initAndOpenFile();
+    }
+    return true;
+  }
+  catch (const Exception& error) {
+    impl.writer.reset();
+    fail(download.get(), error.getErrorCode(), error.what());
+  }
+  catch (const std::exception& error) {
+    impl.writer.reset();
+    fail(download.get(), fallbackError, error.what());
+  }
+  catch (...) {
+    impl.writer.reset();
+    fail(download.get(), fallbackError,
+         "Unable to open the output file");
+  }
+  return false;
+}
+
+void CurlSession::closeOutput(CurlDownload* download) noexcept
+{
+  if (!download || !download->impl_->writer) {
+    return;
+  }
+  try {
+    download->impl_->writer->closeFile();
+  }
+  catch (const std::exception& error) {
+    A2_LOG_ERROR(fmt("Closing stream output failed: %s", error.what()));
+  }
+  catch (...) {
+    A2_LOG_ERROR("Closing stream output failed");
+  }
+  download->impl_->writer.reset();
 }
 
 CurlSession::CurlSession(const Option* option)
@@ -496,18 +632,17 @@ CurlSession::~CurlSession()
     entry.second->remove();
   }
   sockets_.clear();
+  std::map<CurlDownload*, std::shared_ptr<CurlDownload>> activeDownloads;
   for (auto& entry : downloads_) {
-    checkpoint(entry.second.first, true);
-    auto& impl = *entry.second.first->impl_;
+    activeDownloads.emplace(entry.second.first.get(), entry.second.first);
     curl_multi_remove_handle(multi_, entry.first);
     cleanupHandle(*entry.second.second);
-    if (impl.file) {
-      fflush(impl.file);
-      fclose(impl.file);
-      impl.file = nullptr;
-    }
   }
   downloads_.clear();
+  for (const auto& entry : activeDownloads) {
+    checkpoint(entry.second, true);
+    closeOutput(entry.first);
+  }
   if (multi_) {
     curl_multi_cleanup(multi_);
   }
@@ -520,9 +655,11 @@ CurlSession::~CurlSession()
 bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
                           RequestGroup* group)
 {
+  download->snapshot_.errorCode = error_code::UNDEFINED;
+  download->snapshot_.error.clear();
   if (!multi_ || download->impl_->uris.empty()) {
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "The curl transfer session is unavailable";
+    fail(download.get(), error_code::NETWORK_PROBLEM,
+         "The curl transfer session is unavailable");
     return false;
   }
   auto& impl = *download->impl_;
@@ -530,10 +667,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     cleanupHandle(*handle);
   }
   impl.handles.clear();
-  if (impl.file) {
-    fclose(impl.file);
-    impl.file = nullptr;
-  }
+  closeOutput(download.get());
   impl.group = group;
   impl.completedRanges.clear();
   impl.dryRun = group->getOption()->getAsBool(PREF_DRY_RUN);
@@ -547,12 +681,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   const auto& uriValue = impl.uris[impl.uriIndex % impl.uris.size()];
   impl.currentUri = uriValue;
   impl.path = outputPath(group, uriValue);
-  File directory(File(impl.path).getDirname());
-  if (!directory.isDir() && !directory.mkdirs()) {
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "Unable to create the output directory";
-    return false;
-  }
 
   auto context = group->getDownloadContext();
   context->setBasePath(impl.path);
@@ -584,8 +712,18 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     output = File(impl.path);
     existingLength = output.isFile() ? output.size() : 0;
   }
+  const bool rangesFit =
+      std::all_of(state.completedRanges.begin(), state.completedRanges.end(),
+                  [existingLength](const auto& range) {
+                    return range.second <= existingLength;
+                  });
+  const bool restoreState = hasState && output.isFile() && rangesFit &&
+                            existingLength >= state.completedLength;
+  if (hasState && !restoreState) {
+    store_.removePath(impl.path);
+  }
   impl.resumeOffset = 0;
-  if (hasState && existingLength >= state.completedLength) {
+  if (restoreState) {
     impl.completedRanges = state.completedRanges;
     if (impl.completedRanges.empty() && state.completedLength > 0) {
       addCompletedRange(impl, 0, state.completedLength);
@@ -605,23 +743,14 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     impl.resumeOffset = 0;
     download->snapshot_.completedLength = 0;
     download->snapshot_.sessionDownloadLength = 0;
-    download->snapshot_.error.clear();
     download->snapshot_.state = CurlSnapshot::State::Active;
     return true;
   }
 
-  impl.file = fopen(impl.path.c_str(), impl.resumeOffset > 0 ? "r+b" : "wb");
-  if (!impl.file ||
-      (impl.resumeOffset > 0 &&
-       ((!hasState &&
-         a2ftruncate(fileno(impl.file), impl.resumeOffset) != 0) ||
-        a2fseek(impl.file, impl.resumeOffset, SEEK_SET) != 0))) {
-    if (impl.file) {
-      fclose(impl.file);
-      impl.file = nullptr;
-    }
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "Unable to open the output file";
+  const bool preserveExisting =
+      restoreState ||
+      (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE));
+  if (!openOutput(download, preserveExisting)) {
     return false;
   }
   impl.resumed = impl.resumeOffset > 0;
@@ -630,7 +759,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   }
   download->snapshot_.completedLength = completedLength(impl);
   download->snapshot_.sessionDownloadLength = 0;
-  download->snapshot_.error.clear();
   download->snapshot_.state = CurlSnapshot::State::Active;
   return true;
 }
@@ -647,8 +775,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   transfer->rangeEnd = rangeEnd;
   transfer->writeOffset = rangeStart;
   transfer->primary = primary;
-  transfer->ranged =
-      impl.http && rangeEnd >= rangeStart && !impl.dryRun;
+  transfer->ranged = impl.http && rangeEnd >= rangeStart && !impl.dryRun;
   auto* easy = curl_easy_init();
   if (!easy) {
     return false;
@@ -677,8 +804,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   curl_easy_setopt(easy, CURLOPT_DNS_CACHE_TIMEOUT, 300L);
   curl_easy_setopt(easy, CURLOPT_UPKEEP_INTERVAL_MS, 30000L);
   curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, socketOptionCallback);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTDATA,
-                   const_cast<Option*>(taskOption));
+  curl_easy_setopt(easy, CURLOPT_SOCKOPTDATA, const_cast<Option*>(taskOption));
   curl_easy_setopt(easy, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
   curl_easy_setopt(easy, CURLOPT_NOBODY, impl.dryRun ? 1L : 0L);
   curl_easy_setopt(easy, CURLOPT_FILETIME,
@@ -717,10 +843,9 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   curl_easy_setopt(easy, CURLOPT_PROXY_SSL_VERIFYHOST,
                    taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
   const auto& minimumTls = taskOption->get(PREF_MIN_TLS_VERSION);
-  const long sslVersion =
-      minimumTls == A2_V_TLS13 ? CURL_SSLVERSION_TLSv1_3
-      : minimumTls == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
-                                 : CURL_SSLVERSION_TLSv1_1;
+  const long sslVersion = minimumTls == A2_V_TLS13   ? CURL_SSLVERSION_TLSv1_3
+                          : minimumTls == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
+                                                     : CURL_SSLVERSION_TLSv1_1;
   curl_easy_setopt(easy, CURLOPT_SSLVERSION, sslVersion);
   if (!taskOption->blank(PREF_INTERFACE)) {
     curl_easy_setopt(easy, CURLOPT_INTERFACE,
@@ -779,8 +904,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
     const auto proxyPassword = proxyPasswordFor(taskOption, parsed.protocol);
     if (!proxyUser.empty()) {
       curl_easy_setopt(easy, CURLOPT_PROXYUSERNAME, proxyUser.c_str());
-      curl_easy_setopt(easy, CURLOPT_PROXYPASSWORD,
-                       proxyPassword.c_str());
+      curl_easy_setopt(easy, CURLOPT_PROXYPASSWORD, proxyPassword.c_str());
     }
   }
   if (!taskOption->blank(PREF_NO_PROXY)) {
@@ -829,8 +953,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   const auto result = curl_multi_add_handle(multi_, easy) == CURLM_OK;
   if (result) {
     impl.handles.push_back(std::move(transfer));
-    download->snapshot_.connections =
-        static_cast<int>(impl.handles.size());
+    download->snapshot_.connections = static_cast<int>(impl.handles.size());
   }
   else {
     cleanupHandle(*transfer);
@@ -846,14 +969,14 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
   constexpr int64_t probeSize = 4_m;
   if (prepare(download, group)) {
     const auto rangeStart = download->impl_->resumeOffset;
-    const auto rangeEnd =
-        download->impl_->maxConnections > 1
-            ? missingRangeEnd(*download->impl_, rangeStart,
-                              rangeStart + probeSize - 1)
-            : rangeStart > 0 ? std::numeric_limits<int64_t>::max() : -1;
+    const auto rangeEnd = download->impl_->maxConnections > 1
+                              ? missingRangeEnd(*download->impl_, rangeStart,
+                                                rangeStart + probeSize - 1)
+                          : rangeStart > 0 ? std::numeric_limits<int64_t>::max()
+                                           : -1;
     if (!createHandle(download, rangeStart, rangeEnd, true)) {
-      download->snapshot_.state = CurlSnapshot::State::Error;
-      download->snapshot_.error = "Unable to start the curl transfer";
+      fail(download.get(), error_code::NETWORK_PROBLEM,
+           "Unable to start the curl transfer");
       return std::unique_ptr<Command>(new CurlDownloadCommand(
           engine->newCUID(), download, this, group, engine));
     }
@@ -863,8 +986,8 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
     socketAction(CURL_SOCKET_TIMEOUT, 0);
   }
   else if (!download->failed()) {
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "Unable to start the curl transfer";
+    fail(download.get(), error_code::NETWORK_PROBLEM,
+         "Unable to start the curl transfer");
   }
   return std::unique_ptr<Command>(new CurlDownloadCommand(
       engine->newCUID(), download, this, group, engine));
@@ -880,9 +1003,6 @@ void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
            std::chrono::seconds(1))) {
     return;
   }
-  if (impl.file) {
-    fflush(impl.file);
-  }
   StreamState state;
   state.gid = GroupId::toHex(impl.group->getGID());
   state.uri = impl.currentUri;
@@ -897,8 +1017,7 @@ void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
   }
 }
 
-void CurlSession::scheduleRanges(
-    const std::shared_ptr<CurlDownload>& download)
+void CurlSession::scheduleRanges(const std::shared_ptr<CurlDownload>& download)
 {
   auto& impl = *download->impl_;
   const auto total = download->snapshot_.totalLength;
@@ -909,26 +1028,32 @@ void CurlSession::scheduleRanges(
   if (!impl.segmented) {
     impl.segmented = true;
     if (impl.nextRangeOffset <= impl.resumeOffset) {
-      impl.nextRangeOffset =
-          nextMissingOffset(impl, std::min<int64_t>(
-                                      total, impl.resumeOffset + 4_m));
+      impl.nextRangeOffset = nextMissingOffset(
+          impl, std::min<int64_t>(total, impl.resumeOffset + 4_m));
     }
-    const auto target = (total + impl.maxConnections * 4 - 1) /
-                        (impl.maxConnections * 4);
+    const auto target =
+        (total + impl.maxConnections * 4 - 1) / (impl.maxConnections * 4);
     impl.rangeChunkSize =
         std::max<int64_t>(4_m, std::min<int64_t>(32_m, target));
-    impl.rangeChunkSize =
-        ((impl.rangeChunkSize + 1_m - 1) / 1_m) * 1_m;
+    impl.rangeChunkSize = ((impl.rangeChunkSize + 1_m - 1) / 1_m) * 1_m;
     const auto taskOption = impl.group->getOption();
     const bool sizeOutput =
         taskOption->get(PREF_FILE_ALLOCATION) != V_NONE &&
         total >= taskOption->getAsLLInt(PREF_NO_FILE_ALLOCATION_LIMIT);
-    if (sizeOutput && impl.file &&
-        a2ftruncate(fileno(impl.file), total) != 0) {
-      download->snapshot_.state = CurlSnapshot::State::Error;
-      download->snapshot_.error = "Unable to size the output file";
-      cancelHandles(download);
-      return;
+    if (sizeOutput && impl.writer) {
+      try {
+        impl.writer->truncate(total);
+      }
+      catch (const Exception& error) {
+        fail(download.get(), error.getErrorCode(), error.what());
+        cancelHandles(download);
+        return;
+      }
+      catch (const std::exception& error) {
+        fail(download.get(), error_code::FILE_IO_ERROR, error.what());
+        cancelHandles(download);
+        return;
+      }
     }
   }
 
@@ -949,8 +1074,8 @@ void CurlSession::scheduleRanges(
         impl, first,
         std::min<int64_t>(total - 1, first + impl.rangeChunkSize - 1));
     if (!createHandle(download, first, last, false)) {
-      download->snapshot_.state = CurlSnapshot::State::Error;
-      download->snapshot_.error = "Unable to create a ranged transfer";
+      fail(download.get(), error_code::NETWORK_PROBLEM,
+           "Unable to create a ranged transfer");
       cancelHandles(download);
       return;
     }
@@ -962,8 +1087,7 @@ void CurlSession::scheduleRanges(
   rebalanceLimits();
 }
 
-void CurlSession::cancelHandles(
-    const std::shared_ptr<CurlDownload>& download)
+void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
 {
   auto& impl = *download->impl_;
   for (auto& handle : impl.handles) {
@@ -984,11 +1108,7 @@ void CurlSession::finalize(const std::shared_ptr<CurlDownload>& download,
                            curl_off_t reportedFileTime)
 {
   auto& impl = *download->impl_;
-  if (impl.file) {
-    fflush(impl.file);
-    fclose(impl.file);
-    impl.file = nullptr;
-  }
+  closeOutput(download.get());
   auto length = File(impl.path).size();
   if (download->snapshot_.totalLength > 0) {
     length = download->snapshot_.totalLength;
@@ -1034,10 +1154,7 @@ bool CurlSession::restartWithoutResume(
     return false;
   }
   impl.restartAttempted = true;
-  if (impl.file) {
-    fclose(impl.file);
-    impl.file = nullptr;
-  }
+  closeOutput(download.get());
   cancelHandles(download);
   impl.resumeOffset = 0;
   impl.resumed = false;
@@ -1046,14 +1163,13 @@ bool CurlSession::restartWithoutResume(
   impl.segmented = false;
   impl.etag.clear();
   impl.lastModified.clear();
-  impl.file = fopen(impl.path.c_str(), "wb");
   download->snapshot_.totalLength = 0;
   download->snapshot_.completedLength = 0;
   download->snapshot_.sessionDownloadLength = 0;
   store_.removePath(impl.path);
-  const auto rangeEnd =
-      impl.maxConnections > 1 ? 4_m - 1 : -1;
-  if (!impl.file || !createHandle(download, 0, rangeEnd, true)) {
+  const auto rangeEnd = impl.maxConnections > 1 ? 4_m - 1 : -1;
+  if (!openOutput(download, false) ||
+      !createHandle(download, 0, rangeEnd, true)) {
     return false;
   }
   auto* handle = impl.handles.back().get();
@@ -1073,11 +1189,7 @@ bool CurlSession::retry(const std::shared_ptr<CurlDownload>& download)
   if (impl.uris.empty()) {
     return false;
   }
-  if (impl.file) {
-    fflush(impl.file);
-    fclose(impl.file);
-    impl.file = nullptr;
-  }
+  closeOutput(download.get());
   cancelHandles(download);
   impl.uriIndex = (impl.uriIndex + 1) % impl.uris.size();
   impl.currentUri = impl.uris[impl.uriIndex];
@@ -1085,8 +1197,7 @@ bool CurlSession::retry(const std::shared_ptr<CurlDownload>& download)
   impl.resumed = impl.resumeOffset > 0;
   impl.scheduleRanges = false;
   impl.segmented = false;
-  const auto configured =
-      impl.group->getOption()->getAsInt(PREF_RETRY_WAIT);
+  const auto configured = impl.group->getOption()->getAsInt(PREF_RETRY_WAIT);
   const auto wait = std::max<long>(configured, impl.pendingRetryAfter);
   impl.pendingRetryAfter = 0;
   impl.retryPending = true;
@@ -1097,8 +1208,7 @@ bool CurlSession::retry(const std::shared_ptr<CurlDownload>& download)
   return true;
 }
 
-void CurlSession::processRetry(
-    const std::shared_ptr<CurlDownload>& download)
+void CurlSession::processRetry(const std::shared_ptr<CurlDownload>& download)
 {
   auto& impl = *download->impl_;
   if (!impl.retryPending) {
@@ -1114,8 +1224,8 @@ void CurlSession::processRetry(
   impl.retryPending = false;
   if (impl.dryRun) {
     if (!createHandle(download, 0, -1, true)) {
-      download->snapshot_.state = CurlSnapshot::State::Error;
-      download->snapshot_.error = "Unable to restart the curl transfer";
+      fail(download.get(), error_code::NETWORK_PROBLEM,
+           "Unable to restart the curl transfer");
       return;
     }
     auto* handle = impl.handles.back().get();
@@ -1123,24 +1233,17 @@ void CurlSession::processRetry(
     socketAction(CURL_SOCKET_TIMEOUT, 0);
     return;
   }
-  impl.file = fopen(impl.path.c_str(), impl.resumed ? "r+b" : "wb");
-  if (!impl.file ||
-      (impl.resumed &&
-       a2fseek(impl.file, impl.resumeOffset, SEEK_SET) != 0)) {
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "Unable to reopen the output file";
+  if (!openOutput(download, true)) {
     return;
   }
   const auto rangeEnd =
-      impl.maxConnections > 1
-          ? missingRangeEnd(impl, impl.resumeOffset,
-                            impl.resumeOffset + 4_m - 1)
-          : impl.resumeOffset > 0
-                ? std::numeric_limits<int64_t>::max()
-                : -1;
+      impl.maxConnections > 1 ? missingRangeEnd(impl, impl.resumeOffset,
+                                                impl.resumeOffset + 4_m - 1)
+      : impl.resumeOffset > 0 ? std::numeric_limits<int64_t>::max()
+                              : -1;
   if (!createHandle(download, impl.resumeOffset, rangeEnd, true)) {
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error = "Unable to restart the curl transfer";
+    fail(download.get(), error_code::NETWORK_PROBLEM,
+         "Unable to restart the curl transfer");
     return;
   }
   auto* handle = impl.handles.back().get();
@@ -1166,18 +1269,26 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   }
   const bool rejectedResume =
       handle->rangeStart > 0 && impl.http && !handle->rangeAccepted;
-  const bool rangeUnsupported =
-      responseCode == 416 && handle->rangeStart == 0;
+  const bool rangeUnsupported = responseCode == 416 && handle->rangeStart == 0;
   if (rangeUnsupported) {
     impl.maxConnections = 1;
   }
-  if ((result == CURLE_RANGE_ERROR || rangeUnsupported || rejectedResume ||
+  const bool outputFailure =
+      download->snapshot_.errorCode != error_code::UNDEFINED;
+  if (!outputFailure &&
+      (result == CURLE_RANGE_ERROR || rangeUnsupported || rejectedResume ||
        handle->validatorMismatch) &&
       restartWithoutResume(download)) {
     rebalanceLimits();
     return;
   }
   if (result != CURLE_OK) {
+    if (outputFailure) {
+      cancelHandles(download);
+      checkpoint(download, true);
+      closeOutput(download.get());
+      return;
+    }
     if (responseCode == 404) {
       ++impl.fileNotFoundCount;
     }
@@ -1196,12 +1307,12 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     }
     cancelHandles(download);
     checkpoint(download, true);
-    download->snapshot_.state = CurlSnapshot::State::Error;
-    download->snapshot_.error =
-        responseCode > 0
-            ? "HTTP " + std::to_string(responseCode) + ": " +
-                  curl_easy_strerror(result)
-            : curl_easy_strerror(result);
+    const auto message = responseCode > 0
+                             ? "HTTP " + std::to_string(responseCode) + ": " +
+                                   curl_easy_strerror(result)
+                             : curl_easy_strerror(result);
+    fail(download.get(), curlErrorCode(result, responseCode), message);
+    closeOutput(download.get());
     return;
   }
 
@@ -1217,8 +1328,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   const bool rangeAccepted = handle->rangeAccepted;
   cleanupHandle(*handle);
   eraseHandle(impl, handle);
-  download->snapshot_.connections =
-      static_cast<int>(impl.handles.size());
+  download->snapshot_.connections = static_cast<int>(impl.handles.size());
   if (impl.dryRun) {
     download->snapshot_.totalLength = std::max<curl_off_t>(0, reportedLength);
     download->snapshot_.state = CurlSnapshot::State::Complete;
@@ -1245,8 +1355,7 @@ void CurlSession::poll()
   for (const auto& entry : downloads_) {
     checkpoint(entry.second.first, false);
   }
-  if (timeoutArmed_ &&
-      std::chrono::steady_clock::now() >= timeoutDeadline_) {
+  if (timeoutArmed_ && std::chrono::steady_clock::now() >= timeoutDeadline_) {
     timeoutArmed_ = false;
     socketAction(CURL_SOCKET_TIMEOUT, 0);
   }
@@ -1273,7 +1382,8 @@ void CurlSession::socketAction(curl_socket_t socket, int events)
     return;
   }
   int running = 0;
-  const auto result = curl_multi_socket_action(multi_, socket, events, &running);
+  const auto result =
+      curl_multi_socket_action(multi_, socket, events, &running);
   if (result != CURLM_OK && result != CURLM_BAD_SOCKET) {
     A2_LOG_ERROR(fmt("libcurl multi socket action failed: %s",
                      curl_multi_strerror(result)));
@@ -1308,8 +1418,8 @@ void CurlSession::updateSocket(curl_socket_t socket, int action,
     return;
   }
   if (!command) {
-    auto next = std::unique_ptr<CurlSocketCommand>(new CurlSocketCommand(
-        engine_->newCUID(), socket, this, engine_));
+    auto next = std::unique_ptr<CurlSocketCommand>(
+        new CurlSocketCommand(engine_->newCUID(), socket, this, engine_));
     command = next.get();
     sockets_[socket] = command;
     curl_multi_assign(multi_, socket, command);
@@ -1320,8 +1430,7 @@ void CurlSession::updateSocket(curl_socket_t socket, int action,
   command->update(action);
 }
 
-void CurlSession::removeSocket(curl_socket_t socket,
-                               CurlSocketCommand* command)
+void CurlSession::removeSocket(curl_socket_t socket, CurlSocketCommand* command)
 {
   if (command) {
     command->remove();
@@ -1339,53 +1448,76 @@ void CurlSession::updateTimeout(long timeoutMs)
     return;
   }
   timeoutArmed_ = true;
-  timeoutDeadline_ = std::chrono::steady_clock::now() +
-                     std::chrono::milliseconds(timeoutMs);
+  timeoutDeadline_ =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
   armTimeout();
 }
 
 int CurlSession::socketCallback(CURL*, curl_socket_t socket, int action,
-                                void* userData, void* socketData)
+                                void* userData, void* socketData) noexcept
 {
-  auto* session = static_cast<CurlSession*>(userData);
-  auto* command = static_cast<CurlSocketCommand*>(socketData);
-  if (action == CURL_POLL_REMOVE) {
-    session->removeSocket(socket, command);
+  try {
+    auto* session = static_cast<CurlSession*>(userData);
+    auto* command = static_cast<CurlSocketCommand*>(socketData);
+    if (action == CURL_POLL_REMOVE) {
+      session->removeSocket(socket, command);
+    }
+    else {
+      session->updateSocket(socket, action, command);
+    }
+    return 0;
   }
-  else {
-    session->updateSocket(socket, action, command);
+  catch (const std::exception& error) {
+    A2_LOG_ERROR(fmt("libcurl socket callback failed: %s", error.what()));
   }
-  return 0;
+  catch (...) {
+    A2_LOG_ERROR("libcurl socket callback failed");
+  }
+  return -1;
 }
 
-int CurlSession::timerCallback(CURLM*, long timeoutMs, void* userData)
+int CurlSession::timerCallback(CURLM*, long timeoutMs, void* userData) noexcept
 {
-  static_cast<CurlSession*>(userData)->updateTimeout(timeoutMs);
-  return 0;
+  try {
+    static_cast<CurlSession*>(userData)->updateTimeout(timeoutMs);
+    return 0;
+  }
+  catch (const std::exception& error) {
+    A2_LOG_ERROR(fmt("libcurl timer callback failed: %s", error.what()));
+  }
+  catch (...) {
+    A2_LOG_ERROR("libcurl timer callback failed");
+  }
+  return -1;
 }
 
 int CurlSession::socketOptionCallback(void* userData, curl_socket_t socket,
-                                      curlsocktype)
+                                      curlsocktype) noexcept
 {
-  const auto* option = static_cast<const Option*>(userData);
-  const auto receiveBuffer = option->getAsInt(PREF_SOCKET_RECV_BUFFER_SIZE);
-  if (receiveBuffer > 0) {
-    setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
-               reinterpret_cast<const char*>(&receiveBuffer),
-               sizeof(receiveBuffer));
-  }
-  const auto trafficClass = option->getAsInt(PREF_DSCP) << 2;
-  if (trafficClass > 0) {
-    setsockopt(socket, IPPROTO_IP, IP_TOS,
-               reinterpret_cast<const char*>(&trafficClass),
-               sizeof(trafficClass));
+  try {
+    const auto* option = static_cast<const Option*>(userData);
+    const auto receiveBuffer = option->getAsInt(PREF_SOCKET_RECV_BUFFER_SIZE);
+    if (receiveBuffer > 0) {
+      setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
+                 reinterpret_cast<const char*>(&receiveBuffer),
+                 sizeof(receiveBuffer));
+    }
+    const auto trafficClass = option->getAsInt(PREF_DSCP) << 2;
+    if (trafficClass > 0) {
+      setsockopt(socket, IPPROTO_IP, IP_TOS,
+                 reinterpret_cast<const char*>(&trafficClass),
+                 sizeof(trafficClass));
 #ifdef IPV6_TCLASS
-    setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS,
-               reinterpret_cast<const char*>(&trafficClass),
-               sizeof(trafficClass));
+      setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS,
+                 reinterpret_cast<const char*>(&trafficClass),
+                 sizeof(trafficClass));
 #endif
+    }
+    return CURL_SOCKOPT_OK;
   }
-  return CURL_SOCKOPT_OK;
+  catch (...) {
+    return CURL_SOCKOPT_ERROR;
+  }
 }
 
 void CurlSession::stop(const std::shared_ptr<CurlDownload>& download,
@@ -1396,11 +1528,7 @@ void CurlSession::stop(const std::shared_ptr<CurlDownload>& download,
   checkpoint(download, true);
   cancelHandles(download);
   rebalanceLimits();
-  if (impl.file) {
-    fflush(impl.file);
-    fclose(impl.file);
-    impl.file = nullptr;
-  }
+  closeOutput(download.get());
   if (retainState) {
     download->snapshot_.state = CurlSnapshot::State::Paused;
   }
@@ -1423,17 +1551,16 @@ void CurlSession::rebalanceLimits()
   }
   const auto taskShare =
       globalDownloadLimit_ > 0
-          ? std::max<int64_t>(
-                1, globalDownloadLimit_ /
-                       static_cast<int64_t>(taskHandles.size()))
+          ? std::max<int64_t>(1, globalDownloadLimit_ /
+                                     static_cast<int64_t>(taskHandles.size()))
           : 0;
   for (const auto& entry : downloads_) {
     const auto task =
         entry.second.first->impl_->group->getMaxDownloadSpeedLimit();
-    const auto taskLimit =
-        task > 0 && taskShare > 0 ? std::min<int64_t>(task, taskShare)
-        : task > 0                ? static_cast<int64_t>(task)
-                                  : taskShare;
+    const auto taskLimit = task > 0 && taskShare > 0
+                               ? std::min<int64_t>(task, taskShare)
+                           : task > 0 ? static_cast<int64_t>(task)
+                                      : taskShare;
     const auto count = taskHandles[entry.second.first.get()];
     const auto limit =
         taskLimit > 0

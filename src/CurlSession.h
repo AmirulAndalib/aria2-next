@@ -16,10 +16,12 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <string>
 
 #include <curl/curl.h>
 
 #include "StreamStore.h"
+#include "error_code.h"
 
 namespace aria2 {
 
@@ -64,8 +66,8 @@ private:
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
                     int64_t rangeStart = 0, int64_t rangeEnd = -1,
                     bool primary = false);
-  void finish(const std::shared_ptr<CurlDownload>& download,
-              CurlHandle* handle, CURLcode result);
+  void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
+              CURLcode result);
   void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
   bool restartWithoutResume(const std::shared_ptr<CurlDownload>& download);
   bool retry(const std::shared_ptr<CurlDownload>& download);
@@ -74,6 +76,11 @@ private:
   void finalize(const std::shared_ptr<CurlDownload>& download,
                 curl_off_t reportedFileTime);
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
+  bool openOutput(const std::shared_ptr<CurlDownload>& download,
+                  bool preserveExisting);
+  void closeOutput(CurlDownload* download) noexcept;
+  static void fail(CurlDownload* download, error_code::Value errorCode,
+                   const std::string& message) noexcept;
   void rebalanceLimits();
   void socketAction(curl_socket_t socket, int events);
   void processMessages();
@@ -82,19 +89,21 @@ private:
   void removeSocket(curl_socket_t socket, CurlSocketCommand* command);
   void updateTimeout(long timeoutMs);
   static int socketCallback(CURL* easy, curl_socket_t socket, int action,
-                            void* userData, void* socketData);
-  static int timerCallback(CURLM* multi, long timeoutMs, void* userData);
+                            void* userData, void* socketData) noexcept;
+  static int timerCallback(CURLM* multi, long timeoutMs,
+                           void* userData) noexcept;
   static int socketOptionCallback(void* userData, curl_socket_t socket,
-                                  curlsocktype purpose);
+                                  curlsocktype purpose) noexcept;
   static size_t writeData(char* data, size_t size, size_t count,
-                          void* userData);
+                          void* userData) noexcept;
   static size_t receiveHeader(char* data, size_t size, size_t count,
-                              void* userData);
+                              void* userData) noexcept;
   static int updateProgress(void* userData, curl_off_t downloadTotal,
                             curl_off_t downloaded, curl_off_t uploadTotal,
-                            curl_off_t uploaded);
+                            curl_off_t uploaded) noexcept;
 
   friend class CurlSocketCommand;
+  friend class CurlSessionTest;
 };
 
 } // namespace aria2

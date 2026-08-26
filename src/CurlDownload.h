@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "error_code.h"
+
 namespace aria2 {
 
 class RequestGroup;
@@ -33,6 +35,7 @@ struct CurlSnapshot {
   int64_t completedLength = 0;
   int64_t sessionDownloadLength = 0;
   int connections = 0;
+  error_code::Value errorCode = error_code::UNDEFINED;
   std::string currentUri;
   std::string error;
 };
@@ -56,6 +59,7 @@ public:
 private:
   friend class CurlSession;
   friend class CurlDownloadCommand;
+  friend class CurlSessionTest;
 
   std::unique_ptr<CurlDownloadImpl> impl_;
   CurlSnapshot snapshot_;

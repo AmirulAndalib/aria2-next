@@ -13,7 +13,6 @@
 #ifndef D_CURL_DOWNLOAD_IMPL_H
 #define D_CURL_DOWNLOAD_IMPL_H
 
-#include <cstdio>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -22,6 +21,7 @@
 
 #include <curl/curl.h>
 
+#include "DiskWriter.h"
 #include "TimerA2.h"
 
 namespace aria2 {
@@ -55,7 +55,7 @@ struct CurlDownloadImpl {
   std::string currentUri;
   std::string etag;
   std::string lastModified;
-  FILE* file = nullptr;
+  std::unique_ptr<DiskWriter> writer;
   std::vector<std::unique_ptr<CurlHandle>> handles;
   std::vector<std::pair<int64_t, int64_t>> completedRanges;
   RequestGroup* group = nullptr;
