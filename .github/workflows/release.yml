@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   resolve-release:
@@ -34,9 +34,6 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools release-tools
 
       - name: Resolve release version
         id: resolve
@@ -130,12 +127,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Install Linux build tools
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl binutils
-
       - name: Verify runner tools
         run: packaging/scripts/verify-runner-tools ${{ matrix.verify_profile }}
 
@@ -185,11 +176,6 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl curl tar binutils
 
       - name: Install LLVM-MinGW
         run: |
@@ -247,11 +233,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || github.sha }}
 
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends make cmake ninja-build perl binutils
-
       - name: Resolve Android NDK
         run: |
           . packaging/dependencies.env
@@ -301,13 +282,6 @@ jobs:
       ARTIFACT_SUFFIX: ${{ needs.resolve-release.outputs.artifact_suffix }}
       VERSION: ${{ needs.resolve-release.outputs.version }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
-
-      - name: Verify runner tools
-        run: packaging/scripts/verify-runner-tools release-tools
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: artifacts
