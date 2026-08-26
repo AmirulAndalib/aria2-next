@@ -456,6 +456,7 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
                                bytes + length);
     handle->writeOffset += static_cast<int64_t>(length);
     handle->downloaded += static_cast<int64_t>(length);
+    handle->lastProgressAt = std::chrono::steady_clock::now();
     if (handle->writeBuffer.size() >= handle->bufferLimit) {
       flushWriteBuffer(impl, *handle);
     }
@@ -872,6 +873,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   transfer->lease = lease;
   transfer->writeOffset = lease.begin;
   transfer->startedAt = std::chrono::steady_clock::now();
+  transfer->lastProgressAt = transfer->startedAt;
   transfer->bufferLimit = static_cast<size_t>(std::max<int64_t>(
       256_k, std::min<int64_t>(1_m, 32_m / impl.maxConnections)));
   transfer->writeBuffer.reserve(transfer->bufferLimit);
@@ -1229,6 +1231,9 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
         adaptiveRangeSize(remaining, impl.maxConnections, pieceLength);
     impl.planner.refillReady(static_cast<size_t>(impl.maxConnections),
                              preferredPiece, pieceLength);
+    const auto minimumReady =
+        std::max<size_t>(1, static_cast<size_t>(impl.maxConnections) / 4);
+    impl.planner.refillReady(minimumReady, pieceLength, pieceLength);
     while (impl.handles.size() < static_cast<size_t>(impl.maxConnections)) {
       auto lease = impl.planner.takeReady(now);
       if (!lease) {
@@ -1270,11 +1275,11 @@ bool CurlSession::rebalanceEndgame(
   if (active == 0 || active >= static_cast<size_t>(impl.maxConnections)) {
     return false;
   }
-  const auto remaining = std::max<int64_t>(
-      0, download->snapshot_.totalLength - download->snapshot_.completedLength);
-  const auto window = pieceLength * static_cast<int64_t>(impl.maxConnections) *
-                      rangePipelineDepth;
-  if (remaining <= 0 || remaining > window) {
+  const auto idle = static_cast<size_t>(impl.maxConnections) - active;
+  const auto batchSize = std::min<size_t>(
+      static_cast<size_t>(impl.maxConnections) - 1,
+      std::max<size_t>(2, static_cast<size_t>(impl.maxConnections) / 8));
+  if (idle < batchSize) {
     return false;
   }
 
@@ -1287,12 +1292,21 @@ bool CurlSession::rebalanceEndgame(
             rhs->rangeAccepted ? rhs->lease.end - rhs->writeOffset : int64_t{0};
         return lhsRemaining < rhsRemaining;
       });
-  if (candidate == impl.handles.end() || !(*candidate)->rangeAccepted ||
-      (*candidate)->lease.end - (*candidate)->writeOffset < pieceLength * 2) {
+  if (candidate == impl.handles.end() || !(*candidate)->rangeAccepted) {
     return false;
   }
 
   auto* handle = candidate->get();
+  const auto candidateLength = handle->lease.end - handle->writeOffset;
+  if (candidateLength <= 0) {
+    return false;
+  }
+  const bool stalledMinimumRange = candidateLength < pieceLength * 2;
+  if (stalledMinimumRange &&
+      std::chrono::steady_clock::now() - handle->lastProgressAt <
+          std::chrono::seconds(2)) {
+    return false;
+  }
   try {
     flushWriteBuffer(impl, *handle);
     download->snapshot_.completedLength =
@@ -1318,6 +1332,17 @@ bool CurlSession::rebalanceEndgame(
   eraseHandle(impl, handle);
   const auto available =
       static_cast<size_t>(impl.maxConnections) - impl.handles.size();
+  if (stalledMinimumRange) {
+    if (!retryRange(download, remainder, 0)) {
+      failTask(download, error_code::TIME_OUT,
+               "The final stream range stopped making progress");
+      return false;
+    }
+    A2_LOG_DEBUG(fmt("Retried stalled stream endgame range [%" PRId64
+                     ",%" PRId64 ")",
+                     remainder.begin, remainder.end));
+    return true;
+  }
   impl.planner.enqueueBalanced(remainder, available, pieceLength);
   A2_LOG_DEBUG(fmt("Rebalanced stream endgame range [%" PRId64 ",%" PRId64
                    ") across %lu transfer(s)",

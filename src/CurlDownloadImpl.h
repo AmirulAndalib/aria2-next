@@ -41,6 +41,7 @@ struct CurlHandle {
   int64_t bufferOffset = 0;
   size_t bufferLimit = 0;
   std::chrono::steady_clock::time_point startedAt;
+  std::chrono::steady_clock::time_point lastProgressAt;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
   int64_t unsatisfiedTotalLength = -1;
