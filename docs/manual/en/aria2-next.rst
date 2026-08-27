@@ -96,6 +96,10 @@ Basic Options
    Continue downloading a partially downloaded file.
    Use this option to resume a download started by a web browser or another
    program which downloads files sequentially from the beginning.
+   HTTP(S) verifies the remote length before accepting an existing file. An
+   equal-length file completes without transferring payload data. A shorter
+   file resumes only when the server confirms byte-range support. A longer
+   file or an unresumable response is preserved and reported as an error.
    Currently this option is only applicable to HTTP(S)/SFTP downloads.
 
 .. option:: -h, --help[=<TAG>|<KEYWORD>]
@@ -1088,7 +1092,8 @@ Advanced Options
 .. option:: --allow-overwrite [true|false]
 
   Replace an existing output file when no valid persisted transfer state is
-  available. See also :option:`--auto-file-renaming`.
+  available. This takes precedence over :option:`--continue` for an
+  untracked output file. See also :option:`--auto-file-renaming`.
   Default: ``false``
 
 .. option:: --auto-file-renaming [true|false]

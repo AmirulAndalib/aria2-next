@@ -248,6 +248,7 @@ void resetResponse(CurlHandle& handle)
   handle.responseCode = 0;
   handle.responseRangeEnd = -1;
   handle.responseTotalLength = -1;
+  handle.responseContentLength = -1;
   handle.unsatisfiedTotalLength = -1;
   handle.rangeAccepted = false;
   handle.fullResponseAccepted = false;
@@ -279,15 +280,29 @@ bool parseContentRange(const std::string& value, int64_t& first, int64_t& end,
 
 bool parseUnsatisfiedContentRange(const std::string& value, int64_t& total)
 {
+  auto range = value;
+  if (range.size() >= 6 &&
+      std::equal(range.begin(), range.begin() + 5, "bytes",
+                 [](char lhs, char rhs) {
+                   return std::tolower(static_cast<unsigned char>(lhs)) ==
+                          std::tolower(static_cast<unsigned char>(rhs));
+                 }) &&
+      std::isspace(static_cast<unsigned char>(range[5]))) {
+    range = trimHeader(range.substr(6));
+  }
   long long parsedTotal = -1;
   int consumed = 0;
-  if (std::sscanf(value.c_str(), "bytes */%lld%n", &parsedTotal, &consumed) !=
-          1 ||
-      consumed != static_cast<int>(value.size()) || parsedTotal < 0) {
+  if (std::sscanf(range.c_str(), "*/%lld%n", &parsedTotal, &consumed) != 1 ||
+      consumed != static_cast<int>(range.size()) || parsedTotal < 0) {
     return false;
   }
   total = parsedTotal;
   return true;
+}
+
+bool parseContentLength(const std::string& value, int64_t& length)
+{
+  return util::parseLLIntNoThrow(length, value) && length >= 0;
 }
 
 bool strongEtag(const std::string& value)
@@ -493,6 +508,19 @@ std::string CurlSession::failureMessage(const CurlHandle& handle,
                      : detail;
 }
 
+ExistingFileDecision CurlSession::decideExistingFile(int64_t localLength,
+                                                     int64_t remoteLength,
+                                                     bool rangeSupported)
+{
+  if (localLength == remoteLength) {
+    return ExistingFileDecision::Complete;
+  }
+  if (localLength < remoteLength && rangeSupported) {
+    return ExistingFileDecision::Resume;
+  }
+  return ExistingFileDecision::Reject;
+}
+
 std::string CurlSession::gid(const CurlDownload* download)
 {
   if (!download || !download->impl_ || !download->impl_->group) {
@@ -514,6 +542,14 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
       return CURL_WRITEFUNC_ERROR;
     }
     const auto length = size * count;
+    if (handle->purpose == CurlHandlePurpose::RangeProbe) {
+      return handle->responseCode == 206 && handle->rangeAccepted
+                 ? length
+                 : CURL_WRITEFUNC_ERROR;
+    }
+    if (handle->purpose == CurlHandlePurpose::HeadProbe) {
+      return CURL_WRITEFUNC_ERROR;
+    }
     if (handle->validatorMismatch || handle->invalidRange ||
         (handle->ranged && handle->headersComplete && !handle->rangeAccepted &&
          !handle->fullResponseAccepted)) {
@@ -619,8 +655,24 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
           }
           if (!handle->validatorMismatch) {
             handle->rangeAccepted = true;
-            impl.rangeValidated = true;
-            download->snapshot_.totalLength = handle->responseTotalLength;
+            if (handle->purpose == CurlHandlePurpose::Payload) {
+              impl.rangeValidated = true;
+              download->snapshot_.totalLength = handle->responseTotalLength;
+              if (impl.etag.empty() && strongEtag(handle->responseEtag)) {
+                impl.etag = handle->responseEtag;
+              }
+              if (impl.lastModified.empty()) {
+                impl.lastModified = handle->responseLastModified;
+              }
+            }
+          }
+        }
+      }
+      else if (handle->responseCode == 200) {
+        if (!handle->ranged ||
+            (handle->lease.begin == 0 && impl.planner.completedLength() == 0)) {
+          handle->fullResponseAccepted = true;
+          if (handle->purpose == CurlHandlePurpose::Payload) {
             if (impl.etag.empty() && strongEtag(handle->responseEtag)) {
               impl.etag = handle->responseEtag;
             }
@@ -630,24 +682,18 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
           }
         }
       }
-      else if (handle->responseCode == 200) {
-        if (!handle->ranged ||
-            (handle->lease.begin == 0 && impl.planner.completedLength() == 0)) {
-          handle->fullResponseAccepted = true;
-          if (impl.etag.empty() && strongEtag(handle->responseEtag)) {
-            impl.etag = handle->responseEtag;
-          }
-          if (impl.lastModified.empty()) {
-            impl.lastModified = handle->responseLastModified;
-          }
-        }
-      }
     }
     else if (startsWithHeader(line, "etag:")) {
       handle->responseEtag = trimHeader(line.substr(5));
     }
     else if (startsWithHeader(line, "last-modified:")) {
       handle->responseLastModified = trimHeader(line.substr(14));
+    }
+    else if (startsWithHeader(line, "content-length:")) {
+      const auto value = trimHeader(line.substr(15));
+      if (!parseContentLength(value, handle->responseContentLength)) {
+        handle->responseContentLength = -1;
+      }
     }
     else if (startsWithHeader(line, "content-range:")) {
       const auto value = trimHeader(line.substr(14));
@@ -663,7 +709,7 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
                parseUnsatisfiedContentRange(value,
                                             handle->unsatisfiedTotalLength)) {
       }
-      else if (handle->responseCode == 206 || handle->responseCode == 416) {
+      else if (handle->responseCode == 206) {
         handle->invalidRange = true;
       }
     }
@@ -962,6 +1008,8 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.fileNotFoundCount = 0;
   impl.httpVersion = 0;
   impl.rangeValidated = false;
+  impl.existingLength = 0;
+  impl.startMode = CurlStartMode::Transfer;
   impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
   impl.preferredUriIndex %= impl.uris.size();
   const auto& uriValue = impl.uris[impl.preferredUriIndex];
@@ -1017,8 +1065,15 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     impl.lastModified = state.lastModified;
     download->snapshot_.totalLength = state.totalLength;
   }
-  else if (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE)) {
-    impl.planner.commit(0, existingLength);
+  else if (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE) &&
+           !group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE)) {
+    impl.existingLength = existingLength;
+    if (impl.http) {
+      impl.startMode = CurlStartMode::InspectExisting;
+    }
+    else {
+      impl.planner.commit(0, existingLength);
+    }
   }
   if (impl.dryRun) {
     impl.planner.clear();
@@ -1028,9 +1083,15 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     return true;
   }
 
+  if (impl.startMode == CurlStartMode::InspectExisting) {
+    download->snapshot_.completedLength = 0;
+    download->snapshot_.sessionDownloadLength = 0;
+    download->snapshot_.state = CurlSnapshot::State::Active;
+    return true;
+  }
+
   const bool preserveExisting =
-      restoreState ||
-      (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE));
+      restoreState || impl.planner.completedLength() > 0;
   if (!openOutput(download, preserveExisting)) {
     return false;
   }
@@ -1042,7 +1103,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
 
 bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
                                const RangeLease& lease, bool primary,
-                               bool ranged)
+                               bool ranged, CurlHandlePurpose purpose)
 {
   auto& impl = *download->impl_;
   const auto taskOption = impl.group->getOption().get();
@@ -1056,6 +1117,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
       256_k, std::min<int64_t>(1_m, 32_m / impl.maxConnections)));
   transfer->writeBuffer.reserve(transfer->bufferLimit);
   transfer->primary = primary;
+  transfer->purpose = purpose;
   transfer->ranged = impl.http && ranged && !impl.dryRun;
   auto* easy = curl_easy_init();
   if (!easy) {
@@ -1129,7 +1191,9 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   SET_CURL_OPTION(CURLOPT_SOCKOPTFUNCTION, socketOptionCallback);
   SET_CURL_OPTION(CURLOPT_SOCKOPTDATA, const_cast<Option*>(taskOption));
   SET_CURL_OPTION(CURLOPT_HTTPAUTH, CURLAUTH_ANY);
-  SET_CURL_OPTION(CURLOPT_NOBODY, impl.dryRun ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_NOBODY,
+                  impl.dryRun || purpose == CurlHandlePurpose::HeadProbe ? 1L
+                                                                         : 0L);
   SET_CURL_OPTION(CURLOPT_FILETIME,
                   taskOption->getAsBool(PREF_REMOTE_TIME) ? 1L : 0L);
   SET_CURL_OPTION(CURLOPT_WRITEFUNCTION, writeData);
@@ -1290,6 +1354,26 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   return result;
 }
 
+bool CurlSession::startProbe(const std::shared_ptr<CurlDownload>& download,
+                             CurlHandlePurpose purpose)
+{
+  const bool rangeProbe = purpose == CurlHandlePurpose::RangeProbe;
+  const RangeLease lease{
+      0, rangeProbe ? 1 : std::numeric_limits<int64_t>::max(), 0,
+      download->impl_->preferredUriIndex};
+  if (!createHandle(download, lease, true, rangeProbe, purpose)) {
+    return false;
+  }
+  auto* handle = download->impl_->handles.back().get();
+  downloads_[handle->value] = std::make_pair(download, handle);
+  download->impl_->kickPending = true;
+  rebalanceLimits();
+  if (engine_) {
+    engine_->setNoWait(true);
+  }
+  return true;
+}
+
 std::unique_ptr<Command>
 CurlSession::start(const std::shared_ptr<CurlDownload>& download,
                    RequestGroup* group, DownloadEngine* engine)
@@ -1299,6 +1383,19 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
   if (prepare(download, group)) {
     auto& impl = *download->impl_;
     tasks_[download.get()] = download;
+    if (impl.startMode == CurlStartMode::InspectExisting) {
+      if (!startProbe(download, CurlHandlePurpose::RangeProbe)) {
+        failTask(download, error_code::NETWORK_PROBLEM,
+                 "Unable to inspect the existing output file", false);
+      }
+      return std::unique_ptr<Command>(new CurlDownloadCommand(
+          engine->newCUID(), download, this, group, engine));
+    }
+    if (impl.planner.complete()) {
+      finalize(download, -1);
+      return std::unique_ptr<Command>(new CurlDownloadCommand(
+          engine->newCUID(), download, this, group, engine));
+    }
     const auto rangeStart = impl.planner.contiguousLength();
     const bool ranged =
         impl.http && (impl.maxConnections > 1 || rangeStart > 0);
@@ -1313,7 +1410,8 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
     }
     rangeEnd = impl.planner.gapEnd(rangeStart, rangeEnd);
     const RangeLease lease{rangeStart, rangeEnd, 0, impl.preferredUriIndex};
-    if (!createHandle(download, lease, true, ranged)) {
+    if (!createHandle(download, lease, true, ranged,
+                      CurlHandlePurpose::Payload)) {
       fail(download.get(), error_code::NETWORK_PROBLEM,
            "Unable to start the curl transfer");
       tasks_.erase(download.get());
@@ -1426,7 +1524,8 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
       if (auto lease = impl.planner.takeReady(now)) {
         const bool ranged =
             impl.http && (impl.maxConnections > 1 || lease->begin > 0);
-        if (!createHandle(download, *lease, true, ranged)) {
+        if (!createHandle(download, *lease, true, ranged,
+                          CurlHandlePurpose::Payload)) {
           failTask(download, error_code::NETWORK_PROBLEM,
                    "Unable to restart the stream transfer");
           return;
@@ -1465,7 +1564,8 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
       if (!lease) {
         break;
       }
-      if (!createHandle(download, *lease, false, true)) {
+      if (!createHandle(download, *lease, false, true,
+                        CurlHandlePurpose::Payload)) {
         failTask(download, error_code::NETWORK_PROBLEM,
                  "Unable to create a ranged transfer");
         return;
@@ -1728,6 +1828,113 @@ void CurlSession::advance(const std::shared_ptr<CurlDownload>& download)
   }
 }
 
+void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
+                              CurlHandle* handle, CURLcode result,
+                              long responseCode, curl_off_t reportedLength,
+                              curl_off_t reportedFileTime)
+{
+  auto& impl = *download->impl_;
+  const auto purpose = handle->purpose;
+  const auto nativeFailure = failureMessage(*handle, result, responseCode);
+  const auto contentLength = handle->responseContentLength >= 0
+                                 ? handle->responseContentLength
+                                 : static_cast<int64_t>(reportedLength);
+  int64_t remoteLength = -1;
+  bool rangeSupported = false;
+  if (purpose == CurlHandlePurpose::RangeProbe) {
+    if (responseCode == 206 && handle->rangeAccepted) {
+      remoteLength = handle->responseTotalLength;
+      rangeSupported = true;
+    }
+    else if (responseCode == 200 && handle->fullResponseAccepted &&
+             contentLength >= 0) {
+      remoteLength = contentLength;
+    }
+    else if (responseCode == 416 && handle->unsatisfiedTotalLength >= 0) {
+      remoteLength = handle->unsatisfiedTotalLength;
+    }
+  }
+  else if (responseCode >= 200 && responseCode < 300 && contentLength >= 0) {
+    remoteLength = contentLength;
+  }
+
+  const auto responseEtag = handle->responseEtag;
+  const auto responseLastModified = handle->responseLastModified;
+  const bool invalidRange = handle->invalidRange;
+  cleanupHandle(*handle);
+  eraseHandle(impl, handle);
+
+  if (remoteLength < 0 && purpose == CurlHandlePurpose::RangeProbe) {
+    if (startProbe(download, CurlHandlePurpose::HeadProbe)) {
+      return;
+    }
+    failTask(download, error_code::NETWORK_PROBLEM,
+             "Unable to inspect the remote file", false);
+    return;
+  }
+  if (remoteLength < 0) {
+    failTask(download,
+             responseCode >= 400
+                 ? curlErrorCode(result, responseCode)
+                 : error_code::CANNOT_RESUME,
+             responseCode >= 400
+                 ? nativeFailure
+                 : "The remote file length is unavailable",
+             false);
+    return;
+  }
+  if (invalidRange) {
+    failTask(download, error_code::HTTP_PROTOCOL_ERROR,
+             "The server returned an invalid Content-Range response", false);
+    return;
+  }
+
+  if (strongEtag(responseEtag)) {
+    impl.etag = responseEtag;
+  }
+  impl.lastModified = responseLastModified;
+  download->snapshot_.totalLength = remoteLength;
+
+  switch (decideExistingFile(impl.existingLength, remoteLength,
+                             rangeSupported)) {
+  case ExistingFileDecision::Complete:
+    impl.planner.clear();
+    impl.planner.commit(0, remoteLength);
+    impl.planner.configure(remoteLength, std::max<int64_t>(1, remoteLength),
+                           {});
+    impl.plannerConfigured = true;
+    finalize(download, reportedFileTime);
+    return;
+  case ExistingFileDecision::Resume:
+    if (!openOutput(download, true)) {
+      failTask(download, download->snapshot_.errorCode,
+               download->snapshot_.error, false);
+      return;
+    }
+    impl.planner.clear();
+    impl.planner.commit(0, impl.existingLength);
+    impl.rangeValidated = true;
+    impl.startMode = CurlStartMode::Transfer;
+    download->snapshot_.completedLength = impl.existingLength;
+    configurePlanner(download);
+    if (download->failed()) {
+      return;
+    }
+    checkpoint(download, true);
+    schedule(download);
+    engine_->setNoWait(true);
+    return;
+  case ExistingFileDecision::Reject:
+    break;
+  }
+
+  const auto message =
+      impl.existingLength > remoteLength
+          ? "The local file is larger than the remote file"
+          : "The server does not support resuming this file";
+  failTask(download, error_code::CANNOT_RESUME, message, false);
+}
+
 void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
                          CurlHandle* handle, CURLcode result)
 {
@@ -1773,6 +1980,11 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
       logging::sanitizeText(primaryIp ? primaryIp : "unknown");
   const auto safeEffectiveUri =
       logging::sanitizeUri(effectiveUri ? effectiveUri : impl.currentUri);
+  if (handle->purpose != CurlHandlePurpose::Payload) {
+    finishProbe(download, handle, result, responseCode, reportedLength,
+                reportedFileTime);
+    return;
+  }
   try {
     flushWriteBuffer(impl, *handle);
     download->snapshot_.completedLength =

@@ -188,12 +188,9 @@
     "                              checksum while downloading a file if chunk\n" \
     "                              checksums are provided.")
 #define TEXT_CONTINUE                                                   \
-  _(" -c, --continue[=true|false]  Continue downloading a partially downloaded\n" \
-    "                              file. Use this option to resume a download\n" \
-    "                              started by a web browser or another program\n" \
-    "                              which downloads files sequentially from the\n" \
-    "                              beginning. Currently this option is only\n" \
-    "                              applicable to HTTP(S)/SFTP downloads.")
+  _(" -c, --continue[=true|false]  Verify and continue an existing stream file.\n" \
+    "                              Equal-length HTTP files complete without\n" \
+    "                              transferring payload data.")
 #define TEXT_USER_AGENT                                                 \
   _(" -U, --user-agent=USER_AGENT  Set user agent for http(s) downloads.")
 #define TEXT_NO_NETRC                                           \

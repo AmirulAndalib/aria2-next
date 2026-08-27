@@ -32,6 +32,10 @@ namespace aria2 {
 class RequestGroup;
 class CurlDownload;
 
+enum class CurlHandlePurpose { Payload, RangeProbe, HeadProbe };
+
+enum class CurlStartMode { Transfer, InspectExisting };
+
 struct CurlHandle {
   CurlDownload* download = nullptr;
   CURL* value = nullptr;
@@ -46,6 +50,7 @@ struct CurlHandle {
   std::chrono::steady_clock::time_point lastProgressAt;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
+  int64_t responseContentLength = -1;
   int64_t unsatisfiedTotalLength = -1;
   long responseCode = 0;
   bool ranged = false;
@@ -55,6 +60,7 @@ struct CurlHandle {
   bool primary = false;
   bool validatorMismatch = false;
   bool invalidRange = false;
+  CurlHandlePurpose purpose = CurlHandlePurpose::Payload;
   std::string responseEtag;
   std::string responseLastModified;
   std::string range;
@@ -76,6 +82,8 @@ struct CurlDownloadImpl {
   int maxConnections = 1;
   int fileNotFoundCount = 0;
   long httpVersion = 0;
+  int64_t existingLength = 0;
+  CurlStartMode startMode = CurlStartMode::Transfer;
   bool dryRun = false;
   bool http = false;
   bool rangeValidated = false;

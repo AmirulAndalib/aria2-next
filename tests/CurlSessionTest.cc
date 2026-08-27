@@ -38,6 +38,8 @@ public:
   void testAcceptedRangeResponse();
   void testErrorResponseDoesNotChangeIdentity();
   void testNonzeroRangeRejectsCompleteResponse();
+  void testUnsatisfiedRangeResponseForms();
+  void testExistingFileDecision();
   void testPlatformSslOptions();
   void testFailureMessageUsesTheFailureLayer();
   void sendHeader(CurlHandle& handle, const std::string& line);
@@ -47,6 +49,8 @@ A2_TEST(CurlSessionTest, testWriteErrorBoundary)
 A2_TEST(CurlSessionTest, testAcceptedRangeResponse)
 A2_TEST(CurlSessionTest, testErrorResponseDoesNotChangeIdentity)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
+A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
+A2_TEST(CurlSessionTest, testExistingFileDecision)
 A2_TEST(CurlSessionTest, testPlatformSslOptions)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 
@@ -131,6 +135,42 @@ void CurlSessionTest::testNonzeroRangeRejectsCompleteResponse()
   CHECK(!handle.fullResponseAccepted);
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
            CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
+}
+
+void CurlSessionTest::testUnsatisfiedRangeResponseForms()
+{
+  CurlDownload download({"https://example.test/file"});
+  CurlHandle handle;
+  handle.download = &download;
+
+  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
+  sendHeader(handle, "Content-Range: bytes */4096\r\n");
+  sendHeader(handle, "\r\n");
+  CHECK_EQ(4096, handle.unsatisfiedTotalLength);
+  CHECK(!handle.invalidRange);
+
+  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
+  sendHeader(handle, "Content-Range: */8192\r\n");
+  sendHeader(handle, "\r\n");
+  CHECK_EQ(8192, handle.unsatisfiedTotalLength);
+  CHECK(!handle.invalidRange);
+
+  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
+  sendHeader(handle, "\r\n");
+  CHECK_EQ(-1, handle.unsatisfiedTotalLength);
+  CHECK(!handle.invalidRange);
+}
+
+void CurlSessionTest::testExistingFileDecision()
+{
+  CHECK_EQ(ExistingFileDecision::Complete,
+           CurlSession::decideExistingFile(4096, 4096, false));
+  CHECK_EQ(ExistingFileDecision::Resume,
+           CurlSession::decideExistingFile(1024, 4096, true));
+  CHECK_EQ(ExistingFileDecision::Reject,
+           CurlSession::decideExistingFile(1024, 4096, false));
+  CHECK_EQ(ExistingFileDecision::Reject,
+           CurlSession::decideExistingFile(8192, 4096, true));
 }
 
 void CurlSessionTest::testPlatformSslOptions()

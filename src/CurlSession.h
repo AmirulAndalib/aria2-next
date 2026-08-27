@@ -35,6 +35,9 @@ class Option;
 class RequestGroup;
 class CurlSocketCommand;
 struct CurlHandle;
+enum class CurlHandlePurpose;
+
+enum class ExistingFileDecision { Complete, Resume, Reject };
 
 class CurlSession {
 public:
@@ -70,7 +73,14 @@ private:
   bool prepare(const std::shared_ptr<CurlDownload>& download,
                RequestGroup* group);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
-                    const RangeLease& lease, bool primary, bool ranged);
+                    const RangeLease& lease, bool primary, bool ranged,
+                    CurlHandlePurpose purpose);
+  bool startProbe(const std::shared_ptr<CurlDownload>& download,
+                  CurlHandlePurpose purpose);
+  void finishProbe(const std::shared_ptr<CurlDownload>& download,
+                   CurlHandle* handle, CURLcode result, long responseCode,
+                   curl_off_t reportedLength,
+                   curl_off_t reportedFileTime);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
   void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
@@ -97,6 +107,9 @@ private:
   static long platformSslOptions() noexcept;
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);
+  static ExistingFileDecision decideExistingFile(int64_t localLength,
+                                                  int64_t remoteLength,
+                                                  bool rangeSupported);
   static std::string gid(const CurlDownload* download);
   void rebalanceLimits();
   void socketAction(curl_socket_t socket, int events);
