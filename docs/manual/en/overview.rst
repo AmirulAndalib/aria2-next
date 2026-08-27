@@ -170,6 +170,10 @@ Linux and Android use OpenSSL default trust paths and honor ``SSL_CERT_FILE``
 and ``SSL_CERT_DIR``. A PEM CA file supplied with ``--ca-certificate`` replaces
 the default trust configuration for that transfer.
 
+Windows treats an unavailable certificate revocation service as a soft
+failure. Explicitly revoked certificates and other certificate validation
+failures remain fatal.
+
 By default, the bash completion file named ``aria2-next`` is installed to the
 default documentation directory. To change that directory, set
 ``-DARIA2_BASH_COMPLETION_DIR=/path/to/directory``.

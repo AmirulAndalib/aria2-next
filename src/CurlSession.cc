@@ -467,8 +467,19 @@ bool usefulCurlText(const std::string& value)
                      });
 }
 
-std::string curlFailureMessage(const CurlHandle& handle, CURLcode result,
-                               long responseCode)
+} // namespace
+
+long CurlSession::platformSslOptions() noexcept
+{
+#ifdef _WIN32
+  return CURLSSLOPT_REVOKE_BEST_EFFORT;
+#else
+  return 0L;
+#endif
+}
+
+std::string CurlSession::failureMessage(const CurlHandle& handle,
+                                        CURLcode result, long responseCode)
 {
   auto detail = handle.errorBuffer[0] != '\0'
                     ? std::string(handle.errorBuffer.data())
@@ -476,12 +487,11 @@ std::string curlFailureMessage(const CurlHandle& handle, CURLcode result,
   detail = containsSensitiveCurlText(detail)
                ? "Sensitive native diagnostic redacted"
                : logging::sanitizeUri(detail);
-  return responseCode > 0
-             ? "HTTP " + std::to_string(responseCode) + ": " + detail
-             : detail;
+  const bool httpFailure =
+      result == CURLE_HTTP_RETURNED_ERROR || responseCode >= 400;
+  return httpFailure ? "HTTP " + std::to_string(responseCode) + ": " + detail
+                     : detail;
 }
-
-} // namespace
 
 std::string CurlSession::gid(const CurlDownload* download)
 {
@@ -1155,6 +1165,9 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
   SET_CURL_OPTION(CURLOPT_PROXY_SSL_VERIFYHOST,
                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
+  const auto sslOptions = platformSslOptions();
+  SET_CURL_OPTION(CURLOPT_SSL_OPTIONS, sslOptions);
+  SET_CURL_OPTION(CURLOPT_PROXY_SSL_OPTIONS, sslOptions);
   const auto& minimumTls = taskOption->get(PREF_MIN_TLS_VERSION);
   const long sslVersion = minimumTls == A2_V_TLS13   ? CURL_SSLVERSION_TLSv1_3
                           : minimumTls == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
@@ -1755,7 +1768,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_PORT, &primaryPort);
     curl_easy_getinfo(handle->value, CURLINFO_EFFECTIVE_URL, &effectiveUri);
   }
-  const auto nativeFailure = curlFailureMessage(*handle, result, responseCode);
+  const auto nativeFailure = failureMessage(*handle, result, responseCode);
   const auto safePrimaryIp =
       logging::sanitizeText(primaryIp ? primaryIp : "unknown");
   const auto safeEffectiveUri =

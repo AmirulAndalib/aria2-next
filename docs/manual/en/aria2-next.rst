@@ -317,6 +317,8 @@ HTTP Specific Options
   Verify the peer using trusted certificate authorities.
 
   Windows builds use libcurl with Schannel and the native certificate policy.
+  An unavailable revocation service is treated as a soft failure. Explicitly
+  revoked certificates and other certificate validation failures remain fatal.
 
   Default: ``true``
 

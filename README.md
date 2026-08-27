@@ -169,7 +169,7 @@ PUID="$(id -u)" PGID="$(id -g)" \
 
 The container requires `PUID` and `PGID`. The entrypoint assigns writable mounts to those IDs and creates the configuration and session files when absent. Non-root IDs are recommended. UID or GID `0` is supported for environments that require elevated access and emits a startup warning. The default configuration enables JSON-RPC inside the container, stores downloads in `/downloads`, and keeps session state in `/var/lib/aria2-next`. Add `--rpc-secret=<token>` before exposing RPC beyond a trusted local network.
 
-Release binaries verify HTTPS certificates through libcurl by default. Windows uses Schannel and the native certificate store. macOS uses Apple SecTrust. Linux and Android use OpenSSL default trust paths and honor `SSL_CERT_FILE` and `SSL_CERT_DIR`. Explicit CA files remain available through `--ca-certificate`.
+Release binaries verify HTTPS certificates through libcurl by default. Windows uses Schannel and the native certificate store; unavailable revocation services are treated as a soft failure while explicitly revoked certificates remain rejected. macOS uses Apple SecTrust. Linux and Android use OpenSSL default trust paths and honor `SSL_CERT_FILE` and `SSL_CERT_DIR`. Explicit CA files remain available through `--ca-certificate`.
 
 ## Maintenance Audit
 

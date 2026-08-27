@@ -1,5 +1,7 @@
 #include "CurlSession.h"
 
+#include <algorithm>
+
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
 #include "DiskWriter.h"
@@ -36,6 +38,8 @@ public:
   void testAcceptedRangeResponse();
   void testErrorResponseDoesNotChangeIdentity();
   void testNonzeroRangeRejectsCompleteResponse();
+  void testPlatformSslOptions();
+  void testFailureMessageUsesTheFailureLayer();
   void sendHeader(CurlHandle& handle, const std::string& line);
 };
 
@@ -43,6 +47,8 @@ A2_TEST(CurlSessionTest, testWriteErrorBoundary)
 A2_TEST(CurlSessionTest, testAcceptedRangeResponse)
 A2_TEST(CurlSessionTest, testErrorResponseDoesNotChangeIdentity)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
+A2_TEST(CurlSessionTest, testPlatformSslOptions)
+A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 
 void CurlSessionTest::sendHeader(CurlHandle& handle, const std::string& line)
 {
@@ -125,6 +131,27 @@ void CurlSessionTest::testNonzeroRangeRejectsCompleteResponse()
   CHECK(!handle.fullResponseAccepted);
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
            CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
+}
+
+void CurlSessionTest::testPlatformSslOptions()
+{
+#ifdef _WIN32
+  CHECK_EQ(CURLSSLOPT_REVOKE_BEST_EFFORT, CurlSession::platformSslOptions());
+#else
+  CHECK_EQ(0L, CurlSession::platformSslOptions());
+#endif
+}
+
+void CurlSessionTest::testFailureMessageUsesTheFailureLayer()
+{
+  CurlHandle handle;
+  const std::string detail = "native TLS failure";
+  std::copy(detail.begin(), detail.end(), handle.errorBuffer.begin());
+
+  CHECK_EQ(detail,
+           CurlSession::failureMessage(handle, CURLE_SSL_CONNECT_ERROR, 302));
+  CHECK_EQ(std::string("HTTP 503: ") + detail,
+           CurlSession::failureMessage(handle, CURLE_HTTP_RETURNED_ERROR, 503));
 }
 
 } // namespace aria2

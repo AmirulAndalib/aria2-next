@@ -94,6 +94,9 @@ private:
   void closeOutput(CurlDownload* download) noexcept;
   static void fail(CurlDownload* download, error_code::Value errorCode,
                    const std::string& message) noexcept;
+  static long platformSslOptions() noexcept;
+  static std::string failureMessage(const CurlHandle& handle, CURLcode result,
+                                    long responseCode);
   static std::string gid(const CurlDownload* download);
   void rebalanceLimits();
   void socketAction(curl_socket_t socket, int events);
