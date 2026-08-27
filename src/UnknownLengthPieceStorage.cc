@@ -34,6 +34,7 @@
 /* copyright --> */
 #include "UnknownLengthPieceStorage.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "DefaultDiskWriter.h"
@@ -165,6 +166,16 @@ int64_t UnknownLengthPieceStorage::getCompletedLength()
     return piece_->getLength();
   }
   return totalLength_;
+}
+
+int64_t UnknownLengthPieceStorage::getCompletedLength(int64_t offset,
+                                                      int64_t length)
+{
+  const auto completed = getCompletedLength();
+  if (offset < 0 || length <= 0 || offset >= completed) {
+    return 0;
+  }
+  return std::min(length, completed - offset);
 }
 
 std::shared_ptr<DiskAdaptor> UnknownLengthPieceStorage::getDiskAdaptor()

@@ -29,6 +29,7 @@
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/address.hpp>
 #include <libtorrent/announce_entry.hpp>
+#include <libtorrent/close_reason.hpp>
 #include <libtorrent/download_priority.hpp>
 #include <libtorrent/error_code.hpp>
 #include <libtorrent/ip_filter.hpp>
@@ -149,6 +150,7 @@ struct BtSession::Impl {
   std::map<std::string, PendingDelete> pendingDeletes;
   uint64_t payloadDownloaded = 0;
   uint64_t payloadUploaded = 0;
+  uint64_t loggingRevision = 0;
   int downloadRateLimit = 0;
   BtPeerBlocklist blocklist;
   uint64_t filterRevision = 0;
@@ -201,6 +203,7 @@ struct BtSession::Impl {
   explicit Impl(const Option* option)
       : option(option),
         config(makeBtConfig(option)),
+        loggingRevision(logging::revision()),
         downloadRateLimit(option->getAsInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT)),
         sessionStateFile(state::btSessionFile(option))
   {
@@ -305,8 +308,8 @@ lt::session_params makeSessionParams(const Option* option,
     if (!hasDhtNodes(params)) {
       loadedState.clear();
     }
-    A2_LOG_DEBUG(fmt("Loaded BitTorrent session state from %s",
-                     stateFile.c_str()));
+    A2_LOG_TRACE(
+        fmt("Loaded BitTorrent session state from %s", stateFile.c_str()));
     return params;
   }
   catch (const std::exception& error) {
@@ -344,7 +347,7 @@ void saveSessionState(BtSession::Impl* impl)
       return;
     }
     impl->lastSessionState = std::move(state);
-    A2_LOG_DEBUG(fmt("Saved BitTorrent session state to %s",
+    A2_LOG_TRACE(fmt("Saved BitTorrent session state to %s",
                      impl->sessionStateFile.c_str()));
   }
   catch (const std::exception& error) {
@@ -898,7 +901,6 @@ void BtSession::requestProgressRefresh(BtDownload* download)
   }
   download->beginProgressRefresh();
   download->impl_->handle.post_status(
-      lt::torrent_handle::query_accurate_download_counters |
       lt::torrent_handle::query_pieces | lt::torrent_handle::query_name |
       lt::torrent_handle::query_save_path);
   download->impl_->handle.post_file_progress({});
@@ -1246,6 +1248,16 @@ void BtSession::restorePaused(const std::shared_ptr<BtDownload>& download,
 
 void BtSession::poll()
 {
+  const auto logRevision = logging::revision();
+  if (impl_->loggingRevision != logRevision) {
+    impl_->loggingRevision = logRevision;
+    lt::settings_pack settings;
+    settings.set_int(lt::settings_pack::alert_mask, btAlertMask());
+    impl_->session->apply_settings(std::move(settings));
+    A2_LOG_DEBUG(fmt("component=bittorrent event=diagnostics_reconfigured "
+                     "alert_mask=%d",
+                     btAlertMask()));
+  }
   const auto now = std::chrono::system_clock::now();
   const bool resumedAfterSleep =
       now - impl_->lastPoll > std::chrono::seconds(100);
@@ -1278,6 +1290,12 @@ void BtSession::poll()
         continue;
       }
       if (added->error) {
+        A2_LOG_ERROR(
+            fmt("component=bittorrent event=task_add_failed gid=%s "
+                "category=%s code=%d message=%s",
+                GroupId::toHex(download->group()->getGID()).c_str(),
+                added->error.category().name(), added->error.value(),
+                logging::sanitizeText(added->error.message()).c_str()));
         download->impl_->nativeState = BtNativeState::Detached;
         download->setError(added->error.message());
         forgetHandles(download.get());
@@ -1292,6 +1310,10 @@ void BtSession::poll()
       download->impl_->appliedTrackerRevision =
           download->impl_->trackerRevision;
       impl_->handles[added->handle] = download;
+      A2_LOG_INFO(fmt("component=bittorrent event=task_attached gid=%s "
+                      "metadata=%s",
+                      GroupId::toHex(download->group()->getGID()).c_str(),
+                      download->hasMetadata() ? "ready" : "pending"));
       if (removalPending) {
         const auto managed = impl_->downloads.find(download->impl_->gid);
         if (managed != impl_->downloads.end()) {
@@ -1340,6 +1362,83 @@ void BtSession::poll()
                  ? std::shared_ptr<BtDownload>{}
                  : found->second.lock();
     };
+    auto gidFor = [](const std::shared_ptr<BtDownload>& download) {
+      return download && download->group()
+                 ? GroupId::toHex(download->group()->getGID())
+                 : std::string("unknown");
+    };
+
+    if (auto* native = lt::alert_cast<lt::log_alert>(alert)) {
+      A2_LOG_TRACE(fmt("component=bittorrent event=native_session message=%s",
+                       logging::sanitizeText(native->log_message()).c_str()));
+      continue;
+    }
+    if (auto* native = lt::alert_cast<lt::torrent_log_alert>(alert)) {
+      const auto download = findDownload(native->handle);
+      A2_LOG_TRACE(fmt("component=bittorrent event=native_torrent gid=%s "
+                       "message=%s",
+                       gidFor(download).c_str(),
+                       logging::sanitizeText(native->log_message()).c_str()));
+      continue;
+    }
+    if (auto* peer = lt::alert_cast<lt::peer_error_alert>(alert)) {
+      const auto download = findDownload(peer->handle);
+      A2_LOG_DEBUG(fmt("component=bittorrent event=peer_error gid=%s "
+                       "operation=%s category=%s code=%d message=%s",
+                       gidFor(download).c_str(), lt::operation_name(peer->op),
+                       peer->error.category().name(), peer->error.value(),
+                       logging::sanitizeText(peer->error.message()).c_str()));
+      continue;
+    }
+    if (auto* peer = lt::alert_cast<lt::peer_connect_alert>(alert)) {
+      const auto download = findDownload(peer->handle);
+      A2_LOG_TRACE(fmt(
+          "component=bittorrent event=peer_connected gid=%s "
+          "direction=%s message=%s",
+          gidFor(download).c_str(),
+          peer->direction == lt::peer_connect_alert::direction_t::in ? "in"
+                                                                     : "out",
+          logging::sanitizeText(peer->message()).c_str()));
+      continue;
+    }
+    if (auto* peer = lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
+      if (peer->reason == lt::close_reason_t::torrent_removed) {
+        continue;
+      }
+      const auto download = findDownload(peer->handle);
+      A2_LOG_TRACE(fmt("component=bittorrent event=peer_disconnected gid=%s "
+                       "operation=%s category=%s code=%d message=%s",
+                       gidFor(download).c_str(), lt::operation_name(peer->op),
+                       peer->error.category().name(), peer->error.value(),
+                       logging::sanitizeText(peer->error.message()).c_str()));
+      continue;
+    }
+    if (auto* tracker = lt::alert_cast<lt::tracker_announce_alert>(alert)) {
+      const auto download = findDownload(tracker->handle);
+      A2_LOG_DEBUG(
+          fmt("component=bittorrent event=tracker_announce gid=%s "
+              "family=%s event_code=%d url=%s",
+              gidFor(download).c_str(),
+              tracker->local_endpoint.address().is_v6() ? "ipv6" : "ipv4",
+              static_cast<int>(tracker->event),
+              logging::sanitizeUri(tracker->tracker_url()).c_str()));
+      continue;
+    }
+    if (auto* tracker = lt::alert_cast<lt::tracker_reply_alert>(alert)) {
+      const auto download = findDownload(tracker->handle);
+      A2_LOG_DEBUG(
+          fmt("component=bittorrent event=tracker_reply gid=%s "
+              "family=%s peers=%d url=%s",
+              gidFor(download).c_str(),
+              tracker->local_endpoint.address().is_v6() ? "ipv6" : "ipv4",
+              tracker->num_peers,
+              logging::sanitizeUri(tracker->tracker_url()).c_str()));
+      continue;
+    }
+    if (lt::alert_cast<lt::dht_bootstrap_alert>(alert)) {
+      A2_LOG_INFO("component=bittorrent event=dht_bootstrap_complete");
+      continue;
+    }
 
     if (auto* checked = lt::alert_cast<lt::torrent_checked_alert>(alert)) {
       auto download = findDownload(checked->handle);
@@ -1495,10 +1594,8 @@ void BtSession::poll()
             snapshot.fileSelectionState ==
                 BtSnapshot::FileSelectionState::None &&
             !snapshot.error.present) {
-          if (!status.is_finished) {
-            snapshot.selectedComplete = false;
-          }
-          snapshot.complete = status.is_seeding;
+          download->applyNativeCompletion(status.is_finished,
+                                          status.is_seeding);
         }
       }
       continue;
@@ -1603,6 +1700,12 @@ void BtSession::poll()
           if (awaitSelection) {
             download->beginFileSelectionPause();
           }
+          A2_LOG_INFO(
+              fmt("component=bittorrent event=metadata_received gid=%s "
+                  "files=%lu selection=%s",
+                  gidFor(download).c_str(),
+                  static_cast<unsigned long>(info->layout().num_files()),
+                  awaitSelection ? "awaiting" : "ready"));
           try {
             applyDownloadOptions(managed,
                                  download->group()->getOption().get());
@@ -1628,6 +1731,9 @@ void BtSession::poll()
     if (auto* finished = lt::alert_cast<lt::torrent_finished_alert>(alert)) {
       auto download = findDownload(finished->handle);
       if (download) {
+        A2_LOG_INFO(fmt("component=bittorrent event=payload_finished gid=%s",
+                        gidFor(download).c_str()));
+        download->impl_->handle.post_file_progress({});
         requestResumeCheckpoint(download.get(), true);
       }
       continue;
@@ -1728,7 +1834,8 @@ void BtSession::poll()
     if (auto* failed =
             lt::alert_cast<lt::torrent_delete_failed_alert>(alert)) {
       finishNativeDelete(hashKey(failed->info_hashes),
-                         failed->error.message());
+                         failed->error ? failed->error.message()
+                                       : std::string());
       continue;
     }
 
@@ -1770,6 +1877,12 @@ void BtSession::poll()
         snapshot.message = error->error.message();
         download->setError(std::move(snapshot));
       }
+      A2_LOG_ERROR(fmt("component=bittorrent event=task_failed gid=%s "
+                       "category=%s code=%d file=%s message=%s",
+                       gidFor(download).c_str(), error->error.category().name(),
+                       error->error.value(),
+                       logging::sanitizeText(error->filename()).c_str(),
+                       logging::sanitizeText(error->error.message()).c_str()));
       continue;
     }
 
@@ -1804,23 +1917,29 @@ void BtSession::poll()
     }
 
     if (auto* tracker = lt::alert_cast<lt::tracker_error_alert>(alert)) {
+      const auto download = findDownload(tracker->handle);
       if (tracker->times_in_row == 1 || tracker->times_in_row % 10 == 0) {
-        A2_LOG_DEBUG(fmt(
-            "BitTorrent tracker announce failed: url=%s operation=%s "
-            "error=%s consecutive=%d",
-            logging::sanitizeUri(tracker->tracker_url()).c_str(),
-            lt::operation_name(tracker->op),
-            logging::sanitizeText(tracker->error.message()).c_str(),
-            tracker->times_in_row));
+        A2_LOG_DEBUG(
+            fmt("component=bittorrent event=tracker_error gid=%s family=%s "
+                "url=%s operation=%s error=%s consecutive=%d",
+                gidFor(download).c_str(),
+                tracker->local_endpoint.address().is_v6() ? "ipv6" : "ipv4",
+                logging::sanitizeUri(tracker->tracker_url()).c_str(),
+                lt::operation_name(tracker->op),
+                logging::sanitizeText(tracker->error.message()).c_str(),
+                tracker->times_in_row));
       }
       continue;
     }
 
     if (auto* tracker = lt::alert_cast<lt::tracker_warning_alert>(alert)) {
-      A2_LOG_DEBUG(fmt("BitTorrent tracker warning: url=%s message=%s",
-                       logging::sanitizeUri(tracker->tracker_url()).c_str(),
-                       logging::sanitizeText(tracker->warning_message())
-                           .c_str()));
+      const auto download = findDownload(tracker->handle);
+      A2_LOG_DEBUG(
+          fmt("component=bittorrent event=tracker_warning gid=%s "
+              "url=%s message=%s",
+              gidFor(download).c_str(),
+              logging::sanitizeUri(tracker->tracker_url()).c_str(),
+              logging::sanitizeText(tracker->warning_message()).c_str()));
       continue;
     }
 
@@ -1939,7 +2058,6 @@ void BtSession::poll()
       impl_->lastUpdate.difference(global::wallclock()) >= 1_s) {
     impl_->lastUpdate = global::wallclock();
     auto query =
-        lt::torrent_handle::query_accurate_download_counters |
         lt::torrent_handle::query_name | lt::torrent_handle::query_save_path;
     if (impl_->lastPieceUpdate.isZero() ||
         impl_->lastPieceUpdate.difference(global::wallclock()) >= 5_s) {
@@ -1956,10 +2074,12 @@ void BtSession::poll()
     for (const auto& entry : impl_->downloads) {
       const auto& download = entry.second;
       if (download->impl_->handle.is_valid() && download->active()) {
+        if (download->hasMetadata() &&
+            !download->snapshot_.selectedComplete) {
+          download->impl_->handle.post_file_progress({});
+        }
         if (updatePeers) {
           download->impl_->handle.post_peer_info();
-          download->impl_->handle.post_file_progress(
-              lt::torrent_handle::piece_granularity);
         }
         if (download->impl_->lastTrackerUpdate.isZero() ||
             download->impl_->lastTrackerUpdate.difference(

@@ -13,6 +13,7 @@
 #include "Log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <memory>
 #include <mutex>
@@ -37,7 +38,7 @@ namespace logging {
 Settings::Settings()
     : maxFileSize(10 * 1024 * 1024),
       maxFiles(4),
-      fileLevel(spdlog::level::trace),
+      fileLevel(spdlog::level::debug),
       consoleLevel(spdlog::level::info),
       consoleOutput(true),
       colorOutput(true),
@@ -50,6 +51,7 @@ namespace {
 std::mutex configMutex;
 Settings currentSettings;
 std::shared_ptr<spdlog::logger> currentLogger;
+std::atomic<uint64_t> settingsRevision{1};
 
 class BoundedFormatter final : public spdlog::formatter {
 public:
@@ -236,6 +238,8 @@ Settings getSettings()
   return currentSettings;
 }
 
+uint64_t revision() { return settingsRevision.load(std::memory_order_relaxed); }
+
 spdlog::level::level_enum parseLevel(const std::string& level)
 {
   return spdlog::level::from_str(level);
@@ -310,14 +314,18 @@ std::string summarizeHttpMessage(const std::string& value)
       const auto secondSpace = firstSpace == std::string::npos
                                    ? std::string::npos
                                    : line.find(' ', firstSpace + 1);
-      if (secondSpace != std::string::npos &&
-          line.compare(0, 5, "HTTP/") != 0) {
-        line.replace(firstSpace + 1, secondSpace - firstSpace - 1,
-                     sanitizeUri(line.substr(firstSpace + 1,
-                                             secondSpace - firstSpace - 1)));
+      const auto firstColon = line.find(':');
+      if (line.compare(0, 5, "HTTP/") == 0 ||
+          (secondSpace != std::string::npos &&
+           (firstColon == std::string::npos || firstColon > firstSpace))) {
+        if (line.compare(0, 5, "HTTP/") != 0) {
+          line.replace(firstSpace + 1, secondSpace - firstSpace - 1,
+                       sanitizeUri(line.substr(firstSpace + 1,
+                                               secondSpace - firstSpace - 1)));
+        }
+        result = sanitizeText(line);
+        continue;
       }
-      result = sanitizeText(line);
-      continue;
     }
 
     const auto colon = line.find(':');
@@ -328,8 +336,9 @@ std::string summarizeHttpMessage(const std::string& value)
     std::transform(name.begin(), name.end(), name.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     if (name != "content-length" && name != "content-range" &&
-        name != "content-type" && name != "range" &&
-        name != "accept-ranges" && name != "location") {
+        name != "content-type" && name != "content-encoding" &&
+        name != "range" && name != "accept-ranges" && name != "etag" &&
+        name != "last-modified" && name != "location") {
       continue;
     }
     auto content = line.substr(colon + 1);
@@ -339,8 +348,10 @@ std::string summarizeHttpMessage(const std::string& value)
     if (name == "location") {
       content = sanitizeUri(content);
     }
-    result += " | " + sanitizeText(line.substr(0, colon)) + "=" +
-              sanitizeText(content);
+    if (!result.empty()) {
+      result += " | ";
+    }
+    result += sanitizeText(line.substr(0, colon)) + "=" + sanitizeText(content);
   }
   return result;
 }
@@ -359,6 +370,7 @@ void configure(const Settings& settings)
 
   auto previous = std::atomic_exchange(&currentLogger, replacement);
   currentSettings = settings;
+  settingsRevision.fetch_add(1, std::memory_order_relaxed);
   if (previous) {
     previous->flush();
   }
@@ -378,6 +390,7 @@ void shutdown()
   auto previous =
       std::atomic_exchange(&currentLogger, std::shared_ptr<spdlog::logger>());
   currentSettings = Settings();
+  settingsRevision.fetch_add(1, std::memory_order_relaxed);
   if (previous) {
     previous->flush();
   }
@@ -394,6 +407,18 @@ void write(spdlog::level::level_enum level, const char* sourceFile,
   const auto safeMessage = sanitizeText(message ? message : "");
   logger()->log(spdlog::source_loc(sourceFile, lineNum, ""), level,
                 spdlog::string_view_t(safeMessage));
+}
+
+void tryWrite(spdlog::level::level_enum level, const char* sourceFile,
+              int lineNum, const std::string& message) noexcept
+{
+  try {
+    if (enabled(level)) {
+      write(level, sourceFile, lineNum, message);
+    }
+  }
+  catch (...) {
+  }
 }
 
 void write(spdlog::level::level_enum level, const char* sourceFile,

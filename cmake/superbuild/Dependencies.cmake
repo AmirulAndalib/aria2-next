@@ -370,7 +370,7 @@ if(ARIA2_ENABLE_BITTORRENT)
       -Dstreaming=ON
       -Di2p=OFF
       -Dwebtorrent=OFF
-      -Dlogging=OFF
+      -Dlogging=ON
       -Dencryption=ON
       -Ddht=ON
     UPDATE_COMMAND ""

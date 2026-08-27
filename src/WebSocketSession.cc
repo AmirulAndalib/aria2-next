@@ -44,6 +44,7 @@
 #include "message.h"
 #include "DownloadEngine.h"
 #include "DelayedCommand.h"
+#include "DlAbortEx.h"
 #include "WebSocketInteractionCommand.h"
 #include "rpc_helper.h"
 #include "RpcResponse.h"
@@ -75,7 +76,21 @@ ssize_t sendCallback(wslay_event_context_ptr wsctx, const uint8_t* data,
     return r;
   }
   catch (RecoverableException& e) {
-    A2_LOG_TRACE_EX(EX_EXCEPTION_CAUGHT, e);
+    try {
+      logging::tryWrite(
+          spdlog::level::debug, __FILE__, __LINE__,
+          fmt("component=rpc event=websocket_socket_send_failed message=%s",
+              logging::sanitizeText(e.what()).c_str()));
+    }
+    catch (...) {
+    }
+    wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
+    return -1;
+  }
+  catch (...) {
+    logging::tryWrite(
+        spdlog::level::err, __FILE__, __LINE__,
+        "component=rpc event=websocket_socket_send_failed message=unknown");
     wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
     return -1;
   }
@@ -106,7 +121,21 @@ ssize_t recvCallback(wslay_event_context_ptr wsctx, uint8_t* buf, size_t len,
     return r;
   }
   catch (RecoverableException& e) {
-    A2_LOG_TRACE_EX(EX_EXCEPTION_CAUGHT, e);
+    try {
+      logging::tryWrite(
+          spdlog::level::debug, __FILE__, __LINE__,
+          fmt("component=rpc event=websocket_socket_receive_failed message=%s",
+              logging::sanitizeText(e.what()).c_str()));
+    }
+    catch (...) {
+    }
+    wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
+    return -1;
+  }
+  catch (...) {
+    logging::tryWrite(
+        spdlog::level::err, __FILE__, __LINE__,
+        "component=rpc event=websocket_socket_receive_failed message=unknown");
     wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
     return -1;
   }
@@ -139,41 +168,65 @@ void addResponse(WebSocketSession* wsSession,
 } // namespace
 
 namespace {
+void onFrameRecvStart(
+    const struct wslay_event_on_frame_recv_start_arg* arg, void* userData)
+{
+  auto* wsSession = reinterpret_cast<WebSocketSession*>(userData);
+  wsSession->setIgnorePayload(wslay_is_ctrl_frame(arg->opcode));
+}
+
 void onFrameRecvStartCallback(
     wslay_event_context_ptr wsctx,
     const struct wslay_event_on_frame_recv_start_arg* arg, void* userData)
 {
-  WebSocketSession* wsSession = reinterpret_cast<WebSocketSession*>(userData);
-  wsSession->setIgnorePayload(wslay_is_ctrl_frame(arg->opcode));
-}
-} // namespace
-
-namespace {
-void onFrameRecvChunkCallback(
-    wslay_event_context_ptr wsctx,
-    const struct wslay_event_on_frame_recv_chunk_arg* arg, void* userData)
-{
-  WebSocketSession* wsSession = reinterpret_cast<WebSocketSession*>(userData);
-  if (!wsSession->getIgnorePayload()) {
-    // The return value is ignored here. It will be evaluated in
-    // onMsgRecvCallback.
-    wsSession->parseUpdate(arg->data, arg->data_length);
+  try {
+    onFrameRecvStart(arg, userData);
+  }
+  catch (...) {
+    logging::tryWrite(
+        spdlog::level::err, __FILE__, __LINE__,
+        "component=rpc event=websocket_frame_start_failed message=unknown");
+    wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
   }
 }
 } // namespace
 
 namespace {
-void onMsgRecvCallback(wslay_event_context_ptr wsctx,
-                       const struct wslay_event_on_msg_recv_arg* arg,
-                       void* userData)
+void onFrameRecvChunk(
+    const struct wslay_event_on_frame_recv_chunk_arg* arg, void* userData)
 {
-  WebSocketSession* wsSession = reinterpret_cast<WebSocketSession*>(userData);
+  auto* wsSession = reinterpret_cast<WebSocketSession*>(userData);
+  if (!wsSession->getIgnorePayload()) {
+    wsSession->parseUpdate(arg->data, arg->data_length);
+  }
+}
+
+void onFrameRecvChunkCallback(
+    wslay_event_context_ptr wsctx,
+    const struct wslay_event_on_frame_recv_chunk_arg* arg, void* userData)
+{
+  try {
+    onFrameRecvChunk(arg, userData);
+  }
+  catch (...) {
+    logging::tryWrite(
+        spdlog::level::err, __FILE__, __LINE__,
+        "component=rpc event=websocket_frame_receive_failed message=unknown");
+    wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
+  }
+}
+} // namespace
+
+namespace {
+void onMsgRecv(const struct wslay_event_on_msg_recv_arg* arg, void* userData)
+{
+  auto* wsSession = reinterpret_cast<WebSocketSession*>(userData);
   if (!wslay_is_ctrl_frame(arg->opcode)) {
-    // TODO Only process text frame
     ssize_t error = 0;
     auto json = wsSession->parseFinal(nullptr, 0, error);
     if (error < 0) {
-      A2_LOG_DEBUG("Failed to parse JSON-RPC request");
+      logging::tryWrite(spdlog::level::debug, __FILE__, __LINE__,
+                        "component=rpc event=json_request_parse_failed");
       RpcResponse res(
           createJsonRpcErrorResponse(-32700, "Parse error.", Null::g()));
       addResponse(wsSession, res);
@@ -214,6 +267,21 @@ void onMsgRecvCallback(wslay_event_context_ptr wsctx,
     addResponse(wsSession, res);
   }
 }
+
+void onMsgRecvCallback(wslay_event_context_ptr wsctx,
+                       const struct wslay_event_on_msg_recv_arg* arg,
+                       void* userData)
+{
+  try {
+    onMsgRecv(arg, userData);
+  }
+  catch (...) {
+    logging::tryWrite(
+        spdlog::level::err, __FILE__, __LINE__,
+        "component=rpc event=websocket_message_failed message=unknown");
+    wslay_event_set_error(wsctx, WSLAY_ERR_CALLBACK_FAILURE);
+  }
+}
 } // namespace
 
 WebSocketSession::WebSocketSession(const std::shared_ptr<SocketCore>& socket,
@@ -234,7 +302,10 @@ WebSocketSession::WebSocketSession(const std::shared_ptr<SocketCore>& socket,
   callbacks.on_frame_recv_chunk_callback = onFrameRecvChunkCallback;
 
   int r = wslay_event_context_server_init(&wsctx_, &callbacks, this);
-  assert(r == 0);
+  if (r != 0) {
+    throw DL_ABORT_EX(
+        fmt("Unable to initialize WebSocket session: wslay=%d", r));
+  }
   wslay_event_config_set_no_buffering(wsctx_, 1);
 }
 
@@ -248,22 +319,24 @@ bool WebSocketSession::finish() { return !wantRead() && !wantWrite(); }
 
 int WebSocketSession::onReadEvent()
 {
-  if (wslay_event_recv(wsctx_) == 0) {
+  const auto result = wslay_event_recv(wsctx_);
+  if (result == 0) {
     return 0;
   }
-  else {
-    return -1;
-  }
+  A2_LOG_WARN(
+      fmt("component=rpc event=websocket_receive_failed wslay=%d", result));
+  return -1;
 }
 
 int WebSocketSession::onWriteEvent()
 {
-  if (wslay_event_send(wsctx_) == 0) {
+  const auto result = wslay_event_send(wsctx_);
+  if (result == 0) {
     return 0;
   }
-  else {
-    return -1;
-  }
+  A2_LOG_WARN(
+      fmt("component=rpc event=websocket_send_failed wslay=%d", result));
+  return -1;
 }
 
 namespace {
@@ -296,13 +369,15 @@ void WebSocketSession::addTextMessage(const std::string& msg, bool delayed)
         make_unique<DelayedCommand>(cuid, e, 1_s, std::move(c), false));
     return;
   }
-
-  // TODO Don't add text message if the size of outbound queue in
-  // wsctx_ exceeds certain limit.
   wslay_event_msg arg = {WSLAY_TEXT_FRAME,
                          reinterpret_cast<const uint8_t*>(msg.c_str()),
                          msg.size()};
-  wslay_event_queue_msg(wsctx_, &arg);
+  const auto result = wslay_event_queue_msg(wsctx_, &arg);
+  if (result != 0) {
+    A2_LOG_WARN(fmt("component=rpc event=websocket_queue_failed wslay=%d "
+                    "bytes=%lu",
+                    result, static_cast<unsigned long>(msg.size())));
+  }
 }
 
 bool WebSocketSession::closeReceived()

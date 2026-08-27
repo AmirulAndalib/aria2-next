@@ -610,6 +610,38 @@ int64_t RequestGroup::getCompletedLength() const
   return pieceStorage_->getCompletedLength();
 }
 
+std::vector<int64_t> RequestGroup::getFileCompletedLengths() const
+{
+  const auto& files = downloadContext_->getFileEntries();
+  std::vector<int64_t> completed(files.size(), 0);
+  if (curlDownload_) {
+    if (!completed.empty()) {
+      completed[0] =
+          std::max<int64_t>(0, curlDownload_->snapshot().completedLength);
+    }
+    return completed;
+  }
+#ifdef ENABLE_BITTORRENT
+  if (btDownload_) {
+    const auto& snapshots = btDownload_->snapshot().files;
+    const auto count = std::min(completed.size(), snapshots.size());
+    for (size_t index = 0; index < count; ++index) {
+      completed[index] = std::clamp<int64_t>(snapshots[index].completedLength,
+                                             0, files[index]->getLength());
+    }
+    return completed;
+  }
+#endif // ENABLE_BITTORRENT
+  if (!pieceStorage_) {
+    return completed;
+  }
+  for (size_t index = 0; index < files.size(); ++index) {
+    completed[index] = pieceStorage_->getCompletedLength(
+        files[index]->getOffset(), files[index]->getLength());
+  }
+  return completed;
+}
+
 void RequestGroup::validateFilename(const std::string& expectedFilename,
                                     const std::string& actualFilename) const
 {
@@ -906,6 +938,7 @@ std::shared_ptr<DownloadResult> RequestGroup::createDownloadResult() const
   res->gid = gid_;
   res->attrs = downloadContext_->getAttributes();
   res->fileEntries = downloadContext_->getFileEntries();
+  res->fileCompletedLengths = getFileCompletedLengths();
   res->inMemoryDownload = inMemoryDownload_;
   res->sessionDownloadLength = st.sessionDownloadLength;
   res->sessionTime = std::chrono::duration_cast<std::chrono::milliseconds>(

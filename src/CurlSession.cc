@@ -412,7 +412,84 @@ error_code::Value curlErrorCode(CURLcode result, long responseCode)
   }
 }
 
+bool containsSensitiveCurlText(const std::string& value)
+{
+  std::string lowerValue(value);
+  std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  static const char* sensitive[] = {"authorization:", "proxy-authorization:",
+                                    "cookie:",        "set-cookie:",
+                                    "password",       "bearer ",
+                                    "private key",    "client certificate"};
+  return std::any_of(std::begin(sensitive), std::end(sensitive),
+                     [&](const char* marker) {
+                       return lowerValue.find(marker) != std::string::npos;
+                     });
+}
+
+bool usefulCurlText(const std::string& value)
+{
+  std::string lowerValue(value);
+  std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  if (lowerValue.find("netrc file") != std::string::npos ||
+      lowerValue.find("newsession ticket") != std::string::npos ||
+      lowerValue.find("tls handshake") != std::string::npos ||
+      lowerValue.find("change cipher") != std::string::npos ||
+      lowerValue.find("certificate level") != std::string::npos ||
+      lowerValue.find("server certificate:") != std::string::npos ||
+      lowerValue.find("subject:") == 0 || lowerValue.find("issuer:") == 0 ||
+      lowerValue.find("start date:") == 0 ||
+      lowerValue.find("expire date:") == 0) {
+    return false;
+  }
+  static const char* useful[] = {"was resolved",
+                                 "trying ",
+                                 "established connection",
+                                 "connected to",
+                                 "reusing existing",
+                                 "ssl connection using",
+                                 "certificate verified",
+                                 "alpn: server",
+                                 "using http/",
+                                 "request completely",
+                                 "redirect",
+                                 "closing connection",
+                                 "could not",
+                                 "failed",
+                                 "error",
+                                 "timed out",
+                                 "proxy",
+                                 "ssh"};
+  return std::any_of(std::begin(useful), std::end(useful),
+                     [&](const char* marker) {
+                       return lowerValue.find(marker) != std::string::npos;
+                     });
+}
+
+std::string curlFailureMessage(const CurlHandle& handle, CURLcode result,
+                               long responseCode)
+{
+  auto detail = handle.errorBuffer[0] != '\0'
+                    ? std::string(handle.errorBuffer.data())
+                    : std::string(curl_easy_strerror(result));
+  detail = containsSensitiveCurlText(detail)
+               ? "Sensitive native diagnostic redacted"
+               : logging::sanitizeUri(detail);
+  return responseCode > 0
+             ? "HTTP " + std::to_string(responseCode) + ": " + detail
+             : detail;
+}
+
 } // namespace
+
+std::string CurlSession::gid(const CurlDownload* download)
+{
+  if (!download || !download->impl_ || !download->impl_->group) {
+    return "unknown";
+  }
+  return GroupId::toHex(download->impl_->group->getGID());
+}
 
 size_t CurlSession::writeData(char* data, size_t size, size_t count,
                               void* userData) noexcept
@@ -615,6 +692,51 @@ int CurlSession::updateProgress(void* userData, curl_off_t downloadTotal,
   }
 }
 
+int CurlSession::debugCallback(CURL* easy, curl_infotype type, char* data,
+                               size_t size, void* userData) noexcept
+{
+  try {
+    auto* handle = static_cast<CurlHandle*>(userData);
+    void* privateData = nullptr;
+    if (!handle || !handle->download ||
+        curl_easy_getinfo(easy, CURLINFO_PRIVATE, &privateData) != CURLE_OK ||
+        privateData != handle) {
+      return 0;
+    }
+
+    std::string message;
+    const char* direction = nullptr;
+    if (type == CURLINFO_TEXT) {
+      message.assign(data, size);
+      message = trimHeader(message);
+      if (message.empty() || containsSensitiveCurlText(message) ||
+          !usefulCurlText(message)) {
+        return 0;
+      }
+      message = logging::sanitizeUri(message);
+      direction = "info";
+    }
+    else if (type == CURLINFO_HEADER_IN || type == CURLINFO_HEADER_OUT) {
+      message = logging::summarizeHttpMessage(std::string(data, size));
+      if (message.empty()) {
+        return 0;
+      }
+      direction = type == CURLINFO_HEADER_IN ? "recv" : "send";
+    }
+    else {
+      return 0;
+    }
+
+    logging::tryWrite(
+        spdlog::level::trace, __FILE__, __LINE__,
+        fmt("component=stream event=curl_trace gid=%s direction=%s %s",
+            gid(handle->download).c_str(), direction, message.c_str()));
+  }
+  catch (...) {
+  }
+  return 0;
+}
+
 void CurlSession::fail(CurlDownload* download, error_code::Value errorCode,
                        const std::string& message) noexcept
 {
@@ -692,33 +814,68 @@ void CurlSession::closeOutput(CurlDownload* download) noexcept
 CurlSession::CurlSession(const Option* option)
     : option_(option),
       globalDownloadLimit_(option->getAsLLInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT)),
-      store_(state::streamDatabaseFile(option))
+      store_(state::streamDatabaseFile(option)),
+      loggingRevision_(logging::revision())
 {
-  if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+  const auto globalResult = curl_global_init(CURL_GLOBAL_DEFAULT);
+  if (globalResult != CURLE_OK) {
+    A2_LOG_ERROR(fmt("component=stream event=session_init_failed curl=%d "
+                     "message=%s",
+                     static_cast<int>(globalResult),
+                     curl_easy_strerror(globalResult)));
     return;
   }
+  curlInitialized_ = true;
   multi_ = curl_multi_init();
+  if (!multi_) {
+    A2_LOG_ERROR("component=stream event=session_init_failed "
+                 "message=curl_multi_init returned null");
+    return;
+  }
   share_ = curl_share_init();
   if (share_) {
-    curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
-    curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+    const auto cookie =
+        curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    const auto dns =
+        curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    const auto tls =
+        curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+    if (cookie != CURLSHE_OK || dns != CURLSHE_OK || tls != CURLSHE_OK) {
+      A2_LOG_WARN(fmt("component=stream event=share_disabled cookie=%d dns=%d "
+                      "tls=%d",
+                      static_cast<int>(cookie), static_cast<int>(dns),
+                      static_cast<int>(tls)));
+      curl_share_cleanup(share_);
+      share_ = nullptr;
+    }
   }
   store_.open();
-  if (multi_) {
     const auto maxTasks = static_cast<long>(
         std::max(1, option_->getAsInt(PREF_MAX_CONCURRENT_DOWNLOADS)));
     const auto perTask =
         static_cast<long>(effectiveStreamMaxConnections(option_));
     const auto maxConnections = maxTasks * perTask;
-    curl_multi_setopt(multi_, CURLMOPT_MAX_TOTAL_CONNECTIONS, maxConnections);
-    curl_multi_setopt(multi_, CURLMOPT_MAX_HOST_CONNECTIONS, maxConnections);
-    curl_multi_setopt(multi_, CURLMOPT_MAXCONNECTS, maxConnections * 2L);
-    curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, socketCallback);
-    curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, this);
-    curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, timerCallback);
-    curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, this);
-  }
+    const CURLMcode options[] = {
+        curl_multi_setopt(multi_, CURLMOPT_MAX_TOTAL_CONNECTIONS,
+                          maxConnections),
+        curl_multi_setopt(multi_, CURLMOPT_MAX_HOST_CONNECTIONS,
+                          maxConnections),
+        curl_multi_setopt(multi_, CURLMOPT_MAXCONNECTS, maxConnections * 2L),
+        curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, socketCallback),
+        curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, this),
+        curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, timerCallback),
+        curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, this)};
+    const auto failed =
+        std::find_if(std::begin(options), std::end(options),
+                     [](CURLMcode value) { return value != CURLM_OK; });
+    if (failed != std::end(options)) {
+      A2_LOG_ERROR(fmt("component=stream event=session_init_failed curlm=%d "
+                       "message=%s",
+                       static_cast<int>(*failed),
+                       curl_multi_strerror(*failed)));
+      curl_multi_cleanup(multi_);
+      multi_ = nullptr;
+    }
 }
 
 CurlSession::~CurlSession()
@@ -729,7 +886,12 @@ CurlSession::~CurlSession()
   }
   sockets_.clear();
   for (auto& entry : downloads_) {
-    curl_multi_remove_handle(multi_, entry.first);
+    const auto result = curl_multi_remove_handle(multi_, entry.first);
+    if (result != CURLM_OK) {
+      A2_LOG_WARN(fmt("component=stream event=handle_remove_failed curlm=%d "
+                      "message=%s",
+                      static_cast<int>(result), curl_multi_strerror(result)));
+    }
     cleanupHandle(*entry.second.second);
   }
   downloads_.clear();
@@ -754,7 +916,9 @@ CurlSession::~CurlSession()
   if (share_) {
     curl_share_cleanup(share_);
   }
-  curl_global_cleanup();
+  if (curlInitialized_) {
+    curl_global_cleanup();
+  }
 }
 
 bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
@@ -885,158 +1049,191 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   transfer->ranged = impl.http && ranged && !impl.dryRun;
   auto* easy = curl_easy_init();
   if (!easy) {
+    fail(download.get(), error_code::NETWORK_PROBLEM,
+         "curl_easy_init returned null");
     return false;
   }
   transfer->value = easy;
   auto*& headers = transfer->headers;
+  auto setOption = [&](CURLoption option, auto value, const char* name) {
+    const auto result = curl_easy_setopt(easy, option, value);
+    if (result == CURLE_OK) {
+      return true;
+    }
+    const auto message =
+        fmt("Unable to configure %s: %s", name, curl_easy_strerror(result));
+    A2_LOG_ERROR(fmt("component=stream event=handle_setup_failed gid=%s "
+                     "option=%s curl=%d message=%s",
+                     gid(download.get()).c_str(), name,
+                     static_cast<int>(result),
+                     logging::sanitizeText(message).c_str()));
+    fail(download.get(), error_code::NETWORK_PROBLEM, message);
+    return false;
+  };
+  auto appendHeader = [&](const std::string& value) {
+    auto* replacement = curl_slist_append(headers, value.c_str());
+    if (replacement) {
+      headers = replacement;
+      return true;
+    }
+    fail(download.get(), error_code::UNKNOWN_ERROR,
+         "Unable to allocate HTTP request headers");
+    return false;
+  };
+#define SET_CURL_OPTION(name, value)                                           \
+  do {                                                                         \
+    if (!setOption(name, value, #name)) {                                      \
+      cleanupHandle(*transfer);                                                \
+      return false;                                                            \
+    }                                                                          \
+  } while (0)
   const auto uriIndex = lease.uriIndex % impl.uris.size();
   const auto& uriValue = impl.uris[uriIndex];
   impl.currentUri = uriValue;
   download->snapshot_.currentUri = uriValue;
   markUriUsed(impl.group, uriValue);
-  curl_easy_setopt(easy, CURLOPT_URL, uriValue.c_str());
+  SET_CURL_OPTION(CURLOPT_URL, uriValue.c_str());
   if (share_) {
-    curl_easy_setopt(easy, CURLOPT_SHARE, share_);
+    SET_CURL_OPTION(CURLOPT_SHARE, share_);
   }
-  curl_easy_setopt(easy, CURLOPT_PRIVATE, transfer.get());
-  curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, "http,https,sftp");
-  curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, "http,https,sftp");
-  curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_setopt(easy, CURLOPT_FAILONERROR, 1L);
-  curl_easy_setopt(easy, CURLOPT_MAXREDIRS, 10L);
-  curl_easy_setopt(easy, CURLOPT_HTTP_VERSION,
-                   transfer->ranged && impl.maxConnections > 1
-                       ? CURL_HTTP_VERSION_1_1
-                       : CURL_HTTP_VERSION_2TLS);
-  curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(easy, CURLOPT_BUFFERSIZE, 1024L * 1024L);
-  curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
-  curl_easy_setopt(easy, CURLOPT_DNS_CACHE_TIMEOUT, 300L);
-  curl_easy_setopt(easy, CURLOPT_UPKEEP_INTERVAL_MS, 30000L);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTFUNCTION, socketOptionCallback);
-  curl_easy_setopt(easy, CURLOPT_SOCKOPTDATA, const_cast<Option*>(taskOption));
-  curl_easy_setopt(easy, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
-  curl_easy_setopt(easy, CURLOPT_NOBODY, impl.dryRun ? 1L : 0L);
-  curl_easy_setopt(easy, CURLOPT_FILETIME,
-                   taskOption->getAsBool(PREF_REMOTE_TIME) ? 1L : 0L);
-  curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, writeData);
-  curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer.get());
-  curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, receiveHeader);
-  curl_easy_setopt(easy, CURLOPT_HEADERDATA, transfer.get());
-  curl_easy_setopt(easy, CURLOPT_XFERINFOFUNCTION, updateProgress);
-  curl_easy_setopt(easy, CURLOPT_XFERINFODATA, transfer.get());
-  curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 0L);
-  curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT,
-                   taskOption->getAsInt(PREF_CONNECT_TIMEOUT));
-  curl_easy_setopt(easy, CURLOPT_LOW_SPEED_LIMIT,
-                   std::max(1, taskOption->getAsInt(PREF_LOWEST_SPEED_LIMIT)));
-  curl_easy_setopt(easy, CURLOPT_LOW_SPEED_TIME,
-                   taskOption->getAsInt(PREF_TIMEOUT));
-  curl_easy_setopt(easy, CURLOPT_USERAGENT,
-                   taskOption->get(PREF_USER_AGENT).c_str());
-  curl_easy_setopt(easy, CURLOPT_FORBID_REUSE,
-                   taskOption->getAsBool(PREF_ENABLE_HTTP_KEEP_ALIVE) ? 0L
-                                                                      : 1L);
+  SET_CURL_OPTION(CURLOPT_PRIVATE, transfer.get());
+  SET_CURL_OPTION(CURLOPT_ERRORBUFFER, transfer->errorBuffer.data());
+  SET_CURL_OPTION(CURLOPT_DEBUGFUNCTION, debugCallback);
+  SET_CURL_OPTION(CURLOPT_DEBUGDATA, transfer.get());
+  SET_CURL_OPTION(CURLOPT_VERBOSE,
+                  A2_LOG_ENABLED(spdlog::level::trace) ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_PROTOCOLS_STR, "http,https,sftp");
+  SET_CURL_OPTION(CURLOPT_REDIR_PROTOCOLS_STR, "http,https,sftp");
+  SET_CURL_OPTION(CURLOPT_FOLLOWLOCATION, 1L);
+  SET_CURL_OPTION(CURLOPT_FAILONERROR, 1L);
+  SET_CURL_OPTION(CURLOPT_MAXREDIRS, 10L);
+  SET_CURL_OPTION(CURLOPT_HTTP_VERSION,
+                  transfer->ranged && impl.maxConnections > 1
+                      ? CURL_HTTP_VERSION_1_1
+                      : CURL_HTTP_VERSION_2TLS);
+  SET_CURL_OPTION(CURLOPT_NOSIGNAL, 1L);
+  SET_CURL_OPTION(CURLOPT_BUFFERSIZE, 1024L * 1024L);
+  SET_CURL_OPTION(CURLOPT_TCP_KEEPALIVE, 1L);
+  SET_CURL_OPTION(CURLOPT_DNS_CACHE_TIMEOUT, 300L);
+  SET_CURL_OPTION(CURLOPT_UPKEEP_INTERVAL_MS, 30000L);
+  SET_CURL_OPTION(CURLOPT_SOCKOPTFUNCTION, socketOptionCallback);
+  SET_CURL_OPTION(CURLOPT_SOCKOPTDATA, const_cast<Option*>(taskOption));
+  SET_CURL_OPTION(CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+  SET_CURL_OPTION(CURLOPT_NOBODY, impl.dryRun ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_FILETIME,
+                  taskOption->getAsBool(PREF_REMOTE_TIME) ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_WRITEFUNCTION, writeData);
+  SET_CURL_OPTION(CURLOPT_WRITEDATA, transfer.get());
+  SET_CURL_OPTION(CURLOPT_HEADERFUNCTION, receiveHeader);
+  SET_CURL_OPTION(CURLOPT_HEADERDATA, transfer.get());
+  SET_CURL_OPTION(CURLOPT_XFERINFOFUNCTION, updateProgress);
+  SET_CURL_OPTION(CURLOPT_XFERINFODATA, transfer.get());
+  SET_CURL_OPTION(CURLOPT_NOPROGRESS, 0L);
+  SET_CURL_OPTION(CURLOPT_CONNECTTIMEOUT,
+                  taskOption->getAsInt(PREF_CONNECT_TIMEOUT));
+  SET_CURL_OPTION(CURLOPT_LOW_SPEED_LIMIT,
+                  std::max(1, taskOption->getAsInt(PREF_LOWEST_SPEED_LIMIT)));
+  SET_CURL_OPTION(CURLOPT_LOW_SPEED_TIME, taskOption->getAsInt(PREF_TIMEOUT));
+  SET_CURL_OPTION(CURLOPT_USERAGENT, taskOption->get(PREF_USER_AGENT).c_str());
+  SET_CURL_OPTION(CURLOPT_FORBID_REUSE,
+                  taskOption->getAsBool(PREF_ENABLE_HTTP_KEEP_ALIVE) ? 0L : 1L);
   if (taskOption->getAsBool(PREF_HTTP_ACCEPT_GZIP) && !transfer->ranged) {
-    curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
+    SET_CURL_OPTION(CURLOPT_ACCEPT_ENCODING, "");
   }
   if (taskOption->getAsBool(PREF_HTTP_NO_CACHE)) {
-    headers = curl_slist_append(headers, "Cache-Control: no-cache");
-    headers = curl_slist_append(headers, "Pragma: no-cache");
+    if (!appendHeader("Cache-Control: no-cache") ||
+        !appendHeader("Pragma: no-cache")) {
+      cleanupHandle(*transfer);
+      return false;
+    }
   }
-  curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER,
-                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
-  curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST,
-                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
-  curl_easy_setopt(easy, CURLOPT_PROXY_SSL_VERIFYPEER,
-                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
-  curl_easy_setopt(easy, CURLOPT_PROXY_SSL_VERIFYHOST,
-                   taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
+  SET_CURL_OPTION(CURLOPT_SSL_VERIFYPEER,
+                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_SSL_VERIFYHOST,
+                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
+  SET_CURL_OPTION(CURLOPT_PROXY_SSL_VERIFYPEER,
+                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
+  SET_CURL_OPTION(CURLOPT_PROXY_SSL_VERIFYHOST,
+                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
   const auto& minimumTls = taskOption->get(PREF_MIN_TLS_VERSION);
   const long sslVersion = minimumTls == A2_V_TLS13   ? CURL_SSLVERSION_TLSv1_3
                           : minimumTls == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
                                                      : CURL_SSLVERSION_TLSv1_1;
-  curl_easy_setopt(easy, CURLOPT_SSLVERSION, sslVersion);
+  SET_CURL_OPTION(CURLOPT_SSLVERSION, sslVersion);
   if (!taskOption->blank(PREF_INTERFACE)) {
-    curl_easy_setopt(easy, CURLOPT_INTERFACE,
-                     taskOption->get(PREF_INTERFACE).c_str());
+    SET_CURL_OPTION(CURLOPT_INTERFACE, taskOption->get(PREF_INTERFACE).c_str());
   }
   if (taskOption->getAsBool(PREF_DISABLE_IPV6)) {
-    curl_easy_setopt(easy, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    SET_CURL_OPTION(CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
   }
   if (!taskOption->blank(PREF_CA_CERTIFICATE)) {
-    curl_easy_setopt(easy, CURLOPT_CAINFO,
-                     taskOption->get(PREF_CA_CERTIFICATE).c_str());
+    SET_CURL_OPTION(CURLOPT_CAINFO,
+                    taskOption->get(PREF_CA_CERTIFICATE).c_str());
   }
   if (!taskOption->blank(PREF_CERTIFICATE)) {
-    curl_easy_setopt(easy, CURLOPT_SSLCERT,
-                     taskOption->get(PREF_CERTIFICATE).c_str());
+    SET_CURL_OPTION(CURLOPT_SSLCERT, taskOption->get(PREF_CERTIFICATE).c_str());
   }
   if (!taskOption->blank(PREF_PRIVATE_KEY)) {
-    curl_easy_setopt(easy, CURLOPT_SSLKEY,
-                     taskOption->get(PREF_PRIVATE_KEY).c_str());
-    curl_easy_setopt(easy, CURLOPT_SSH_PRIVATE_KEYFILE,
-                     taskOption->get(PREF_PRIVATE_KEY).c_str());
+    SET_CURL_OPTION(CURLOPT_SSLKEY, taskOption->get(PREF_PRIVATE_KEY).c_str());
+    SET_CURL_OPTION(CURLOPT_SSH_PRIVATE_KEYFILE,
+                    taskOption->get(PREF_PRIVATE_KEY).c_str());
   }
   if (impl.http && !taskOption->blank(PREF_HTTP_USER)) {
-    curl_easy_setopt(easy, CURLOPT_USERNAME,
-                     taskOption->get(PREF_HTTP_USER).c_str());
-    curl_easy_setopt(easy, CURLOPT_PASSWORD,
-                     taskOption->get(PREF_HTTP_PASSWD).c_str());
+    SET_CURL_OPTION(CURLOPT_USERNAME, taskOption->get(PREF_HTTP_USER).c_str());
+    SET_CURL_OPTION(CURLOPT_PASSWORD,
+                    taskOption->get(PREF_HTTP_PASSWD).c_str());
   }
   else if (!impl.http && !taskOption->blank(PREF_SFTP_USER)) {
-    curl_easy_setopt(easy, CURLOPT_USERNAME,
-                     taskOption->get(PREF_SFTP_USER).c_str());
-    curl_easy_setopt(easy, CURLOPT_PASSWORD,
-                     taskOption->get(PREF_SFTP_PASSWD).c_str());
+    SET_CURL_OPTION(CURLOPT_USERNAME, taskOption->get(PREF_SFTP_USER).c_str());
+    SET_CURL_OPTION(CURLOPT_PASSWORD,
+                    taskOption->get(PREF_SFTP_PASSWD).c_str());
   }
   else if (!taskOption->getAsBool(PREF_NO_NETRC)) {
-    curl_easy_setopt(easy, CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
+    SET_CURL_OPTION(CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
     if (!taskOption->blank(PREF_NETRC_PATH)) {
-      curl_easy_setopt(easy, CURLOPT_NETRC_FILE,
-                       taskOption->get(PREF_NETRC_PATH).c_str());
+      SET_CURL_OPTION(CURLOPT_NETRC_FILE,
+                      taskOption->get(PREF_NETRC_PATH).c_str());
     }
   }
   if (!impl.http && !taskOption->blank(PREF_SSH_HOST_KEY_SHA256)) {
-    curl_easy_setopt(easy, CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256,
-                     taskOption->get(PREF_SSH_HOST_KEY_SHA256).c_str());
+    SET_CURL_OPTION(CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256,
+                    taskOption->get(PREF_SSH_HOST_KEY_SHA256).c_str());
   }
   if (!taskOption->blank(PREF_REFERER)) {
-    curl_easy_setopt(easy, CURLOPT_REFERER,
-                     taskOption->get(PREF_REFERER).c_str());
+    SET_CURL_OPTION(CURLOPT_REFERER, taskOption->get(PREF_REFERER).c_str());
   }
   const auto proxy = proxyFor(taskOption, uriValue);
   if (!proxy.empty()) {
-    curl_easy_setopt(easy, CURLOPT_PROXY, proxy.c_str());
+    SET_CURL_OPTION(CURLOPT_PROXY, proxy.c_str());
     uri::UriStruct parsed;
     uri::parse(parsed, uriValue);
     const auto proxyUser = proxyUserFor(taskOption, parsed.protocol);
     const auto proxyPassword = proxyPasswordFor(taskOption, parsed.protocol);
     if (!proxyUser.empty()) {
-      curl_easy_setopt(easy, CURLOPT_PROXYUSERNAME, proxyUser.c_str());
-      curl_easy_setopt(easy, CURLOPT_PROXYPASSWORD, proxyPassword.c_str());
+      SET_CURL_OPTION(CURLOPT_PROXYUSERNAME, proxyUser.c_str());
+      SET_CURL_OPTION(CURLOPT_PROXYPASSWORD, proxyPassword.c_str());
     }
   }
   if (!taskOption->blank(PREF_NO_PROXY)) {
-    curl_easy_setopt(easy, CURLOPT_NOPROXY,
-                     taskOption->get(PREF_NO_PROXY).c_str());
+    SET_CURL_OPTION(CURLOPT_NOPROXY, taskOption->get(PREF_NO_PROXY).c_str());
   }
   if (impl.http) {
-    curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
+    SET_CURL_OPTION(CURLOPT_COOKIEFILE, "");
   }
   if (!taskOption->blank(PREF_LOAD_COOKIES)) {
-    curl_easy_setopt(easy, CURLOPT_COOKIEFILE,
-                     taskOption->get(PREF_LOAD_COOKIES).c_str());
+    SET_CURL_OPTION(CURLOPT_COOKIEFILE,
+                    taskOption->get(PREF_LOAD_COOKIES).c_str());
   }
   if (!taskOption->blank(PREF_SAVE_COOKIES)) {
-    curl_easy_setopt(easy, CURLOPT_COOKIEJAR,
-                     taskOption->get(PREF_SAVE_COOKIES).c_str());
+    SET_CURL_OPTION(CURLOPT_COOKIEJAR,
+                    taskOption->get(PREF_SAVE_COOKIES).c_str());
   }
   std::istringstream configuredHeaders(taskOption->get(PREF_HEADER));
   std::string header;
   while (std::getline(configuredHeaders, header)) {
-    if (!header.empty()) {
-      headers = curl_slist_append(headers, header.c_str());
+    if (!header.empty() && !appendHeader(header)) {
+      cleanupHandle(*transfer);
+      return false;
     }
   }
   if (transfer->ranged) {
@@ -1044,27 +1241,39 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
         lease.end == std::numeric_limits<int64_t>::max()
             ? std::to_string(lease.begin) + '-'
             : std::to_string(lease.begin) + '-' + std::to_string(lease.end - 1);
-    curl_easy_setopt(easy, CURLOPT_RANGE, transfer->range.c_str());
+    SET_CURL_OPTION(CURLOPT_RANGE, transfer->range.c_str());
     const auto& validator = !impl.etag.empty() ? impl.etag : impl.lastModified;
     if (lease.begin > 0 && !validator.empty()) {
       const auto ifRange = "If-Range: " + validator;
-      headers = curl_slist_append(headers, ifRange.c_str());
+      if (!appendHeader(ifRange)) {
+        cleanupHandle(*transfer);
+        return false;
+      }
     }
   }
   else if (lease.begin > 0) {
-    curl_easy_setopt(easy, CURLOPT_RESUME_FROM_LARGE,
-                     static_cast<curl_off_t>(lease.begin));
+    SET_CURL_OPTION(CURLOPT_RESUME_FROM_LARGE,
+                    static_cast<curl_off_t>(lease.begin));
   }
   if (headers) {
-    curl_easy_setopt(easy, CURLOPT_HTTPHEADER, headers);
+    SET_CURL_OPTION(CURLOPT_HTTPHEADER, headers);
   }
-  const auto result = curl_multi_add_handle(multi_, easy) == CURLM_OK;
+  const auto addResult = curl_multi_add_handle(multi_, easy);
+  const auto result = addResult == CURLM_OK;
   if (result) {
     impl.handles.push_back(std::move(transfer));
   }
   else {
+    const auto message = std::string("Unable to add curl transfer: ") +
+                         curl_multi_strerror(addResult);
+    A2_LOG_ERROR(fmt("component=stream event=handle_add_failed gid=%s "
+                     "curlm=%d message=%s",
+                     gid(download.get()).c_str(), static_cast<int>(addResult),
+                     logging::sanitizeText(message).c_str()));
+    fail(download.get(), error_code::NETWORK_PROBLEM, message);
     cleanupHandle(*transfer);
   }
+#undef SET_CURL_OPTION
   return result;
 }
 
@@ -1329,7 +1538,13 @@ bool CurlSession::rebalanceEndgame(
                        handle->lease.attempts, handle->lease.uriIndex};
   auto found = downloads_.find(handle->value);
   if (found != downloads_.end()) {
-    curl_multi_remove_handle(multi_, handle->value);
+    const auto result = curl_multi_remove_handle(multi_, handle->value);
+    if (result != CURLM_OK) {
+      A2_LOG_WARN(fmt("component=stream event=handle_remove_failed gid=%s "
+                      "curlm=%d message=%s",
+                      gid(download.get()).c_str(), static_cast<int>(result),
+                      curl_multi_strerror(result)));
+    }
     downloads_.erase(found);
   }
   cleanupHandle(*handle);
@@ -1362,7 +1577,13 @@ void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
     if (handle->value) {
       auto found = downloads_.find(handle->value);
       if (found != downloads_.end()) {
-        curl_multi_remove_handle(multi_, handle->value);
+        const auto result = curl_multi_remove_handle(multi_, handle->value);
+        if (result != CURLM_OK) {
+          A2_LOG_WARN(fmt("component=stream event=handle_remove_failed gid=%s "
+                          "curlm=%d message=%s",
+                          gid(download.get()).c_str(), static_cast<int>(result),
+                          curl_multi_strerror(result)));
+        }
         downloads_.erase(found);
       }
       cleanupHandle(*handle);
@@ -1420,6 +1641,7 @@ void CurlSession::failTask(const std::shared_ptr<CurlDownload>& download,
                            const std::string& message, bool retainState)
 {
   auto& impl = *download->impl_;
+  auto finalMessage = message;
   if (retainState) {
     if (!download->failed()) {
       try {
@@ -1430,9 +1652,11 @@ void CurlSession::failTask(const std::shared_ptr<CurlDownload>& download,
       }
       catch (const Exception& error) {
         errorCode = error.getErrorCode();
+        finalMessage = error.what();
       }
-      catch (const std::exception&) {
+      catch (const std::exception& error) {
         errorCode = error_code::FILE_IO_ERROR;
+        finalMessage = error.what();
       }
     }
     checkpoint(download, true);
@@ -1442,7 +1666,13 @@ void CurlSession::failTask(const std::shared_ptr<CurlDownload>& download,
   }
   cancelHandles(download);
   closeOutput(download.get());
-  fail(download.get(), errorCode, message);
+  fail(download.get(), errorCode, finalMessage);
+  A2_LOG_ERROR(fmt("component=stream event=task_failed gid=%s error_code=%d "
+                   "completed=%" PRId64 " uri=%s message=%s",
+                   gid(download.get()).c_str(), static_cast<int>(errorCode),
+                   download->snapshot_.completedLength,
+                   logging::sanitizeUri(impl.currentUri).c_str(),
+                   logging::sanitizeText(finalMessage).c_str()));
   tasks_.erase(download.get());
   if (engine_) {
     engine_->setNoWait(true);
@@ -1494,6 +1724,16 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   curl_off_t reportedLength = 0;
   curl_off_t reportedFileTime = -1;
   curl_off_t reportedSpeed = 0;
+  curl_off_t transferId = -1;
+  curl_off_t connectionId = -1;
+  curl_off_t nameLookupTime = 0;
+  curl_off_t connectTime = 0;
+  curl_off_t appConnectTime = 0;
+  curl_off_t startTransferTime = 0;
+  long osError = 0;
+  long primaryPort = 0;
+  char* primaryIp = nullptr;
+  char* effectiveUri = nullptr;
   if (handle->value) {
     curl_easy_getinfo(handle->value, CURLINFO_RESPONSE_CODE, &responseCode);
     curl_easy_getinfo(handle->value, CURLINFO_RETRY_AFTER, &retryAfter);
@@ -1501,7 +1741,25 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
                       &reportedLength);
     curl_easy_getinfo(handle->value, CURLINFO_FILETIME_T, &reportedFileTime);
     curl_easy_getinfo(handle->value, CURLINFO_SPEED_DOWNLOAD_T, &reportedSpeed);
+    curl_easy_getinfo(handle->value, CURLINFO_XFER_ID, &transferId);
+    curl_easy_getinfo(handle->value, CURLINFO_CONN_ID, &connectionId);
+    curl_easy_getinfo(handle->value, CURLINFO_NAMELOOKUP_TIME_T,
+                      &nameLookupTime);
+    curl_easy_getinfo(handle->value, CURLINFO_CONNECT_TIME_T, &connectTime);
+    curl_easy_getinfo(handle->value, CURLINFO_APPCONNECT_TIME_T,
+                      &appConnectTime);
+    curl_easy_getinfo(handle->value, CURLINFO_STARTTRANSFER_TIME_T,
+                      &startTransferTime);
+    curl_easy_getinfo(handle->value, CURLINFO_OS_ERRNO, &osError);
+    curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_IP, &primaryIp);
+    curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_PORT, &primaryPort);
+    curl_easy_getinfo(handle->value, CURLINFO_EFFECTIVE_URL, &effectiveUri);
   }
+  const auto nativeFailure = curlFailureMessage(*handle, result, responseCode);
+  const auto safePrimaryIp =
+      logging::sanitizeText(primaryIp ? primaryIp : "unknown");
+  const auto safeEffectiveUri =
+      logging::sanitizeUri(effectiveUri ? effectiveUri : impl.currentUri);
   try {
     flushWriteBuffer(impl, *handle);
     download->snapshot_.completedLength =
@@ -1533,11 +1791,18 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     }
   }
 
-  A2_LOG_DEBUG(fmt("Stream range [%" PRId64 ",%" PRId64
-                   ") finished: HTTP %ld, curl=%d, speed=%" PRId64 " B/s",
-                   lease.begin, lease.end, responseCode,
-                   static_cast<int>(result),
-                   static_cast<int64_t>(reportedSpeed)));
+  A2_LOG_TRACE(fmt(
+      "component=stream event=range_finished gid=%s transfer=%" PRId64
+      " connection=%" PRId64 " range=%" PRId64 "-%" PRId64
+      " http=%ld curl=%d os_error=%ld remote=%s:%ld speed=%" PRId64
+      " dns_us=%" PRId64 " connect_us=%" PRId64 " tls_us=%" PRId64
+      " first_byte_us=%" PRId64 " uri=%s",
+      gid(download.get()).c_str(), static_cast<int64_t>(transferId),
+      static_cast<int64_t>(connectionId), lease.begin, lease.end, responseCode,
+      static_cast<int>(result), osError, safePrimaryIp.c_str(), primaryPort,
+      static_cast<int64_t>(reportedSpeed), static_cast<int64_t>(nameLookupTime),
+      static_cast<int64_t>(connectTime), static_cast<int64_t>(appConnectTime),
+      static_cast<int64_t>(startTransferTime), safeEffectiveUri.c_str()));
 
   if (impl.dryRun) {
     download->snapshot_.totalLength = std::max<curl_off_t>(0, reportedLength);
@@ -1606,14 +1871,19 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
          retryableFailure(result, responseCode, impl.fileNotFoundCount,
                           maxFileNotFound)) &&
         retryRange(download, remainder, retryAfter)) {
+      A2_LOG_DEBUG(
+          fmt("component=stream event=range_retry gid=%s transfer=%" PRId64
+              " connection=%" PRId64 " range=%" PRId64 "-%" PRId64
+              " attempt=%lu http=%ld curl=%d delay=%" PRId64 " message=%s",
+              gid(download.get()).c_str(), static_cast<int64_t>(transferId),
+              static_cast<int64_t>(connectionId), remainder.begin,
+              remainder.end, static_cast<unsigned long>(lease.attempts + 1),
+              responseCode, static_cast<int>(result),
+              static_cast<int64_t>(retryAfter), nativeFailure.c_str()));
       schedule(download);
       return;
     }
-    const auto message = responseCode > 0
-                             ? "HTTP " + std::to_string(responseCode) + ": " +
-                                   curl_easy_strerror(result)
-                             : curl_easy_strerror(result);
-    failTask(download, curlErrorCode(result, responseCode), message);
+    failTask(download, curlErrorCode(result, responseCode), nativeFailure);
     return;
   }
 
@@ -1652,6 +1922,21 @@ void CurlSession::poll()
 {
   if (!multi_) {
     return;
+  }
+  const auto revision = logging::revision();
+  if (revision != loggingRevision_) {
+    loggingRevision_ = revision;
+    const auto verbose = A2_LOG_ENABLED(spdlog::level::trace) ? 1L : 0L;
+    for (const auto& entry : downloads_) {
+      const auto result =
+          curl_easy_setopt(entry.first, CURLOPT_VERBOSE, verbose);
+      if (result != CURLE_OK) {
+        A2_LOG_WARN(fmt("component=stream event=trace_reconfigure_failed "
+                        "gid=%s curl=%d message=%s",
+                        gid(entry.second.first.get()).c_str(),
+                        static_cast<int>(result), curl_easy_strerror(result)));
+      }
+    }
   }
   rebalanceLimits();
   for (const auto& entry : tasks_) {
@@ -1727,7 +2012,15 @@ void CurlSession::processMessages()
     }
     auto download = found->second.first;
     auto* handle = found->second.second;
-    curl_multi_remove_handle(multi_, message->easy_handle);
+    const auto removeResult =
+        curl_multi_remove_handle(multi_, message->easy_handle);
+    if (removeResult != CURLM_OK) {
+      A2_LOG_ERROR(fmt("component=stream event=handle_remove_failed gid=%s "
+                       "curlm=%d message=%s",
+                       gid(download.get()).c_str(),
+                       static_cast<int>(removeResult),
+                       curl_multi_strerror(removeResult)));
+    }
     downloads_.erase(found);
     rebalanceLimits();
     finish(download, handle, message->data.result);
@@ -1745,7 +2038,11 @@ void CurlSession::updateSocket(curl_socket_t socket, int action,
         new CurlSocketCommand(engine_->newCUID(), socket, this, engine_));
     command = next.get();
     sockets_[socket] = command;
-    curl_multi_assign(multi_, socket, command);
+    const auto result = curl_multi_assign(multi_, socket, command);
+    if (result != CURLM_OK) {
+      throw DL_ABORT_EX(std::string("Unable to assign libcurl socket: ") +
+                        curl_multi_strerror(result));
+    }
     command->update(action);
     engine_->addCommand(std::move(next));
     return;
@@ -1760,7 +2057,12 @@ void CurlSession::removeSocket(curl_socket_t socket, CurlSocketCommand* command)
   }
   sockets_.erase(socket);
   if (multi_) {
-    curl_multi_assign(multi_, socket, nullptr);
+    const auto result = curl_multi_assign(multi_, socket, nullptr);
+    if (result != CURLM_OK) {
+      A2_LOG_WARN(fmt("component=stream event=socket_unassign_failed curlm=%d "
+                      "message=%s",
+                      static_cast<int>(result), curl_multi_strerror(result)));
+    }
   }
 }
 
@@ -1791,10 +2093,18 @@ int CurlSession::socketCallback(CURL*, curl_socket_t socket, int action,
     return 0;
   }
   catch (const std::exception& error) {
-    A2_LOG_ERROR(fmt("libcurl socket callback failed: %s", error.what()));
+    try {
+      logging::tryWrite(
+          spdlog::level::err, __FILE__, __LINE__,
+          fmt("component=stream event=socket_callback_failed message=%s",
+              logging::sanitizeText(error.what()).c_str()));
+    }
+  catch (...) {
+  }
   }
   catch (...) {
-    A2_LOG_ERROR("libcurl socket callback failed");
+    logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,
+                      "component=stream event=socket_callback_failed");
   }
   return -1;
 }
@@ -1806,10 +2116,18 @@ int CurlSession::timerCallback(CURLM*, long timeoutMs, void* userData) noexcept
     return 0;
   }
   catch (const std::exception& error) {
-    A2_LOG_ERROR(fmt("libcurl timer callback failed: %s", error.what()));
+    try {
+      logging::tryWrite(
+          spdlog::level::err, __FILE__, __LINE__,
+          fmt("component=stream event=timer_callback_failed message=%s",
+              logging::sanitizeText(error.what()).c_str()));
+    }
+  catch (...) {
+  }
   }
   catch (...) {
-    A2_LOG_ERROR("libcurl timer callback failed");
+    logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,
+                      "component=stream event=timer_callback_failed");
   }
   return -1;
 }
@@ -1906,8 +2224,16 @@ void CurlSession::rebalanceLimits()
             : 0;
     auto* handle = entry.second.second;
     if (handle->appliedLimit != limit) {
-      curl_easy_setopt(entry.first, CURLOPT_MAX_RECV_SPEED_LARGE,
-                       static_cast<curl_off_t>(limit));
+      const auto result =
+          curl_easy_setopt(entry.first, CURLOPT_MAX_RECV_SPEED_LARGE,
+                           static_cast<curl_off_t>(limit));
+      if (result != CURLE_OK) {
+        A2_LOG_ERROR(fmt("component=stream event=rate_limit_failed gid=%s "
+                         "curl=%d message=%s",
+                         gid(entry.second.first.get()).c_str(),
+                         static_cast<int>(result), curl_easy_strerror(result)));
+        continue;
+      }
       handle->appliedLimit = limit;
     }
   }

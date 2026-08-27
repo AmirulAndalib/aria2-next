@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "LibsslTLSSession.h"
+#include "OpenSslDiagnostics.h"
 
 #include <openssl/err.h>
 namespace aria2 {
@@ -206,8 +207,7 @@ std::string OpenSSLTLSSession::getLastErrorString()
     case SSL_ERROR_ZERO_RETURN:
       return "";
     case SSL_ERROR_SYSCALL: {
-      int err = ERR_get_error();
-      if (err == 0) {
+      if (ERR_peek_error() == 0) {
         if (rv_ == 0) {
           return "EOF was received";
         }
@@ -219,7 +219,7 @@ std::string OpenSSLTLSSession::getLastErrorString()
         }
       }
       else {
-        return ERR_error_string(err, nullptr);
+        return openssl::errorStack();
       }
     }
     case SSL_ERROR_SSL:
@@ -227,8 +227,8 @@ std::string OpenSSLTLSSession::getLastErrorString()
           verifyResult != X509_V_OK) {
         return X509_verify_cert_error_string(verifyResult);
       }
-      if (const auto err = ERR_get_error()) {
-        return ERR_error_string(err, nullptr);
+      if (ERR_peek_error() != 0) {
+        return openssl::errorStack();
       }
       return "TLS protocol error";
     default:

@@ -156,6 +156,10 @@ void LogTest::testSanitizersProtectLogIntegrity()
   REQUIRE(summary.find("secret") == std::string::npos);
   REQUIRE(summary.find("Authorization") == std::string::npos);
   REQUIRE(summary.find("X-Private-Token") == std::string::npos);
+
+  REQUIRE_EQ(std::string("Content-Range=bytes 0-9/10"),
+             logging::summarizeHttpMessage("Content-Range: bytes 0-9/10\r\n"));
+  REQUIRE(logging::summarizeHttpMessage("X-Request-Token: secret\r\n").empty());
 }
 
 void LogTest::testSourceLocationIsPortable()
@@ -172,9 +176,11 @@ void LogTest::testSourceLocationIsPortable()
 
 void LogTest::testLevelFilteringAndReconfiguration()
 {
+  const auto initialRevision = logging::revision();
   auto infoSettings = settings(4096, 1);
   infoSettings.fileLevel = spdlog::level::info;
   logging::configure(infoSettings);
+  REQUIRE(logging::revision() > initialRevision);
   A2_LOG_DEBUG("hidden debug record");
   A2_LOG_INFO("visible info record");
   logging::flush();

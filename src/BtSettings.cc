@@ -31,6 +31,7 @@
 #include <libtorrent/version.hpp>
 
 #include "DlAbortEx.h"
+#include "Log.h"
 #include "Option.h"
 #include "SocketCore.h"
 #include "prefs.h"
@@ -149,6 +150,23 @@ std::string makeListenInterfaces(
 }
 
 } // namespace
+
+int btAlertMask()
+{
+  auto mask = lt::alert_category::error | lt::alert_category::status |
+              lt::alert_category::storage | lt::alert_category::port_mapping |
+              lt::alert_category::performance_warning |
+              lt::alert_category::ip_block;
+  if (A2_LOG_ENABLED(spdlog::level::debug)) {
+    mask |= lt::alert_category::tracker | lt::alert_category::dht |
+            lt::alert_category::peer;
+  }
+  if (A2_LOG_ENABLED(spdlog::level::trace)) {
+    mask |= lt::alert_category::connect | lt::alert_category::session_log |
+            lt::alert_category::torrent_log;
+  }
+  return static_cast<int>(static_cast<unsigned int>(mask));
+}
 
 std::vector<std::string> detectBtRouteAddresses(const Option* option)
 {
@@ -365,13 +383,7 @@ BtConfig makeBtConfig(const Option* option,
   settings.set_bool(lt::settings_pack::apply_filter_to_dht,
                     blocklistScope == "all");
   settings.set_int(lt::settings_pack::alert_queue_size, 16384);
-  settings.set_int(
-      lt::settings_pack::alert_mask,
-      static_cast<int>(static_cast<unsigned int>(
-          lt::alert_category::error | lt::alert_category::status |
-          lt::alert_category::storage | lt::alert_category::port_mapping |
-          lt::alert_category::performance_warning |
-          lt::alert_category::ip_block)));
+  settings.set_int(lt::settings_pack::alert_mask, btAlertMask());
   settings.set_int(lt::settings_pack::upload_rate_limit,
                    option->getAsInt(PREF_MAX_OVERALL_UPLOAD_LIMIT));
   settings.set_int(lt::settings_pack::download_rate_limit,

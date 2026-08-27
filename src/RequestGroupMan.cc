@@ -815,14 +815,11 @@ void RequestGroupMan::formatDownloadResultFull(
     OutputFile& out, const char* status,
     const std::shared_ptr<DownloadResult>& downloadResult) const
 {
-  BitfieldMan bt(downloadResult->pieceLength, downloadResult->totalLength);
-  bt.setBitfield(
-      reinterpret_cast<const unsigned char*>(downloadResult->bitfield.data()),
-      downloadResult->bitfield.size());
   bool head = true;
   const std::vector<std::shared_ptr<FileEntry>>& fileEntries =
       downloadResult->fileEntries;
-  for (auto& f : fileEntries) {
+  for (size_t index = 0; index < fileEntries.size(); ++index) {
+    const auto& f = fileEntries[index];
     if (!f->isRequested()) {
       continue;
     }
@@ -834,12 +831,13 @@ void RequestGroupMan::formatDownloadResultFull(
     else {
       o << "   |    |           |";
     }
-    if (f->getLength() == 0 || downloadResult->bitfield.empty()) {
+    if (f->getLength() == 0 ||
+        index >= downloadResult->fileCompletedLengths.size()) {
       o << "  -|";
     }
     else {
-      int64_t completedLength =
-          bt.getOffsetCompletedLength(f->getOffset(), f->getLength());
+      const auto completedLength =
+          downloadResult->fileCompletedLengths[index];
       o << std::setw(3) << 100 * completedLength / f->getLength() << "|";
     }
     writeFilePath(o, f, downloadResult->inMemoryDownload);

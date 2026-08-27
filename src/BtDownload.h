@@ -87,6 +87,7 @@ private:
   StopReason stopReason_ = StopReason::None;
   ShutdownStage shutdownStage_ = ShutdownStage::Idle;
   ProgressState progressState_ = ProgressState::Stable;
+  bool nativeFinished_ = false;
   bool completionNotified_ = false;
   RequestGroup* group_ = nullptr;
 
@@ -150,6 +151,7 @@ public:
   void completeFileSelectionApply();
   void failFileSelectionApply();
   void applyTransportState(BtSnapshot::State state);
+  void applyNativeCompletion(bool finished, bool seeding);
   void beginProgressVerification();
   void beginSelectionProgressHold();
   void beginProgressRefresh();

@@ -38,6 +38,7 @@
 #include <openssl/rand.h>
 
 #include "DlAbortEx.h"
+#include "OpenSslDiagnostics.h"
 #include "fmt.h"
 
 namespace aria2 {
@@ -45,9 +46,8 @@ namespace aria2 {
 namespace {
 void handleError(const std::string& funName)
 {
-  throw DL_ABORT_EX(
-      fmt("Exception in OpenSSL MSE DH routine %s: %s",
-          funName.c_str(), ERR_error_string(ERR_get_error(), nullptr)));
+  throw DL_ABORT_EX(fmt("Exception in OpenSSL MSE DH routine %s: %s",
+                        funName.c_str(), openssl::errorStack().c_str()));
 }
 } // namespace
 

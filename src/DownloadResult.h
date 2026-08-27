@@ -81,6 +81,8 @@ struct DownloadResult {
 
   std::vector<std::shared_ptr<FileEntry>> fileEntries;
 
+  std::vector<int64_t> fileCompletedLengths;
+
   // This field contains GIDs. See comment in
   // RequestGroup.cc::followedByGIDs_.
   std::vector<a2_gid_t> followedBy;

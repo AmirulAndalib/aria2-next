@@ -22,6 +22,7 @@
 #include "download_helper.h"
 #include "FileEntry.h"
 #include "DefaultPieceStorage.h"
+#include "Piece.h"
 #include "RpcMethodFactory.h"
 #include "Ed2kAttribute.h"
 #include "ed2k_hash.h"
@@ -116,6 +117,7 @@ public:
   void testBtResumeProgressAuthority();
 #endif // ENABLE_BITTORRENT
   void testGatherProgressCommon();
+  void testFileProgressIncludesInFlightBlocks();
   void testChangePosition();
   void testChangePosition_fail();
   void testGetSessionInfo();
@@ -184,6 +186,7 @@ A2_TEST(RpcMethodTest, testBtSharingContract)
 A2_TEST(RpcMethodTest, testBtResumeProgressAuthority)
 #endif // ENABLE_BITTORRENT
 A2_TEST(RpcMethodTest, testGatherProgressCommon)
+A2_TEST(RpcMethodTest, testFileProgressIncludesInFlightBlocks)
 A2_TEST(RpcMethodTest, testChangePosition)
 A2_TEST(RpcMethodTest, testChangePosition_fail)
 A2_TEST(RpcMethodTest, testGetSessionInfo)
@@ -1411,6 +1414,63 @@ void RpcMethodTest::testGatherProgressCommon()
   REQUIRE(entry->containsKey("gid"));
 }
 
+void RpcMethodTest::testFileProgressIncludesInFlightBlocks()
+{
+  constexpr int32_t pieceLength = 64_k;
+  constexpr int64_t totalLength = 128_k;
+  auto dctx = std::make_shared<DownloadContext>(
+      pieceLength, totalLength, A2_TEST_OUT_DIR "/file-progress");
+  std::vector<std::shared_ptr<FileEntry>> entries = {
+      std::make_shared<FileEntry>("first.bin", 20_k, 0),
+      std::make_shared<FileEntry>("second.bin", 44_k, 20_k),
+      std::make_shared<FileEntry>("third.bin", 64_k, 64_k)};
+  dctx->setFileEntries(entries.begin(), entries.end());
+
+  auto group =
+      std::make_shared<RequestGroup>(GroupId::create(), util::copy(option_));
+  group->setDownloadContext(dctx);
+  auto storage =
+      std::make_shared<DefaultPieceStorage>(dctx, group->getOption().get());
+  group->setPieceStorage(storage);
+
+  const unsigned char completedPieces[] = {0x40};
+  storage->setBitfield(completedPieces, sizeof(completedPieces));
+  auto inFlight = std::make_shared<Piece>(0, pieceLength);
+  inFlight->completeBlock(0);
+  inFlight->completeBlock(2);
+  storage->addInFlightPiece({inFlight});
+
+  REQUIRE_EQ((int64_t)96_k, storage->getCompletedLength());
+  REQUIRE_EQ((int64_t)16_k, storage->getCompletedLength(0, 20_k));
+  REQUIRE_EQ((int64_t)16_k, storage->getCompletedLength(20_k, 44_k));
+  REQUIRE_EQ((int64_t)64_k, storage->getCompletedLength(64_k, 64_k));
+
+  const auto progress = group->getFileCompletedLengths();
+  REQUIRE_EQ(std::vector<int64_t>{16_k, 16_k, 64_k}, progress);
+
+  auto result = group->createDownloadResult();
+  REQUIRE_EQ(progress, result->fileCompletedLengths);
+
+  auto stopped = Dict::g();
+  gatherStoppedDownload(stopped.get(), result,
+                        {"completedLength", "files"});
+  const auto stoppedFiles = downcast<List>(stopped->get("files"));
+  REQUIRE_EQ(std::string("16384"),
+             getString(downcast<Dict>(stoppedFiles->get(0)),
+                       "completedLength"));
+
+  auto rpc = Dict::g();
+  gatherProgressCommon(rpc.get(), group, {"completedLength", "files"});
+  REQUIRE_EQ(std::string("98304"), getString(rpc.get(), "completedLength"));
+  const auto files = downcast<List>(rpc->get("files"));
+  REQUIRE_EQ(std::string("16384"),
+             getString(downcast<Dict>(files->get(0)), "completedLength"));
+  REQUIRE_EQ(std::string("16384"),
+             getString(downcast<Dict>(files->get(1)), "completedLength"));
+  REQUIRE_EQ(std::string("65536"),
+             getString(downcast<Dict>(files->get(2)), "completedLength"));
+}
+
 #ifdef ENABLE_BITTORRENT
 void RpcMethodTest::testGetPeers()
 {
@@ -1909,6 +1969,17 @@ void RpcMethodTest::testBtResumeProgressAuthority()
   download->beginProgressRefresh();
   download->applyFileProgress({100, 20});
   assertProgress(120, {100, 20}, "0.312500");
+
+  const auto firstLength = snapshot.files[0].length;
+  const auto secondLength = snapshot.files[1].length;
+  download->beginProgressRefresh();
+  download->applyNativeCompletion(false, false);
+  download->applyFileProgress({firstLength, secondLength});
+  assertProgress(firstLength + secondLength,
+                 {firstLength, secondLength}, "1.000000");
+  REQUIRE(!snapshot.selectedComplete);
+  download->applyNativeCompletion(true, false);
+  REQUIRE(snapshot.selectedComplete);
 }
 #endif // ENABLE_BITTORRENT
 

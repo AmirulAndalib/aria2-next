@@ -34,6 +34,9 @@
 /* copyright --> */
 #include "ExpatXmlParser.h"
 
+#include "Log.h"
+#include "fmt.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -154,6 +157,15 @@ ssize_t XmlParser::parseUpdate(const char* data, size_t size)
   }
   XML_Status rv = XML_Parse(ctx_, data, size, 0);
   if (rv == XML_STATUS_ERROR) {
+    const auto code = XML_GetErrorCode(ctx_);
+    A2_LOG_DEBUG(
+        fmt("component=parser event=xml_parse_failed code=%d "
+            "line=%lu column=%lu byte=%" PRId64 " message=%s",
+            static_cast<int>(code),
+            static_cast<unsigned long>(XML_GetCurrentLineNumber(ctx_)),
+            static_cast<unsigned long>(XML_GetCurrentColumnNumber(ctx_)),
+            static_cast<int64_t>(XML_GetCurrentByteIndex(ctx_)),
+            XML_ErrorString(code)));
     return lastError_ = ERR_XML_PARSE;
   }
   else {
@@ -168,6 +180,15 @@ ssize_t XmlParser::parseFinal(const char* data, size_t size)
   }
   XML_Status rv = XML_Parse(ctx_, data, size, 1);
   if (rv == XML_STATUS_ERROR) {
+    const auto code = XML_GetErrorCode(ctx_);
+    A2_LOG_DEBUG(
+        fmt("component=parser event=xml_parse_failed code=%d "
+            "line=%lu column=%lu byte=%" PRId64 " message=%s",
+            static_cast<int>(code),
+            static_cast<unsigned long>(XML_GetCurrentLineNumber(ctx_)),
+            static_cast<unsigned long>(XML_GetCurrentColumnNumber(ctx_)),
+            static_cast<int64_t>(XML_GetCurrentByteIndex(ctx_)),
+            XML_ErrorString(code)));
     return lastError_ = ERR_XML_PARSE;
   }
   else {
@@ -181,6 +202,7 @@ int XmlParser::reset()
   sessionData_.reset();
   XML_Bool rv = XML_ParserReset(ctx_, nullptr);
   if (rv == XML_FALSE) {
+    A2_LOG_ERROR("component=parser event=xml_reset_failed");
     return lastError_ = ERR_RESET;
   }
   else {

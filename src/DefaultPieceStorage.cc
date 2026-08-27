@@ -36,6 +36,7 @@
 
 #include <numeric>
 #include <algorithm>
+#include <limits>
 
 #include "DownloadContext.h"
 #include "Piece.h"
@@ -219,42 +220,6 @@ void DefaultPieceStorage::deleteUsedPiece(const std::shared_ptr<Piece>& piece)
   piece->releaseWrCache(wrDiskCache_);
 }
 
-// void DefaultPieceStorage::reduceUsedPieces(size_t upperBound)
-// {
-//   size_t usedPiecesSize = usedPieces.size();
-//   if(usedPiecesSize <= upperBound) {
-//     return;
-//   }
-//   size_t delNum = usedPiecesSize-upperBound;
-//   int fillRate = 10;
-//   while(delNum && fillRate <= 15) {
-//     delNum -= deleteUsedPiecesByFillRate(fillRate, delNum);
-//     fillRate += 5;
-//   }
-// }
-
-// size_t DefaultPieceStorage::deleteUsedPiecesByFillRate(int fillRate,
-//                                                     size_t delNum)
-// {
-//   size_t deleted = 0;
-//   for(Pieces::iterator itr = usedPieces.begin();
-//       itr != usedPieces.end() && deleted < delNum;) {
-//     std::shared_ptr<Piece>& piece = *itr;
-//     if(!bitfieldMan->isUseBitSet(piece->getIndex()) &&
-//        piece->countCompleteBlock() <= piece->countBlock()*(fillRate/100.0)) {
-//       logger->info(MSG_DELETING_USED_PIECE,
-//                  piece->getIndex(),
-//                  (piece->countCompleteBlock()*100)/piece->countBlock(),
-//                  fillRate);
-//       itr = usedPieces.erase(itr);
-//       ++deleted;
-//     } else {
-//       ++itr;
-//     }
-//   }
-//   return deleted;
-// }
-
 void DefaultPieceStorage::completePiece(const std::shared_ptr<Piece>& piece)
 {
   if (!piece) {
@@ -339,6 +304,47 @@ int64_t DefaultPieceStorage::getCompletedLength()
     completedLength = totalLength;
   }
   return completedLength;
+}
+
+int64_t DefaultPieceStorage::getCompletedLength(int64_t offset,
+                                                int64_t length)
+{
+  const auto totalLength = getTotalLength();
+  if (offset < 0 || length <= 0 || offset >= totalLength) {
+    return 0;
+  }
+
+  length = std::min(length, totalLength - offset);
+  const auto end = offset + length;
+  int64_t completed = bitfieldMan_->getOffsetCompletedLength(offset, length);
+  const auto pieceLength = bitfieldMan_->getBlockLength();
+
+  for (const auto& piece : usedPieces_) {
+    if (!piece || bitfieldMan_->isBitSet(piece->getIndex()) ||
+        pieceLength <= 0 ||
+        piece->getIndex() >
+            static_cast<size_t>(std::numeric_limits<int64_t>::max() /
+                                pieceLength)) {
+      continue;
+    }
+    const auto pieceOffset =
+        static_cast<int64_t>(piece->getIndex()) * pieceLength;
+    for (size_t block = 0; block < piece->countBlock(); ++block) {
+      if (!piece->hasBlock(block)) {
+        continue;
+      }
+      const auto blockOffset =
+          pieceOffset + static_cast<int64_t>(block) * piece->getBlockLength();
+      const auto blockEnd = blockOffset + piece->getBlockLength(block);
+      const auto overlapBegin = std::max(offset, blockOffset);
+      const auto overlapEnd = std::min(end, blockEnd);
+      if (overlapBegin < overlapEnd) {
+        completed += overlapEnd - overlapBegin;
+      }
+    }
+  }
+
+  return std::min(completed, length);
 }
 
 int64_t DefaultPieceStorage::getFilteredCompletedLength()

@@ -101,6 +101,15 @@ public:
     return completedLength;
   }
 
+  virtual int64_t getCompletedLength(int64_t offset,
+                                     int64_t length) override
+  {
+    if (offset < 0 || length <= 0 || completedLength <= offset) {
+      return 0;
+    }
+    return std::min(length, completedLength - offset);
+  }
+
   void setCompletedLength(int64_t completedLength)
   {
     this->completedLength = completedLength;

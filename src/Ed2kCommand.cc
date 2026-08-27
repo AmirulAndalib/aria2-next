@@ -32,6 +32,7 @@
 #include "Ed2kSession.h"
 #include "Ed2kUploadQueue.h"
 #include "FileEntry.h"
+#include "GroupId.h"
 #include "Log.h"
 #include "message.h"
 #include "Option.h"
@@ -1103,7 +1104,14 @@ bool Ed2kCommand::execute()
   }
   catch (DlAbortEx& err) {
     getRequestGroup()->setLastErrorCode(err.getErrorCode(), err.what());
-    A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, err);
+    A2_LOG_ERROR(
+        fmt("component=ed2k event=connection_failed gid=%s cuid=%" PRId64
+            " role=%s endpoint=%s:%u error_code=%d message=%s",
+            GroupId::toHex(getRequestGroup()->getGID()).c_str(), getCuid(),
+            mode_ == Mode::SERVER ? "server" : "peer",
+            logging::sanitizeText(endpoint_.host).c_str(), endpoint_.port,
+            static_cast<int>(err.getErrorCode()),
+            logging::sanitizeText(err.what()).c_str()));
     return true;
   }
   catch (DlRetryEx& err) {
@@ -1129,13 +1137,24 @@ bool Ed2kCommand::execute()
                           retryWait);
       scheduleEd2kPeerCheck(getRequestGroup(), getDownloadEngine());
     }
-    A2_LOG_DEBUG_EX(EX_EXCEPTION_CAUGHT, err);
+    A2_LOG_DEBUG(
+        fmt("component=ed2k event=connection_retry gid=%s cuid=%" PRId64
+            " role=%s endpoint=%s:%u message=%s",
+            GroupId::toHex(getRequestGroup()->getGID()).c_str(), getCuid(),
+            mode_ == Mode::SERVER ? "server" : "peer",
+            logging::sanitizeText(endpoint_.host).c_str(), endpoint_.port,
+            logging::sanitizeText(err.what()).c_str()));
     return true;
   }
   catch (DownloadFailureException& err) {
     getRequestGroup()->setLastErrorCode(err.getErrorCode(), err.what());
     getRequestGroup()->setHaltRequested(true);
-    A2_LOG_ERROR_EX(EX_EXCEPTION_CAUGHT, err);
+    A2_LOG_ERROR(fmt("component=ed2k event=task_failed gid=%s cuid=%" PRId64
+                     " endpoint=%s:%u error_code=%d message=%s",
+                     GroupId::toHex(getRequestGroup()->getGID()).c_str(),
+                     getCuid(), logging::sanitizeText(endpoint_.host).c_str(),
+                     endpoint_.port, static_cast<int>(err.getErrorCode()),
+                     logging::sanitizeText(err.what()).c_str()));
     return true;
   }
 }
@@ -2234,10 +2253,12 @@ void Ed2kCommand::handleServerPacket()
       updateEd2kServerIdChange(getEd2kAttrs(group->getDownloadContext()),
                                endpoint_, idChange);
     }
-    A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                    " - ED2K server %s:%u assigned %s ID 0x%08x.",
-                    getCuid(), endpoint_.host.c_str(), endpoint_.port,
-                    idChange.highId ? "High" : "Low", idChange.clientId));
+    A2_LOG_INFO(fmt("component=ed2k event=server_connected gid=%s cuid=%" PRId64
+                    " endpoint=%s:%u id_type=%s client_id=0x%08x",
+                    GroupId::toHex(getRequestGroup()->getGID()).c_str(),
+                    getCuid(), logging::sanitizeText(endpoint_.host).c_str(),
+                    endpoint_.port, idChange.highId ? "high" : "low",
+                    idChange.clientId));
     if (attrs->searchActive) {
       queueServerOfferFiles();
       queueSearchRequest();
@@ -2759,6 +2780,11 @@ void Ed2kCommand::handlePeerPacket()
   case ed2k::OP_ACCEPTUPLOADREQ:
     peerAccepted_ = true;
     markEd2kPeerAccepted(attrs, endpoint_);
+    A2_LOG_DEBUG(fmt("component=ed2k event=peer_download_ready gid=%s "
+                     "cuid=%" PRId64 " endpoint=%s:%u",
+                     GroupId::toHex(getRequestGroup()->getGID()).c_str(),
+                     getCuid(), logging::sanitizeText(endpoint_.host).c_str(),
+                     endpoint_.port));
     queuePeerPartRequest();
     state_ = State::WRITE;
     break;

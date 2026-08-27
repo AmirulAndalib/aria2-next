@@ -649,9 +649,10 @@ void BtDownload::restoreResumeProgress()
     snapshot_.files[index].completedLength = completed[index];
   }
   updateSelection(group_->getDownloadContext());
+  nativeFinished_ = snapshot_.hasMetadata &&
+                    snapshot_.completedLength == snapshot_.totalLength;
   snapshot_.selectedComplete =
-      snapshot_.hasMetadata &&
-      snapshot_.completedLength == snapshot_.totalLength;
+      nativeFinished_;
   snapshot_.complete =
       hasAllPieces(impl_->params.have_pieces, info.num_pieces());
 }
@@ -664,6 +665,7 @@ void BtDownload::refreshLogicalProgress()
   updateSelection(group_->getDownloadContext());
   snapshot_.selectedComplete =
       progressState_ == ProgressState::Stable &&
+      nativeFinished_ &&
       snapshot_.fileSelectionState == BtSnapshot::FileSelectionState::None &&
       !snapshot_.error.present && snapshot_.totalLength > 0 &&
       snapshot_.completedLength == snapshot_.totalLength;
@@ -672,12 +674,14 @@ void BtDownload::refreshLogicalProgress()
 void BtDownload::beginProgressVerification()
 {
   progressState_ = ProgressState::Verifying;
+  nativeFinished_ = false;
   snapshot_.selectedComplete = false;
 }
 
 void BtDownload::beginSelectionProgressHold()
 {
   progressState_ = ProgressState::Selecting;
+  nativeFinished_ = false;
   snapshot_.selectedComplete = false;
   snapshot_.complete = false;
 }
@@ -686,6 +690,13 @@ void BtDownload::beginProgressRefresh()
 {
   progressState_ = ProgressState::Refreshing;
   snapshot_.selectedComplete = false;
+}
+
+void BtDownload::applyNativeCompletion(bool finished, bool seeding)
+{
+  nativeFinished_ = finished;
+  snapshot_.complete = seeding;
+  refreshLogicalProgress();
 }
 
 void BtDownload::applyFileProgress(

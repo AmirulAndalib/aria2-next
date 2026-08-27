@@ -43,6 +43,7 @@
 #include <openssl/bio.h>
 
 #include "Log.h"
+#include "OpenSslDiagnostics.h"
 #include "fmt.h"
 #include "BufferedFile.h"
 
@@ -102,8 +103,8 @@ OpenSSLTLSContext::OpenSSLTLSContext(TLSVersion minVer)
 {
   sslCtx_ = SSL_CTX_new(TLS_server_method());
   if (!sslCtx_) {
-    A2_LOG_ERROR(fmt("SSL_CTX_new() failed. Cause: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+    A2_LOG_ERROR(
+        fmt("SSL_CTX_new() failed. Cause: %s", openssl::errorStack().c_str()));
     return;
   }
 
@@ -125,7 +126,7 @@ OpenSSLTLSContext::OpenSSLTLSContext(TLSVersion minVer)
 
   if (SSL_CTX_set_min_proto_version(sslCtx_, minimumVersion) != 1) {
     A2_LOG_ERROR(fmt("SSL_CTX_set_min_proto_version() failed. Cause: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return;
   }
 
@@ -138,7 +139,7 @@ OpenSSLTLSContext::OpenSSLTLSContext(TLSVersion minVer)
 #endif
   if (SSL_CTX_set_cipher_list(sslCtx_, "HIGH:!aNULL:!eNULL") == 0) {
     A2_LOG_ERROR(fmt("SSL_CTX_set_cipher_list() failed. Cause: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return;
   }
   good_ = true;
@@ -157,20 +158,18 @@ bool OpenSSLTLSContext::addCredentialFile(const std::string& certfile,
   if (SSL_CTX_use_PrivateKey_file(sslCtx_, keyfile.c_str(), SSL_FILETYPE_PEM) !=
       1) {
     A2_LOG_ERROR(fmt("Failed to load private key from %s. Cause: %s",
-                     keyfile.c_str(),
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     keyfile.c_str(), openssl::errorStack().c_str()));
     return false;
   }
   if (SSL_CTX_use_certificate_chain_file(sslCtx_, certfile.c_str()) != 1) {
     A2_LOG_ERROR(fmt("Failed to load certificate from %s. Cause: %s",
-                     certfile.c_str(),
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     certfile.c_str(), openssl::errorStack().c_str()));
     return false;
   }
   if (SSL_CTX_check_private_key(sslCtx_) != 1) {
     A2_LOG_ERROR(fmt("The RPC certificate and private key do not match. "
                      "Cause: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
   A2_LOG_DEBUG(fmt("Credential files(cert=%s, key=%s) were successfully added.",
@@ -195,7 +194,7 @@ bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)
   if (!p12) {
     A2_LOG_ERROR(fmt("Failed to open PKCS12 file: %s. "
                      "If you meant to use PEM, specify --rpc-private-key.",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
   EVP_PKEY* pkey;
@@ -204,7 +203,7 @@ bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)
   if (!PKCS12_parse(p12.get(), "", &pkey, &cert, &ca)) {
     A2_LOG_ERROR(fmt("Failed to parse PKCS12 file: %s. "
                      "If you meant to use PEM, specify --rpc-private-key.",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
 
@@ -214,17 +213,17 @@ bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)
 
   if (!pkey || !cert) {
     A2_LOG_ERROR(fmt("Failed to use PKCS12 file: no pkey or cert %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
   if (!SSL_CTX_use_PrivateKey(sslCtx_, pkey)) {
     A2_LOG_ERROR(fmt("Failed to use PKCS12 file pkey: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
   if (!SSL_CTX_use_certificate(sslCtx_, cert)) {
     A2_LOG_ERROR(fmt("Failed to use PKCS12 file cert: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
   while (ca && sk_X509_num(ca) > 0) {
@@ -232,14 +231,14 @@ bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)
     if (SSL_CTX_add_extra_chain_cert(sslCtx_, chainCertificate) != 1) {
       X509_free(chainCertificate);
       A2_LOG_ERROR(fmt("Failed to use PKCS12 file chain: %s",
-                       ERR_error_string(ERR_get_error(), nullptr)));
+                       openssl::errorStack().c_str()));
       return false;
     }
   }
   if (SSL_CTX_check_private_key(sslCtx_) != 1) {
     A2_LOG_ERROR(fmt("The RPC PKCS12 certificate and private key do not "
                      "match. Cause: %s",
-                     ERR_error_string(ERR_get_error(), nullptr)));
+                     openssl::errorStack().c_str()));
     return false;
   }
 

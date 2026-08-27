@@ -13,6 +13,8 @@
 #ifndef D_CURL_DOWNLOAD_IMPL_H
 #define D_CURL_DOWNLOAD_IMPL_H
 
+#include <array>
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -57,6 +59,7 @@ struct CurlHandle {
   std::string responseLastModified;
   std::string range;
   std::vector<unsigned char> writeBuffer;
+  std::array<char, CURL_ERROR_SIZE> errorBuffer{};
 };
 
 struct CurlDownloadImpl {

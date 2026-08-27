@@ -14,6 +14,7 @@
 #define D_CURL_SESSION_H
 
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -63,6 +64,8 @@ private:
   std::chrono::steady_clock::time_point timeoutDeadline_;
   bool timeoutArmed_ = false;
   bool shuttingDown_ = false;
+  bool curlInitialized_ = false;
+  uint64_t loggingRevision_ = 0;
 
   bool prepare(const std::shared_ptr<CurlDownload>& download,
                RequestGroup* group);
@@ -91,6 +94,7 @@ private:
   void closeOutput(CurlDownload* download) noexcept;
   static void fail(CurlDownload* download, error_code::Value errorCode,
                    const std::string& message) noexcept;
+  static std::string gid(const CurlDownload* download);
   void rebalanceLimits();
   void socketAction(curl_socket_t socket, int events);
   void
@@ -113,6 +117,8 @@ private:
   static int updateProgress(void* userData, curl_off_t downloadTotal,
                             curl_off_t downloaded, curl_off_t uploadTotal,
                             curl_off_t uploaded) noexcept;
+  static int debugCallback(CURL* easy, curl_infotype type, char* data,
+                           size_t size, void* userData) noexcept;
 
   friend class CurlSocketCommand;
   friend class CurlSessionTest;

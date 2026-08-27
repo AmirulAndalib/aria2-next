@@ -44,6 +44,7 @@ struct Settings {
 };
 
 Settings getSettings();
+uint64_t revision();
 spdlog::level::level_enum parseLevel(const std::string& level);
 std::string sanitizeText(const std::string& value);
 std::string sanitizeUri(const std::string& value);
@@ -62,6 +63,8 @@ void write(spdlog::level::level_enum level, const char* sourceFile,
 void write(spdlog::level::level_enum level, const char* sourceFile,
            int lineNum, const std::string& message,
            const Exception& exception);
+void tryWrite(spdlog::level::level_enum level, const char* sourceFile,
+              int lineNum, const std::string& message) noexcept;
 
 } // namespace logging
 

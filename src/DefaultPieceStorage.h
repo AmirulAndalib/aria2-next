@@ -146,6 +146,9 @@ public:
 
   virtual int64_t getCompletedLength() override;
 
+  virtual int64_t getCompletedLength(int64_t offset,
+                                     int64_t length) override;
+
   virtual int64_t getFilteredCompletedLength() override;
 
   virtual void initStorage() override;

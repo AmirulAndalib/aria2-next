@@ -1372,9 +1372,10 @@ Advanced Options
   ``info`` reports download and service lifecycle events. ``warn`` reports
   degraded operation that may require attention. ``error`` reports failed
   operations. ``debug`` adds protocol decisions and retry context. ``trace``
-  adds bounded control-flow diagnostics without recording transfer payloads or
-  authentication data. URI credentials and query values are redacted.
-  Default: ``trace``
+  adds curated libcurl and libtorrent diagnostics without recording transfer
+  payloads, TLS frames, peer messages, or authentication data. URI credentials
+  and query values are redacted.
+  Default: ``debug``
 
 .. option:: --log-max-size=<SIZE>
 
@@ -3547,6 +3548,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`download-result <--download-result>`
   * :option:`keep-unfinished-download-result <--keep-unfinished-download-result>`
   * :option:`log <-l>`
+  * :option:`console-log-level <--console-log-level>`
   * :option:`log-level <--log-level>`
   * :option:`log-max-files <--log-max-files>`
   * :option:`log-max-size <--log-max-size>`
@@ -3569,7 +3571,8 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
 
   With the :option:`log <-l>` option, you can dynamically start logging or
   change log file. To stop logging, specify an empty string("") as the parameter
-  value. Log path, size, file-count, and level changes take effect immediately.
+  value. Log path, size, file-count, console level, and file level changes take
+  effect immediately.
   This method returns ``OK`` for success.
 
 .. function:: aria2.getGlobalStat([secret])

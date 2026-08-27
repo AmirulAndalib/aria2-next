@@ -240,6 +240,8 @@ public:
 
   int64_t getCompletedLength() const;
 
+  std::vector<int64_t> getFileCompletedLengths() const;
+
   inline int64_t getPendingLength() const
   {
     return getTotalLength() - getCompletedLength();

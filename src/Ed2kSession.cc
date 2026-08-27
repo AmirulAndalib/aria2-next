@@ -366,7 +366,7 @@ DownloadStateLoadResult Ed2kSession::loadDownloadState(RequestGroup* group)
   }
   storage->addInFlightPiece(pieces);
   attrs->sharingTime.restore(state.sharingTime);
-  A2_LOG_DEBUG(fmt("Loaded ED2K download state for GID %s from %s.",
+  A2_LOG_TRACE(fmt("Loaded ED2K download state for GID %s from %s.",
                    state.gid.c_str(), databasePath_.c_str()));
   return DownloadStateLoadResult::Loaded;
 }
@@ -549,7 +549,7 @@ void Ed2kSession::restoreRuntime()
   if (uploadQueue_) {
     uploadQueue_->credits().restore(credits);
   }
-  A2_LOG_DEBUG(
+  A2_LOG_TRACE(
       fmt("Loaded ED2K runtime state from %s.", databasePath_.c_str()));
 }
 
@@ -569,7 +569,7 @@ void Ed2kSession::checkpointRuntime()
         fmt("Failed to save ED2K runtime state to %s.", databasePath_.c_str()));
   }
   else {
-    A2_LOG_DEBUG(fmt("Saved ED2K runtime state to %s.", databasePath_.c_str()));
+    A2_LOG_TRACE(fmt("Saved ED2K runtime state to %s.", databasePath_.c_str()));
   }
 }
 

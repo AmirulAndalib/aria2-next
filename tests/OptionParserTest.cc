@@ -169,7 +169,7 @@ void OptionParserTest::testLogRotationOptions()
   REQUIRE_EQ((int64_t)10_m,
                        defaults.getAsLLInt(PREF_LOG_MAX_SIZE));
   REQUIRE_EQ(4, defaults.getAsInt(PREF_LOG_MAX_FILES));
-  REQUIRE_EQ(V_TRACE, defaults.get(PREF_LOG_LEVEL));
+  REQUIRE_EQ(V_DEBUG, defaults.get(PREF_LOG_LEVEL));
   REQUIRE_EQ(V_INFO, defaults.get(PREF_CONSOLE_LOG_LEVEL));
 
   Option configured;

@@ -830,26 +830,9 @@ void createUriEntry(List* uriList, const std::shared_ptr<FileEntry>& file)
 } // namespace
 
 namespace {
-void createCurlFileEntry(List* files, const CurlSnapshot& snapshot,
-                         const std::shared_ptr<FileEntry>& file)
-{
-  auto entry = Dict::g();
-  entry->put(KEY_INDEX, "1");
-  entry->put(KEY_PATH, file->getPath());
-  entry->put(KEY_SELECTED, VLB_TRUE);
-  entry->put(KEY_LENGTH, util::itos(snapshot.totalLength));
-  entry->put(KEY_COMPLETED_LENGTH, util::itos(snapshot.completedLength));
-  auto uriList = List::g();
-  createUriEntry(uriList.get(), file);
-  entry->put(KEY_URIS, std::move(uriList));
-  files->append(std::move(entry));
-}
-} // namespace
-
-namespace {
 template <typename InputIterator>
 void createFileEntry(List* files, InputIterator first, InputIterator last,
-                     const BitfieldMan* bf)
+                     const std::vector<int64_t>& completedLengths)
 {
   size_t index = 1;
   for (; first != last; ++first, ++index) {
@@ -858,8 +841,8 @@ void createFileEntry(List* files, InputIterator first, InputIterator last,
     entry->put(KEY_PATH, (*first)->getPath());
     entry->put(KEY_SELECTED, (*first)->isRequested() ? VLB_TRUE : VLB_FALSE);
     entry->put(KEY_LENGTH, util::itos((*first)->getLength()));
-    int64_t completedLength = bf->getOffsetCompletedLength(
-        (*first)->getOffset(), (*first)->getLength());
+    const auto completedLength =
+        index <= completedLengths.size() ? completedLengths[index - 1] : 0;
     entry->put(KEY_COMPLETED_LENGTH, util::itos(completedLength));
 
     auto uriList = List::g();
@@ -893,33 +876,6 @@ void createBtFileEntry(List* files, const BtSnapshot& snapshot)
 }
 } // namespace
 #endif
-
-namespace {
-template <typename InputIterator>
-void createFileEntry(List* files, InputIterator first, InputIterator last,
-                     int64_t totalLength, int32_t pieceLength,
-                     const std::string& bitfield)
-{
-  BitfieldMan bf(pieceLength, totalLength);
-  bf.setBitfield(reinterpret_cast<const unsigned char*>(bitfield.data()),
-                 bitfield.size());
-  createFileEntry(files, first, last, &bf);
-}
-} // namespace
-
-namespace {
-template <typename InputIterator>
-void createFileEntry(List* files, InputIterator first, InputIterator last,
-                     int64_t totalLength, int32_t pieceLength,
-                     const std::shared_ptr<PieceStorage>& ps)
-{
-  BitfieldMan bf(pieceLength, totalLength);
-  if (ps) {
-    bf.setBitfield(ps->getBitfield(), ps->getBitfieldLength());
-  }
-  createFileEntry(files, first, last, &bf);
-}
-} // namespace
 
 namespace {
 bool requested_key(const std::vector<std::string>& keys, const std::string& k)
@@ -1133,20 +1089,16 @@ void gatherProgressCommon(Dict* entryDict,
   }
   if (requested_key(keys, KEY_FILES)) {
     auto files = List::g();
-    if (group->getCurlDownload()) {
-      createCurlFileEntry(files.get(), group->getCurlDownload()->snapshot(),
-                          dctx->getFirstFileEntry());
-    }
 #ifdef ENABLE_BITTORRENT
-    else if (group->getBtDownload()) {
+    if (group->getBtDownload()) {
       createBtFileEntry(files.get(), group->getBtDownload()->snapshot());
     }
     else
 #endif // ENABLE_BITTORRENT
     {
       createFileEntry(files.get(), std::begin(dctx->getFileEntries()),
-                      std::end(dctx->getFileEntries()), dctx->getTotalLength(),
-                      dctx->getPieceLength(), ps);
+                      std::end(dctx->getFileEntries()),
+                      group->getFileCompletedLengths());
     }
     entryDict->put(KEY_FILES, std::move(files));
   }
@@ -1405,8 +1357,8 @@ void gatherStoppedDownload(Dict* entryDict,
 #endif
     {
       createFileEntry(files.get(), std::begin(ds->fileEntries),
-                      std::end(ds->fileEntries), ds->totalLength,
-                      ds->pieceLength, ds->bitfield);
+                      std::end(ds->fileEntries),
+                      ds->fileCompletedLengths);
     }
     entryDict->put(KEY_FILES, std::move(files));
   }
@@ -1485,23 +1437,25 @@ std::unique_ptr<ValueBase> GetFilesRpcMethod::process(const RpcRequest& req,
       }
 #endif
       createFileEntry(files.get(), std::begin(dr->fileEntries),
-                      std::end(dr->fileEntries), dr->totalLength,
-                      dr->pieceLength, dr->bitfield);
+                      std::end(dr->fileEntries),
+                      dr->fileCompletedLengths);
     }
   }
   else {
     auto& dctx = group->getDownloadContext();
-    if (group->getCurlDownload()) {
-      createCurlFileEntry(files.get(), group->getCurlDownload()->snapshot(),
-                          dctx->getFirstFileEntry());
+#ifdef ENABLE_BITTORRENT
+    if (group->getBtDownload()) {
+      createBtFileEntry(files.get(), group->getBtDownload()->snapshot());
     }
     else {
+#endif
       createFileEntry(files.get(),
-                      std::begin(group->getDownloadContext()->getFileEntries()),
-                      std::end(group->getDownloadContext()->getFileEntries()),
-                      dctx->getTotalLength(), dctx->getPieceLength(),
-                      group->getPieceStorage());
+                      std::begin(dctx->getFileEntries()),
+                      std::end(dctx->getFileEntries()),
+                      group->getFileCompletedLengths());
+#ifdef ENABLE_BITTORRENT
     }
+#endif
   }
   return std::move(files);
 }
@@ -2546,6 +2500,11 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
     logSettings.fileLevel = logging::parseLevel(option.get(PREF_LOG_LEVEL));
     reconfigureLogging = true;
   }
+  if (option.defined(PREF_CONSOLE_LOG_LEVEL)) {
+    logSettings.consoleLevel =
+        logging::parseLevel(option.get(PREF_CONSOLE_LOG_LEVEL));
+    reconfigureLogging = true;
+  }
   if (option.defined(PREF_LOG)) {
     logSettings.file = option.get(PREF_LOG);
     reconfigureLogging = true;
@@ -2559,13 +2518,8 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
     reconfigureLogging = true;
   }
   if (reconfigureLogging) {
-    try {
       logging::configure(logSettings);
     }
-    catch (RecoverableException& e) {
-      // TODO no exception handling
-    }
-  }
 }
 
 } // namespace aria2

@@ -21,6 +21,7 @@
 #include "Ed2kUploadQueue.h"
 #include "File.h"
 #include "Log.h"
+#include "SqliteDiagnostics.h"
 #include "ed2k_hash.h"
 #include "ed2k_server.h"
 #include "fmt.h"
@@ -38,8 +39,9 @@ public:
   Statement(sqlite3* db, const char* sql) : db_(db)
   {
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt_, nullptr) != SQLITE_OK) {
-      A2_LOG_ERROR(fmt("Failed to prepare ED2K database statement: %s",
-                       sqlite3_errmsg(db_)));
+      A2_LOG_ERROR(fmt(
+          "component=storage store=ed2k event=sqlite_failed %s",
+          sqlite::diagnostic(db_, sqlite3_errcode(db_), "prepare").c_str()));
       stmt_ = nullptr;
     }
   }
@@ -61,16 +63,54 @@ private:
 
 bool bindText(sqlite3_stmt* stmt, int index, const std::string& value)
 {
-  return sqlite3_bind_text(stmt, index, value.data(),
-                           static_cast<int>(value.size()),
-                           SQLITE_TRANSIENT) == SQLITE_OK;
+  const auto result =
+      sqlite3_bind_text(stmt, index, value.data(),
+                        static_cast<int>(value.size()), SQLITE_TRANSIENT);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed index=%d %s", index,
+        sqlite::diagnostic(sqlite3_db_handle(stmt), result, "bind_text")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
 }
 
 bool bindBlob(sqlite3_stmt* stmt, int index, const std::string& value)
 {
-  return sqlite3_bind_blob(stmt, index, value.data(),
-                           static_cast<int>(value.size()),
-                           SQLITE_TRANSIENT) == SQLITE_OK;
+  const auto result =
+      sqlite3_bind_blob(stmt, index, value.data(),
+                        static_cast<int>(value.size()), SQLITE_TRANSIENT);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed index=%d %s", index,
+        sqlite::diagnostic(sqlite3_db_handle(stmt), result, "bind_blob")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
+}
+
+bool bindInt(sqlite3_stmt* stmt, int index, int value)
+{
+  const auto result = sqlite3_bind_int(stmt, index, value);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed index=%d %s", index,
+        sqlite::diagnostic(sqlite3_db_handle(stmt), result, "bind_int")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
+}
+
+bool bindInt64(sqlite3_stmt* stmt, int index, int64_t value)
+{
+  const auto result = sqlite3_bind_int64(stmt, index, value);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed index=%d %s", index,
+        sqlite::diagnostic(sqlite3_db_handle(stmt), result, "bind_int64")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
 }
 
 std::string columnBlob(sqlite3_stmt* stmt, int index)
@@ -96,8 +136,20 @@ bool stepDone(sqlite3* db, sqlite3_stmt* stmt)
   if (result == SQLITE_DONE) {
     return true;
   }
-  A2_LOG_ERROR(fmt("Failed to update ED2K database: %s", sqlite3_errmsg(db)));
+  A2_LOG_ERROR(fmt("component=storage store=ed2k event=sqlite_failed %s",
+                   sqlite::diagnostic(db, result, "step").c_str()));
   return false;
+}
+
+int stepRows(sqlite3_stmt* stmt, const char* operation)
+{
+  const auto result = sqlite3_step(stmt);
+  if (result != SQLITE_ROW && result != SQLITE_DONE) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed %s",
+        sqlite::diagnostic(sqlite3_db_handle(stmt), result, operation).c_str()));
+  }
+  return result;
 }
 
 } // namespace
@@ -119,25 +171,37 @@ bool Ed2kStore::open()
   if (path_.empty()) {
     return false;
   }
+  sqlite::configureNativeLogging();
   File directory(File(path_).getDirname());
   if (!directory.isDir() && !directory.mkdirs()) {
     A2_LOG_ERROR(fmt("Failed to create ED2K database directory: %s",
                      directory.getPath().c_str()));
     return false;
   }
-  if (sqlite3_open_v2(path_.c_str(), &db_,
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
-                          SQLITE_OPEN_FULLMUTEX,
-                      nullptr) != SQLITE_OK) {
-    A2_LOG_ERROR(fmt("Failed to open ED2K database %s: %s", path_.c_str(),
-                     db_ ? sqlite3_errmsg(db_) : "out of memory"));
+  const auto openResult = sqlite3_open_v2(
+      path_.c_str(), &db_,
+      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+      nullptr);
+  if (openResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=ed2k event=sqlite_failed path=%s %s",
+            path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
     if (db_) {
       sqlite3_close_v2(db_);
       db_ = nullptr;
     }
     return false;
   }
-  sqlite3_busy_timeout(db_, 5000);
+  sqlite::configureConnection(db_);
+  const auto timeoutResult = sqlite3_busy_timeout(db_, 5000);
+  if (timeoutResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=ed2k event=sqlite_failed %s",
+            sqlite::diagnostic(db_, timeoutResult, "busy_timeout").c_str()));
+    sqlite3_close_v2(db_);
+    db_ = nullptr;
+    return false;
+  }
   if (!exec("PRAGMA foreign_keys=ON") || !exec("PRAGMA journal_mode=WAL") ||
       !exec("PRAGMA synchronous=NORMAL")) {
     sqlite3_close_v2(db_);
@@ -147,7 +211,14 @@ bool Ed2kStore::open()
   int version;
   {
     Statement versionQuery(db_, "PRAGMA user_version");
-    if (!versionQuery || sqlite3_step(versionQuery.get()) != SQLITE_ROW) {
+    const auto versionResult =
+        versionQuery ? sqlite3_step(versionQuery.get()) : SQLITE_ERROR;
+    if (!versionQuery || versionResult != SQLITE_ROW) {
+      if (versionQuery) {
+        A2_LOG_ERROR(
+            fmt("component=storage store=ed2k event=sqlite_failed %s",
+                sqlite::diagnostic(db_, versionResult, "read_schema").c_str()));
+      }
       sqlite3_close_v2(db_);
       db_ = nullptr;
       return false;
@@ -195,7 +266,9 @@ bool Ed2kStore::exec(const char* sql) const
     return true;
   }
   A2_LOG_ERROR(
-      fmt("ED2K database error: %s", message ? message : sqlite3_errmsg(db_)));
+      fmt("component=storage store=ed2k event=sqlite_failed %s detail=%s",
+          sqlite::diagnostic(db_, result, "exec").c_str(),
+          logging::sanitizeText(message ? message : "").c_str()));
   sqlite3_free(message);
   return false;
 }
@@ -252,7 +325,7 @@ bool Ed2kStore::loadIdentity(std::string& clientHash,
   clientHash.clear();
   kadState.clear();
   int result;
-  while ((result = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+  while ((result = stepRows(stmt.get(), "load_identity")) == SQLITE_ROW) {
     const auto key = columnText(stmt.get(), 0);
     if (key == "client_hash") {
       clientHash = columnBlob(stmt.get(), 1);
@@ -282,8 +355,7 @@ bool Ed2kStore::saveIdentity(const std::string& clientHash,
   for (const auto& value : values) {
     sqlite3_reset(stmt.get());
     sqlite3_clear_bindings(stmt.get());
-    if (sqlite3_bind_text(stmt.get(), 1, value.first, -1, SQLITE_STATIC) !=
-            SQLITE_OK ||
+    if (!bindText(stmt.get(), 1, value.first) ||
         !bindBlob(stmt.get(), 2, *value.second) || !stepDone(db_, stmt.get())) {
       rollback();
       return false;
@@ -303,7 +375,7 @@ bool Ed2kStore::loadServers(std::vector<ServerState>& servers) const
   }
   servers.clear();
   int result;
-  while ((result = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+  while ((result = stepRows(stmt.get(), "load_servers")) == SQLITE_ROW) {
     ServerState state;
     if (!parseServerStatePayload(state, columnBlob(stmt.get(), 0))) {
       return false;
@@ -353,7 +425,7 @@ bool Ed2kStore::loadCredits(std::vector<PeerCreditState>& credits) const
   }
   credits.clear();
   int result;
-  while ((result = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+  while ((result = stepRows(stmt.get(), "load_credits")) == SQLITE_ROW) {
     PeerCreditState state;
     state.userHash = columnBlob(stmt.get(), 0);
     state.uploaded = static_cast<uint64_t>(sqlite3_column_int64(stmt.get(), 1));
@@ -391,12 +463,8 @@ bool Ed2kStore::replaceCredits(const std::vector<PeerCreditState>& credits)
     sqlite3_reset(stmt.get());
     sqlite3_clear_bindings(stmt.get());
     if (!bindBlob(stmt.get(), 1, credit.userHash) ||
-        sqlite3_bind_int64(stmt.get(), 2,
-                           static_cast<int64_t>(credit.uploaded)) !=
-            SQLITE_OK ||
-        sqlite3_bind_int64(stmt.get(), 3,
-                           static_cast<int64_t>(credit.downloaded)) !=
-            SQLITE_OK ||
+        !bindInt64(stmt.get(), 2, static_cast<int64_t>(credit.uploaded)) ||
+        !bindInt64(stmt.get(), 3, static_cast<int64_t>(credit.downloaded)) ||
         !stepDone(db_, stmt.get())) {
       rollback();
       return false;
@@ -418,7 +486,7 @@ bool Ed2kStore::loadFileSources(std::vector<PersistedFileSources>& files) const
   }
   files.clear();
   int result;
-  while ((result = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+  while ((result = stepRows(stmt.get(), "load_file_sources")) == SQLITE_ROW) {
     const auto fileHash = columnBlob(stmt.get(), 0);
     const auto fileSize = sqlite3_column_int64(stmt.get(), 1);
     if (fileHash.size() != HASH_LENGTH || fileSize <= 0) {
@@ -467,12 +535,11 @@ bool Ed2kStore::replaceFileSources(
       sqlite3_reset(stmt.get());
       sqlite3_clear_bindings(stmt.get());
       if (!bindBlob(stmt.get(), 1, file.fileHash) ||
-          sqlite3_bind_int64(stmt.get(), 2, file.fileSize) != SQLITE_OK ||
-          sqlite3_bind_int64(stmt.get(), 3, static_cast<int64_t>(i)) !=
-              SQLITE_OK ||
+          !bindInt64(stmt.get(), 2, file.fileSize) ||
+          !bindInt64(stmt.get(), 3, static_cast<int64_t>(i)) ||
           !bindText(stmt.get(), 4, source.host) ||
-          sqlite3_bind_int(stmt.get(), 5, source.port) != SQLITE_OK ||
-          sqlite3_bind_int(stmt.get(), 6, source.cryptOptions) != SQLITE_OK ||
+          !bindInt(stmt.get(), 5, source.port) ||
+          !bindInt(stmt.get(), 6, source.cryptOptions) ||
           !bindBlob(stmt.get(), 7, source.userHash) ||
           !stepDone(db_, stmt.get())) {
         rollback();
@@ -513,7 +580,7 @@ Ed2kStore::loadDownload(PersistedDownloadState& state,
   if (!stmt || !bindText(stmt.get(), 1, gid)) {
     return DownloadStateLoadResult::Error;
   }
-  const auto rowResult = sqlite3_step(stmt.get());
+  const auto rowResult = stepRows(stmt.get(), "load_download");
   if (rowResult == SQLITE_DONE) {
     return DownloadStateLoadResult::Missing;
   }
@@ -543,7 +610,8 @@ Ed2kStore::loadDownload(PersistedDownloadState& state,
     return DownloadStateLoadResult::Error;
   }
   int result;
-  while ((result = sqlite3_step(pieces.get())) == SQLITE_ROW) {
+  while ((result = stepRows(pieces.get(), "load_download_pieces")) ==
+         SQLITE_ROW) {
     PersistedPieceState piece;
     piece.index = static_cast<size_t>(sqlite3_column_int64(pieces.get(), 0));
     piece.length = sqlite3_column_int64(pieces.get(), 1);
@@ -571,7 +639,7 @@ bool Ed2kStore::loadDownloads(std::vector<PersistedDownloadState>& states) const
   }
   std::vector<std::string> gids;
   int result;
-  while ((result = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+  while ((result = stepRows(stmt.get(), "list_downloads")) == SQLITE_ROW) {
     gids.push_back(columnText(stmt.get(), 0));
   }
   if (result != SQLITE_DONE) {
@@ -609,14 +677,13 @@ bool Ed2kStore::saveDownload(const PersistedDownloadState& state)
       "updated_at=excluded.updated_at");
   if (!download || !bindText(download.get(), 1, state.gid) ||
       !bindBlob(download.get(), 2, state.fileHash) ||
-      sqlite3_bind_int64(download.get(), 3, state.fileSize) != SQLITE_OK ||
+      !bindInt64(download.get(), 3, state.fileSize) ||
       !bindText(download.get(), 4, state.link) ||
       !bindText(download.get(), 5, state.path) ||
-      sqlite3_bind_int64(download.get(), 6, state.modifiedTime) != SQLITE_OK ||
-      sqlite3_bind_int(download.get(), 7, state.paused ? 1 : 0) != SQLITE_OK ||
-      sqlite3_bind_int(download.get(), 8, state.complete ? 1 : 0) !=
-          SQLITE_OK ||
-      sqlite3_bind_int64(download.get(), 9, state.sharingTime) != SQLITE_OK ||
+      !bindInt64(download.get(), 6, state.modifiedTime) ||
+      !bindInt(download.get(), 7, state.paused ? 1 : 0) ||
+      !bindInt(download.get(), 8, state.complete ? 1 : 0) ||
+      !bindInt64(download.get(), 9, state.sharingTime) ||
       !bindBlob(download.get(), 10, state.bitfield) ||
       !stepDone(db_, download.get())) {
     rollback();
@@ -641,9 +708,8 @@ bool Ed2kStore::saveDownload(const PersistedDownloadState& state)
     sqlite3_reset(piece.get());
     sqlite3_clear_bindings(piece.get());
     if (!bindText(piece.get(), 1, state.gid) ||
-        sqlite3_bind_int64(piece.get(), 2, static_cast<int64_t>(value.index)) !=
-            SQLITE_OK ||
-        sqlite3_bind_int64(piece.get(), 3, value.length) != SQLITE_OK ||
+        !bindInt64(piece.get(), 2, static_cast<int64_t>(value.index)) ||
+        !bindInt64(piece.get(), 3, value.length) ||
         !bindBlob(piece.get(), 4, value.bitfield) ||
         !stepDone(db_, piece.get())) {
       rollback();

@@ -45,6 +45,7 @@ std::vector<std::string> detectBtRouteAddresses(const Option* option);
 BtConfig makeBtConfig(const Option* option);
 BtConfig makeBtConfig(const Option* option,
                       const std::vector<std::string>& routeAddresses);
+int btAlertMask();
 void configureBtDiskIo(libtorrent::session_params& params,
                        const Option* option);
 void applyBtFilePrioritySpec(

@@ -20,18 +20,26 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/steady_timer.hpp>
 
+#include "Log.h"
+#include "fmt.h"
+
 namespace aria2 {
 
 namespace asio = boost::asio;
 
 struct SystemResolver::Impl {
   struct Operation {
-    Operation(asio::io_context& context, RequestId requestId)
-        : id(requestId), resolver(context), timer(context)
+    Operation(asio::io_context& context, RequestId requestId,
+              std::string hostname)
+        : id(requestId),
+          hostname(std::move(hostname)),
+          resolver(context),
+          timer(context)
     {
     }
 
     RequestId id;
+    std::string hostname;
     asio::ip::tcp::resolver resolver;
     asio::steady_timer timer;
     std::vector<std::string> addresses;
@@ -71,7 +79,8 @@ SystemResolver::resolve(const std::string& hostname, uint16_t port,
   if (id == 0) {
     id = impl_->nextId++;
   }
-  auto operation = std::make_shared<Impl::Operation>(impl_->context, id);
+  auto operation =
+      std::make_shared<Impl::Operation>(impl_->context, id, hostname);
   impl_->operations.emplace(id, operation);
 
   if (timeout.count() > 0) {
@@ -94,7 +103,14 @@ SystemResolver::resolve(const std::string& hostname, uint16_t port,
     if (ec) {
       operation->error = operation->timedOut
                              ? "Name resolution timed out"
-                             : ec.message();
+                             : fmt("%s:%d: %s", ec.category().name(),
+                                   ec.value(), ec.message().c_str());
+      A2_LOG_DEBUG(fmt("component=network event=dns_failed host=%s "
+                       "category=%s code=%d timeout=%s message=%s",
+                       logging::sanitizeText(operation->hostname).c_str(),
+                       ec.category().name(), ec.value(),
+                       operation->timedOut ? "true" : "false",
+                       logging::sanitizeText(operation->error).c_str()));
     }
     else {
       for (const auto& result : results) {
@@ -106,6 +122,8 @@ SystemResolver::resolve(const std::string& hostname, uint16_t port,
       }
       if (operation->addresses.empty()) {
         operation->error = "No address returned";
+        A2_LOG_DEBUG(fmt("component=network event=dns_empty host=%s",
+                         logging::sanitizeText(operation->hostname).c_str()));
       }
     }
     operation->complete = true;
@@ -127,6 +145,10 @@ SystemResolver::resolve(const std::string& hostname, uint16_t port,
   catch (const std::exception& error) {
     operation->timer.cancel();
     operation->error = error.what();
+    A2_LOG_DEBUG(fmt("component=network event=dns_start_failed host=%s "
+                     "message=%s",
+                     logging::sanitizeText(hostname).c_str(),
+                     logging::sanitizeText(error.what()).c_str()));
     operation->complete = true;
     impl_->completed = true;
   }

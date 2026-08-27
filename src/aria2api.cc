@@ -54,7 +54,6 @@
 #include "PieceStorage.h"
 #include "DownloadContext.h"
 #include "FileEntry.h"
-#include "BitfieldMan.h"
 #include "RpcMethodImpl.h"
 #include "console.h"
 #include "KeepRunningCommand.h"
@@ -588,14 +587,13 @@ void createUriEntry(OutputIterator out, const std::shared_ptr<FileEntry>& file)
 
 namespace {
 FileData createFileData(const std::shared_ptr<FileEntry>& fe, int index,
-                        const BitfieldMan* bf)
+                        int64_t completedLength)
 {
   FileData file;
   file.index = index;
   file.path = fe->getPath();
   file.length = fe->getLength();
-  file.completedLength =
-      bf->getOffsetCompletedLength(fe->getOffset(), fe->getLength());
+  file.completedLength = completedLength;
   file.selected = fe->isRequested();
   createUriEntry(std::back_inserter(file.uris), fe);
   return file;
@@ -637,40 +635,15 @@ BtMetaInfoData createBtMetaInfo(const BtMetadata* metadata,
 namespace {
 template <typename OutputIterator, typename InputIterator>
 void createFileEntry(OutputIterator out, InputIterator first,
-                     InputIterator last, const BitfieldMan* bf)
+                     InputIterator last,
+                     const std::vector<int64_t>& completedLengths)
 {
   size_t index = 1;
   for (; first != last; ++first) {
-    out++ = createFileData(*first, index++, bf);
+    const auto completedLength =
+        index <= completedLengths.size() ? completedLengths[index - 1] : 0;
+    out++ = createFileData(*first, index++, completedLength);
   }
-}
-} // namespace
-
-namespace {
-template <typename OutputIterator, typename InputIterator>
-void createFileEntry(OutputIterator out, InputIterator first,
-                     InputIterator last, int64_t totalLength,
-                     int32_t pieceLength, const std::string& bitfield)
-{
-  BitfieldMan bf(pieceLength, totalLength);
-  bf.setBitfield(reinterpret_cast<const unsigned char*>(bitfield.data()),
-                 bitfield.size());
-  createFileEntry(out, first, last, &bf);
-}
-} // namespace
-
-namespace {
-template <typename OutputIterator, typename InputIterator>
-void createFileEntry(OutputIterator out, InputIterator first,
-                     InputIterator last, int64_t totalLength,
-                     int32_t pieceLength,
-                     const std::shared_ptr<PieceStorage>& ps)
-{
-  BitfieldMan bf(pieceLength, totalLength);
-  if (ps) {
-    bf.setBitfield(ps->getBitfield(), ps->getBitfieldLength());
-  }
-  createFileEntry(out, first, last, &bf);
 }
 } // namespace
 
@@ -812,8 +785,8 @@ struct RequestGroupDH : public DownloadHandle {
 #endif
     const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
     createFileEntry(std::back_inserter(res), dctx->getFileEntries().begin(),
-                    dctx->getFileEntries().end(), dctx->getTotalLength(),
-                    dctx->getPieceLength(), group->getPieceStorage());
+                    dctx->getFileEntries().end(),
+                    group->getFileCompletedLengths());
     return res;
   }
   virtual int getNumFiles() override
@@ -830,12 +803,9 @@ struct RequestGroupDH : public DownloadHandle {
     }
 #endif
     const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
-    BitfieldMan bf(dctx->getPieceLength(), dctx->getTotalLength());
-    const std::shared_ptr<PieceStorage>& ps = group->getPieceStorage();
-    if (ps) {
-      bf.setBitfield(ps->getBitfield(), ps->getBitfieldLength());
-    }
-    return createFileData(dctx->getFileEntries()[index - 1], index, &bf);
+    const auto completedLengths = group->getFileCompletedLengths();
+    return createFileData(dctx->getFileEntries().at(index - 1), index,
+                          completedLengths.at(index - 1));
   }
   virtual BtMetaInfoData getBtMetaInfo() override
   {
@@ -913,8 +883,7 @@ struct DownloadResultDH : public DownloadHandle {
     }
 #endif
     createFileEntry(std::back_inserter(res), dr->fileEntries.begin(),
-                    dr->fileEntries.end(), dr->totalLength, dr->pieceLength,
-                    dr->bitfield);
+                    dr->fileEntries.end(), dr->fileCompletedLengths);
     return res;
   }
   virtual int getNumFiles() override { return dr->fileEntries.size(); }
@@ -925,10 +894,8 @@ struct DownloadResultDH : public DownloadHandle {
       return createBtFileData(dr->btSnapshot.files.at(index - 1), index);
     }
 #endif
-    BitfieldMan bf(dr->pieceLength, dr->totalLength);
-    bf.setBitfield(reinterpret_cast<const unsigned char*>(dr->bitfield.data()),
-                   dr->bitfield.size());
-    return createFileData(dr->fileEntries[index - 1], index, &bf);
+    return createFileData(dr->fileEntries.at(index - 1), index,
+                          dr->fileCompletedLengths.at(index - 1));
   }
   virtual BtMetaInfoData getBtMetaInfo() override
   {

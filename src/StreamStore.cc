@@ -19,6 +19,7 @@
 
 #include "File.h"
 #include "Log.h"
+#include "SqliteDiagnostics.h"
 #include "fmt.h"
 
 namespace aria2 {
@@ -29,7 +30,10 @@ class Statement {
 public:
   Statement(sqlite3* db, const char* sql)
   {
-    if (sqlite3_prepare_v2(db, sql, -1, &value_, nullptr) != SQLITE_OK) {
+    const auto result = sqlite3_prepare_v2(db, sql, -1, &value_, nullptr);
+    if (result != SQLITE_OK) {
+      A2_LOG_ERROR(fmt("component=storage store=stream event=sqlite_failed %s",
+                       sqlite::diagnostic(db, result, "prepare").c_str()));
       value_ = nullptr;
     }
   }
@@ -50,9 +54,41 @@ private:
 
 bool bindText(sqlite3_stmt* statement, int index, const std::string& value)
 {
-  return sqlite3_bind_text(statement, index, value.data(),
-                           static_cast<int>(value.size()),
-                           SQLITE_TRANSIENT) == SQLITE_OK;
+  const auto result =
+      sqlite3_bind_text(statement, index, value.data(),
+                        static_cast<int>(value.size()), SQLITE_TRANSIENT);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=stream event=sqlite_failed index=%d %s", index,
+        sqlite::diagnostic(sqlite3_db_handle(statement), result, "bind_text")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
+}
+
+bool bindInt64(sqlite3_stmt* statement, int index, int64_t value)
+{
+  const auto result = sqlite3_bind_int64(statement, index, value);
+  if (result != SQLITE_OK) {
+    A2_LOG_ERROR(fmt(
+        "component=storage store=stream event=sqlite_failed index=%d %s",
+        index,
+        sqlite::diagnostic(sqlite3_db_handle(statement), result, "bind_int64")
+            .c_str()));
+  }
+  return result == SQLITE_OK;
+}
+
+int step(sqlite3_stmt* statement, const char* operation)
+{
+  const auto result = sqlite3_step(statement);
+  if (result != SQLITE_ROW && result != SQLITE_DONE) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=stream event=sqlite_failed %s",
+            sqlite::diagnostic(sqlite3_db_handle(statement), result, operation)
+                .c_str()));
+  }
+  return result;
 }
 
 std::string textColumn(sqlite3_stmt* statement, int index)
@@ -130,33 +166,54 @@ bool StreamStore::open()
   if (path_.empty()) {
     return false;
   }
+  sqlite::configureNativeLogging();
   File directory(File(path_).getDirname());
-  if ((!directory.isDir() && !directory.mkdirs()) ||
-      sqlite3_open_v2(path_.c_str(), &db_,
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE |
-                          SQLITE_OPEN_FULLMUTEX,
-                      nullptr) != SQLITE_OK) {
-    A2_LOG_ERROR(fmt("Unable to open stream state database %s: %s",
-                     path_.c_str(),
-                     db_ ? sqlite3_errmsg(db_) : "out of memory"));
+  if (!directory.isDir() && !directory.mkdirs()) {
+    A2_LOG_ERROR(fmt("component=storage store=stream "
+                     "event=database_directory_failed path=%s",
+                     logging::sanitizeText(directory.getPath()).c_str()));
+    return false;
+  }
+  const auto openResult = sqlite3_open_v2(
+      path_.c_str(), &db_,
+      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+      nullptr);
+  if (openResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=stream event=sqlite_failed path=%s %s",
+            path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
     if (db_) {
       sqlite3_close_v2(db_);
       db_ = nullptr;
     }
     return false;
   }
-  sqlite3_busy_timeout(db_, 5000);
+  sqlite::configureConnection(db_);
+  const auto timeoutResult = sqlite3_busy_timeout(db_, 5000);
+  if (timeoutResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=stream event=sqlite_failed %s",
+            sqlite::diagnostic(db_, timeoutResult, "busy_timeout").c_str()));
+    sqlite3_close_v2(db_);
+    db_ = nullptr;
+    return false;
+  }
   int version = 0;
   {
     Statement versionQuery(db_, "PRAGMA user_version");
-    if (versionQuery && sqlite3_step(versionQuery.get()) == SQLITE_ROW) {
+    if (versionQuery && step(versionQuery.get(), "read_schema") == SQLITE_ROW) {
       version = sqlite3_column_int(versionQuery.get(), 0);
     }
   }
-  if (version != 0 && version != 2 &&
-      sqlite3_exec(db_, "DROP TABLE IF EXISTS downloads", nullptr, nullptr,
-                   nullptr) != SQLITE_OK) {
-    A2_LOG_ERROR("Unable to reset the stream state database");
+  const auto resetResult =
+      version != 0 && version != 2
+          ? sqlite3_exec(db_, "DROP TABLE IF EXISTS downloads", nullptr,
+                         nullptr, nullptr)
+          : SQLITE_OK;
+  if (resetResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=stream event=sqlite_failed %s",
+            sqlite::diagnostic(db_, resetResult, "reset_schema").c_str()));
     sqlite3_close_v2(db_);
     db_ = nullptr;
     return false;
@@ -173,9 +230,14 @@ bool StreamStore::open()
       "updated_at INTEGER NOT NULL DEFAULT (unixepoch()));"
       "PRAGMA user_version=2;";
   char* message = nullptr;
-  if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
-    A2_LOG_ERROR(fmt("Unable to initialize stream state database: %s",
-                     message ? message : sqlite3_errmsg(db_)));
+  const auto schemaResult =
+      sqlite3_exec(db_, schema, nullptr, nullptr, &message);
+  if (schemaResult != SQLITE_OK) {
+    A2_LOG_ERROR(
+        fmt("component=storage store=stream event=sqlite_failed %s "
+            "detail=%s",
+            sqlite::diagnostic(db_, schemaResult, "initialize_schema").c_str(),
+            logging::sanitizeText(message ? message : "").c_str()));
     sqlite3_free(message);
     sqlite3_close_v2(db_);
     db_ = nullptr;
@@ -192,7 +254,8 @@ void StreamStore::pruneMissingFiles()
     return;
   }
   std::vector<std::string> missing;
-  while (sqlite3_step(query.get()) == SQLITE_ROW) {
+  int queryResult;
+  while ((queryResult = step(query.get(), "prune_scan")) == SQLITE_ROW) {
     auto path = textColumn(query.get(), 0);
     if (!path.empty() && !File(path).exists()) {
       missing.push_back(std::move(path));
@@ -223,7 +286,7 @@ bool StreamStore::load(StreamState& state, const std::string& gid,
       "ORDER BY gid=?1 DESC,updated_at DESC LIMIT 1");
   if (!statement || !bindText(statement.get(), 1, gid) ||
       !bindText(statement.get(), 2, path) ||
-      sqlite3_step(statement.get()) != SQLITE_ROW) {
+      step(statement.get(), "load") != SQLITE_ROW) {
     return false;
   }
   StreamState value;
@@ -263,7 +326,7 @@ bool StreamStore::save(const StreamState& state)
   Statement removeStale(db_, "DELETE FROM downloads WHERE path=?1 AND gid<>?2");
   if (!removeStale || !bindText(removeStale.get(), 1, state.path) ||
       !bindText(removeStale.get(), 2, state.gid) ||
-      sqlite3_step(removeStale.get()) != SQLITE_DONE) {
+      step(removeStale.get(), "remove_stale") != SQLITE_DONE) {
     return false;
   }
   Statement statement(
@@ -282,12 +345,10 @@ bool StreamStore::save(const StreamState& state)
          bindText(statement.get(), 3, state.path) &&
          bindText(statement.get(), 4, state.etag) &&
          bindText(statement.get(), 5, state.lastModified) &&
-         sqlite3_bind_int64(statement.get(), 6, state.totalLength) ==
-             SQLITE_OK &&
-         sqlite3_bind_int64(statement.get(), 7, state.completedLength) ==
-             SQLITE_OK &&
+         bindInt64(statement.get(), 6, state.totalLength) &&
+         bindInt64(statement.get(), 7, state.completedLength) &&
          bindText(statement.get(), 8, encodeRanges(state.completedRanges)) &&
-         sqlite3_step(statement.get()) == SQLITE_DONE;
+         step(statement.get(), "save") == SQLITE_DONE;
 }
 
 bool StreamStore::remove(const std::string& gid)
@@ -297,7 +358,7 @@ bool StreamStore::remove(const std::string& gid)
   }
   Statement statement(db_, "DELETE FROM downloads WHERE gid=?1");
   return statement && bindText(statement.get(), 1, gid) &&
-         sqlite3_step(statement.get()) == SQLITE_DONE;
+         step(statement.get(), "remove_gid") == SQLITE_DONE;
 }
 
 bool StreamStore::removePath(const std::string& path)
@@ -307,7 +368,7 @@ bool StreamStore::removePath(const std::string& path)
   }
   Statement statement(db_, "DELETE FROM downloads WHERE path=?1");
   return statement && bindText(statement.get(), 1, path) &&
-         sqlite3_step(statement.get()) == SQLITE_DONE;
+         step(statement.get(), "remove_path") == SQLITE_DONE;
 }
 
 } // namespace aria2

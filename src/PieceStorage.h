@@ -110,6 +110,8 @@ public:
 
   virtual int64_t getCompletedLength() = 0;
 
+  virtual int64_t getCompletedLength(int64_t offset, int64_t length) = 0;
+
   virtual int64_t getFilteredCompletedLength() = 0;
 
   virtual void setupFileFilter() = 0;
