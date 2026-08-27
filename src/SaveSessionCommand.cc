@@ -78,7 +78,7 @@ void SaveSessionCommand::process()
     rgman->setLastSessionHash(std::move(sessionHash));
 
     if (sessionSerializer.save(filename)) {
-      A2_LOG_INFO(
+      A2_LOG_DEBUG(
           fmt(_("Serialized session to '%s' successfully."), filename.c_str()));
     }
     else {

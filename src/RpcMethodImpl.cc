@@ -2176,7 +2176,7 @@ std::unique_ptr<ValueBase> SaveSessionRpcMethod::process(const RpcRequest& req,
   }
   SessionSerializer sessionSerializer(e->getRequestGroupMan().get());
   if (sessionSerializer.save(filename)) {
-    A2_LOG_INFO(
+    A2_LOG_DEBUG(
         fmt(_("Serialized session to '%s' successfully."), filename.c_str()));
     return createOKResponse();
   }
