@@ -384,6 +384,23 @@ void BtSessionTest::testDesktopSettings()
 
   const auto defaultConfig =
       makeBtConfig(&option, {"192.0.2.10", "2001:db8::10"});
+  REQUIRE_EQ(std::string("qBittorrent/5.2.3"),
+             defaultConfig.settings.get_str(
+                 libtorrent::settings_pack::user_agent));
+  REQUIRE_EQ(std::string("-qB5230-"),
+             defaultConfig.settings.get_str(
+                 libtorrent::settings_pack::peer_fingerprint));
+  REQUIRE(defaultConfig.settings
+              .get_str(libtorrent::settings_pack::handshake_client_version)
+              .empty());
+  option.put(PREF_BT_USER_AGENT, "CustomClient/1.0");
+  option.put(PREF_BT_PEER_ID_PREFIX, "-CC1000-");
+  const auto customIdentity = makeBtConfig(&option, {"192.0.2.10"}).settings;
+  REQUIRE_EQ(std::string("CustomClient/1.0"),
+             customIdentity.get_str(libtorrent::settings_pack::user_agent));
+  REQUIRE_EQ(
+      std::string("-CC1000-"),
+      customIdentity.get_str(libtorrent::settings_pack::peer_fingerprint));
   REQUIRE_EQ(std::string("192.0.2.10:0,[2001:db8::10]:0"),
              defaultConfig.listenInterfaces);
   REQUIRE(defaultConfig.outgoingInterfaces.empty());

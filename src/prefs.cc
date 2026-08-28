@@ -489,6 +489,8 @@ PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES =
     makePref("bt-max-concurrent-http-announces");
 PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS = makePref("bt-announce-all-tiers");
 PrefPtr PREF_BT_ANNOUNCE_ALL_TRACKERS = makePref("bt-announce-all-trackers");
+PrefPtr PREF_BT_USER_AGENT = makePref("bt-user-agent");
+PrefPtr PREF_BT_PEER_ID_PREFIX = makePref("bt-peer-id-prefix");
 PrefPtr PREF_BT_ANONYMOUS_MODE = makePref("bt-anonymous-mode");
 // values: true | false
 PrefPtr PREF_BT_SEED_UNVERIFIED = makePref("bt-seed-unverified");

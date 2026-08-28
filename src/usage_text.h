@@ -374,6 +374,10 @@
   _(" --bt-announce-all-tiers[=true|false] Announce to every tracker tier.")
 #define TEXT_BT_ANNOUNCE_ALL_TRACKERS                                    \
   _(" --bt-announce-all-trackers[=true|false] Announce to every tracker in a tier.")
+#define TEXT_BT_USER_AGENT                                               \
+  _(" --bt-user-agent=USER_AGENT Set the BitTorrent tracker and peer identity.")
+#define TEXT_BT_PEER_ID_PREFIX                                           \
+  _(" --bt-peer-id-prefix=PREFIX Set the BitTorrent peer ID prefix.")
 #define TEXT_BT_ANONYMOUS_MODE                                           \
   _(" --bt-anonymous-mode[=true|false] Hide identifying client information.")
 #define TEXT_BT_SEED_UNVERIFIED                                         \

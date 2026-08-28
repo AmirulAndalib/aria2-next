@@ -23,12 +23,10 @@
 #include <boost/asio/ip/udp.hpp>
 
 #include <libtorrent/alert.hpp>
-#include <libtorrent/fingerprint.hpp>
 #include <libtorrent/mmap_disk_io.hpp>
 #include <libtorrent/posix_disk_io.hpp>
 #include <libtorrent/pread_disk_io.hpp>
 #include <libtorrent/session.hpp>
-#include <libtorrent/version.hpp>
 
 #include "DlAbortEx.h"
 #include "Log.h"
@@ -50,6 +48,19 @@ std::string lower(std::string value)
       value.begin(), value.end(), value.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
+}
+
+void validateBtIdentity(const Option* option)
+{
+  const auto& userAgent = option->get(PREF_BT_USER_AGENT);
+  if (userAgent.find_first_of("\r\n") != std::string::npos) {
+    throw DL_ABORT_EX("bt-user-agent must not contain CR or LF");
+  }
+
+  const auto& peerIdPrefix = option->get(PREF_BT_PEER_ID_PREFIX);
+  if (peerIdPrefix.size() > 20) {
+    throw DL_ABORT_EX("bt-peer-id-prefix must not exceed 20 bytes");
+  }
 }
 
 lt::download_priority_t filePriority(const std::string& value)
@@ -198,6 +209,7 @@ BtConfig makeBtConfig(const Option* option)
 BtConfig makeBtConfig(const Option* option,
                       const std::vector<std::string>& routeAddresses)
 {
+  validateBtIdentity(option);
   BtConfig config;
   lt::settings_pack settings;
   const auto configuredInterfaces = splitInterfaces(option);
@@ -293,14 +305,9 @@ BtConfig makeBtConfig(const Option* option,
                        ? lt::settings_pack::peer_proportional
                        : lt::settings_pack::prefer_tcp);
   settings.set_str(lt::settings_pack::user_agent,
-                   "aria2-next/" PACKAGE_VERSION " libtorrent/" +
-                       std::to_string(LIBTORRENT_VERSION_MAJOR) + "." +
-                       std::to_string(LIBTORRENT_VERSION_MINOR) + "." +
-                       std::to_string(LIBTORRENT_VERSION_TINY));
+                   option->get(PREF_BT_USER_AGENT));
   settings.set_str(lt::settings_pack::peer_fingerprint,
-                   lt::generate_fingerprint("A2", PACKAGE_VERSION_MAJOR,
-                                            PACKAGE_VERSION_MINOR,
-                                            PACKAGE_VERSION_PATCH));
+                   option->get(PREF_BT_PEER_ID_PREFIX));
   settings.set_str(lt::settings_pack::dht_bootstrap_nodes,
                    option->get(PREF_BT_DHT_BOOTSTRAP_NODES));
   settings.set_bool(lt::settings_pack::announce_to_all_tiers,

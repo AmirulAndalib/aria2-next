@@ -804,6 +804,20 @@ BitTorrent Specific Options
   Hide identifying client information from peer and tracker requests.
   Default: ``false``
 
+.. option:: --bt-user-agent=<USER_AGENT>
+
+  Set the identity sent to HTTP and HTTPS trackers and reported to peers in
+  the BitTorrent extension handshake. The default follows the current stable
+  qBittorrent identity and uses libtorrent's native identity handling.
+  Default: ``qBittorrent/5.2.3``
+
+.. option:: --bt-peer-id-prefix=<PREFIX>
+
+  Set the prefix used by libtorrent when generating the 20-byte BitTorrent
+  peer ID. The value must not exceed 20 bytes. An empty value lets libtorrent
+  generate an unbranded peer ID. The default matches qBittorrent 5.2.3.
+  Default: ``-qB5230-``
+
 .. option:: --bt-announce-all-tiers [true|false]
 
   Announce to one tracker in every tracker tier. Default: ``true``
@@ -3552,6 +3566,8 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   * :option:`bt-max-open-files <--bt-max-open-files>`
   * :option:`bt-max-uploads <--bt-max-uploads>`
   * :option:`bt-peer-blocklist <--bt-peer-blocklist>`
+  * :option:`bt-peer-id-prefix <--bt-peer-id-prefix>`
+  * :option:`bt-user-agent <--bt-user-agent>`
   * :option:`download-result <--download-result>`
   * :option:`keep-unfinished-download-result <--keep-unfinished-download-result>`
   * :option:`log <-l>`

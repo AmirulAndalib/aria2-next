@@ -33,7 +33,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/OptionHandlerTest.cc
   tests/SegmentManTest.cc
   tests/BitfieldManTest.cc
-  tests/SingletonHolderTest.cc
   tests/HttpHeaderTest.cc
   tests/FileTest.cc
   tests/OptionTest.cc
@@ -46,7 +45,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/FixedNumberRandomizer.h
   tests/ProtocolDetectorTest.cc
   tests/ExceptionTest.cc
-  tests/FmtTest.cc
   tests/DownloadHandlersTest.cc
   tests/DownloadEngineTest.cc
   tests/SignatureTest.cc
@@ -87,7 +85,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/WrDiskCacheEntryTest.cc
   tests/GroupIdTest.cc
   tests/IndexedListTest.cc
-  tests/SimpleRandomizerTest.cc
   tests/MessageDigestHelperTest.cc
   tests/IteratableChunkChecksumValidatorTest.cc
   tests/IteratableChecksumValidatorTest.cc

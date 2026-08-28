@@ -1637,6 +1637,22 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     handlers.push_back(op);
   }
   {
+    OptionHandler* op(new DefaultOptionHandler(
+        PREF_BT_USER_AGENT, TEXT_BT_USER_AGENT, "qBittorrent/5.2.3"));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
+    OptionHandler* op(new DefaultOptionHandler(
+        PREF_BT_PEER_ID_PREFIX, TEXT_BT_PEER_ID_PREFIX, "-qB5230-"));
+    op->addTag(TAG_ADVANCED);
+    op->addTag(TAG_BITTORRENT);
+    op->setChangeGlobalOption(true);
+    handlers.push_back(op);
+  }
+  {
     OptionHandler* op(
         new BooleanOptionHandler(PREF_BT_ANONYMOUS_MODE, TEXT_BT_ANONYMOUS_MODE,
                                  A2_V_FALSE, OptionHandler::OPT_ARG));

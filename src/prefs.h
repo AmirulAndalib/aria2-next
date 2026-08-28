@@ -469,6 +469,10 @@ extern PrefPtr PREF_BT_MAX_CONCURRENT_HTTP_ANNOUNCES;
 extern PrefPtr PREF_BT_ANNOUNCE_ALL_TIERS;
 // values: true | false
 extern PrefPtr PREF_BT_ANNOUNCE_ALL_TRACKERS;
+// values: string
+extern PrefPtr PREF_BT_USER_AGENT;
+// values: string, 0 to 20 bytes
+extern PrefPtr PREF_BT_PEER_ID_PREFIX;
 // values: true | false
 extern PrefPtr PREF_BT_ANONYMOUS_MODE;
 // values: true | false
