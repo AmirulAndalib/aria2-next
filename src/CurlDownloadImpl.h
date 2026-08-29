@@ -80,6 +80,8 @@ struct CurlDownloadImpl {
   RangePlanner planner;
   RequestGroup* group = nullptr;
   int maxConnections = 1;
+  int connectionLimit = 1;
+  int successfulRangesSincePenalty = 0;
   int fileNotFoundCount = 0;
   long httpVersion = 0;
   int64_t existingLength = 0;

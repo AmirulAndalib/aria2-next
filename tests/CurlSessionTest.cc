@@ -207,11 +207,16 @@ void CurlSessionTest::testPlatformSslOptions()
 
 void CurlSessionTest::testRetryableFailureClassification()
 {
-  CHECK(CurlSession::retryableFailure(CURLE_SSL_CONNECT_ERROR, 0, 0, 0));
+  CHECK(CurlSession::retryableFailure(CURLE_SSL_CONNECT_ERROR, 0, 0, 0, false));
+  CHECK(!CurlSession::retryableFailure(CURLE_PEER_FAILED_VERIFICATION, 0, 0, 0,
+                                       false));
+  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CERTPROBLEM, 0, 0, 0, false));
   CHECK(
-      !CurlSession::retryableFailure(CURLE_PEER_FAILED_VERIFICATION, 0, 0, 0));
-  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CERTPROBLEM, 0, 0, 0));
-  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CACERT_BADFILE, 0, 0, 0));
+      !CurlSession::retryableFailure(CURLE_SSL_CACERT_BADFILE, 0, 0, 0, false));
+  CHECK(CurlSession::retryableFailure(CURLE_HTTP_RETURNED_ERROR, 403, 0, 0,
+                                      true));
+  CHECK(!CurlSession::retryableFailure(CURLE_HTTP_RETURNED_ERROR, 403, 0, 0,
+                                       false));
 }
 
 void CurlSessionTest::testFailureMessageUsesTheFailureLayer()
