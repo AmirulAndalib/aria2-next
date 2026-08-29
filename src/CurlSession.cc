@@ -654,6 +654,9 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
             handle->validatorMismatch = true;
           }
           if (!handle->validatorMismatch) {
+            handle->lease.end =
+                std::min({handle->lease.end, handle->responseRangeEnd,
+                          handle->responseTotalLength});
             handle->rangeAccepted = true;
             if (handle->purpose == CurlHandlePurpose::Payload) {
               impl.rangeValidated = true;

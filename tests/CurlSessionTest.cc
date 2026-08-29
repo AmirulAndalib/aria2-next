@@ -36,6 +36,7 @@ class CurlSessionTest {
 public:
   void testWriteErrorBoundary();
   void testAcceptedRangeResponse();
+  void testShortAcceptedRangeClampsLease();
   void testErrorResponseDoesNotChangeIdentity();
   void testNonzeroRangeRejectsCompleteResponse();
   void testUnsatisfiedRangeResponseForms();
@@ -47,6 +48,7 @@ public:
 
 A2_TEST(CurlSessionTest, testWriteErrorBoundary)
 A2_TEST(CurlSessionTest, testAcceptedRangeResponse)
+A2_TEST(CurlSessionTest, testShortAcceptedRangeClampsLease)
 A2_TEST(CurlSessionTest, testErrorResponseDoesNotChangeIdentity)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
 A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
@@ -98,6 +100,25 @@ void CurlSessionTest::testAcceptedRangeResponse()
   CHECK_EQ(4096, download.snapshot().totalLength);
   CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
   CHECK(download.impl_->rangeValidated);
+}
+
+void CurlSessionTest::testShortAcceptedRangeClampsLease()
+{
+  CurlDownload download({"https://example.test/file"});
+  CurlHandle handle;
+  handle.download = &download;
+  handle.lease = {0, 4 * 1024 * 1024};
+  handle.ranged = true;
+
+  sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
+  sendHeader(handle, "Content-Range: bytes 0-60650/60651\r\n");
+  sendHeader(handle, "\r\n");
+
+  CHECK(handle.rangeAccepted);
+  CHECK(!handle.invalidRange);
+  CHECK_EQ(60651, handle.responseRangeEnd);
+  CHECK_EQ(60651, handle.lease.end);
+  CHECK_EQ(60651, download.snapshot().totalLength);
 }
 
 void CurlSessionTest::testErrorResponseDoesNotChangeIdentity()
