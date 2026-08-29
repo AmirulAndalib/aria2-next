@@ -297,12 +297,6 @@ void Ed2kKadCommand::init()
         std::make_shared<ed2k::KadRoutingTable>(
             ed2k::ed2kHashToKadId(attrs->clientHash));
   }
-  for (const auto& source : attrs->link.sources) {
-    ed2k::Endpoint endpoint;
-    endpoint.host = source.host;
-    endpoint.port = source.port == 0 ? 4672 : source.port;
-    attrs->kadRoutingTable->addRouterNode(endpoint);
-  }
   queueBootstrap();
 }
 

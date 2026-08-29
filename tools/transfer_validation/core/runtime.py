@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import shutil
 import socket
@@ -17,6 +18,37 @@ def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         return int(listener.getsockname()[1])
+
+
+def non_loopback_ipv4() -> str:
+    candidates: list[str] = []
+    try:
+        candidates.extend(
+            str(entry[4][0])
+            for entry in socket.getaddrinfo(
+                socket.gethostname(), None, socket.AF_INET, socket.SOCK_STREAM
+            )
+        )
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))
+            candidates.append(str(probe.getsockname()[0]))
+    except OSError:
+        pass
+    benchmark = ipaddress.ip_network("198.18.0.0/15")
+    for candidate in dict.fromkeys(candidates):
+        address = ipaddress.ip_address(candidate)
+        if not (
+            address.is_loopback
+            or address.is_unspecified
+            or address.is_multicast
+            or address.is_link_local
+            or address in benchmark
+        ):
+            return candidate
+    raise RuntimeError("A non-loopback IPv4 address is required")
 
 
 def wait_for_port(port: int, timeout: float = 15.0) -> None:

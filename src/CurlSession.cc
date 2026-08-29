@@ -382,7 +382,7 @@ bool retryableHttpFailure(CURLcode result, long responseCode,
          responseCode == 504;
 }
 
-bool retryableTransportFailure(CURLcode result)
+bool retryableTransportFailure(CURLcode result, bool applicationConnected)
 {
   switch (result) {
   case CURLE_COULDNT_RESOLVE_HOST:
@@ -397,6 +397,8 @@ bool retryableTransportFailure(CURLcode result)
   case CURLE_AGAIN:
   case CURLE_SSL_CONNECT_ERROR:
     return true;
+  case CURLE_SSH:
+    return applicationConnected;
   default:
     return false;
   }
@@ -506,11 +508,12 @@ long CurlSession::platformSslOptions() noexcept
 
 bool CurlSession::retryableFailure(CURLcode result, long responseCode,
                                    int fileNotFoundCount, int maxFileNotFound,
-                                   bool validatedRange)
+                                   bool validatedRange,
+                                   bool applicationConnected)
 {
   return retryableHttpFailure(result, responseCode, fileNotFoundCount,
                               maxFileNotFound, validatedRange) ||
-         retryableTransportFailure(result);
+         retryableTransportFailure(result, applicationConnected);
 }
 
 std::string CurlSession::failureMessage(const CurlHandle& handle,
@@ -2180,7 +2183,9 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     if (!remainder.empty() &&
         (alternateMirror ||
          retryableFailure(result, responseCode, impl.fileNotFoundCount,
-                          maxFileNotFound, ranged && impl.rangeValidated)) &&
+                          maxFileNotFound, ranged && impl.rangeValidated,
+                          appConnectTime > 0 || startTransferTime > 0 ||
+                              writeOffset > lease.begin)) &&
         retryRange(download, remainder,
                    adaptiveForbidden ? std::max<curl_off_t>(1, retryAfter)
                                      : retryAfter)) {

@@ -21,6 +21,29 @@ from core.runtime import RunDirectory, create_payload, free_port, sha256, wait_f
 from core.services import ToxiproxyService
 
 
+def generate_rsa_key(executable: str, path: Path, pem: bool = False) -> None:
+    command = [executable, "-q", "-t", "rsa", "-b", "2048"]
+    if pem:
+        command.extend(("-m", "PEM"))
+    command.extend(("-N", "", "-f", str(path)))
+    subprocess.run(command, check=True)
+
+
+def wait_error(
+    engine: EngineProcess, gid: str, timeout: float
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout
+    last: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        last = engine.rpc.call("aria2.tellStatus", [gid])
+        if last.get("status") == "error":
+            return last
+        if last.get("status") == "complete":
+            raise RuntimeError("Invalid SFTP credentials unexpectedly succeeded")
+        time.sleep(0.1)
+    raise TimeoutError(f"Invalid SFTP credentials did not fail: {last}")
+
+
 def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
     sshd = Path(shutil.which("sshd") or "/usr/sbin/sshd")
     ssh_keygen = shutil.which("ssh-keygen")
@@ -33,14 +56,10 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
     expected = create_payload(payload, 4 * 1024 * 1024)
     host_key = server_root / "host_key"
     client_key = server_root / "client_key"
-    subprocess.run(
-        [ssh_keygen, "-q", "-t", "rsa", "-b", "2048", "-N", "", "-f", str(host_key)],
-        check=True,
-    )
-    subprocess.run(
-        [ssh_keygen, "-q", "-t", "rsa", "-b", "2048", "-m", "PEM", "-N", "", "-f", str(client_key)],
-        check=True,
-    )
+    rejected_key = server_root / "rejected_key"
+    generate_rsa_key(ssh_keygen, host_key)
+    generate_rsa_key(ssh_keygen, client_key, pem=True)
+    generate_rsa_key(ssh_keygen, rejected_key, pem=True)
     authorized_keys = server_root / "authorized_keys"
     authorized_keys.write_bytes(client_key.with_suffix(".pub").read_bytes())
 
@@ -120,6 +139,22 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 recovered = engine.download_dir / "sftp-recovered.bin"
                 if sha256(recovered) != expected:
                     raise RuntimeError("Recovered SFTP payload digest mismatch")
+
+                gid = engine.add_uri(
+                    f"sftp://127.0.0.1:{port}{remote_path}",
+                    {
+                        **options,
+                        "sftp-user": f"{getpass.getuser()}-invalid",
+                        "private-key": str(rejected_key),
+                        "out": "sftp-rejected.bin",
+                    },
+                )
+                rejected_status = wait_error(engine, gid, 10)
+                if rejected_status.get("errorCode") != "24":
+                    raise RuntimeError(
+                        "Invalid SFTP credentials returned an unexpected error: "
+                        f"{rejected_status}"
+                    )
             finally:
                 engine.stop()
     finally:
@@ -139,6 +174,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         "recoveryDurationSeconds": recovery_duration,
         "status": status.get("status"),
         "recoveryStatus": recovered_status.get("status"),
+        "authenticationError": rejected_status.get("errorCode"),
     }
 
 
