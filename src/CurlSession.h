@@ -107,6 +107,8 @@ private:
   static long platformSslOptions() noexcept;
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);
+  static bool retryableFailure(CURLcode result, long responseCode,
+                               int fileNotFoundCount, int maxFileNotFound);
   static ExistingFileDecision decideExistingFile(int64_t localLength,
                                                   int64_t remoteLength,
                                                   bool rangeSupported);

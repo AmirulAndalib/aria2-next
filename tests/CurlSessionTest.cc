@@ -42,6 +42,7 @@ public:
   void testUnsatisfiedRangeResponseForms();
   void testExistingFileDecision();
   void testPlatformSslOptions();
+  void testRetryableFailureClassification();
   void testFailureMessageUsesTheFailureLayer();
   void sendHeader(CurlHandle& handle, const std::string& line);
 };
@@ -54,6 +55,7 @@ A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
 A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
 A2_TEST(CurlSessionTest, testExistingFileDecision)
 A2_TEST(CurlSessionTest, testPlatformSslOptions)
+A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 
 void CurlSessionTest::sendHeader(CurlHandle& handle, const std::string& line)
@@ -201,6 +203,15 @@ void CurlSessionTest::testPlatformSslOptions()
 #else
   CHECK_EQ(0L, CurlSession::platformSslOptions());
 #endif
+}
+
+void CurlSessionTest::testRetryableFailureClassification()
+{
+  CHECK(CurlSession::retryableFailure(CURLE_SSL_CONNECT_ERROR, 0, 0, 0));
+  CHECK(
+      !CurlSession::retryableFailure(CURLE_PEER_FAILED_VERIFICATION, 0, 0, 0));
+  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CERTPROBLEM, 0, 0, 0));
+  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CACERT_BADFILE, 0, 0, 0));
 }
 
 void CurlSessionTest::testFailureMessageUsesTheFailureLayer()

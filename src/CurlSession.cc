@@ -360,20 +360,25 @@ int64_t bufferedLength(const CurlDownloadImpl& impl)
   return result;
 }
 
-bool retryableFailure(CURLcode result, long responseCode, int fileNotFoundCount,
-                      int maxFileNotFound)
+bool retryableHttpFailure(CURLcode result, long responseCode,
+                          int fileNotFoundCount, int maxFileNotFound)
 {
   if (result == CURLE_REMOTE_FILE_NOT_FOUND) {
     return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound;
   }
-  if (result == CURLE_HTTP_RETURNED_ERROR) {
-    if (responseCode == 404 || result == CURLE_REMOTE_FILE_NOT_FOUND) {
-      return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound;
-    }
-    return responseCode == 408 || responseCode == 425 || responseCode == 429 ||
-           responseCode == 500 || responseCode == 502 || responseCode == 503 ||
-           responseCode == 504;
+  if (result != CURLE_HTTP_RETURNED_ERROR) {
+    return false;
   }
+  if (responseCode == 404) {
+    return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound;
+  }
+  return responseCode == 408 || responseCode == 425 || responseCode == 429 ||
+         responseCode == 500 || responseCode == 502 || responseCode == 503 ||
+         responseCode == 504;
+}
+
+bool retryableTransportFailure(CURLcode result)
+{
   switch (result) {
   case CURLE_COULDNT_RESOLVE_HOST:
   case CURLE_COULDNT_CONNECT:
@@ -385,6 +390,7 @@ bool retryableFailure(CURLcode result, long responseCode, int fileNotFoundCount,
   case CURLE_HTTP2:
   case CURLE_HTTP2_STREAM:
   case CURLE_AGAIN:
+  case CURLE_SSL_CONNECT_ERROR:
     return true;
   default:
     return false;
@@ -491,6 +497,14 @@ long CurlSession::platformSslOptions() noexcept
 #else
   return 0L;
 #endif
+}
+
+bool CurlSession::retryableFailure(CURLcode result, long responseCode,
+                                   int fileNotFoundCount, int maxFileNotFound)
+{
+  return retryableHttpFailure(result, responseCode, fileNotFoundCount,
+                              maxFileNotFound) ||
+         retryableTransportFailure(result);
 }
 
 std::string CurlSession::failureMessage(const CurlHandle& handle,
