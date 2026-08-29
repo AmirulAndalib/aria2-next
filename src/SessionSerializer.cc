@@ -286,8 +286,15 @@ bool saveDownloadResult(IOFile& fp, std::set<a2_gid_t>& metainfoCache,
     auto save = false;
     switch (dr->result) {
     case error_code::FINISHED:
-    case error_code::REMOVED:
       save = dr->option->getAsBool(PREF_FORCE_SAVE);
+      break;
+    case error_code::REMOVED:
+#ifdef ENABLE_BITTORRENT
+      save = !(dr->attrs.size() > CTX_ATTR_BT && dr->attrs[CTX_ATTR_BT]) &&
+             dr->option->getAsBool(PREF_FORCE_SAVE);
+#else
+      save = dr->option->getAsBool(PREF_FORCE_SAVE);
+#endif
       break;
     case error_code::IN_PROGRESS:
       save = saveInProgress;

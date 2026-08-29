@@ -31,7 +31,7 @@ void ApplicationStatePathTest::testProtocolPaths()
   REQUIRE_EQ(std::string("/var/lib/aria2-next/bittorrent/session"),
              state::btSessionFile(&option));
   REQUIRE_EQ(std::string("/var/lib/aria2-next/bittorrent/torrents"),
-             state::btResumeDirectory(&option));
+             state::btTorrentDirectory(&option));
   REQUIRE_EQ(std::string("/var/lib/aria2-next/ed2k/state.db"),
              state::ed2kDatabaseFile(&option));
   REQUIRE_EQ(std::string("/var/lib/aria2-next/stream/state.db"),

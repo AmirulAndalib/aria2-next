@@ -640,9 +640,9 @@
   _(" --save-session=FILE          Save error/unfinished downloads to FILE on exit.\n" \
     "                              You can pass this output file to aria2-next with -i\n" \
     "                              option on restart. Please note that downloads\n" \
-    "                              added by aria2.addTorrent and aria2.addMetalink\n" \
-    "                              RPC method and whose metadata could not be saved\n" \
-    "                              as a file will not be saved. Downloads removed\n" \
+    "                              added by aria2.addMetalink whose metadata could\n" \
+    "                              not be saved will not be restored. BitTorrent\n" \
+    "                              uploads use private state. Downloads removed\n" \
     "                              using aria2.remove and aria2.forceRemove will not\n" \
     "                              be saved.")
 #define TEXT_ED2K_MIN_SPLIT_SIZE                                       \
@@ -815,16 +815,11 @@
     "                              --rpc-private-key options to specify the\n" \
     "                              server certificate and private key.")
 #define TEXT_RPC_SAVE_UPLOAD_METADATA                                   \
-  _(" --rpc-save-upload-metadata[=true|false] Save the uploaded torrent or\n" \
-    "                              metalink metadata in the directory specified\n" \
-    "                              by --dir option. The filename consists of\n" \
-    "                              SHA-1 hash hex string of metadata plus\n" \
-    "                              extension. For torrent, the extension is\n" \
-    "                              '.torrent'. For metalink, it is '.meta4'.\n" \
-    "                              If false is given to this option, the\n" \
-    "                              downloads added by aria2.addTorrent or\n" \
-    "                              aria2.addMetalink will not be saved by\n" \
-    "                              --save-session option.")
+  _(" --rpc-save-upload-metadata[=true|false] Save uploaded metalink metadata\n" \
+    "                              in the directory specified by --dir. Torrent\n" \
+    "                              uploads are always private engine state under\n" \
+    "                              --state-dir and never enter the download\n" \
+    "                              directory.")
 #define TEXT_FORCE_SAVE                         \
   _(" --force-save[=true|false]    Save download with --save-session option even\n" \
     "                              if the download is completed or removed. This\n" \

@@ -24,13 +24,14 @@
 #include <libtorrent/load_torrent.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/read_resume_data.hpp>
+#include <libtorrent/write_resume_data.hpp>
 #include <libtorrent/storage_defs.hpp>
 #include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
 
 #include "DlAbortEx.h"
-#include "BtResumeStore.h"
+#include "BtStateStore.h"
 #include "DownloadContext.h"
 #include "FileEntry.h"
 #include "Log.h"
@@ -255,8 +256,10 @@ BtDownload::fromFile(const std::string& path,
   if (error) {
     throw DL_ABORT_EX("Unable to load torrent file: " + error.message());
   }
-  return std::shared_ptr<BtDownload>(
+  auto download = std::shared_ptr<BtDownload>(
       new BtDownload(makeImpl(std::move(params), webSeeds), Source::Metainfo));
+  download->impl_->metadataSourcePath = path;
+  return download;
 }
 
 std::shared_ptr<BtDownload>
@@ -322,6 +325,29 @@ BtMetainfo BtDownload::metainfo() const
         {rpcIndex++, layout.file_path(index), layout.file_size(index)});
   }
   return result;
+}
+
+std::string BtDownload::torrentFileData() const
+{
+  try {
+    const auto data = lt::write_torrent_file_buf(impl_->params, {});
+    return std::string(data.data(), data.size());
+  }
+  catch (const std::exception& error) {
+    throw DL_ABORT_EX("Unable to serialize torrent metadata: " +
+                      std::string(error.what()));
+  }
+}
+
+void BtDownload::setManagedMetadataPath(std::string path)
+{
+  impl_->metadataSourcePath = path;
+  impl_->managedMetadataPath = std::move(path);
+}
+
+BtStateReference BtDownload::stateReference() const
+{
+  return {impl_->managedMetadataPath, impl_->resumePath};
 }
 
 void BtDownload::configure(const Option* option)
@@ -720,6 +746,11 @@ void BtDownload::initialize(RequestGroup* group)
   group_ = group;
   impl_->gid = group_->getGID();
   configure(group_->getOption().get());
+  BtStateStore stateStore(group_->getOption().get());
+  if (impl_->managedMetadataPath.empty() &&
+      stateStore.ownsMetadata(impl_->metadataSourcePath)) {
+    impl_->managedMetadataPath = impl_->metadataSourcePath;
+  }
   if (impl_->resumeLoaded) {
     return;
   }
@@ -727,8 +758,8 @@ void BtDownload::initialize(RequestGroup* group)
 
   const auto& identity = !snapshot_.infoHashV1.empty() ? snapshot_.infoHashV1
                                                        : snapshot_.infoHashV2;
-  impl_->resumePath = BtResumeStore::path(group_->getOption().get(), identity);
-  const auto resumeData = BtResumeStore::read(impl_->resumePath);
+  impl_->resumePath = stateStore.resumePath(identity);
+  const auto resumeData = BtStateStore::readResume(impl_->resumePath);
   if (resumeData.empty()) {
     return;
   }

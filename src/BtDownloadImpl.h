@@ -55,6 +55,8 @@ struct BtDownload::Impl {
   bool trackerTierCompressionReported = false;
   uint64_t trackerRevision = 1;
   uint64_t appliedTrackerRevision = 0;
+  std::string metadataSourcePath;
+  std::string managedMetadataPath;
   std::string resumePath;
   std::string previousSavePath;
   bool resumeLoaded = false;

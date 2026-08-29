@@ -39,7 +39,7 @@ std::string btSessionFile(const Option* option)
                            : util::applyDir(directory, "session");
 }
 
-std::string btResumeDirectory(const Option* option)
+std::string btTorrentDirectory(const Option* option)
 {
   const auto directory = protocolDirectory(option, "bittorrent");
   return directory.empty() ? std::string()

@@ -1080,13 +1080,11 @@ RPC Options
 
 .. option:: --rpc-save-upload-metadata [true|false]
 
-  Save the uploaded torrent or metalink metadata in the directory
-  specified by :option:`--dir` option. The file name consists of SHA-1
-  hash hex string of metadata plus extension. For torrent, the
-  extension is '.torrent'. For metalink, it is '.meta4'.  If false is
-  given to this option, the downloads added by
-  :func:`aria2.addTorrent` or :func:`aria2.addMetalink` will not be
-  saved by :option:`--save-session` option. Default: ``true``
+  Save uploaded Metalink metadata in the directory specified by
+  :option:`--dir`. BitTorrent uploads are always stored as private engine state
+  below :option:`--state-dir` and never written to the download directory.
+  If false is given, downloads added by :func:`aria2.addMetalink` are not saved
+  by :option:`--save-session`. Default: ``true``
 
 .. option:: --rpc-secret=<TOKEN>
 
@@ -1178,10 +1176,10 @@ Advanced Options
 .. option:: --state-dir=<DIR>
 
   Store persistent transfer state under *DIR*. HTTP, HTTPS, SFTP, and Metalink
-  payload progress uses ``stream/state.db``. BitTorrent stores native session
-  and fast-resume data under ``bittorrent``. ED2K stores its SQLite database in
-  ``ed2k/state.db``. Completed, removed, and missing payloads are pruned from the
-  stream database.
+  payload progress uses ``stream/state.db``. BitTorrent stores native session,
+  uploaded torrent metadata, and fast-resume data under ``bittorrent``. ED2K
+  stores its SQLite database in ``ed2k/state.db``. Completed, removed, and
+  missing payloads are pruned from the stream database.
 
   The default is the current user's native application state location:
   ``~/Library/Application Support/aria2-next`` on macOS,
@@ -1560,9 +1558,9 @@ Advanced Options
   output file to aria2-next with :option:`--input-file <-i>` option on
   restart. If you like the output to be gzipped append a .gz extension to
   the file name.
-  Please note that downloads added by
-  :func:`aria2.addTorrent` and :func:`aria2.addMetalink` RPC method
-  and whose metadata could not be saved as a file are not saved.
+  Downloads added by :func:`aria2.addMetalink` are not saved when their
+  uploaded metadata could not be stored. BitTorrent uploads use the private
+  state directory and remain restorable without files in the download path.
   Downloads removed using :func:`aria2.remove` and
   :func:`aria2.forceRemove` will not be saved. GID is also saved with
   :option:`gid <--gid>`, but there are some restrictions, see below.
@@ -1949,8 +1947,9 @@ Persistent State
 ~~~~~~~~~~~~~~~~
 
 HTTP(S), SFTP, and Metalink progress is stored in ``stream/state.db`` under
-:option:`--state-dir`. BitTorrent keeps native session and fast-resume data in
-``bittorrent``. ED2K keeps network and transfer state in ``ed2k/state.db``.
+:option:`--state-dir`. BitTorrent keeps native session, managed torrent
+metadata, and fast-resume data in ``bittorrent``. ED2K keeps network and
+transfer state in ``ed2k/state.db``.
 Active and paused ED2K sharing tasks resume with the same GID and immediately
 expose their persisted progress after restart. Their transfer records are
 removed only when the task is deleted or its sharing criteria are satisfied.
@@ -2295,14 +2294,11 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   *position* is omitted or *position* is larger than the current size of the
   queue, the new download is appended to the end of the queue.
   This method returns the GID of the newly registered download.
-  If :option:`--rpc-save-upload-metadata` is ``true``, the
-  uploaded data is saved as a file named as the hex string of SHA-1 hash of
-  data plus ".torrent" in the directory specified by :option:`--dir
-  <-d>` option.  E.g. a file name might be
-  ``0a3893293e27ac0490424c06de4d09242215f0a6.torrent``.  If a file with the
-  same name already exists, it is overwritten!  If the file cannot be saved
-  successfully or :option:`--rpc-save-upload-metadata` is ``false``,
-  the downloads added by this method are not saved by :option:`--save-session`.
+  Uploaded metadata is validated by libtorrent and stored under
+  ``state-dir/bittorrent/torrents``. It remains available while any active,
+  paused, stopped, or session-retained task references it. Removing the final
+  task reference removes both its managed metadata and fast-resume state.
+  User-provided torrent files are never managed or deleted by this method.
 
   The following examples add local file ``file.torrent``.
 

@@ -84,6 +84,7 @@
 #ifdef ENABLE_BITTORRENT
 #  include "BtDownload.h"
 #  include "BtSession.h"
+#  include "BtStateStore.h"
 #  include "BtMetadata.h"
 #endif // ENABLE_BITTORRENT
 #include "CheckIntegrityEntry.h"
@@ -436,34 +437,28 @@ std::unique_ptr<ValueBase> AddTorrentRpcMethod::process(const RpcRequest& req,
   bool posGiven = checkPosParam(posParam);
   size_t pos = posGiven ? posParam->i() : 0;
 
-  std::string filename;
-  if (requestOption->getAsBool(PREF_RPC_SAVE_UPLOAD_METADATA)) {
-    filename = util::applyDir(requestOption->get(PREF_DIR),
-                              getHexSha1(torrentParam->s()) + ".torrent");
-    // Save uploaded data in order to save this download in
-    // --save-session file.
-    if (util::saveAs(filename, torrentParam->s(), true)) {
-      A2_LOG_DEBUG(
-          fmt("Uploaded torrent data was saved as %s", filename.c_str()));
-      requestOption->put(PREF_TORRENT_FILE, filename);
-    }
-    else {
-      A2_LOG_DEBUG(fmt("Uploaded torrent data was not saved."
-                       " Failed to write file %s",
-                       filename.c_str()));
-      filename.clear();
-    }
+  auto download = BtDownload::fromBuffer(torrentParam->s(), uris);
+  auto stateStore = e->getRequestGroupMan()->getBtStateStore();
+  if (!stateStore) {
+    throw DL_ABORT_EX("BitTorrent state store is unavailable");
   }
-  std::vector<std::shared_ptr<RequestGroup>> result;
-  createRequestGroupForBitTorrent(result, requestOption, uris, filename,
-                                  torrentParam->s());
+  const auto filename = stateStore->storeMetadata(download->torrentFileData());
+  download->setManagedMetadataPath(filename);
+  requestOption->put(PREF_TORRENT_FILE, filename);
 
-  if (!result.empty()) {
-    return addRequestGroup(result.front(), e, posGiven, pos);
+  std::vector<std::shared_ptr<RequestGroup>> result;
+  try {
+    createRequestGroupForBitTorrent(result, requestOption, download, filename);
+    if (!result.empty()) {
+      return addRequestGroup(result.front(), e, posGiven, pos);
+    }
   }
-  else {
-    throw DL_ABORT_EX("No Torrent to download.");
+  catch (...) {
+    e->getRequestGroupMan()->collectBtStateGarbage();
+    throw;
   }
+  e->getRequestGroupMan()->collectBtStateGarbage();
+  throw DL_ABORT_EX("No Torrent to download.");
 }
 
 namespace {

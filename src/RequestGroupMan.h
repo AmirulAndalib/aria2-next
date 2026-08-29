@@ -59,6 +59,9 @@ class ServerStat;
 class Option;
 class OutputFile;
 class UriListParser;
+#ifdef ENABLE_BITTORRENT
+class BtStateStore;
+#endif
 class WrDiskCache;
 class OpenedFileCounter;
 namespace ed2k {
@@ -126,6 +129,11 @@ private:
   std::unique_ptr<WrDiskCache> wrDiskCache_;
 
   std::shared_ptr<OpenedFileCounter> openedFileCounter_;
+
+#ifdef ENABLE_BITTORRENT
+  std::unique_ptr<BtStateStore> btStateStore_;
+  bool btStateStartupCollectionPending_ = true;
+#endif
 
   std::unique_ptr<ed2k::UploadQueue> ed2kUploadQueue_;
   std::unique_ptr<ed2k::Ed2kSession> ed2kSession_;
@@ -270,6 +278,11 @@ public:
   bool removeDownloadResult(a2_gid_t gid);
 
   void addDownloadResult(const std::shared_ptr<DownloadResult>& downloadResult);
+
+#ifdef ENABLE_BITTORRENT
+  BtStateStore* getBtStateStore() const { return btStateStore_.get(); }
+  void collectBtStateGarbage();
+#endif
 
   ed2k::UploadQueue* getEd2kUploadQueue() const
   {

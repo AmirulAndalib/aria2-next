@@ -48,6 +48,7 @@
 #include "ContextAttribute.h"
 #ifdef ENABLE_BITTORRENT
 #  include "BtSnapshot.h"
+#  include "BtStateStore.h"
 #endif
 
 namespace aria2 {
@@ -96,6 +97,7 @@ struct DownloadResult {
 
 #ifdef ENABLE_BITTORRENT
   BtSnapshot btSnapshot;
+  BtStateReference btState;
 #endif
 
   std::string dir;

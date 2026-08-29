@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "BtSnapshot.h"
+#include "BtStateStore.h"
 #include "RecoverableException.h"
 
 namespace aria2 {
@@ -113,6 +114,9 @@ public:
   static size_t maxMetainfoSize();
 
   BtMetainfo metainfo() const;
+  std::string torrentFileData() const;
+  void setManagedMetadataPath(std::string path);
+  BtStateReference stateReference() const;
 
   void configure(const Option* option);
   void populateDownloadContext(const std::shared_ptr<DownloadContext>& context,

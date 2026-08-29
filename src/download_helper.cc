@@ -514,6 +514,15 @@ void createRequestGroupForBitTorrent(
   result.push_back(std::move(group));
 }
 
+void createRequestGroupForBitTorrent(
+    std::vector<std::shared_ptr<RequestGroup>>& result,
+    const std::shared_ptr<Option>& option,
+    const std::shared_ptr<BtDownload>& download,
+    const std::string& metaInfoUri)
+{
+  result.push_back(createBtRequestGroup(download, metaInfoUri, option));
+}
+
 #endif // ENABLE_BITTORRENT
 
 #ifdef ENABLE_METALINK

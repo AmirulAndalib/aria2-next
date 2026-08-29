@@ -2,6 +2,7 @@
 
 #include "a2doctest.h"
 
+#include "ApplicationStatePath.h"
 #include "DownloadEngine.h"
 #include "SelectEventPoll.h"
 #include "Option.h"
@@ -31,6 +32,7 @@
 #ifdef ENABLE_BITTORRENT
 #  include "BtDownload.h"
 #  include "BtSession.h"
+#  include "BtStateStore.h"
 #  include "BtMetadata.h"
 #endif // ENABLE_BITTORRENT
 
@@ -49,6 +51,8 @@ public:
   {
     option_ = std::make_shared<Option>();
     option_->put(PREF_DIR, A2_TEST_OUT_DIR "/aria2_RpcMethodTest");
+    option_->put(PREF_STATE_DIR,
+                 A2_TEST_OUT_DIR "/aria2_RpcMethodTest/state");
     option_->put(PREF_PIECE_LENGTH, "1048576");
     option_->put(PREF_MAX_DOWNLOAD_RESULT, "10");
     option_->put(PREF_BT_MAX_OPEN_FILES, "100");
@@ -442,47 +446,64 @@ RpcRequest createAddTorrentReq()
 
 void RpcMethodTest::testAddTorrent()
 {
-  File(e_->getOption()->get(PREF_DIR) +
-       "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-      .remove();
   AddTorrentRpcMethod m;
-  {
-    // Saving upload metadata is disabled by option.
-    auto res = m.execute(createAddTorrentReq(), e_.get());
-    REQUIRE(!File(e_->getOption()->get(PREF_DIR) +
-                  "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-                 .exists());
-    REQUIRE_EQ(0, res.code);
-    REQUIRE_EQ(sizeof(a2_gid_t) * 2, downcast<String>(res.param)->s().size());
-  }
-  e_->getOption()->put(PREF_RPC_SAVE_UPLOAD_METADATA, A2_V_TRUE);
-  {
-    auto res = m.execute(createAddTorrentReq(), e_.get());
-    REQUIRE(File(e_->getOption()->get(PREF_DIR) +
-                 "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-                .exists());
-    REQUIRE_EQ(0, res.code);
+  auto add = [&]() {
+    auto response = m.execute(createAddTorrentReq(), e_.get());
+    REQUIRE_EQ(0, response.code);
     a2_gid_t gid;
     REQUIRE_EQ(
-        0, GroupId::toNumericId(gid, downcast<String>(res.param)->s().c_str()));
+        0, GroupId::toNumericId(
+               gid, downcast<String>(response.param)->s().c_str()));
+    return gid;
+  };
 
-    auto group = findReservedGroup(e_->getRequestGroupMan().get(), gid);
-    REQUIRE(group);
-    REQUIRE_EQ(e_->getOption()->get(PREF_DIR) + "/aria2-0.8.2.tar.bz2",
-               group->getFirstFilePath());
-    REQUIRE_EQ((size_t)0, group->getDownloadContext()
-                              ->getFirstFileEntry()
-                              ->getRemainingUris()
-                              .size());
-  }
+  auto* manager = e_->getRequestGroupMan().get();
+  const auto firstGid = add();
+  auto first = findReservedGroup(manager, firstGid);
+  REQUIRE(first);
+  const auto firstState = first->getBtDownload()->stateReference();
+  REQUIRE(File(firstState.metadataPath).isFile());
+  REQUIRE_EQ(state::btTorrentDirectory(option_.get()),
+             File(firstState.metadataPath).getDirname());
+  REQUIRE_EQ(e_->getOption()->get(PREF_DIR) + "/aria2-0.8.2.tar.bz2",
+             first->getFirstFilePath());
+  REQUIRE_EQ((size_t)0, first->getDownloadContext()
+                            ->getFirstFileEntry()
+                            ->getRemainingUris()
+                            .size());
+  REQUIRE(!File(util::applyDir(option_->get(PREF_DIR),
+                               File(firstState.metadataPath).getBasename()))
+               .exists());
+
+  BtStateStore::writeResume(firstState.resumePath, "resume", 6);
+  const auto secondGid = add();
+  auto second = findReservedGroup(manager, secondGid);
+  REQUIRE(second);
+  REQUIRE_EQ(firstState.metadataPath,
+             second->getBtDownload()->stateReference().metadataPath);
+  REQUIRE_EQ(firstState.resumePath,
+             second->getBtDownload()->stateReference().resumePath);
+
+  REQUIRE(manager->removeReservedGroup(firstGid));
+  REQUIRE(File(firstState.metadataPath).exists());
+  REQUIRE(File(firstState.resumePath).exists());
+
+  auto stopped = second->createDownloadResult();
+  manager->addDownloadResult(stopped);
+  REQUIRE(manager->removeReservedGroup(secondGid));
+  REQUIRE(File(firstState.metadataPath).exists());
+  REQUIRE(File(firstState.resumePath).exists());
+  REQUIRE(manager->removeDownloadResult(secondGid));
+  REQUIRE(!File(firstState.metadataPath).exists());
+  REQUIRE(!File(firstState.resumePath).exists());
+  REQUIRE(File(A2_TEST_DIR "/single.torrent").exists());
+
   {
     auto req = createAddTorrentReq();
-    // with options
     std::string dir = A2_TEST_OUT_DIR "/aria2_RpcMethodTest_testAddTorrent";
     File(dir).mkdirs();
     auto opt = Dict::g();
     opt->put(PREF_DIR->k, dir);
-    File(dir + "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent").remove();
     req.params->append(std::move(opt));
 
     auto res = m.execute(std::move(req), e_.get());
@@ -493,8 +514,19 @@ void RpcMethodTest::testAddTorrent()
     REQUIRE_EQ(dir + "/aria2-0.8.2.tar.bz2",
                findReservedGroup(e_->getRequestGroupMan().get(), gid)
                    ->getFirstFilePath());
-    REQUIRE(File(dir + "/0a3893293e27ac0490424c06de4d09242215f0a6.torrent")
-                .exists());
+    auto group = findReservedGroup(manager, gid);
+    const auto state = group->getBtDownload()->stateReference();
+    REQUIRE(!File(util::applyDir(dir, File(state.metadataPath).getBasename()))
+                 .exists());
+    group->getBtDownload()->mutableSnapshot().complete = true;
+    group->getBtDownload()->mutableSnapshot().selectedComplete = true;
+    auto completed = group->createDownloadResult();
+    REQUIRE_EQ(error_code::FINISHED, completed->result);
+    manager->addDownloadResult(completed);
+    REQUIRE(manager->removeReservedGroup(gid));
+    REQUIRE(File(state.metadataPath).exists());
+    manager->purgeDownloadResult();
+    REQUIRE(!File(state.metadataPath).exists());
   }
 }
 

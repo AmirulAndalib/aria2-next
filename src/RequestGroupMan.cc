@@ -35,6 +35,10 @@
 #include "RequestGroupMan.h"
 
 #include "ApplicationStatePath.h"
+#ifdef ENABLE_BITTORRENT
+#  include "BtDownload.h"
+#  include "BtStateStore.h"
+#endif
 
 #include <unistd.h>
 #include <cstring>
@@ -42,6 +46,7 @@
 #include <sstream>
 #include <numeric>
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "RecoverableException.h"
@@ -126,6 +131,9 @@ RequestGroupMan::RequestGroupMan(
       maxDownloadResult_(option->getAsInt(PREF_MAX_DOWNLOAD_RESULT)),
       openedFileCounter_(
           std::make_shared<OpenedFileCounter>(this, DEFAULT_CORE_OPEN_FILES)),
+#ifdef ENABLE_BITTORRENT
+      btStateStore_(make_unique<BtStateStore>(option)),
+#endif
       ed2kUploadQueue_(make_unique<ed2k::UploadQueue>(
           option->getAsInt(PREF_ED2K_UPLOAD_SLOTS))),
       ed2kSession_(make_unique<ed2k::Ed2kSession>(
@@ -241,7 +249,13 @@ size_t RequestGroupMan::changeReservedGroupPosition(a2_gid_t gid, int pos,
 
 bool RequestGroupMan::removeReservedGroup(a2_gid_t gid)
 {
-  return reservedGroups_.remove(gid);
+  const auto removed = reservedGroups_.remove(gid);
+#ifdef ENABLE_BITTORRENT
+  if (removed) {
+    collectBtStateGarbage();
+  }
+#endif
+  return removed;
 }
 
 namespace {
@@ -481,6 +495,9 @@ void RequestGroupMan::removeStoppedGroup(DownloadEngine* e)
   if (numRemoved > 0) {
     A2_LOG_TRACE(fmt("%lu RequestGroup(s) deleted.",
                      static_cast<unsigned long>(numRemoved)));
+#ifdef ENABLE_BITTORRENT
+    collectBtStateGarbage();
+#endif
   }
 }
 
@@ -498,6 +515,13 @@ createInitialCommand(const std::shared_ptr<RequestGroup>& requestGroup,
 void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
 {
   removeStoppedGroup(e);
+
+#ifdef ENABLE_BITTORRENT
+  if (btStateStartupCollectionPending_ && !uriListParser_) {
+    collectBtStateGarbage();
+    btStateStartupCollectionPending_ = false;
+  }
+#endif
 
 #ifdef ENABLE_BITTORRENT
   if (keepRunning_ && e->getBtSession()) {
@@ -531,6 +555,12 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
       }
       else {
         uriListParser_.reset();
+#ifdef ENABLE_BITTORRENT
+        if (btStateStartupCollectionPending_) {
+          collectBtStateGarbage();
+          btStateStartupCollectionPending_ = false;
+        }
+#endif
         if (reservedGroups_.empty()) {
           break;
         }
@@ -941,7 +971,13 @@ RequestGroupMan::findDownloadResult(a2_gid_t gid) const
 
 bool RequestGroupMan::removeDownloadResult(a2_gid_t gid)
 {
-  return downloadResults_.remove(gid);
+  const auto removed = downloadResults_.remove(gid);
+#ifdef ENABLE_BITTORRENT
+  if (removed) {
+    collectBtStateGarbage();
+  }
+#endif
+  return removed;
 }
 
 void RequestGroupMan::addDownloadResult(
@@ -950,6 +986,7 @@ void RequestGroupMan::addDownloadResult(
   ++numStoppedTotal_;
   bool rv = downloadResults_.push_back(dr->gid->getNumericId(), dr);
   assert(rv);
+  bool evicted = false;
   while (downloadResults_.size() > maxDownloadResult_) {
     // Save last encountered error code so that we can report it
     // later.
@@ -968,10 +1005,66 @@ void RequestGroupMan::addDownloadResult(
       }
     }
     downloadResults_.pop_front();
+    evicted = true;
+  }
+#ifdef ENABLE_BITTORRENT
+  if (evicted) {
+    collectBtStateGarbage();
+  }
+#endif
+}
+
+void RequestGroupMan::purgeDownloadResult()
+{
+  downloadResults_.clear();
+#ifdef ENABLE_BITTORRENT
+  collectBtStateGarbage();
+#endif
+}
+
+#ifdef ENABLE_BITTORRENT
+namespace {
+
+void addBtStateReference(std::set<std::string>& paths,
+                         const BtStateReference& reference)
+{
+  if (!reference.metadataPath.empty()) {
+    paths.insert(reference.metadataPath);
+  }
+  if (!reference.resumePath.empty()) {
+    paths.insert(reference.resumePath);
   }
 }
 
-void RequestGroupMan::purgeDownloadResult() { downloadResults_.clear(); }
+} // namespace
+
+void RequestGroupMan::collectBtStateGarbage()
+{
+  if (!btStateStore_ || uriListParser_) {
+    return;
+  }
+  std::set<std::string> referencedPaths;
+  for (const auto& group : requestGroups_) {
+    if (group->getBtDownload()) {
+      addBtStateReference(referencedPaths,
+                          group->getBtDownload()->stateReference());
+    }
+  }
+  for (const auto& group : reservedGroups_) {
+    if (group->getBtDownload()) {
+      addBtStateReference(referencedPaths,
+                          group->getBtDownload()->stateReference());
+    }
+  }
+  for (const auto& result : downloadResults_) {
+    addBtStateReference(referencedPaths, result->btState);
+  }
+  for (const auto& result : unfinishedDownloadResults_) {
+    addBtStateReference(referencedPaths, result->btState);
+  }
+  btStateStore_->collect(referencedPaths);
+}
+#endif
 
 std::shared_ptr<ServerStat>
 RequestGroupMan::findServerStat(const std::string& hostname,

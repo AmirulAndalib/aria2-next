@@ -46,7 +46,7 @@
 #include "BtDownloadImpl.h"
 #include "BtDownloadCommand.h"
 #include "BtPeerBlocklist.h"
-#include "BtResumeStore.h"
+#include "BtStateStore.h"
 #include "BtSettings.h"
 #include "BufferedFile.h"
 #include "DownloadContext.h"
@@ -598,7 +598,7 @@ std::vector<BtTrackerSnapshot> makeTrackers(const lt::torrent_handle& handle,
 void saveResume(const std::string& path, const lt::add_torrent_params& params)
 {
   const auto data = lt::write_resume_data_buf(params);
-  BtResumeStore::write(path, data.data(), data.size());
+  BtStateStore::writeResume(path, data.data(), data.size());
 }
 
 lt::ip_filter makeIpFilter(const BtPeerBlocklist& blocklist)
@@ -986,9 +986,6 @@ void BtSession::beginNativeDelete(
 
   if (intent == DeleteIntent::Replace) {
     prepareFreshAdd(download.get());
-  }
-  else if (!download->impl_->resumePath.empty()) {
-    File(download->impl_->resumePath).remove();
   }
 
   const auto key = hashKey(handle.info_hashes());
@@ -2400,9 +2397,6 @@ void BtSession::discard(const std::shared_ptr<BtDownload>& download)
 {
   if (!download) {
     return;
-  }
-  if (!download->impl_->resumePath.empty()) {
-    File(download->impl_->resumePath).remove();
   }
   if (download->group()) {
     impl_->downloads[download->group()->getGID()] = download;

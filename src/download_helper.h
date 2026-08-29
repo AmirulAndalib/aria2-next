@@ -54,6 +54,9 @@ class MetadataInfo;
 class DownloadContext;
 class UriListParser;
 class GroupId;
+#ifdef ENABLE_BITTORRENT
+class BtDownload;
+#endif
 
 #ifdef ENABLE_BITTORRENT
 // Create a libtorrent-backed request group from a local torrent file or the
@@ -62,6 +65,12 @@ void createRequestGroupForBitTorrent(
     std::vector<std::shared_ptr<RequestGroup>>& result,
     const std::shared_ptr<Option>& option, const std::vector<std::string>& uris,
     const std::string& metaInfoUri, const std::string& torrentData = "");
+
+void createRequestGroupForBitTorrent(
+    std::vector<std::shared_ptr<RequestGroup>>& result,
+    const std::shared_ptr<Option>& option,
+    const std::shared_ptr<BtDownload>& download,
+    const std::string& metaInfoUri);
 
 #endif // ENABLE_BITTORRENT
 

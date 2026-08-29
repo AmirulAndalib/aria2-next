@@ -969,6 +969,9 @@ std::shared_ptr<DownloadResult> RequestGroup::createDownloadResult() const
     res->bitfield =
         util::fromHex(snapshot.bitfield.begin(), snapshot.bitfield.end());
     res->btSnapshot = snapshot;
+    if (!isUserRequestedHalt()) {
+      res->btState = btDownload_->stateReference();
+    }
   }
 #endif // ENABLE_BITTORRENT
   res->pieceLength = downloadContext_->getPieceLength();

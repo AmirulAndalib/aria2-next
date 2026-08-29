@@ -1,7 +1,7 @@
 #include "BtSession.h"
 #include "ApplicationStatePath.h"
 #include "BtDownload.h"
-#include "BtResumeStore.h"
+#include "BtStateStore.h"
 #include "BtSettings.h"
 
 #include "a2doctest.h"
@@ -45,7 +45,7 @@ public:
   void testDesktopSettings();
   void testTrackerOwnership();
   void testTrackerTierNormalization();
-  void testResumeStore();
+  void testStateStore();
 };
 
 A2_TEST(BtSessionTest, testSessionStateRoundTrip)
@@ -55,7 +55,7 @@ A2_TEST(BtSessionTest, testPausedRestoreHydration)
 A2_TEST(BtSessionTest, testDesktopSettings)
 A2_TEST(BtSessionTest, testTrackerOwnership)
 A2_TEST(BtSessionTest, testTrackerTierNormalization)
-A2_TEST(BtSessionTest, testResumeStore)
+A2_TEST(BtSessionTest, testStateStore)
 
 void BtSessionTest::testFileSelectionResumeState()
 {
@@ -75,9 +75,10 @@ void BtSessionTest::testFileSelectionResumeState()
   const auto identity = !probe->snapshot().infoHashV1.empty()
                             ? probe->snapshot().infoHashV1
                             : probe->snapshot().infoHashV2;
-  const auto resumePath = BtResumeStore::path(&option, identity);
+  BtStateStore stateStore(&option);
+  const auto resumePath = stateStore.resumePath(identity);
   const auto resume = libtorrent::write_resume_data_buf(params);
-  BtResumeStore::write(resumePath, resume.data(), resume.size());
+  BtStateStore::writeResume(resumePath, resume.data(), resume.size());
 
   auto makeGroup = [&magnet](const std::shared_ptr<Option>& taskOption) {
     auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOption);
@@ -167,8 +168,8 @@ void BtSessionTest::testFileSelectionResumeState()
   params.seeding_time = 0;
   params.completed_time = 1;
   const auto completedResume = libtorrent::write_resume_data_buf(params);
-  BtResumeStore::write(resumePath, completedResume.data(),
-                       completedResume.size());
+  BtStateStore::writeResume(resumePath, completedResume.data(),
+                            completedResume.size());
 
   auto selectedOption = std::make_shared<Option>(*awaitingOption);
   auto restored = makeGroup(selectedOption);
@@ -308,9 +309,10 @@ void BtSessionTest::testPausedRestoreHydration()
   const auto identity = !probe->snapshot().infoHashV1.empty()
                             ? probe->snapshot().infoHashV1
                             : probe->snapshot().infoHashV2;
-  const auto resumePath = BtResumeStore::path(option.get(), identity);
+  BtStateStore stateStore(option.get());
+  const auto resumePath = stateStore.resumePath(identity);
   const auto resume = libtorrent::write_resume_data_buf(params);
-  BtResumeStore::write(resumePath, resume.data(), resume.size());
+  BtStateStore::writeResume(resumePath, resume.data(), resume.size());
 
   auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
   auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
@@ -358,19 +360,36 @@ void BtSessionTest::testPausedRestoreHydration()
   REQUIRE(waitUntil([&]() { return download->stopped(); }));
 }
 
-void BtSessionTest::testResumeStore()
+void BtSessionTest::testStateStore()
 {
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
   option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-state");
-  const auto path = BtResumeStore::path(&option, "0123456789abcdef");
+  BtStateStore store(&option);
+  const auto identity = std::string(40, '1');
+  const auto path = store.resumePath(identity);
   REQUIRE_EQ(std::string(A2_TEST_OUT_DIR
                          "/bt-state/bittorrent/torrents/"
-                         "0123456789abcdef.fastresume"),
+                         "1111111111111111111111111111111111111111.fastresume"),
              path);
-  BtResumeStore::write(path, "resume", 6);
-  REQUIRE_EQ(std::string("resume"), BtResumeStore::read(path));
-  File(path).remove();
+  BtStateStore::writeResume(path, "resume", 6);
+  REQUIRE_EQ(std::string("resume"), BtStateStore::readResume(path));
+
+  const auto metadata = store.storeMetadata("metadata");
+  const auto foreign = util::applyDir(store.directory(), "user.torrent");
+  {
+    BufferedFile file(foreign.c_str(), BufferedFile::WRITE);
+    REQUIRE(file);
+    REQUIRE_EQ((size_t)4, file.write("user", 4));
+  }
+  store.collect({metadata});
+  REQUIRE(File(metadata).exists());
+  REQUIRE(!File(path).exists());
+  REQUIRE(File(foreign).exists());
+  store.collect({});
+  REQUIRE(!File(metadata).exists());
+  REQUIRE(File(foreign).exists());
+  File(foreign).remove();
 }
 
 void BtSessionTest::testDesktopSettings()
@@ -594,11 +613,11 @@ void BtSessionTest::testSessionStateRoundTrip()
     REQUIRE(file);
     REQUIRE_EQ(encoded.size(), file.write(encoded.data(), encoded.size()));
   }
-  const auto original = BtResumeStore::read(path);
+  const auto original = BtStateStore::readResume(path);
   {
     BtSession session(&option);
   }
-  REQUIRE_EQ(original, BtResumeStore::read(path));
+  REQUIRE_EQ(original, BtStateStore::readResume(path));
   File(path).remove();
 }
 
