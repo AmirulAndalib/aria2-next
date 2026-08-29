@@ -435,6 +435,8 @@ BtConfig makeBtConfig(const Option* option,
                                  : lt::settings_pack::pe_enabled;
   settings.set_int(lt::settings_pack::out_enc_policy, encryptionPolicy);
   settings.set_int(lt::settings_pack::in_enc_policy, encryptionPolicy);
+  settings.set_bool(lt::settings_pack::prefer_encrypted_connections,
+                    encryption == V_PREFERRED);
   settings.set_int(lt::settings_pack::allowed_enc_level,
                    lt::settings_pack::pe_both);
   settings.set_bool(lt::settings_pack::prefer_rc4, false);

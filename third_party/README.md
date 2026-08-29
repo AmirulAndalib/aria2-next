@@ -38,3 +38,6 @@ servers, examples, tests, fuzzers, and nested repository metadata are excluded.
 Boost is a header subset for the maintained Boost.Asio and libtorrent
 configuration. Disabled WebTorrent, I2P, and fallback cryptography include
 trees are excluded.
+
+The libtorrent tree carries an aria2-next setting extension for encrypted-first
+peer negotiation with libtorrent's native plaintext fallback.

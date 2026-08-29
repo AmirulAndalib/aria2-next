@@ -229,7 +229,10 @@ namespace {
 			TORRENT_ASSERT(peer_info_struct());
 
 			torrent_peer* pi = peer_info_struct();
-			if (pi->pe_support == true)
+			if (pi->pe_support == true
+				|| (m_settings.get_bool(settings_pack::prefer_encrypted_connections)
+					&& (pi->fast_reconnects == 0
+						|| (!pi->supports_utp && pi->fast_reconnects == 1))))
 			{
 				// toggle encryption support flag, toggled back to
 				// true if encrypted portion of the handshake

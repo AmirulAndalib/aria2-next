@@ -363,11 +363,9 @@ void BtDownload::configure(const Option* option)
     const auto& added = option->get(PREF_BT_TRACKER);
     util::split(added.begin(), added.end(), std::back_inserter(addedTrackers),
                 ',', true);
-    const bool metadataUnknownMagnet =
-        source_ == Source::Magnet && !impl_->params.ti;
     const bool privateTorrent = impl_->params.ti && impl_->params.ti->priv();
     std::vector<std::string> usableTrackers;
-    if (!metadataUnknownMagnet && !privateTorrent) {
+    if (!privateTorrent) {
       for (auto tracker : addedTrackers) {
         tracker = util::strip(tracker);
         if (tracker.empty() ||

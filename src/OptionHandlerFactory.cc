@@ -1395,7 +1395,7 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   {
     OptionHandler* op(new NumberOptionHandler(PREF_BT_MAX_OUT_REQUEST_QUEUE,
                                               TEXT_BT_MAX_OUT_REQUEST_QUEUE,
-                                              "500", 1, UINT16_MAX));
+                                              "128", 1, UINT16_MAX));
     op->addTag(TAG_ADVANCED);
     op->addTag(TAG_BITTORRENT);
     op->setChangeGlobalOption(true);

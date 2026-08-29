@@ -1069,6 +1069,11 @@ namespace aux {
 			// naturally evicted.
 			apply_filter_to_dht,
 
+			// Prefer an encrypted first attempt for peers whose encryption
+			// capability is unknown. Failed encrypted handshakes retain the
+			// built-in immediate plaintext fallback.
+			prefer_encrypted_connections,
+
 			max_bool_setting_internal
 		};
 

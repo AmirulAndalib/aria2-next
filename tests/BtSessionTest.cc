@@ -414,6 +414,8 @@ void BtSessionTest::testDesktopSettings()
              settings.get_int(libtorrent::settings_pack::in_enc_policy));
   REQUIRE_EQ(libtorrent::settings_pack::pe_both,
              settings.get_int(libtorrent::settings_pack::allowed_enc_level));
+  REQUIRE(settings.get_bool(
+      libtorrent::settings_pack::prefer_encrypted_connections));
   REQUIRE(!settings.get_bool(libtorrent::settings_pack::prefer_rc4));
   REQUIRE_EQ(20,
              settings.get_int(libtorrent::settings_pack::unchoke_slots_limit));
@@ -428,7 +430,7 @@ void BtSessionTest::testDesktopSettings()
              settings.get_int(libtorrent::settings_pack::max_failcount));
   REQUIRE_EQ(3,
              settings.get_int(libtorrent::settings_pack::request_queue_time));
-  REQUIRE_EQ(500, settings.get_int(
+  REQUIRE_EQ(128, settings.get_int(
                        libtorrent::settings_pack::max_out_request_queue));
   REQUIRE_EQ(2000, settings.get_int(
                         libtorrent::settings_pack::max_allowed_in_request_queue));
@@ -483,6 +485,8 @@ void BtSessionTest::testDesktopSettings()
              required.get_int(libtorrent::settings_pack::out_enc_policy));
   REQUIRE_EQ(libtorrent::settings_pack::pe_forced,
              required.get_int(libtorrent::settings_pack::in_enc_policy));
+  REQUIRE(!required.get_bool(
+      libtorrent::settings_pack::prefer_encrypted_connections));
 
   option.put(PREF_BT_ENCRYPTION, V_DISABLED);
   const auto disabled = makeBtConfig(&option).settings;
@@ -490,6 +494,8 @@ void BtSessionTest::testDesktopSettings()
              disabled.get_int(libtorrent::settings_pack::out_enc_policy));
   REQUIRE_EQ(libtorrent::settings_pack::pe_disabled,
              disabled.get_int(libtorrent::settings_pack::in_enc_policy));
+  REQUIRE(!disabled.get_bool(
+      libtorrent::settings_pack::prefer_encrypted_connections));
 }
 
 void BtSessionTest::testTrackerOwnership()
@@ -497,10 +503,30 @@ void BtSessionTest::testTrackerOwnership()
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
   option.put(PREF_BT_TRACKER, "udp://tracker.example:6969/announce");
+  auto magnet = BtDownload::fromMagnet(
+      "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567");
+  magnet->configure(&option);
+  REQUIRE_EQ(std::string("global"), magnet->trackerSource(
+                                        "udp://tracker.example:6969/announce"));
+
   auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
   download->configure(&option);
   REQUIRE_EQ(std::string("global"), download->trackerSource(
                                         "udp://tracker.example:6969/announce"));
+
+  std::vector<libtorrent::create_file_entry> files;
+  files.emplace_back("private.bin", 1);
+  libtorrent::create_torrent torrent(
+      std::move(files), 16_k, libtorrent::create_torrent::v1_only);
+  torrent.set_hash(libtorrent::piece_index_t{0},
+                   libtorrent::sha1_hash::max());
+  torrent.set_priv(true);
+  const auto encoded = torrent.generate_buf();
+  auto privateDownload = BtDownload::fromBuffer(
+      std::string(encoded.data(), encoded.size()), {});
+  privateDownload->configure(&option);
+  REQUIRE_EQ(std::string("unknown"), privateDownload->trackerSource(
+                                         "udp://tracker.example:6969/announce"));
 }
 
 void BtSessionTest::testTrackerTierNormalization()
