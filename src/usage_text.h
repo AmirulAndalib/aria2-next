@@ -629,8 +629,8 @@
   _(" --bt-tracker-receive-timeout=SEC Set the tracker no-data timeout.")
 #define TEXT_BT_INTERFACE                                                  \
   _(" --bt-interface=INTERFACE,... Bind BitTorrent traffic to interfaces or IPs.\n" \
-    "                              By default, operating-system routes select one\n" \
-    "                              address per available IP family.")
+    "                              By default, listen on all addresses and let the\n" \
+    "                              operating system select outgoing routes.")
 #define TEXT_HTTP_ACCEPT_GZIP                   \
   _(" --http-accept-gzip[=true|false] Send 'Accept-Encoding: deflate, gzip' request\n" \
     "                              header and inflate response if remote server\n" \

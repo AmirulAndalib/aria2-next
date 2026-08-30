@@ -1735,7 +1735,7 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   {
     OptionHandler* op(new NumberOptionHandler(
         PREF_BT_TRACKER_COMPLETION_TIMEOUT, TEXT_BT_TRACKER_COMPLETION_TIMEOUT,
-        "30", 1, 600));
+        "10", 1, 600));
     op->addTag(TAG_BITTORRENT);
     op->setChangeGlobalOption(true);
     handlers.push_back(op);

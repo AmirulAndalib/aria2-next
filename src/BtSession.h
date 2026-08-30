@@ -106,7 +106,7 @@ private:
                           const std::string& error = {});
   bool recoverPartfile(const std::shared_ptr<BtDownload>& download,
                        const BtErrorSnapshot& error);
-  void refreshAutomaticRoute(bool reopenSockets);
+  void reopenNetworkSockets();
 
 public:
   explicit BtSession(const Option* option);

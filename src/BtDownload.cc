@@ -14,6 +14,7 @@
 #include "BtDownloadImpl.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -150,6 +151,17 @@ bool hasAllPieces(const lt::typed_bitfield<lt::piece_index_t>& pieces,
 bool unsupportedTracker(const std::string& url)
 {
   return util::startsWith(url, "ws://") || util::startsWith(url, "wss://");
+}
+
+size_t trackerProtocolGroup(const std::string& url)
+{
+  if (util::startsWith(url, "https://")) {
+    return 2;
+  }
+  if (util::startsWith(url, "http://")) {
+    return 1;
+  }
+  return 0;
 }
 
 const char* trackerOriginName(BtTrackerOrigin origin)
@@ -440,9 +452,16 @@ void BtDownload::configure(const Option* option)
                     })
                         ->tier +
                     1;
+      std::array<int, 3> protocolTiers{{-1, -1, -1}};
+      auto nextTier = baseTier;
       for (const auto& tracker : usableTrackers) {
+        const auto group = trackerProtocolGroup(tracker);
+        if (protocolTiers[group] < 0) {
+          protocolTiers[group] = nextTier;
+          nextTier = std::min(nextTier + 1, maxNativeTier);
+        }
         effectiveTrackers.push_back(
-            {tracker, baseTier, BtTrackerOrigin::Global});
+            {tracker, protocolTiers[group], BtTrackerOrigin::Global});
       }
     }
   }

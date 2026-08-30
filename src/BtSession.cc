@@ -167,7 +167,6 @@ struct BtSession::Impl {
   Timer lastDhtStats = Timer::zero();
   Timer lastSessionStats = Timer::zero();
   Timer lastSessionStateSave = Timer::zero();
-  Timer lastRouteUpdate = Timer::zero();
   std::string sessionStateFile;
   std::string lastSessionState;
   size_t droppedAlerts = 0;
@@ -1078,42 +1077,22 @@ bool BtSession::recoverPartfile(
   return true;
 }
 
-void BtSession::refreshAutomaticRoute(bool reopenSockets)
+void BtSession::reopenNetworkSockets()
 {
-  auto announce = [this]() {
-    for (const auto& entry : impl_->downloads) {
-      const auto& handle = entry.second->impl_->handle;
-      if (!handle.is_valid() || !handle.in_session()) {
-        continue;
-      }
-      handle.force_reannounce();
-      handle.force_dht_announce();
-      handle.force_lsd_announce();
+  impl_->session->reopen_network_sockets();
+  impl_->listenEndpoints.clear();
+  impl_->listenPort = 0;
+  impl_->announcePort = 0;
+  for (const auto& entry : impl_->downloads) {
+    const auto& handle = entry.second->impl_->handle;
+    if (!handle.is_valid() || !handle.in_session()) {
+      continue;
     }
-  };
-  if (!impl_->config.automaticRoute) {
-    if (reopenSockets) {
-      impl_->session->reopen_network_sockets();
-      announce();
-    }
-    return;
+    handle.force_reannounce();
+    handle.force_dht_announce();
+    handle.force_lsd_announce();
   }
-
-  const auto addresses = detectBtRouteAddresses(impl_->option);
-  if (!addresses.empty() && addresses != impl_->config.routeAddresses) {
-    auto config = makeBtConfig(impl_->option, addresses);
-    impl_->session->apply_settings(config.settings);
-    impl_->config = std::move(config);
-    impl_->listenEndpoints.clear();
-    impl_->listenPort = 0;
-    A2_LOG_INFO(fmt("BitTorrent route addresses changed: %s",
-                    impl_->config.listenInterfaces.c_str()));
-    announce();
-  }
-  else if (reopenSockets) {
-    impl_->session->reopen_network_sockets();
-    announce();
-  }
+  A2_LOG_INFO("component=bittorrent event=network_sockets_reopened");
 }
 
 BtSession::BtSession(const Option* option) : impl_(make_unique<Impl>(option))
@@ -1258,10 +1237,8 @@ void BtSession::poll()
   const auto now = std::chrono::system_clock::now();
   const bool resumedAfterSleep =
       now - impl_->lastPoll > std::chrono::seconds(100);
-  if (resumedAfterSleep || impl_->lastRouteUpdate.isZero() ||
-      impl_->lastRouteUpdate.difference(global::wallclock()) >= 5_s) {
-    impl_->lastRouteUpdate = global::wallclock();
-    refreshAutomaticRoute(resumedAfterSleep);
+  if (resumedAfterSleep) {
+    reopenNetworkSockets();
   }
   impl_->lastPoll = now;
 
@@ -2136,11 +2113,7 @@ void BtSession::requestStop(const std::shared_ptr<BtDownload>& download,
 
 void BtSession::applyGlobalOptions(const Option* option)
 {
-  auto routeAddresses = detectBtRouteAddresses(option);
-  if (routeAddresses.empty() && impl_->config.automaticRoute) {
-    routeAddresses = impl_->config.routeAddresses;
-  }
-  auto config = makeBtConfig(option, routeAddresses);
+  auto config = makeBtConfig(option);
   const bool networkChanged = !impl_->config.hasSameNetwork(config);
   impl_->session->apply_settings(config.settings);
   impl_->config = std::move(config);

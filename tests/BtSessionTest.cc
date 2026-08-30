@@ -401,8 +401,7 @@ void BtSessionTest::testDesktopSettings()
   option.put(PREF_ENABLE_DHT, A2_V_FALSE);
   option.put(PREF_BT_PORT_MAPPING, A2_V_FALSE);
 
-  const auto defaultConfig =
-      makeBtConfig(&option, {"192.0.2.10", "2001:db8::10"});
+  const auto defaultConfig = makeBtConfig(&option);
   REQUIRE_EQ(std::string("qBittorrent/5.2.3"),
              defaultConfig.settings.get_str(
                  libtorrent::settings_pack::user_agent));
@@ -414,16 +413,15 @@ void BtSessionTest::testDesktopSettings()
               .empty());
   option.put(PREF_BT_USER_AGENT, "CustomClient/1.0");
   option.put(PREF_BT_PEER_ID_PREFIX, "-CC1000-");
-  const auto customIdentity = makeBtConfig(&option, {"192.0.2.10"}).settings;
+  const auto customIdentity = makeBtConfig(&option).settings;
   REQUIRE_EQ(std::string("CustomClient/1.0"),
              customIdentity.get_str(libtorrent::settings_pack::user_agent));
   REQUIRE_EQ(
       std::string("-CC1000-"),
       customIdentity.get_str(libtorrent::settings_pack::peer_fingerprint));
-  REQUIRE_EQ(std::string("192.0.2.10:0,[2001:db8::10]:0"),
+  REQUIRE_EQ(std::string("0.0.0.0:0,[::]:0"),
              defaultConfig.listenInterfaces);
   REQUIRE(defaultConfig.outgoingInterfaces.empty());
-  REQUIRE(defaultConfig.automaticRoute);
   option.put(PREF_BT_INTERFACE, "en0");
   const auto config = makeBtConfig(&option);
   const auto& settings = config.settings;
@@ -473,11 +471,10 @@ void BtSessionTest::testDesktopSettings()
   REQUIRE(settings.get_bool(libtorrent::settings_pack::announce_to_all_tiers));
   REQUIRE(
       !settings.get_bool(libtorrent::settings_pack::announce_to_all_trackers));
-  REQUIRE_EQ(30, config.trackerCompletionTimeout);
+  REQUIRE_EQ(10, config.trackerCompletionTimeout);
   REQUIRE_EQ(10, config.trackerReceiveTimeout);
   REQUIRE_EQ(std::string("en0:0"), config.listenInterfaces);
   REQUIRE_EQ(std::string("en0"), config.outgoingInterfaces);
-  REQUIRE(!config.automaticRoute);
 
   option.put(PREF_BT_MAX_OUT_REQUEST_QUEUE, "1500");
   option.put(PREF_BT_DISK_WRITE_CACHE, "write-through");
@@ -521,17 +518,25 @@ void BtSessionTest::testTrackerOwnership()
 {
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
-  option.put(PREF_BT_TRACKER, "udp://tracker.example:6969/announce");
+  option.put(PREF_BT_TRACKER,
+             "udp://one.example:6969/announce,"
+             "https://two.example/announce,"
+             "http://three.example/announce");
   auto magnet = BtDownload::fromMagnet(
       "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567");
   magnet->configure(&option);
+  const auto& globalTiers = magnet->snapshot().announceList;
+  REQUIRE_EQ((size_t)3, globalTiers.size());
+  REQUIRE_EQ((size_t)1, globalTiers[0].size());
+  REQUIRE_EQ((size_t)1, globalTiers[1].size());
+  REQUIRE_EQ((size_t)1, globalTiers[2].size());
   REQUIRE_EQ(std::string("global"), magnet->trackerSource(
-                                        "udp://tracker.example:6969/announce"));
+                                        "udp://one.example:6969/announce"));
 
   auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
   download->configure(&option);
   REQUIRE_EQ(std::string("global"), download->trackerSource(
-                                        "udp://tracker.example:6969/announce"));
+                                        "udp://one.example:6969/announce"));
 
   std::vector<libtorrent::create_file_entry> files;
   files.emplace_back("private.bin", 1);
@@ -545,7 +550,7 @@ void BtSessionTest::testTrackerOwnership()
       std::string(encoded.data(), encoded.size()), {});
   privateDownload->configure(&option);
   REQUIRE_EQ(std::string("unknown"), privateDownload->trackerSource(
-                                         "udp://tracker.example:6969/announce"));
+                                         "udp://one.example:6969/announce"));
 }
 
 void BtSessionTest::testTrackerTierNormalization()
@@ -573,16 +578,18 @@ void BtSessionTest::testTrackerTierNormalization()
   REQUIRE_EQ((size_t)256, nativeTiers.size());
   REQUIRE_EQ((size_t)2, nativeTiers.back().size());
 
-  option.put(PREF_BT_TRACKER, "udp://global.example:6969/announce");
+  option.put(PREF_BT_TRACKER,
+             "udp://global-one.example:6969/announce,"
+             "https://global-two.example/announce");
   download->configure(&option);
   const auto& tiersWithGlobal = download->snapshot().announceList;
   REQUIRE_EQ((size_t)256, tiersWithGlobal.size());
   REQUIRE_EQ((size_t)3, tiersWithGlobal[254].size());
-  REQUIRE_EQ((size_t)1, tiersWithGlobal[255].size());
-  REQUIRE_EQ(std::string("udp://global.example:6969/announce"),
+  REQUIRE_EQ((size_t)2, tiersWithGlobal[255].size());
+  REQUIRE_EQ(std::string("udp://global-one.example:6969/announce"),
              tiersWithGlobal[255][0]);
   REQUIRE_EQ(std::string("global"), download->trackerSource(
-                                        "udp://global.example:6969/announce"));
+                                        "https://global-two.example/announce"));
 }
 
 void BtSessionTest::testSessionStateRoundTrip()
@@ -593,7 +600,7 @@ void BtSessionTest::testSessionStateRoundTrip()
   OptionParser::getInstance()->parseDefaultValues(option);
   REQUIRE_EQ(V_BOTH, option.get(PREF_BT_TRANSPORT));
   REQUIRE_EQ(V_PREFERRED, option.get(PREF_BT_ENCRYPTION));
-  REQUIRE_EQ(30, option.getAsInt(PREF_BT_TRACKER_COMPLETION_TIMEOUT));
+  REQUIRE_EQ(10, option.getAsInt(PREF_BT_TRACKER_COMPLETION_TIMEOUT));
   REQUIRE_EQ(10, option.getAsInt(PREF_BT_TRACKER_RECEIVE_TIMEOUT));
   option.put(PREF_STATE_DIR, stateDirectory);
   const auto path = state::btSessionFile(&option);

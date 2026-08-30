@@ -18,10 +18,6 @@
 #include <string>
 #include <vector>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/address.hpp>
-#include <boost/asio/ip/udp.hpp>
-
 #include <libtorrent/alert.hpp>
 #include <libtorrent/mmap_disk_io.hpp>
 #include <libtorrent/posix_disk_io.hpp>
@@ -109,36 +105,10 @@ std::string withListenPort(const std::string& interface, int port)
   return interface + ':' + std::to_string(port);
 }
 
-std::string routeAddress(const boost::asio::ip::address& destination)
-{
-  boost::asio::io_context context;
-  boost::asio::ip::udp::socket socket(context);
-  boost::system::error_code error;
-  socket.open(destination.is_v4() ? boost::asio::ip::udp::v4()
-                                  : boost::asio::ip::udp::v6(),
-              error);
-  if (error) {
-    return {};
-  }
-  socket.connect({destination, 9}, error);
-  if (error) {
-    return {};
-  }
-  const auto local = socket.local_endpoint(error);
-  if (error || local.address().is_unspecified()) {
-    return {};
-  }
-  return local.address().to_string();
-}
-
-std::string makeListenInterfaces(
-    const Option* option, const std::vector<std::string>& routeAddresses)
+std::string makeListenInterfaces(const Option* option)
 {
   const auto port = option->getAsInt(PREF_LISTEN_PORT);
-  auto interfaces = splitInterfaces(option);
-  if (interfaces.empty()) {
-    interfaces = routeAddresses;
-  }
+  const auto interfaces = splitInterfaces(option);
   if (!interfaces.empty()) {
     std::string result;
     for (const auto& interface : interfaces) {
@@ -157,7 +127,11 @@ std::string makeListenInterfaces(
     return result;
   }
 
-  return {};
+  auto result = "0.0.0.0:" + std::to_string(port);
+  if (!option->getAsBool(PREF_DISABLE_IPV6)) {
+    result += ",[::]:" + std::to_string(port);
+  }
+  return result;
 }
 
 } // namespace
@@ -179,53 +153,13 @@ int btAlertMask()
   return static_cast<int>(static_cast<unsigned int>(mask));
 }
 
-std::vector<std::string> detectBtRouteAddresses(const Option* option)
-{
-  if (!splitInterfaces(option).empty() || !option->get(PREF_BT_PROXY).empty()) {
-    return {};
-  }
-
-  std::vector<std::string> result;
-  const auto ipv4 = routeAddress(boost::asio::ip::make_address("192.0.2.1"));
-  if (!ipv4.empty()) {
-    result.push_back(ipv4);
-  }
-  if (!option->getAsBool(PREF_DISABLE_IPV6)) {
-    const auto ipv6 =
-        routeAddress(boost::asio::ip::make_address("2001:db8::1"));
-    if (!ipv6.empty() &&
-        std::find(result.begin(), result.end(), ipv6) == result.end()) {
-      result.push_back(ipv6);
-    }
-  }
-  return result;
-}
-
 BtConfig makeBtConfig(const Option* option)
-{
-  return makeBtConfig(option, detectBtRouteAddresses(option));
-}
-
-BtConfig makeBtConfig(const Option* option,
-                      const std::vector<std::string>& routeAddresses)
 {
   validateBtIdentity(option);
   BtConfig config;
   lt::settings_pack settings;
   const auto configuredInterfaces = splitInterfaces(option);
-  config.automaticRoute =
-      configuredInterfaces.empty() && option->get(PREF_BT_PROXY).empty();
-  if (config.automaticRoute) {
-    config.routeAddresses = routeAddresses;
-  }
-  else if (configuredInterfaces.empty()) {
-    config.routeAddresses.push_back("0.0.0.0");
-    if (!option->getAsBool(PREF_DISABLE_IPV6)) {
-      config.routeAddresses.push_back("::");
-    }
-  }
-  config.listenInterfaces =
-      makeListenInterfaces(option, config.routeAddresses);
+  config.listenInterfaces = makeListenInterfaces(option);
   settings.set_str(lt::settings_pack::listen_interfaces,
                    config.listenInterfaces);
   if (!configuredInterfaces.empty()) {

@@ -579,10 +579,10 @@ BitTorrent Specific Options
 
   Bind BitTorrent listeners, outgoing TCP peers, uTP, UDP trackers, and DHT to
   the given network interface names or numeric IP addresses. Without this
-  option, aria2-next asks the operating system to select one route address for
-  each available IP family. The route is refreshed after network changes and
-  system resume. This setting is independent of :option:`--interface` and
-  :option:`--multiple-interface`.
+  option, aria2-next listens on all IPv4 and IPv6 addresses and leaves outgoing
+  route selection to the operating system. Native libtorrent sockets are
+  reopened after system resume. This setting is independent of
+  :option:`--interface` and :option:`--multiple-interface`.
 
 .. option:: --bt-dht-bootstrap-nodes=<HOST:PORT>[,...]
 
@@ -860,17 +860,17 @@ BitTorrent Specific Options
 .. option:: --bt-tracker=<URI>[,...]
 
   Comma separated list of additional tracker announce URIs. The list is added
-  as one native tier after the tiers from the torrent. Trackers are
-  deduplicated and never injected into private torrents. WebTorrent ``ws://``
-  and ``wss://`` trackers are rejected because maintained builds do not include
-  WebRTC. Metainfo with more native tiers than libtorrent can represent keeps
-  every tracker and merges only the lowest-priority excess tiers. When this
-  option adds trackers, the final native tier is reserved for them.
+  after the tiers from the torrent. UDP, HTTP, and HTTPS trackers use separate
+  native tiers so one unreachable transport cannot block every discovery path.
+  Trackers are deduplicated and never injected into private torrents.
+  WebTorrent ``ws://`` and ``wss://`` trackers are rejected because maintained
+  builds do not include WebRTC. Excess tiers are merged into libtorrent's final
+  representable tier.
 
 .. option:: --bt-tracker-completion-timeout=<SEC>
 
   Set the maximum number of seconds for a complete tracker request after the
-  request has been sent. Default: ``30``
+  request has been sent. Default: ``10``
 
 .. option:: --bt-tracker-receive-timeout=<SEC>
 
