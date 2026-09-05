@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import shutil
 import sys
 import time
@@ -49,8 +50,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         begin, end = 4 * 1024 * 1024, 5 * 1024 * 1024
         requested = f"bytes={begin}-{end - 1}"
         missing = f"bytes={end - 65536}-{end - 1}"
-        for case in ("short", "tail"):
-            body = response_body[:-65536] if case == "short" else response_body
+        for case in ("short", "tail", "tail-retry"):
+            body = response_body if case == "tail" else response_body[:-65536]
             response = {
                 "status": 206,
                 "base64Body": base64.b64encode(body).decode(),
@@ -71,6 +72,25 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 },
                 "response": response,
             })
+        # Replacement requests also pay response latency. Changing the Range
+        # must not turn every slow-tail test into an instant healthy response.
+        wiremock.stub({
+            "priority": 5,
+            "request": {"method": "GET", "url": "/payload.bin?case=tail"},
+            "response": {"proxyBaseUrl": caddy.base_url,
+                         "fixedDelayMilliseconds": 1000},
+        })
+        wiremock.stub({
+            "priority": 1,
+            "scenarioName": "tail-retry",
+            "requiredScenarioState": "Started",
+            "newScenarioState": "Recovered",
+            "request": {
+                "method": "GET", "url": "/payload.bin?case=tail-retry",
+                "headers": {"Range": {"equalTo": missing}},
+            },
+            "response": {"status": 503, "headers": {"Retry-After": "1"}},
+        })
         wiremock.stub({
             "priority": 1,
             "request": {
@@ -168,6 +188,11 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             for case in ("short", "delayed", "tail", "retry-429", "retry-503"):
                 check(f"{case}.bin",
                       f"{wiremock.base_url}/payload.bin?case={case}")
+            tail_gid = check(
+                "tail-retry.bin", f"{wiremock.base_url}/payload.bin?case=tail-retry",
+                {"retry-wait": "10", "stream-max-connections": "256"})
+            if results["tail-retry.bin"] < 10:
+                raise RuntimeError("Tail recovery ignored the configured retry wait")
 
             for connections in (1, 2, 64, 256):
                 check(f"conditional-{connections}.bin",
@@ -245,6 +270,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             short = ranges("short")
             if short.count(requested) != 1 or short.count(missing) != 1:
                 raise RuntimeError("Short response did not request only its missing suffix")
+            if ranges("tail-retry").count(missing) != 2:
+                raise RuntimeError("Tail retry did not remain local to its missing suffix")
             for code in (429, 503):
                 if ranges(f"retry-{code}").count(requested) != 2:
                     raise RuntimeError(f"HTTP {code} retry was not exercised exactly once")
@@ -252,6 +279,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     for value in ranges("tail") if value]
             if not any(begin < first <= last < end for first, last in tail):
                 raise RuntimeError("Slow tail work was not reassigned")
+            if len([r for r in tail if begin <= r[0] < end]) > 3:
+                raise RuntimeError("Tail replacements recursively split their own work")
 
             gid = engine.add_uri(
                 f"{wiremock.base_url}/payload.bin?case=conditional",
@@ -294,6 +323,14 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             results["restartAndRemoval"] = "passed"
         finally:
             engine.stop()
+
+        # The logger buffers debug output. Check the flushed pre-restart log,
+        # rather than racing the logger immediately after RPC completion.
+        retry_log = (run.logs / "before-restart.engine.log").read_text()
+        delay = re.search(rf"event=range_retry gid={tail_gid} .*retry_in_ms=(\d+)",
+                          retry_log)
+        if not delay or int(delay[1]) < 10000:
+            raise RuntimeError("Retry diagnostics omit the actual scheduled wait")
 
     return {"sha256": expected, "runs": results}
 

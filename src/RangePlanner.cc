@@ -227,12 +227,16 @@ size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
   while (ready_.size() < targetCount) {
     auto candidate = std::max_element(
         ready_.begin(), ready_.end(), [](const auto& lhs, const auto& rhs) {
-          const auto lhsLength = lhs.attempts == 0 ? lhs.length() : int64_t{0};
-          const auto rhsLength = rhs.attempts == 0 ? rhs.length() : int64_t{0};
+          const auto lhsLength = lhs.attempts == 0 && !lhs.redistributed
+                                     ? lhs.length()
+                                     : int64_t{0};
+          const auto rhsLength = rhs.attempts == 0 && !rhs.redistributed
+                                     ? rhs.length()
+                                     : int64_t{0};
           return lhsLength < rhsLength;
         });
     if (candidate == ready_.end() || candidate->attempts != 0 ||
-        candidate->length() <= preferredPieceSize ||
+        candidate->redistributed || candidate->length() <= preferredPieceSize ||
         candidate->length() < minimumPieceSize * 2) {
       break;
     }
@@ -272,7 +276,10 @@ void RangePlanner::enqueueBalanced(RangeLease lease, size_t maxPieces,
                                                       minimumPieceSize *
                                                       minimumPieceSize);
     const auto end = std::min(lease.end, begin + length);
-    ready_.push_back({begin, end, lease.attempts, lease.uriIndex});
+    auto part = lease;
+    part.begin = begin;
+    part.end = end;
+    ready_.push_back(part);
     begin = end;
   }
 }

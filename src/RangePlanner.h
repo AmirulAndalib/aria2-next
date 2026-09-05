@@ -29,6 +29,7 @@ struct RangeLease {
   int64_t end = 0;
   size_t attempts = 0;
   size_t uriIndex = 0;
+  bool redistributed = false;
 
   bool empty() const { return begin >= end; }
   int64_t length() const { return end - begin; }

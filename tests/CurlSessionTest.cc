@@ -8,11 +8,13 @@
 #include "DownloadEngine.h"
 #include "DownloadFailureException.h"
 #include "Option.h"
+#include "RequestGroup.h"
 #include "SelectEventPoll.h"
 #include "SocketCore.h"
 #include "a2doctest.h"
 #include "a2functional.h"
 #include "prefs.h"
+#include "wallclock.h"
 
 namespace aria2 {
 
@@ -48,6 +50,7 @@ public:
   void testRetryableFailureClassification();
   void testFailureMessageUsesTheFailureLayer();
   void testShutdownWithLiveSocket();
+  void testTailRecovery();
   void sendHeader(CurlHandle& handle, const std::string& line);
 };
 
@@ -60,6 +63,70 @@ A2_TEST(CurlSessionTest, testExistingFileDecision)
 A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
+A2_TEST(CurlSessionTest, testTailRecovery)
+
+void CurlSessionTest::testTailRecovery()
+{
+  auto option = std::make_shared<Option>();
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-tail");
+  option->put(PREF_RETRY_WAIT, "10");
+  option->put(PREF_MAX_TRIES, "4");
+  RequestGroup group(GroupId::create(), option);
+  auto engine = make_unique<DownloadEngine>(make_unique<SelectEventPoll>());
+  engine->setOption(option.get());
+  auto* session = engine->getCurlSession();
+  session->engine_ = engine.get();
+  auto download = std::make_shared<CurlDownload>(
+      std::vector<std::string>{"http://example.test/payload"});
+  auto& impl = *download->impl_;
+  impl.group = &group;
+  impl.connectionLimit = 64;
+  auto handle = make_unique<CurlHandle>();
+  handle->value = curl_easy_init();
+  REQUIRE(handle->value);
+  handle->rangeAccepted = true;
+  handle->lease = {0, 80_k};
+  handle->writeOffset = 16_k;
+  global::wallclock().reset();
+  handle->firstPayload = global::wallclock();
+  handle->payloadSpeed.reset();
+  handle->payloadSpeed.update(16_k);
+  impl.handles.push_back(std::move(handle));
+
+  global::wallclock().advance(1_s);
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  global::wallclock().advance(1_s);
+  for (int i = 0; i < 32; ++i) {
+    impl.handles.push_back(make_unique<CurlHandle>());
+  }
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  impl.handles.resize(1);
+  group.setMaxDownloadSpeedLimit(1_k);
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  group.setMaxDownloadSpeedLimit(0);
+  CHECK(session->rebalanceEndgame(download, 1_m));
+  auto lease = impl.planner.takeReady({});
+  REQUIRE(lease);
+  CHECK_EQ(16_k, lease->begin);
+  CHECK_EQ(80_k, lease->end);
+  CHECK(lease->redistributed);
+  CHECK(!impl.planner.takeReady({}));
+
+  auto replacement = make_unique<CurlHandle>();
+  replacement->lease = *lease;
+  replacement->writeOffset = lease->begin;
+  replacement->rangeAccepted = true;
+  replacement->firstPayload = global::wallclock();
+  impl.handles.push_back(std::move(replacement));
+  global::wallclock().advance(20_s);
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  const auto delay = session->retryRange(download, *lease, 12);
+  REQUIRE(delay);
+  CHECK(*delay >= 12_s);
+  CHECK(*delay <= std::chrono::milliseconds(12100));
+  CHECK(!impl.planner.takeReady(std::chrono::steady_clock::now()));
+  global::wallclock().reset();
+}
 
 void CurlSessionTest::testShutdownWithLiveSocket()
 {

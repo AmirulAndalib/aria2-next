@@ -25,6 +25,7 @@
 
 #include "DiskWriter.h"
 #include "RangePlanner.h"
+#include "SpeedCalc.h"
 #include "TimerA2.h"
 
 namespace aria2 {
@@ -45,6 +46,8 @@ struct CurlHandle {
   int64_t appliedLimit = -1;
   int64_t bufferOffset = 0;
   size_t bufferLimit = 0;
+  SpeedCalc payloadSpeed;
+  Timer firstPayload = Timer::zero();
   int connectionLimit = 1;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;

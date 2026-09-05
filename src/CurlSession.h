@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -92,8 +93,9 @@ private:
   void schedule(const std::shared_ptr<CurlDownload>& download);
   bool rebalanceEndgame(const std::shared_ptr<CurlDownload>& download,
                         int64_t pieceLength);
-  bool retryRange(const std::shared_ptr<CurlDownload>& download,
-                  const RangeLease& lease, curl_off_t retryAfter);
+  std::optional<std::chrono::milliseconds>
+  retryRange(const std::shared_ptr<CurlDownload>& download,
+             const RangeLease& lease, curl_off_t retryAfter);
   void penalizeConnectionLimit(const std::shared_ptr<CurlDownload>& download,
                                int requestLimit);
   void rewardConnectionLimit(const std::shared_ptr<CurlDownload>& download);

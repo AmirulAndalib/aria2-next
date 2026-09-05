@@ -272,6 +272,10 @@ HTTP/SFTP Options
   attempts. A valid HTTP ``Retry-After`` delay takes precedence when it is
   longer. Default: ``0``
 
+  Pending retries can temporarily leave a download with zero connections.
+  This wait does not discard completed ranges. Debug retry messages report
+  the actual scheduled wait in milliseconds, including backoff.
+
 .. option:: --stream-max-connections=<N>
 
   Set the maximum number of native libcurl connections or HTTP/2 streams used
@@ -279,6 +283,11 @@ HTTP/SFTP Options
   the actual count for small files or servers that return a complete response.
   SFTP remains single-stream. The accepted range is ``1`` to ``256``.
   Default: ``6``
+
+  Parallel transfers reuse available connections and assign remaining work
+  from one range queue. Tail redistribution observes recent response-body
+  progress and is bounded per assigned range. Connection setup and response
+  latency alone do not trigger repeated splitting of replacement requests.
 
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and

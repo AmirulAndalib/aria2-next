@@ -44,6 +44,7 @@ void RangePlannerTest::testLocalizedRetry()
   planner.commit(lease->begin, 35);
   lease->attempts = 1;
   lease->uriIndex = 2;
+  lease->redistributed = true;
   const auto deadline = RangePlanner::TimePoint{} + std::chrono::seconds(1);
   planner.defer(lease->remainder(35), deadline);
 
@@ -55,6 +56,7 @@ void RangePlannerTest::testLocalizedRetry()
   CHECK_EQ(100, retry->end);
   CHECK_EQ(1, retry->attempts);
   CHECK_EQ(2, retry->uriIndex);
+  CHECK(retry->redistributed);
   CHECK(!planner.takeReady(deadline));
   planner.commit(retry->begin, retry->end);
   CHECK(planner.complete());
@@ -88,15 +90,17 @@ void RangePlannerTest::testReadyRefill()
 void RangePlannerTest::testBalancedEnqueue()
 {
   RangePlanner planner;
-  planner.enqueueBalanced({10, 110, 2, 3}, 4, 10);
+  planner.enqueueBalanced({10, 110, 0, 3, true}, 4, 10);
+  CHECK_EQ(4, planner.refillReady(16, 1, 1));
 
   int64_t cursor = 10;
   size_t count = 0;
   while (auto lease = planner.takeReady({})) {
     CHECK_EQ(cursor, lease->begin);
     CHECK(lease->end > lease->begin);
-    CHECK_EQ(2, lease->attempts);
+    CHECK_EQ(0, lease->attempts);
     CHECK_EQ(3, lease->uriIndex);
+    CHECK(lease->redistributed);
     cursor = lease->end;
     ++count;
   }

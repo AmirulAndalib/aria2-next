@@ -51,9 +51,8 @@
     "                              output and standard error will be redirected to\n" \
     "                              \"/dev/null\". Requires RPC, an input file, or a URI.")
 #define TEXT_RETRY_WAIT                                                 \
-  _(" --retry-wait=SEC             Set the seconds to wait between retries. \n" \
-    "                              With SEC > 0, aria2 will retry download when the\n" \
-    "                              HTTP server returns 503 response.")
+  _(" --retry-wait=SEC             Set the minimum seconds between stream retries.\n" \
+    "                              A longer HTTP Retry-After delay takes precedence.")
 #define TEXT_STREAM_MAX_CONNECTIONS                                     \
   _(" --stream-max-connections=N  Set the per-file HTTP connection ceiling.")
 #define TEXT_TIMEOUT                                            \
