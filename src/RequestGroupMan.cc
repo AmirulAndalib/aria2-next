@@ -53,6 +53,7 @@
 #include "RequestGroup.h"
 #include "Log.h"
 #include "DownloadEngine.h"
+#include "CurlSession.h"
 #include "Ed2kUploadQueue.h"
 #include "Ed2kSession.h"
 #include "message.h"
@@ -523,15 +524,22 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
   }
 #endif
 
-#ifdef ENABLE_BITTORRENT
-  if (keepRunning_ && e->getBtSession()) {
+  if (keepRunning_) {
     for (const auto& group : reservedGroups_) {
-      if (group->isPauseRequested() && group->getBtDownload()) {
+      if (!group->isPauseRequested()) {
+        continue;
+      }
+      if (group->getCurlDownload() && e->getCurlSession()) {
+        e->getCurlSession()->restorePaused(group->getCurlDownload(),
+                                           group.get());
+      }
+#ifdef ENABLE_BITTORRENT
+      if (group->getBtDownload() && e->getBtSession()) {
         e->getBtSession()->restorePaused(group->getBtDownload(), group.get());
       }
+#endif
     }
   }
-#endif
 
   int maxConcurrentDownloads = optimizeConcurrentDownloads_
                                    ? optimizeConcurrentDownloads()
@@ -569,6 +577,10 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
     std::shared_ptr<RequestGroup> groupToAdd = *reservedGroups_.begin();
     reservedGroups_.pop_front();
     if (keepRunning_ && groupToAdd->isPauseRequested()) {
+      if (groupToAdd->getCurlDownload() && e->getCurlSession()) {
+        e->getCurlSession()->restorePaused(groupToAdd->getCurlDownload(),
+                                           groupToAdd.get());
+      }
       pending.push_back(groupToAdd);
       continue;
     }

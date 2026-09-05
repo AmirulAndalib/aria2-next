@@ -52,9 +52,34 @@ class RpcClient:
                 time.sleep(0.1)
         raise TimeoutError(f"RPC did not become ready within {timeout:g}s")
 
+    def wait_status(
+        self, gid: str, status: str, timeout: float = 10.0
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        last = {}
+        while time.monotonic() < deadline:
+            last = self.call("aria2.tellStatus", [gid])
+            if last.get("status") == status:
+                return last
+            if last.get("status") == "error":
+                raise RpcError(f"Task {gid} failed: {last}")
+            time.sleep(0.1)
+        raise TimeoutError(f"Task {gid} did not enter {status}: {last}")
+
     def wait_complete(self, gid: str, timeout: float = 60.0) -> dict[str, Any]:
+        return self._wait_complete(gid, timeout, content_only=False)
+
+    def wait_content_complete(
+        self, gid: str, timeout: float = 60.0
+    ) -> dict[str, Any]:
+        return self._wait_complete(gid, timeout, content_only=True)
+
+    def _wait_complete(
+        self, gid: str, timeout: float, *, content_only: bool
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         last: dict[str, Any] = {}
+        previous_completed = 0
         while time.monotonic() < deadline:
             last = self.call("aria2.tellStatus", [gid])
             status = last.get("status")
@@ -64,7 +89,14 @@ class RpcClient:
                 )
             total = int(last.get("totalLength", "0"))
             completed = int(last.get("completedLength", "0"))
-            if total > 0 and completed == total:
+            if not content_only and completed < previous_completed:
+                raise RpcError(
+                    f"Task {gid} lost progress: {previous_completed} -> {completed}"
+                )
+            previous_completed = completed
+            if status == "complete" and completed == total:
+                return last
+            if content_only and total > 0 and completed == total:
                 return last
             time.sleep(0.1)
         raise TimeoutError(f"Task {gid} did not complete: {last}")

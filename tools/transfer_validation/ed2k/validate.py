@@ -98,7 +98,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         seed_gid = seed.add_uri(
             seed_link, {**common, "dir": str(seed.download_dir)}
         )
-        seed.rpc.wait_complete(seed_gid, 45)
+        seed.rpc.wait_content_complete(seed_gid, 45)
         seed_status = wait_sharing(seed, seed_gid, 15)
 
         started = time.monotonic()

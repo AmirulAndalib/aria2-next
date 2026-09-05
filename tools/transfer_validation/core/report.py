@@ -41,5 +41,6 @@ def run_validation(protocol: str, validation: Validation) -> int:
         }
         print(f"FAIL {protocol}: {error}")
     run.write_result(result)
-    run.cleanup_payloads()
+    if success:
+        run.cleanup_payloads()
     return 0 if success else 1

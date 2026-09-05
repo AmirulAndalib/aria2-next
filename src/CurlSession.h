@@ -52,6 +52,8 @@ public:
   void armTimeout();
   void advance(const std::shared_ptr<CurlDownload>& download);
   void stop(const std::shared_ptr<CurlDownload>& download, bool retainState);
+  void restorePaused(const std::shared_ptr<CurlDownload>& download,
+                     RequestGroup* group);
 
 private:
   CURLM* multi_ = nullptr;
@@ -92,7 +94,8 @@ private:
                         int64_t pieceLength);
   bool retryRange(const std::shared_ptr<CurlDownload>& download,
                   const RangeLease& lease, curl_off_t retryAfter);
-  void penalizeConnectionLimit(const std::shared_ptr<CurlDownload>& download);
+  void penalizeConnectionLimit(const std::shared_ptr<CurlDownload>& download,
+                               int requestLimit);
   void rewardConnectionLimit(const std::shared_ptr<CurlDownload>& download);
   std::vector<RangeLease>
   activeLeases(const std::shared_ptr<CurlDownload>& download) const;

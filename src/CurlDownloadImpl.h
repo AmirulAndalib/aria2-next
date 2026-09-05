@@ -42,12 +42,10 @@ struct CurlHandle {
   curl_slist* headers = nullptr;
   RangeLease lease;
   int64_t writeOffset = 0;
-  int64_t downloaded = 0;
   int64_t appliedLimit = -1;
   int64_t bufferOffset = 0;
   size_t bufferLimit = 0;
-  std::chrono::steady_clock::time_point startedAt;
-  std::chrono::steady_clock::time_point lastProgressAt;
+  int connectionLimit = 1;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
   int64_t responseContentLength = -1;
@@ -81,9 +79,8 @@ struct CurlDownloadImpl {
   RequestGroup* group = nullptr;
   int maxConnections = 1;
   int connectionLimit = 1;
-  int successfulRangesSincePenalty = 0;
+  std::chrono::steady_clock::time_point recoverConnectionsAt{};
   int fileNotFoundCount = 0;
-  long httpVersion = 0;
   int64_t existingLength = 0;
   CurlStartMode startMode = CurlStartMode::Transfer;
   bool dryRun = false;

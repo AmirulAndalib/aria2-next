@@ -74,7 +74,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             "seed-time": "10",
         }
         seed_gid = seed.add_torrent(torrent, {**common, "dir": str(seed.download_dir)})
-        seed.rpc.wait_complete(seed_gid, 45)
+        seed.rpc.wait_content_complete(seed_gid, 45)
         seed_status = wait_seeding(seed, seed_gid, 15)
         seed_session = seed.rpc.call("aria2.getBtSessionStatus")
         endpoints = seed_session.get("listenEndpoints", [])
@@ -91,7 +91,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             [leecher_gid, [seed_endpoint]],
         )
         try:
-            leecher_status = leecher.rpc.wait_complete(leecher_gid, 45)
+            leecher_status = leecher.rpc.wait_content_complete(leecher_gid, 45)
         except Exception as error:
             raise RuntimeError(
                 f"{error}; seedSession={seed_session}; "

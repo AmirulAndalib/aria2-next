@@ -5,9 +5,14 @@
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
 #include "DiskWriter.h"
+#include "DownloadEngine.h"
 #include "DownloadFailureException.h"
+#include "Option.h"
+#include "SelectEventPoll.h"
+#include "SocketCore.h"
 #include "a2doctest.h"
 #include "a2functional.h"
+#include "prefs.h"
 
 namespace aria2 {
 
@@ -36,7 +41,7 @@ class CurlSessionTest {
 public:
   void testWriteErrorBoundary();
   void testAcceptedRangeResponse();
-  void testShortAcceptedRangeClampsLease();
+  void testRangeOwnershipAndResponseBoundaries();
   void testErrorResponseDoesNotChangeIdentity();
   void testNonzeroRangeRejectsCompleteResponse();
   void testUnsatisfiedRangeResponseForms();
@@ -44,12 +49,13 @@ public:
   void testPlatformSslOptions();
   void testRetryableFailureClassification();
   void testFailureMessageUsesTheFailureLayer();
+  void testShutdownWithLiveSocket();
   void sendHeader(CurlHandle& handle, const std::string& line);
 };
 
 A2_TEST(CurlSessionTest, testWriteErrorBoundary)
 A2_TEST(CurlSessionTest, testAcceptedRangeResponse)
-A2_TEST(CurlSessionTest, testShortAcceptedRangeClampsLease)
+A2_TEST(CurlSessionTest, testRangeOwnershipAndResponseBoundaries)
 A2_TEST(CurlSessionTest, testErrorResponseDoesNotChangeIdentity)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
 A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
@@ -57,6 +63,33 @@ A2_TEST(CurlSessionTest, testExistingFileDecision)
 A2_TEST(CurlSessionTest, testPlatformSslOptions)
 A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
+A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
+
+void CurlSessionTest::testShutdownWithLiveSocket()
+{
+  SocketCore listener;
+  listener.bind("127.0.0.1", 0, AF_INET);
+  listener.beginListen();
+  Option option;
+  option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-shutdown");
+  auto engine = make_unique<DownloadEngine>(make_unique<SelectEventPoll>());
+  engine->setOption(&option);
+  auto* session = engine->getCurlSession();
+  session->engine_ = engine.get();
+  auto easy = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(
+      curl_easy_init(), curl_easy_cleanup);
+  REQUIRE(easy);
+  const auto url =
+      "http://127.0.0.1:" + std::to_string(listener.getAddrInfo().port) + "/";
+  REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()));
+  REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_PROXY, ""));
+  REQUIRE_EQ(CURLM_OK, curl_multi_add_handle(session->multi_, easy.get()));
+  session->socketAction(CURL_SOCKET_TIMEOUT, 0);
+  REQUIRE(!session->sockets_.empty());
+  // Destroying the engine must unregister native callbacks before deleting
+  // the commands they reference. AddressSanitizer detects the reversed order.
+  engine.reset();
+}
 
 void CurlSessionTest::sendHeader(CurlHandle& handle, const std::string& line)
 {
@@ -104,23 +137,37 @@ void CurlSessionTest::testAcceptedRangeResponse()
   CHECK(download.impl_->rangeValidated);
 }
 
-void CurlSessionTest::testShortAcceptedRangeClampsLease()
+void CurlSessionTest::testRangeOwnershipAndResponseBoundaries()
 {
-  CurlDownload download({"https://example.test/file"});
-  CurlHandle handle;
-  handle.download = &download;
-  handle.lease = {0, 4 * 1024 * 1024};
-  handle.ranged = true;
+  struct Case {
+    int64_t begin, end, responseEnd, total;
+  };
+  for (const auto& item :
+       {Case{0, 4 * 1024 * 1024, 60651, 60651},
+        Case{0, 4 * 1024 * 1024, 60651, 8 * 1024 * 1024},
+        Case{1024, 2048, 1536, 4096}, Case{1024, 2048, 1536, 1536}}) {
+    CurlDownload download({"https://example.test/file"});
+    CurlHandle handle;
+    handle.download = &download;
+    handle.lease = {item.begin, item.end};
+    handle.writeOffset = item.begin;
+    handle.ranged = true;
 
-  sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-  sendHeader(handle, "Content-Range: bytes 0-60650/60651\r\n");
-  sendHeader(handle, "\r\n");
+    sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
+    sendHeader(handle, "Content-Range: bytes " + std::to_string(item.begin) +
+                           "-" + std::to_string(item.responseEnd - 1) + "/" +
+                           std::to_string(item.total) + "\r\n");
+    sendHeader(handle, "\r\n");
 
-  CHECK(handle.rangeAccepted);
-  CHECK(!handle.invalidRange);
-  CHECK_EQ(60651, handle.responseRangeEnd);
-  CHECK_EQ(60651, handle.lease.end);
-  CHECK_EQ(60651, download.snapshot().totalLength);
+    CHECK(handle.rangeAccepted);
+    CHECK(!handle.invalidRange);
+    CHECK_EQ(item.responseEnd, handle.responseRangeEnd);
+    CHECK_EQ(std::min(item.end, item.total), handle.lease.end);
+    CHECK_EQ(item.total, download.snapshot().totalLength);
+    const auto remainder = handle.lease.remainder(item.responseEnd);
+    CHECK_EQ(item.responseEnd, remainder.begin);
+    CHECK_EQ(std::min(item.end, item.total), remainder.end);
+  }
 }
 
 void CurlSessionTest::testErrorResponseDoesNotChangeIdentity()
@@ -213,8 +260,8 @@ void CurlSessionTest::testRetryableFailureClassification()
                                        false, true));
   CHECK(!CurlSession::retryableFailure(CURLE_SSL_CERTPROBLEM, 0, 0, 0, false,
                                        true));
-  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CACERT_BADFILE, 0, 0, 0,
-                                       false, true));
+  CHECK(!CurlSession::retryableFailure(CURLE_SSL_CACERT_BADFILE, 0, 0, 0, false,
+                                       true));
   CHECK(CurlSession::retryableFailure(CURLE_HTTP_RETURNED_ERROR, 403, 0, 0,
                                       true, false));
   CHECK(!CurlSession::retryableFailure(CURLE_HTTP_RETURNED_ERROR, 403, 0, 0,

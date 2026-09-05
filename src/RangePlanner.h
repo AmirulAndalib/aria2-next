@@ -13,6 +13,7 @@
 #ifndef D_RANGE_PLANNER_H
 #define D_RANGE_PLANNER_H
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +32,13 @@ struct RangeLease {
 
   bool empty() const { return begin >= end; }
   int64_t length() const { return end - begin; }
+
+  RangeLease remainder(int64_t offset) const
+  {
+    auto result = *this;
+    result.begin = std::clamp(offset, begin, end);
+    return result;
+  }
 };
 
 class RangePlanner {

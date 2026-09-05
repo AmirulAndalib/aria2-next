@@ -107,9 +107,11 @@ DownloadEngine::DownloadEngine(std::unique_ptr<EventPoll> eventPoll)
 
 DownloadEngine::~DownloadEngine()
 {
+  // Native socket callbacks still refer to commands owned by this engine.
+  // Unregister them while both commands and request groups remain alive.
+  curlSession_.reset();
   commands_.clear();
   routineCommands_.clear();
-  curlSession_.reset();
 #ifdef ENABLE_BITTORRENT
   btSession_.reset();
 #endif // ENABLE_BITTORRENT
