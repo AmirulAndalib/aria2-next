@@ -105,6 +105,7 @@ private:
                 error_code::Value errorCode, const std::string& message,
                 bool retainState = true);
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
+  void restartFullDownload(const std::shared_ptr<CurlDownload>& download);
   bool openOutput(const std::shared_ptr<CurlDownload>& download,
                   bool preserveExisting);
   void closeOutput(CurlDownload* download) noexcept;

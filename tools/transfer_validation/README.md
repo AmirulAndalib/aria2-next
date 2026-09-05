@@ -26,7 +26,8 @@ Failed runs retain their payloads and state. HTTP validation checks single and
 64-connection downloads, a throttled 320 MiB workload configured for 256
 connections, HTTPS, empty files, short ranges, delayed headers, slow tails,
 429/503 retries, interrupted connections, Unicode paths, paused restart, and
-batch removal. Compact request evidence verifies that faults were exercised and
+batch removal. Conditional requests cover ETag and date validators, ignored
+ranges, changed resources, and protected existing files. Compact request evidence verifies that faults were exercised and
 short responses retrieve only their missing suffix. Successful transfers require
 completed RPC state, nondecreasing sampled progress, and matching SHA-256 hashes.
 BitTorrent and ED2K checks separately wait for content completion because sharing

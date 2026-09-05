@@ -57,6 +57,8 @@ class WireMockService:
             "--disable-banner",
             "--async-response-enabled",
             "true",
+            "--logged-response-body-size-limit",
+            "0",
         ]
         self.process = subprocess.Popen(command, stdout=self.log, stderr=self.log)
         wait_for_port(self.port, 20)

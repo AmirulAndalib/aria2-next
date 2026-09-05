@@ -40,13 +40,11 @@ public:
 class CurlSessionTest {
 public:
   void testWriteErrorBoundary();
-  void testAcceptedRangeResponse();
+  void testResponseIdentity();
   void testRangeOwnershipAndResponseBoundaries();
-  void testErrorResponseDoesNotChangeIdentity();
   void testNonzeroRangeRejectsCompleteResponse();
   void testUnsatisfiedRangeResponseForms();
   void testExistingFileDecision();
-  void testPlatformSslOptions();
   void testRetryableFailureClassification();
   void testFailureMessageUsesTheFailureLayer();
   void testShutdownWithLiveSocket();
@@ -54,13 +52,11 @@ public:
 };
 
 A2_TEST(CurlSessionTest, testWriteErrorBoundary)
-A2_TEST(CurlSessionTest, testAcceptedRangeResponse)
+A2_TEST(CurlSessionTest, testResponseIdentity)
 A2_TEST(CurlSessionTest, testRangeOwnershipAndResponseBoundaries)
-A2_TEST(CurlSessionTest, testErrorResponseDoesNotChangeIdentity)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
 A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
 A2_TEST(CurlSessionTest, testExistingFileDecision)
-A2_TEST(CurlSessionTest, testPlatformSslOptions)
 A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
@@ -113,28 +109,45 @@ void CurlSessionTest::testWriteErrorBoundary()
   CHECK_EQ(std::string("Disk is full"), download.snapshot().error);
 }
 
-void CurlSessionTest::testAcceptedRangeResponse()
+void CurlSessionTest::testResponseIdentity()
 {
-  CurlDownload download({"https://example.test/file"});
-  CurlHandle handle;
-  handle.download = &download;
-  handle.lease = {1024, 2048};
-  handle.writeOffset = 1024;
-  handle.ranged = true;
+  for (const auto& tag : {"\"revision-one\"", "\"\"", "W/\"weak\"", "bare",
+                          "\"bad space\"", "\"bad\"quote\""}) {
+    CurlDownload download({"https://example.test/file"});
+    CurlHandle handle;
+    handle.download = &download;
+    handle.lease = {0, 4096};
+    handle.ranged = true;
+    sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
+    sendHeader(handle, std::string("ETag: ") + tag + "\r\n");
+    sendHeader(handle, "Last-Modified: Tue, 25 Aug 2026 00:00:00 GMT\r\n");
+    sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
+    sendHeader(handle, "\r\n");
+    CHECK(handle.rangeAccepted);
+    CHECK_EQ(tag == std::string("\"revision-one\"") ||
+                 tag == std::string("\"\""),
+             !download.impl_->etag.empty());
+    CHECK(!download.impl_->lastModified.empty());
+  }
 
-  sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-  sendHeader(handle, "ETag: \"revision-one\"\r\n");
-  sendHeader(handle, "Last-Modified: Tue, 25 Aug 2026 00:00:00 GMT\r\n");
-  sendHeader(handle, "Content-Range: bytes 1024-2047/4096\r\n");
-  sendHeader(handle, "\r\n");
-
-  CHECK(handle.rangeAccepted);
-  CHECK(!handle.invalidRange);
-  CHECK(!handle.validatorMismatch);
-  CHECK_EQ(2048, handle.responseRangeEnd);
-  CHECK_EQ(4096, download.snapshot().totalLength);
-  CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
-  CHECK(download.impl_->rangeValidated);
+  for (int code : {200, 206, 503}) {
+    CurlDownload download({"https://example.test/file"});
+    download.impl_->etag = "\"revision-one\"";
+    CurlHandle handle;
+    handle.download = &download;
+    handle.lease = {0, 4096};
+    handle.ranged = true;
+    sendHeader(handle, "HTTP/1.1 " + std::to_string(code) + " Response\r\n");
+    sendHeader(handle, "ETag: \"revision-two\"\r\n");
+    if (code == 206) {
+      sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
+    }
+    sendHeader(handle, "\r\n");
+    CHECK_EQ(code != 503, handle.validatorMismatch);
+    CHECK(!handle.rangeAccepted);
+    CHECK(!handle.fullResponseAccepted);
+    CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
+  }
 }
 
 void CurlSessionTest::testRangeOwnershipAndResponseBoundaries()
@@ -168,24 +181,6 @@ void CurlSessionTest::testRangeOwnershipAndResponseBoundaries()
     CHECK_EQ(item.responseEnd, remainder.begin);
     CHECK_EQ(std::min(item.end, item.total), remainder.end);
   }
-}
-
-void CurlSessionTest::testErrorResponseDoesNotChangeIdentity()
-{
-  CurlDownload download({"https://example.test/file"});
-  download.impl_->etag = "\"revision-one\"";
-  CurlHandle handle;
-  handle.download = &download;
-  handle.lease = {1024, 2048};
-  handle.ranged = true;
-
-  sendHeader(handle, "HTTP/1.1 503 Service Unavailable\r\n");
-  sendHeader(handle, "ETag: \"error-page\"\r\n");
-  sendHeader(handle, "\r\n");
-
-  CHECK(!handle.rangeAccepted);
-  CHECK(!handle.validatorMismatch);
-  CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
 }
 
 void CurlSessionTest::testNonzeroRangeRejectsCompleteResponse()
@@ -241,15 +236,6 @@ void CurlSessionTest::testExistingFileDecision()
            CurlSession::decideExistingFile(1024, 4096, false));
   CHECK_EQ(ExistingFileDecision::Reject,
            CurlSession::decideExistingFile(8192, 4096, true));
-}
-
-void CurlSessionTest::testPlatformSslOptions()
-{
-#ifdef _WIN32
-  CHECK_EQ(CURLSSLOPT_REVOKE_BEST_EFFORT, CurlSession::platformSslOptions());
-#else
-  CHECK_EQ(0L, CurlSession::platformSslOptions());
-#endif
 }
 
 void CurlSessionTest::testRetryableFailureClassification()

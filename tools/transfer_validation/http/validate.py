@@ -17,7 +17,7 @@ sys.path.insert(0, str(SUITE_ROOT))
 from core.engine import EngineProcess
 from core.report import run_validation
 from core.runtime import RunDirectory, create_payload, sha256
-from core.services import CaddyService, ToxiproxyService, WireMockService
+from core.services import CaddyService, ToxiproxyService, WireMockService, post_json
 
 
 def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
@@ -96,6 +96,40 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 },
             })
 
+        with urllib.request.urlopen(caddy.base_url + "/payload.bin") as response:
+            etag = response.headers["ETag"]
+            modified = response.headers["Last-Modified"]
+        wiremock.file("payload.bin", payload)
+        whole = {"status": 200, "bodyFileName": "payload.bin",
+                 "headers": {"ETag": etag, "Last-Modified": modified}}
+        wiremock.stub({
+            "priority": 1,
+            "request": {"method": "GET", "url": "/payload.bin?case=conditional",
+                        "headers": {"If-Range": {"matches": ".+"}}},
+            "response": whole,
+        })
+        wiremock.stub({
+            "priority": 1,
+            "request": {"method": "GET", "url": "/payload.bin?case=date"},
+            "response": {"proxyBaseUrl": caddy.base_url,
+                         "headers": {"ETag": "invalid-unquoted-tag"}},
+        })
+        for case in ("ignored", "changed-200", "changed-206", "changed-412", "416"):
+            response = whole
+            if case == "changed-200":
+                response = {**whole, "headers": {"ETag": '"changed"'}}
+            elif case == "changed-206":
+                response = {"proxyBaseUrl": caddy.base_url,
+                            "headers": {"ETag": '"changed"'}}
+            elif case in ("changed-412", "416"):
+                response = {"status": 412 if case == "changed-412" else 416}
+            wiremock.stub({
+                "priority": 1,
+                "request": {"method": "GET", "url": f"/payload.bin?case={case}",
+                            "headers": {"Range": {"matches": "bytes=[1-9][0-9]*-.*"}}},
+                "response": response,
+            })
+
         engine = EngineProcess(run, "engine", engine_path)
         session = run.state / "download.session"
         engine.start([f"--save-session={session}"])
@@ -108,13 +142,16 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
 
         def check(
             name: str, url: str, overrides: dict[str, str] | None = None,
-            digest: str = expected,
+            digest: str = expected, restart: bool = False,
         ) -> str:
             started = time.monotonic()
             gid = engine.add_uri(
                 url, {**options, "out": name, **(overrides or {})}
             )
-            engine.rpc.wait_complete(gid, 30)
+            if restart:
+                engine.rpc.wait_status(gid, "complete", 30)
+            else:
+                engine.rpc.wait_complete(gid, 30)
             if sha256(engine.download_dir / name) != digest:
                 raise RuntimeError(f"Payload digest mismatch: {name}")
             results[name] = round(time.monotonic() - started, 3)
@@ -131,6 +168,31 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             for case in ("short", "delayed", "tail", "retry-429", "retry-503"):
                 check(f"{case}.bin",
                       f"{wiremock.base_url}/payload.bin?case={case}")
+
+            for connections in (1, 2, 64, 256):
+                check(f"conditional-{connections}.bin",
+                      f"{wiremock.base_url}/payload.bin?case=conditional",
+                      {"stream-max-connections": str(connections)})
+            check("date.bin", f"{wiremock.base_url}/payload.bin?case=date")
+            check("ignored.bin", f"{wiremock.base_url}/payload.bin?case=ignored",
+                  restart=True)
+            for case in ("changed-200", "changed-206", "changed-412", "416", "ignored"):
+                name = f"protected-{case}.bin"
+                path = engine.download_dir / name
+                prefix = payload.read_bytes()[:4 * 1024 * 1024]
+                if case == "ignored":
+                    path.write_bytes(prefix)
+                gid = engine.add_uri(
+                    f"{wiremock.base_url}/payload.bin?case={case}",
+                    {**options, "out": name, "continue": "true"},
+                )
+                status = engine.rpc.wait_status(gid, "error", 10)
+                saved = path.read_bytes()
+                if (status.get("errorCode") != "8" or not saved
+                        or saved != prefix[:len(saved)]
+                        or (case == "ignored" and saved != prefix)):
+                    raise RuntimeError(f"Unsafe range failure: {case}: {status}")
+            results["conditionalResponses"] = "passed"
 
             # Native throttling keeps the 256-way transfer observable without
             # relying on an external server or a multi-gigabyte download.
@@ -153,14 +215,14 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
 
             # Keep only the request evidence needed to detect lost or repeated
             # work; do not duplicate WireMock response bodies in the report.
-            with urllib.request.urlopen(
-                f"{wiremock.base_url}/__admin/requests"
-            ) as response:
-                requests = [
-                    {"url": e["request"]["url"],
-                     "range": e["request"]["headers"].get("Range")}
-                    for e in json.load(response)["requests"]
-                ]
+            requests = []
+            for entry in post_json(f"{wiremock.base_url}/__admin/requests/find",
+                                   {"method": "GET"})["requests"]:
+                headers = {k.lower(): v for k, v in entry["headers"].items()}
+                requests.append({"url": entry["url"], "range": headers.get("range"),
+                                 "ifMatch": headers.get("if-match"),
+                                 "ifRange": headers.get("if-range"),
+                                 "ifUnmodifiedSince": headers.get("if-unmodified-since")})
             (run.logs / "http-requests.json").write_text(
                 json.dumps(requests, indent=2)
             )
@@ -168,6 +230,17 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             def ranges(case):
                 return [r["range"] for r in requests
                         if r["url"] == f"/payload.bin?case={case}"]
+
+            for case, key, value in (("conditional", "ifMatch", etag),
+                                     ("date", "ifUnmodifiedSince", modified)):
+                partial = [r for r in requests
+                           if r["url"] == f"/payload.bin?case={case}"
+                           and r["range"] and not r["range"].startswith("bytes=0-")]
+                if not partial or any(r[key] != value or r["ifRange"] for r in partial):
+                    raise RuntimeError(f"Incorrect range precondition: {case}")
+            if sum(r["url"] == "/payload.bin?case=ignored" and not r["range"]
+                   for r in requests) != 1:
+                raise RuntimeError("Range fallback did not issue exactly one complete GET")
 
             short = ranges("short")
             if short.count(requested) != 1 or short.count(missing) != 1:
@@ -181,7 +254,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 raise RuntimeError("Slow tail work was not reassigned")
 
             gid = engine.add_uri(
-                f"{caddy.base_url}/payload.bin",
+                f"{wiremock.base_url}/payload.bin?case=conditional",
                 {**options, "out": "resume-é-下载.bin", "max-download-limit": "4M"},
             )
             time.sleep(0.2)

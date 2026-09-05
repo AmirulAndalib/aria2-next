@@ -86,6 +86,8 @@ struct CurlDownloadImpl {
   bool dryRun = false;
   bool http = false;
   bool rangeValidated = false;
+  bool allowFullRestart = false;
+  bool fullDownload = false;
   bool plannerConfigured = false;
   bool kickPending = false;
   bool stopRequested = false;

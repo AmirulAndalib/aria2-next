@@ -308,9 +308,32 @@ bool parseContentLength(const std::string& value, int64_t& length)
 
 bool strongEtag(const std::string& value)
 {
-  return !value.empty() &&
-         !(value.size() >= 2 && (value[0] == 'W' || value[0] == 'w') &&
-           value[1] == '/');
+  return value.size() >= 2 && value.front() == '"' && value.back() == '"' &&
+         std::all_of(value.begin() + 1, value.end() - 1, [](unsigned char c) {
+           return c == 0x21 || (c >= 0x23 && c <= 0x7e) || c >= 0x80;
+         });
+}
+
+void rememberIdentity(CurlDownloadImpl& impl, const std::string& etag,
+                      const std::string& modified)
+{
+  if (impl.etag.empty() && strongEtag(etag)) {
+    impl.etag = etag;
+  }
+  if (impl.lastModified.empty() &&
+      curl_getdate(modified.c_str(), nullptr) != -1) {
+    impl.lastModified = modified;
+  }
+}
+
+bool identityChanged(const CurlDownloadImpl& impl, const CurlHandle& handle)
+{
+  if (!impl.etag.empty()) {
+    return !handle.responseEtag.empty() && impl.etag != handle.responseEtag;
+  }
+  const auto before = curl_getdate(impl.lastModified.c_str(), nullptr);
+  const auto after = curl_getdate(handle.responseLastModified.c_str(), nullptr);
+  return before != -1 && after != -1 && before != after;
 }
 
 void cleanupHandle(CurlHandle& handle)
@@ -646,6 +669,9 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
     }
     else if (line == "\r\n" || line == "\n") {
       handle->headersComplete = true;
+      if (handle->responseCode == 200 || handle->responseCode == 206) {
+        handle->validatorMismatch = identityChanged(impl, *handle);
+      }
       if (handle->responseCode == 206 && handle->ranged) {
         if (handle->responseTotalLength <= 0 ||
             handle->responseRangeEnd <= handle->lease.begin ||
@@ -660,15 +686,6 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
           handle->validatorMismatch = true;
         }
         else {
-          if (!impl.etag.empty() && !handle->responseEtag.empty() &&
-              impl.etag != handle->responseEtag) {
-            handle->validatorMismatch = true;
-          }
-          else if (impl.etag.empty() && !impl.lastModified.empty() &&
-                   !handle->responseLastModified.empty() &&
-                   impl.lastModified != handle->responseLastModified) {
-            handle->validatorMismatch = true;
-          }
           if (!handle->validatorMismatch) {
             // A response can cover less than the assigned range. Only EOF
             // limits our responsibility; finish() returns the missing suffix.
@@ -678,27 +695,24 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
             if (handle->purpose == CurlHandlePurpose::Payload) {
               impl.rangeValidated = true;
               download->snapshot_.totalLength = handle->responseTotalLength;
-              if (impl.etag.empty() && strongEtag(handle->responseEtag)) {
-                impl.etag = handle->responseEtag;
-              }
-              if (impl.lastModified.empty()) {
-                impl.lastModified = handle->responseLastModified;
-              }
+              rememberIdentity(impl, handle->responseEtag,
+                               handle->responseLastModified);
             }
           }
         }
       }
       else if (handle->responseCode == 200) {
-        if (!handle->ranged ||
-            (handle->lease.begin == 0 && impl.planner.completedLength() == 0)) {
+        if (download->snapshot_.totalLength > 0 &&
+            handle->responseContentLength >= 0 &&
+            download->snapshot_.totalLength != handle->responseContentLength) {
+          handle->validatorMismatch = true;
+        }
+        if (!handle->validatorMismatch && handle->lease.begin == 0 &&
+            impl.planner.completedLength() == 0 && !impl.plannerConfigured) {
           handle->fullResponseAccepted = true;
           if (handle->purpose == CurlHandlePurpose::Payload) {
-            if (impl.etag.empty() && strongEtag(handle->responseEtag)) {
-              impl.etag = handle->responseEtag;
-            }
-            if (impl.lastModified.empty()) {
-              impl.lastModified = handle->responseLastModified;
-            }
+            rememberIdentity(impl, handle->responseEtag,
+                             handle->responseLastModified);
           }
         }
       }
@@ -1021,6 +1035,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.kickPending = false;
   impl.fileNotFoundCount = 0;
   impl.rangeValidated = false;
+  impl.fullDownload = false;
   impl.existingLength = 0;
   impl.startMode = CurlStartMode::Transfer;
   impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
@@ -1071,10 +1086,11 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   if (hasState && !restoreState) {
     store_.removePath(impl.path);
   }
+  impl.allowFullRestart = existingLength == 0 ||
+                          group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE);
   if (restoreState) {
     impl.planner.restore(state.completedRanges);
-    impl.etag = state.etag;
-    impl.lastModified = state.lastModified;
+    rememberIdentity(impl, state.etag, state.lastModified);
     download->snapshot_.totalLength = state.totalLength;
   }
   else if (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE) &&
@@ -1145,8 +1161,7 @@ void CurlSession::restorePaused(const std::shared_ptr<CurlDownload>& download,
   }
   impl.group = group;
   impl.planner.restore(state.completedRanges);
-  impl.etag = state.etag;
-  impl.lastModified = state.lastModified;
+  rememberIdentity(impl, state.etag, state.lastModified);
   impl.currentUri = state.uri;
   download->snapshot_.currentUri = state.uri;
   download->snapshot_.totalLength = state.totalLength;
@@ -1373,18 +1388,28 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
             ? std::to_string(lease.begin) + '-'
             : std::to_string(lease.begin) + '-' + std::to_string(lease.end - 1);
     SET_CURL_OPTION(CURLOPT_RANGE, transfer->range.c_str());
-    const auto& validator = !impl.etag.empty() ? impl.etag : impl.lastModified;
-    if (lease.begin > 0 && !validator.empty()) {
-      const auto ifRange = "If-Range: " + validator;
-      if (!appendHeader(ifRange)) {
-        cleanupHandle(*transfer);
-        return false;
-      }
-    }
   }
   else if (lease.begin > 0) {
     SET_CURL_OPTION(CURLOPT_RESUME_FROM_LARGE,
                     static_cast<curl_off_t>(lease.begin));
+  }
+  // Parallel slices and resumed transfers must retain the same representation.
+  // Unlike If-Range, these preconditions report a change explicitly with 412.
+  if (impl.http && purpose == CurlHandlePurpose::Payload) {
+    if (!impl.etag.empty()) {
+      if (!appendHeader("If-Match: " + impl.etag)) {
+        cleanupHandle(*transfer);
+        return false;
+      }
+    }
+    else {
+      const auto modified = curl_getdate(impl.lastModified.c_str(), nullptr);
+      if (modified != -1) {
+        SET_CURL_OPTION(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFUNMODSINCE);
+        SET_CURL_OPTION(CURLOPT_TIMEVALUE_LARGE,
+                        static_cast<curl_off_t>(modified));
+      }
+    }
   }
   if (headers) {
     SET_CURL_OPTION(CURLOPT_HTTPHEADER, headers);
@@ -1775,6 +1800,48 @@ void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
   download->snapshot_.connections = 0;
 }
 
+void CurlSession::restartFullDownload(
+    const std::shared_ptr<CurlDownload>& download)
+{
+  auto& impl = *download->impl_;
+  if (!impl.allowFullRestart || impl.fullDownload) {
+    failTask(
+        download, error_code::CANNOT_RESUME,
+        "The server ignored the byte range; restarting requires permission "
+        "to overwrite the existing file");
+    return;
+  }
+  cancelHandles(download);
+  closeOutput(download.get());
+  store_.removePath(impl.path);
+  impl.planner.clear();
+  impl.plannerConfigured = false;
+  impl.rangeValidated = false;
+  impl.fullDownload = true;
+  download->snapshot_.completedLength = 0;
+  if (!openOutput(download, false)) {
+    failTask(download, download->snapshot_.errorCode, download->snapshot_.error,
+             false);
+    return;
+  }
+  const RangeLease lease{0, std::numeric_limits<int64_t>::max(), 0,
+                         impl.preferredUriIndex};
+  if (!createHandle(download, lease, true, false, CurlHandlePurpose::Payload)) {
+    failTask(download, error_code::NETWORK_PROBLEM,
+             "Unable to restart the complete transfer");
+    return;
+  }
+  auto* handle = impl.handles.back().get();
+  downloads_[handle->value] = std::make_pair(download, handle);
+  impl.kickPending = true;
+  rebalanceLimits();
+  checkpoint(download, true);
+  engine_->setNoWait(true);
+  A2_LOG_INFO(fmt("component=stream event=full_download_restart gid=%s "
+                  "reason=range_ignored",
+                  gid(download.get()).c_str()));
+}
+
 void CurlSession::finalize(const std::shared_ptr<CurlDownload>& download,
                            curl_off_t reportedFileTime)
 {
@@ -1999,10 +2066,7 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
     return;
   }
 
-  if (strongEtag(responseEtag)) {
-    impl.etag = responseEtag;
-  }
-  impl.lastModified = responseLastModified;
+  rememberIdentity(impl, responseEtag, responseLastModified);
   download->snapshot_.totalLength = remoteLength;
 
   switch (decideExistingFile(impl.existingLength, remoteLength,
@@ -2161,7 +2225,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
              download->snapshot_.error);
     return;
   }
-  if (validatorMismatch) {
+  if (validatorMismatch || responseCode == 412) {
     failTask(download, error_code::CANNOT_RESUME,
              "The remote resource changed while resuming the download");
     return;
@@ -2193,8 +2257,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
 
   if (ranged && !rangeAccepted && !fullResponseAccepted &&
       responseCode == 200) {
-    failTask(download, error_code::CANNOT_RESUME,
-             "The server did not honor the requested byte range");
+    restartFullDownload(download);
     return;
   }
 
@@ -2217,7 +2280,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     if (download->snapshot_.totalLength > 0) {
       remainder.end = std::min(remainder.end, download->snapshot_.totalLength);
     }
-    if (!remainder.empty() &&
+    if (!impl.fullDownload && !remainder.empty() &&
         (alternateMirror ||
          retryableFailure(result, responseCode, impl.fileNotFoundCount,
                           maxFileNotFound, ranged && impl.rangeValidated,

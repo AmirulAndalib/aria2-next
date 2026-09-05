@@ -282,9 +282,14 @@ HTTP/SFTP Options
 
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and
-  are preserved in the stream state database. If a server ignores a nonzero
-  Range request or the remote representation changes, Aria2 Next retains the
-  partial file and reports that the transfer cannot be resumed.
+  are preserved in the stream state database. Parallel and resumed requests
+  use ``If-Match`` with a valid strong ETag, or ``If-Unmodified-Since`` with
+  a valid modification date. A changed representation stops the transfer
+  without mixing file versions.
+
+  If a server ignores Range, a new download can restart once as a complete
+  transfer. An existing partial file is retained unless
+  :option:`--allow-overwrite` permits restarting it from zero.
 
 .. option:: -t, --timeout=<SEC>
 
