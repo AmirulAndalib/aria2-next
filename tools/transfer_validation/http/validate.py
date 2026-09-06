@@ -10,6 +10,7 @@ import shutil
 import sys
 import time
 import urllib.request
+from urllib.parse import quote
 from pathlib import Path
 
 SUITE_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,8 @@ from core.services import CaddyService, ToxiproxyService, WireMockService, post_
 def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
     payload = run.fixtures / "payload.bin"
     expected = create_payload(payload, 16 * 1024 * 1024)
+    automatic_name = "resume-é-下载%20.bin"
+    shutil.copyfile(payload, run.fixtures / automatic_name)
     with payload.open("rb") as source:
         block = source.read(1024 * 1024)
         source.seek(4 * 1024 * 1024)
@@ -178,6 +181,20 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            automatic_url = f"{caddy.base_url}/{quote(automatic_name)}"
+            for connections in (1, 64):
+                directory = engine.download_dir / f"names-{connections}"
+                directory.mkdir()
+                gid = engine.add_uri(automatic_url, {
+                    **options, "dir": str(directory),
+                    "stream-max-connections": str(connections),
+                })
+                status = engine.rpc.wait_complete(gid, 30)
+                output = directory / automatic_name
+                if (status["files"][0]["path"] != str(output)
+                        or sha256(output) != expected):
+                    raise RuntimeError("Automatic output filename mismatch")
+            results["automaticFilename"] = "passed"
             for name in ("empty.bin", "tiny.bin"):
                 check(name, f"{caddy.base_url}/{name}",
                       digest=sha256(run.fixtures / name))
@@ -283,8 +300,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 raise RuntimeError("Tail requests exceeded the useful body-sample budget")
 
             gid = engine.add_uri(
-                f"{wiremock.base_url}/payload.bin?case=conditional",
-                {**options, "out": "resume-é-下载.bin", "max-download-limit": "4M"},
+                automatic_url,
+                {**options, "max-download-limit": "4M"},
             )
             time.sleep(0.2)
             engine.rpc.call("aria2.pause", [gid])
@@ -296,11 +313,14 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             shutil.copyfile(engine.engine_log, run.logs / "before-restart.engine.log")
             engine.start([f"--save-session={session}", f"--input-file={session}"])
             restored = engine.rpc.wait_status(gid, "paused")
-            if any(restored[k] != paused[k] for k in ("totalLength", "completedLength")):
-                raise RuntimeError("Paused progress changed across restart")
+            if (any(restored[k] != paused[k]
+                    for k in ("totalLength", "completedLength"))
+                    or restored["files"][0]["path"] != str(engine.download_dir / automatic_name)
+                    or restored["files"][0]["path"] != paused["files"][0]["path"]):
+                raise RuntimeError("Paused progress or filename changed across restart")
             engine.rpc.call("aria2.unpause", [gid])
             engine.rpc.wait_complete(gid, 30)
-            if sha256(engine.download_dir / "resume-é-下载.bin") != expected:
+            if sha256(engine.download_dir / automatic_name) != expected:
                 raise RuntimeError("Resumed transfer digest mismatch")
 
             gids = [

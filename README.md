@@ -22,6 +22,9 @@ Aria2 Next is an actively maintained download engine and the embedded engine use
 
 Stream, BitTorrent, and ED2K resume state is stored under `--state-dir`. Payload directories no longer receive adjacent `.aria2` control files. HTTP cookies, authentication, proxies, TLS, SFTP, resume validation, and HTTP/2 use their native library implementations. HTTP and HTTPS transfers use libcurl's event-driven multi-socket API, adaptive verified byte ranges, HTTP/2 multiplexing, shared cookies and TLS sessions, and range-aware SQLite resume state.
 
+Automatic stream filenames decode the URL basename once using libcurl. Explicit
+`--out` values and metadata-defined paths remain literal; request URLs are unchanged.
+
 HTTP range transfers retain unreturned portions of valid partial responses and
 retry only unfinished data. Connection setup and low-speed timeouts use libcurl;
 server overload reduces new request concurrency and staggers retries. Slow tail

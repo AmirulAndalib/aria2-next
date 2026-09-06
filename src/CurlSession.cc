@@ -189,7 +189,23 @@ std::string outputPath(RequestGroup* group, const std::string& uriValue)
     }
     uri::UriStruct parsed;
     if (uri::parse(parsed, uriValue)) {
-      name = util::fixTaintedBasename(parsed.file);
+      name = parsed.file;
+      if (name.size() <= static_cast<size_t>(std::numeric_limits<int>::max())) {
+        int length = 0;
+        const auto decoded = std::unique_ptr<char, decltype(&curl_free)>(
+            curl_easy_unescape(nullptr, name.c_str(),
+                               static_cast<int>(name.size()), &length),
+            curl_free);
+        if (decoded) {
+          std::string candidate(decoded.get(), static_cast<size_t>(length));
+          // Decode only the URL basename, never a configured or restored path.
+          if (util::isUtf8(candidate) && candidate != "." &&
+              candidate != "..") {
+            name = std::move(candidate);
+          }
+        }
+      }
+      name = util::createSafePath(name);
     }
     if (name.empty()) {
       name = Request::DEFAULT_FILE;

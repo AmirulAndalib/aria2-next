@@ -8,6 +8,7 @@
 #include "DownloadContext.h"
 #include "DiskWriter.h"
 #include "DownloadEngine.h"
+#include "FileEntry.h"
 #include "DownloadFailureException.h"
 #include "Option.h"
 #include "RequestGroup.h"
@@ -44,6 +45,7 @@ public:
 class CurlSessionTest {
 public:
   void testWriteErrorBoundary();
+  void testOutputFilename();
   void testResponseIdentity();
   void testRangeOwnershipAndResponseBoundaries();
   void testNonzeroRangeRejectsCompleteResponse();
@@ -57,6 +59,7 @@ public:
 };
 
 A2_TEST(CurlSessionTest, testWriteErrorBoundary)
+A2_TEST(CurlSessionTest, testOutputFilename)
 A2_TEST(CurlSessionTest, testResponseIdentity)
 A2_TEST(CurlSessionTest, testRangeOwnershipAndResponseBoundaries)
 A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
@@ -66,6 +69,49 @@ A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
 A2_TEST(CurlSessionTest, testTailRecovery)
+
+void CurlSessionTest::testOutputFilename()
+{
+  auto option = std::make_shared<Option>();
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-filename-state");
+  option->put(PREF_DIR, A2_TEST_OUT_DIR "/curl-filename");
+  CurlSession session(option.get());
+  const std::pair<std::string, std::string> cases[] = {
+      {"%E4%B8%AD%E6%96%87%20file.bin", "中文 file.bin"},
+      {"a%2520b.bin", "a%20b.bin"},
+      {"a+b.bin?filename=ignored", "a+b.bin"},
+      {"bad%ZZ.bin", "bad%ZZ.bin"},
+      {"bad%FF.bin", "bad%FF.bin"},
+      {"dir%2Fchild.bin", "dir%2Fchild.bin"},
+      {"zero%00byte.bin", "zero%00byte.bin"},
+      {"line%0Abreak.bin", "line%0Abreak.bin"},
+      {"%2E%2E", "%2E%2E"},
+      {"%2E", "%2E"},
+      {"", "index.html"},
+  };
+  for (const auto& entry : cases) {
+    RequestGroup group(GroupId::create(), option);
+    group.setDownloadContext(std::make_shared<DownloadContext>(1_m, 0, ""));
+    auto download = std::make_shared<CurlDownload>(
+        std::vector<std::string>{"https://example.test/" + entry.first});
+    session.restorePaused(download, &group);
+    const auto expected = option->get(PREF_DIR) + "/" + entry.second;
+    CHECK_EQ(expected, group.getFirstFilePath());
+    // A fresh snapshot must not decode an already selected output path again.
+    download = std::make_shared<CurlDownload>(
+        std::vector<std::string>{"https://example.test/other"});
+    session.restorePaused(download, &group);
+    CHECK_EQ(expected, group.getFirstFilePath());
+  }
+  option->put(PREF_OUT, "literal%20name.bin");
+  RequestGroup group(GroupId::create(), option);
+  group.setDownloadContext(std::make_shared<DownloadContext>(1_m, 0, ""));
+  auto download = std::make_shared<CurlDownload>(
+      std::vector<std::string>{"https://example.test/%E4%B8%AD.bin"});
+  session.restorePaused(download, &group);
+  CHECK_EQ(option->get(PREF_DIR) + "/literal%20name.bin",
+           group.getFirstFilePath());
+}
 
 void CurlSessionTest::testTailRecovery()
 {
