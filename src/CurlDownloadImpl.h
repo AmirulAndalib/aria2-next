@@ -47,7 +47,8 @@ struct CurlHandle {
   int64_t bufferOffset = 0;
   size_t bufferLimit = 0;
   SpeedCalc payloadSpeed;
-  Timer firstPayload = Timer::zero();
+  Timer bodySampleStart = Timer::zero();
+  Timer lastPayload = Timer::zero();
   int connectionLimit = 1;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;

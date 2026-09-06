@@ -587,7 +587,7 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
            "Received an oversized output block");
       return CURL_WRITEFUNC_ERROR;
     }
-    const auto length = size * count;
+    auto length = size * count;
     if (handle->purpose == CurlHandlePurpose::RangeProbe) {
       return handle->responseCode == 206 && handle->rangeAccepted
                  ? length
@@ -616,6 +616,14 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
            "The response body exceeds its declared byte range");
       return CURL_WRITEFUNC_ERROR;
     }
+    // A helper can own the suffix of an in-flight HTTP response. Stop this
+    // request at its assigned boundary without writing into the helper's range.
+    const bool assisted =
+        handle->rangeAccepted && handle->lease.end < handle->responseRangeEnd;
+    if (assisted) {
+      length =
+          std::min<uint64_t>(length, handle->lease.end - handle->writeOffset);
+    }
     if (handle->writeBuffer.empty()) {
       handle->bufferOffset = handle->writeOffset;
     }
@@ -630,8 +638,11 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
                                bytes + length);
     handle->writeOffset += static_cast<int64_t>(length);
     if (length > 0) {
-      if (handle->firstPayload.isZero()) {
-        handle->firstPayload = global::wallclock();
+      handle->lastPayload = global::wallclock();
+    }
+    if (length > 0 && handle->writeOffset - handle->lease.begin >= 64_k) {
+      if (handle->bodySampleStart.isZero()) {
+        handle->bodySampleStart = global::wallclock();
         handle->payloadSpeed.reset();
       }
       handle->payloadSpeed.update(length);
@@ -645,7 +656,9 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
     if (impl.group) {
       impl.group->getDownloadContext()->updateDownload(length);
     }
-    return length;
+    return assisted && handle->writeOffset == handle->lease.end
+               ? CURL_WRITEFUNC_ERROR
+               : length;
   }
   catch (const Exception& error) {
     fail(download, error.getErrorCode(), error.what());
@@ -1698,14 +1711,13 @@ bool CurlSession::rebalanceEndgame(
     return false;
   }
   const auto capacity = static_cast<size_t>(impl.connectionLimit);
-  // Bulk requests should drain before tail recovery starts replacing work.
-  if (capacity <= 1 || active > capacity / 2 || globalDownloadLimit_ > 0 ||
+  if (capacity <= 1 || active >= capacity || globalDownloadLimit_ > 0 ||
       impl.group->getMaxDownloadSpeedLimit() > 0) {
     return false;
   }
-  // Observe body progress, excluding connection and response-header latency.
-  // Each assigned range can be redistributed once; replacement requests must
-  // not recursively restart their own warm-up. Native timeouts handle failures.
+  // Let idle connections help while preserving the donor's live prefix.
+  // A meaningful body sample protects fresh requests and bounds cancellation
+  // by actual forward progress, rather than a lifetime redistribution count.
   CurlHandle* handle = nullptr;
   long double longest = 0;
   int64_t splitQuantum = pieceLength;
@@ -1713,20 +1725,27 @@ bool CurlSession::rebalanceEndgame(
   for (const auto& candidate : impl.handles) {
     const auto remaining = candidate->lease.end - candidate->writeOffset;
     if (!candidate->rangeAccepted || remaining <= 0 ||
-        candidate->firstPayload.isZero() || candidate->lease.redistributed) {
+        candidate->bodySampleStart.isZero() ||
+        candidate->writeOffset - candidate->lease.begin < 64_k) {
       continue;
     }
     curl_off_t firstByte = 0;
     curl_easy_getinfo(candidate->value, CURLINFO_STARTTRANSFER_TIME_T,
                       &firstByte);
-    const auto requestCost = std::max(1.0L, firstByte / 500000.0L);
+    const auto requestCost = std::max(1.0L, firstByte / 1000000.0L);
     const auto bodySeconds = std::chrono::duration<long double>(
-                                 candidate->firstPayload.difference(now))
+                                 candidate->bodySampleStart.difference(now))
                                  .count();
-    if (bodySeconds < requestCost * 2) {
+    if (bodySeconds < std::max(2.0L, requestCost)) {
       continue;
     }
     const auto speed = candidate->payloadSpeed.calculateNewestSpeed(2);
+    const auto idleSeconds = std::chrono::duration<long double>(
+                                 candidate->lastPayload.difference(now))
+                                 .count();
+    if (speed == 0 && idleSeconds < requestCost * 2) {
+      continue;
+    }
     const auto remainingTime =
         speed > 0 ? static_cast<long double>(remaining) / speed
                   : std::numeric_limits<long double>::infinity();
@@ -1758,7 +1777,16 @@ bool CurlSession::rebalanceEndgame(
   }
 
   auto remainder = handle->lease.remainder(handle->writeOffset);
-  remainder.redistributed = true;
+  if (remainder.length() >= splitQuantum * 2) {
+    remainder.begin += (remainder.length() / 2 / splitQuantum) * splitQuantum;
+    handle->lease.end = remainder.begin;
+    impl.planner.enqueue(remainder);
+    A2_LOG_DEBUG(fmt("component=stream event=tail_assisted gid=%s "
+                     "range=%" PRId64 "-%" PRId64,
+                     gid(download.get()).c_str(), remainder.begin,
+                     remainder.end));
+    return true;
+  }
   auto found = downloads_.find(handle->value);
   if (found != downloads_.end()) {
     const auto result = curl_multi_remove_handle(multi_, handle->value);
@@ -1772,12 +1800,11 @@ bool CurlSession::rebalanceEndgame(
   }
   cleanupHandle(*handle);
   eraseHandle(impl, handle);
-  const size_t pieces = remainder.length() >= splitQuantum * 2 ? 2 : 1;
-  impl.planner.enqueueBalanced(remainder, pieces, splitQuantum);
-  A2_LOG_DEBUG(fmt("component=stream event=tail_redistributed gid=%s "
-                   "range=%" PRId64 "-%" PRId64 " pieces=%lu",
-                   gid(download.get()).c_str(), remainder.begin, remainder.end,
-                   static_cast<unsigned long>(pieces)));
+  impl.planner.enqueue(remainder);
+  A2_LOG_DEBUG(fmt("component=stream event=tail_reassigned gid=%s "
+                   "range=%" PRId64 "-%" PRId64,
+                   gid(download.get()).c_str(), remainder.begin,
+                   remainder.end));
   return true;
 }
 
@@ -2159,6 +2186,15 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_IP, &primaryIp);
     curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_PORT, &primaryPort);
     curl_easy_getinfo(handle->value, CURLINFO_EFFECTIVE_URL, &effectiveUri);
+  }
+  if (result == CURLE_WRITE_ERROR &&
+      handle->purpose == CurlHandlePurpose::Payload && handle->rangeAccepted &&
+      handle->writeOffset == handle->lease.end &&
+      handle->lease.end < handle->responseRangeEnd &&
+      download->snapshot_.errorCode == error_code::UNDEFINED) {
+    // The native callback stopped a donor after completing its shortened
+    // assignment. Its suffix is independently owned by another request.
+    result = CURLE_OK;
   }
   const auto nativeFailure = failureMessage(*handle, result, responseCode);
   const auto safePrimaryIp =

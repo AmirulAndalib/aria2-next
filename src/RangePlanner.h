@@ -29,7 +29,6 @@ struct RangeLease {
   int64_t end = 0;
   size_t attempts = 0;
   size_t uriIndex = 0;
-  bool redistributed = false;
 
   bool empty() const { return begin >= end; }
   int64_t length() const { return end - begin; }
@@ -69,8 +68,6 @@ public:
 
   size_t refillReady(size_t targetCount, int64_t preferredPieceSize,
                      int64_t minimumPieceSize);
-  void enqueueBalanced(RangeLease lease, size_t maxPieces,
-                       int64_t minimumPieceSize);
 
 private:
   struct DeferredLease {

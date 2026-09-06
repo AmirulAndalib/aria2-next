@@ -4,6 +4,8 @@
 
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
+#include "ByteArrayDiskWriter.h"
+#include "DownloadContext.h"
 #include "DiskWriter.h"
 #include "DownloadEngine.h"
 #include "DownloadFailureException.h"
@@ -72,6 +74,8 @@ void CurlSessionTest::testTailRecovery()
   option->put(PREF_RETRY_WAIT, "10");
   option->put(PREF_MAX_TRIES, "4");
   RequestGroup group(GroupId::create(), option);
+  group.setDownloadContext(
+      std::make_shared<DownloadContext>(1_m, 1_m, "payload"));
   auto engine = make_unique<DownloadEngine>(make_unique<SelectEventPoll>());
   engine->setOption(option.get());
   auto* session = engine->getCurlSession();
@@ -80,17 +84,21 @@ void CurlSessionTest::testTailRecovery()
       std::vector<std::string>{"http://example.test/payload"});
   auto& impl = *download->impl_;
   impl.group = &group;
+  impl.writer = make_unique<ByteArrayDiskWriter>();
   impl.connectionLimit = 64;
   auto handle = make_unique<CurlHandle>();
   handle->value = curl_easy_init();
   REQUIRE(handle->value);
   handle->rangeAccepted = true;
-  handle->lease = {0, 80_k};
-  handle->writeOffset = 16_k;
+  handle->download = download.get();
+  handle->lease = {0, 1_m};
+  handle->responseRangeEnd = 1_m;
+  handle->writeOffset = 80_k;
   global::wallclock().reset();
-  handle->firstPayload = global::wallclock();
+  handle->bodySampleStart = global::wallclock();
+  handle->lastPayload = global::wallclock();
   handle->payloadSpeed.reset();
-  handle->payloadSpeed.update(16_k);
+  handle->payloadSpeed.update(80_k);
   impl.handles.push_back(std::move(handle));
 
   global::wallclock().advance(1_s);
@@ -99,24 +107,42 @@ void CurlSessionTest::testTailRecovery()
   for (int i = 0; i < 32; ++i) {
     impl.handles.push_back(make_unique<CurlHandle>());
   }
-  CHECK(!session->rebalanceEndgame(download, 1_m));
-  impl.handles.resize(1);
   group.setMaxDownloadSpeedLimit(1_k);
   CHECK(!session->rebalanceEndgame(download, 1_m));
   group.setMaxDownloadSpeedLimit(0);
   CHECK(session->rebalanceEndgame(download, 1_m));
+  REQUIRE_EQ(33, impl.handles.size());
+  auto* donor = impl.handles.front().get();
   auto lease = impl.planner.takeReady({});
   REQUIRE(lease);
-  CHECK_EQ(16_k, lease->begin);
-  CHECK_EQ(80_k, lease->end);
-  CHECK(lease->redistributed);
+  CHECK_EQ(donor->lease.end, lease->begin);
+  CHECK_EQ(1_m, lease->end);
   CHECK(!impl.planner.takeReady({}));
+
+  std::string body(static_cast<size_t>(1_m - donor->writeOffset), 'x');
+  CHECK_EQ(CURL_WRITEFUNC_ERROR,
+           CurlSession::writeData(body.data(), 1, body.size(), donor));
+  CHECK_EQ(lease->begin, donor->writeOffset);
+  CHECK_EQ(lease->begin, impl.writer->size());
+  CHECK_EQ(error_code::UNDEFINED, download->snapshot_.errorCode);
+  impl.planner.commit(0, 80_k);
+  RangePlanner restored;
+  restored.restore(impl.planner.completedRanges());
+  restored.configure(1_m, 1_m, {});
+  auto missing = restored.takeReady({});
+  REQUIRE(missing);
+  CHECK_EQ(lease->begin, missing->begin);
+  CHECK_EQ(lease->end, missing->end);
+  CHECK(!restored.takeReady({}));
+  curl_easy_cleanup(donor->value);
+  donor->value = nullptr;
+  impl.handles.clear();
 
   auto replacement = make_unique<CurlHandle>();
   replacement->lease = *lease;
-  replacement->writeOffset = lease->begin;
+  replacement->writeOffset = lease->begin + 16_k;
   replacement->rangeAccepted = true;
-  replacement->firstPayload = global::wallclock();
+  replacement->bodySampleStart = global::wallclock();
   impl.handles.push_back(std::move(replacement));
   global::wallclock().advance(20_s);
   CHECK(!session->rebalanceEndgame(download, 1_m));

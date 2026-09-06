@@ -227,16 +227,12 @@ size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
   while (ready_.size() < targetCount) {
     auto candidate = std::max_element(
         ready_.begin(), ready_.end(), [](const auto& lhs, const auto& rhs) {
-          const auto lhsLength = lhs.attempts == 0 && !lhs.redistributed
-                                     ? lhs.length()
-                                     : int64_t{0};
-          const auto rhsLength = rhs.attempts == 0 && !rhs.redistributed
-                                     ? rhs.length()
-                                     : int64_t{0};
+          const auto lhsLength = lhs.attempts == 0 ? lhs.length() : int64_t{0};
+          const auto rhsLength = rhs.attempts == 0 ? rhs.length() : int64_t{0};
           return lhsLength < rhsLength;
         });
     if (candidate == ready_.end() || candidate->attempts != 0 ||
-        candidate->redistributed || candidate->length() <= preferredPieceSize ||
+        candidate->length() <= preferredPieceSize ||
         candidate->length() < minimumPieceSize * 2) {
       break;
     }
@@ -252,36 +248,6 @@ size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
     ready_.insert(std::next(candidate), std::move(suffix));
   }
   return ready_.size();
-}
-
-void RangePlanner::enqueueBalanced(RangeLease lease, size_t maxPieces,
-                                   int64_t minimumPieceSize)
-{
-  if (lease.empty()) {
-    return;
-  }
-  maxPieces = std::max<size_t>(1, maxPieces);
-  minimumPieceSize = std::max<int64_t>(1, minimumPieceSize);
-  const auto pieces =
-      std::min<size_t>(maxPieces, static_cast<size_t>(std::max<int64_t>(
-                                      1, lease.length() / minimumPieceSize)));
-  auto begin = lease.begin;
-  for (size_t index = 0; index < pieces; ++index) {
-    const auto remainingPieces = static_cast<int64_t>(pieces - index);
-    const auto remaining = lease.end - begin;
-    const auto length =
-        index + 1 == pieces
-            ? remaining
-            : std::max<int64_t>(minimumPieceSize, remaining / remainingPieces /
-                                                      minimumPieceSize *
-                                                      minimumPieceSize);
-    const auto end = std::min(lease.end, begin + length);
-    auto part = lease;
-    part.begin = begin;
-    part.end = end;
-    ready_.push_back(part);
-    begin = end;
-  }
 }
 
 } // namespace aria2

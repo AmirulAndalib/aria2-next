@@ -285,9 +285,10 @@ HTTP/SFTP Options
   Default: ``6``
 
   Parallel transfers reuse available connections and assign remaining work
-  from one range queue. Tail redistribution observes recent response-body
-  progress and is bounded per assigned range. Connection setup and response
-  latency alone do not trigger repeated splitting of replacement requests.
+  from one range queue. Idle connections can assist a slow transfer by taking
+  its suffix while the original request continues its prefix. Assistance uses
+  recent body progress and a meaningful received-data sample, so connection
+  setup and response latency alone do not trigger repeated restarts.
 
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and

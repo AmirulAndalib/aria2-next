@@ -279,8 +279,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     for value in ranges("tail") if value]
             if not any(begin < first <= last < end for first, last in tail):
                 raise RuntimeError("Slow tail work was not reassigned")
-            if len([r for r in tail if begin <= r[0] < end]) > 3:
-                raise RuntimeError("Tail replacements recursively split their own work")
+            if len([r for r in tail if begin <= r[0] < end]) > (end - begin) // 65536:
+                raise RuntimeError("Tail requests exceeded the useful body-sample budget")
 
             gid = engine.add_uri(
                 f"{wiremock.base_url}/payload.bin?case=conditional",
