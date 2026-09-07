@@ -27,9 +27,8 @@ namespace aria2 {
 struct RangeLease {
   int64_t begin = 0;
   int64_t end = 0;
-  size_t uriIndex = 0;
   size_t attempts = 0;
-  std::chrono::steady_clock::time_point readyAt{};
+  size_t uriIndex = 0;
 
   bool empty() const { return begin >= end; }
   int64_t length() const { return end - begin; }
@@ -42,8 +41,6 @@ struct RangeLease {
   }
 };
 
-// Owns completed bytes and pending work, including each failed range's retry
-// budget and deadline. Waiting ranges never block other eligible work.
 class RangePlanner {
 public:
   using TimePoint = std::chrono::steady_clock::time_point;
@@ -62,25 +59,31 @@ public:
   bool complete() const;
   const std::vector<StoredRange>& completedRanges() const { return completed_; }
 
-  // Ready ranges stay ordered by offset so the file fills front to back.
   void enqueue(RangeLease lease);
+  void defer(RangeLease lease, TimePoint readyAt);
   std::optional<RangeLease> takeReady(TimePoint now);
+  std::optional<TimePoint> nextDeadline() const;
   bool hasReady(TimePoint now) const;
-  bool hasPending() const { return !ready_.empty(); }
-  std::optional<TimePoint> nextDeadline(TimePoint now) const;
-  size_t readyCount() const { return ready_.size(); }
+  bool hasPending() const { return !ready_.empty() || !deferred_.empty(); }
 
   size_t refillReady(size_t targetCount, int64_t preferredPieceSize,
-                     int64_t minimumPieceSize, TimePoint now);
+                     int64_t minimumPieceSize);
 
 private:
+  struct DeferredLease {
+    RangeLease lease;
+    TimePoint readyAt;
+  };
+
   void normalizeCompleted();
   void enqueueGap(int64_t begin, int64_t end);
+  void releaseDeferred(TimePoint now);
 
   int64_t totalLength_ = 0;
   int64_t chunkSize_ = 0;
   std::vector<StoredRange> completed_;
   std::deque<RangeLease> ready_;
+  std::vector<DeferredLease> deferred_;
 };
 
 } // namespace aria2

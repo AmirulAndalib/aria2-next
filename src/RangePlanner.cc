@@ -24,6 +24,7 @@ void RangePlanner::clear()
   chunkSize_ = 0;
   completed_.clear();
   ready_.clear();
+  deferred_.clear();
 }
 
 void RangePlanner::restore(const std::vector<StoredRange>& ranges)
@@ -116,7 +117,7 @@ void RangePlanner::enqueueGap(int64_t begin, int64_t end)
 {
   while (begin < end) {
     const auto next = std::min(end, begin + chunkSize_);
-    ready_.push_back({begin, next, 0});
+    ready_.push_back({begin, next, 0, 0});
     begin = next;
   }
 }
@@ -127,6 +128,7 @@ void RangePlanner::configure(int64_t totalLength, int64_t chunkSize,
   totalLength_ = std::max<int64_t>(0, totalLength);
   chunkSize_ = std::max<int64_t>(1, chunkSize);
   ready_.clear();
+  deferred_.clear();
   if (totalLength_ <= 0) {
     return;
   }
@@ -160,69 +162,74 @@ void RangePlanner::configure(int64_t totalLength, int64_t chunkSize,
 
 void RangePlanner::enqueue(RangeLease lease)
 {
-  if (lease.empty()) {
-    return;
+  if (!lease.empty()) {
+    ready_.push_back(std::move(lease));
   }
-  const auto position =
-      std::upper_bound(ready_.begin(), ready_.end(), lease.begin,
-                       [](int64_t value, const RangeLease& entry) {
-                         return value < entry.begin;
-                       });
-  ready_.insert(position, std::move(lease));
+}
+
+void RangePlanner::defer(RangeLease lease, TimePoint readyAt)
+{
+  if (!lease.empty()) {
+    deferred_.push_back({std::move(lease), readyAt});
+  }
+}
+
+void RangePlanner::releaseDeferred(TimePoint now)
+{
+  for (auto it = deferred_.begin(); it != deferred_.end();) {
+    if (it->readyAt <= now) {
+      ready_.push_back(std::move(it->lease));
+      it = deferred_.erase(it);
+    }
+    else {
+      ++it;
+    }
+  }
 }
 
 std::optional<RangeLease> RangePlanner::takeReady(TimePoint now)
 {
-  // Due retries precede fresh work. A delayed retry cannot occupy a slot or
-  // hold up an unrelated range while its backoff is running.
-  auto position =
-      std::find_if(ready_.begin(), ready_.end(), [now](const auto& r) {
-        return r.attempts > 0 && r.readyAt <= now;
-      });
-  if (position == ready_.end()) {
-    position = std::find_if(ready_.begin(), ready_.end(),
-                            [now](const auto& r) { return r.readyAt <= now; });
-  }
-  if (position == ready_.end()) {
+  releaseDeferred(now);
+  if (ready_.empty()) {
     return std::nullopt;
   }
-  auto lease = std::move(*position);
-  ready_.erase(position);
-  lease.readyAt = {};
+  auto lease = std::move(ready_.front());
+  ready_.pop_front();
   return lease;
+}
+
+std::optional<RangePlanner::TimePoint> RangePlanner::nextDeadline() const
+{
+  if (deferred_.empty()) {
+    return std::nullopt;
+  }
+  return std::min_element(
+             deferred_.begin(), deferred_.end(),
+             [](const DeferredLease& lhs, const DeferredLease& rhs) {
+               return lhs.readyAt < rhs.readyAt;
+             })
+      ->readyAt;
 }
 
 bool RangePlanner::hasReady(TimePoint now) const
 {
-  return std::any_of(ready_.begin(), ready_.end(),
-                     [now](const auto& r) { return r.readyAt <= now; });
-}
-
-std::optional<RangePlanner::TimePoint>
-RangePlanner::nextDeadline(TimePoint now) const
-{
-  std::optional<TimePoint> next;
-  for (const auto& range : ready_) {
-    if (range.readyAt > now && (!next || range.readyAt < *next)) {
-      next = range.readyAt;
-    }
-  }
-  return next;
+  return !ready_.empty() || std::any_of(deferred_.begin(), deferred_.end(),
+                                        [now](const DeferredLease& entry) {
+                                          return entry.readyAt <= now;
+                                        });
 }
 
 size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
-                                 int64_t minimumPieceSize, TimePoint now)
+                                 int64_t minimumPieceSize)
 {
   minimumPieceSize = std::max<int64_t>(1, minimumPieceSize);
   preferredPieceSize = std::max<int64_t>(minimumPieceSize, preferredPieceSize);
-  auto eligible = static_cast<size_t>(
-      std::count_if(ready_.begin(), ready_.end(),
-                    [now](const auto& r) { return r.readyAt <= now; }));
-  while (eligible < targetCount) {
+  while (ready_.size() < targetCount) {
     auto candidate = std::max_element(
         ready_.begin(), ready_.end(), [](const auto& lhs, const auto& rhs) {
-          return (lhs.attempts == 0 ? lhs.length() : 0) <
-                 (rhs.attempts == 0 ? rhs.length() : 0);
+          const auto lhsLength = lhs.attempts == 0 ? lhs.length() : int64_t{0};
+          const auto rhsLength = rhs.attempts == 0 ? rhs.length() : int64_t{0};
+          return lhsLength < rhsLength;
         });
     if (candidate == ready_.end() || candidate->attempts != 0 ||
         candidate->length() <= preferredPieceSize ||
@@ -239,7 +246,6 @@ size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
     suffix.begin = split;
     candidate->end = split;
     ready_.insert(std::next(candidate), std::move(suffix));
-    ++eligible;
   }
   return ready_.size();
 }

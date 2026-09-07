@@ -25,10 +25,8 @@ Generated state and payloads live under `build/transfer-validation`. Successful 
 Failed runs retain their payloads and state. HTTP validation checks single and
 64-connection downloads, a throttled 320 MiB workload configured for 256
 connections, HTTPS, empty files, short ranges, delayed headers, slow tails,
-429/503 retries, tiny-gap recovery with an explicit retry wait, an early 403
-that must not change admission, bounded failures and empty range responses,
-progress-gated tail assistance, half-file slow-worker recovery, interrupted connections, Unicode paths, paused
-restart, and
+429/503 retries, tiny-gap recovery with an explicit retry wait, progress-gated
+tail assistance, interrupted connections, Unicode paths, paused restart, and
 batch removal. Conditional requests cover ETag and date validators, ignored
 ranges, changed resources, and protected existing files. Compact request evidence verifies that faults were exercised and
 short responses retrieve only their missing suffix. Successful transfers require

@@ -200,9 +200,7 @@ HTTP/SFTP Options
 
 .. option:: -m, --max-tries=<N>
 
-  Set the maximum consecutive attempts for each stream range, including the
-  initial request. ``0`` means unlimited. Payload progress resets only that
-  range's failure count; healthy sibling ranges cannot reset it.
+  Set number of tries. ``0`` means unlimited.
   See also :option:`--retry-wait`.
   Default: ``5``
 
@@ -270,13 +268,13 @@ HTTP/SFTP Options
 
 .. option:: --retry-wait=<SEC>
 
-  Set the minimum delay in seconds before retrying a failed stream range.
-  A longer HTTP ``Retry-After`` delay takes precedence. Retries also use
-  exponential backoff with jitter. Default: ``0``.
+  Set the minimum number of seconds between retryable stream transfer
+  attempts. A valid HTTP ``Retry-After`` delay takes precedence when it is
+  longer. Default: ``0``
 
-  HTTP ``429`` and ``503`` additionally delay new requests for the task while
-  existing transfers continue. Other retryable failures affect only their own
-  range. Debug ``range_retry`` messages report each retry's actual wait.
+  Pending retries can temporarily leave a download with zero connections.
+  This wait does not discard completed ranges. Debug retry messages report
+  the actual scheduled wait in milliseconds, including backoff.
 
 .. option:: --stream-max-connections=<N>
 
@@ -286,21 +284,11 @@ HTTP/SFTP Options
   SFTP remains single-stream. The accepted range is ``1`` to ``256``.
   Default: ``6``
 
-  Long ranges reduce request overhead. When a connection becomes free and no
-  range is pending, a slow live range can be split and its suffix assigned to
-  the free connection. Assistance uses response age and recent body progress;
-  a slow worker need not receive a fixed byte quota before it can be helped.
-  Idle slots can take further disjoint suffixes before earlier helpers respond.
-  Original prefixes continue downloading while helpers establish their connections.
-
-  The number of requests in flight follows an admission window. It starts at
-  this ceiling. HTTP ``429`` or ``503`` lowers the window once per request
-  generation. Pending responses are not counted as failures, and later payload
-  raises the window to the number of served connections. Further growth
-  requires new payload progress and is paced by :option:`--retry-wait`, with
-  a minimum interval of one second. A plain ``403`` does not estimate server
-  capacity. libcurl handles connection setup and low-speed timeouts using
-  :option:`--connect-timeout` and :option:`--timeout`.
+  Parallel transfers reuse available connections and assign remaining work
+  from one range queue. Idle connections can assist a slow transfer by taking
+  its suffix while the original request continues its prefix. Assistance uses
+  recent body progress and a meaningful received-data sample, so connection
+  setup and response latency alone do not trigger repeated restarts.
 
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and

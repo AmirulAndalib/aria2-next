@@ -26,18 +26,10 @@ Automatic stream filenames decode the URL basename once using libcurl. Explicit
 `--out` values and metadata-defined paths remain literal; request URLs are unchanged.
 
 HTTP range transfers retain unreturned portions of valid partial responses and
-retry only unfinished data. Long ranges reduce request overhead; idle
-connections can help by taking the suffix of a slow live range. Helpers
-use response age and actual payload progress, without waiting for a
-fixed byte quota. Idle slots can take further disjoint suffixes while earlier
-helpers establish their connections; the original prefix continues downloading.
-Request concurrency decreases once per request generation on HTTP 429/503; late payload
-corrects incomplete admission observations and further growth requires new
-payload progress. Other transient failures retry only their unfinished range,
-with bounded attempts and backoff. `Retry-After` is honored for every retry,
-including growth probes. libcurl owns connection and low-speed timeouts.
-`--max-tries` bounds consecutive failures of each range. Paused stream
-tasks restore their saved progress before resuming network activity.
+retry only unfinished data. Connection setup and low-speed timeouts use libcurl;
+server overload reduces new request concurrency and staggers retries. Slow tail
+ranges are split only when the remaining work justifies another request. Paused
+stream tasks restore their saved progress before resuming network activity.
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted. Aria2 Next then replaces the metadata-only native handle with a checked libtorrent handle that already contains the final file priorities. This prevents stale partfiles from entering the payload session.
 

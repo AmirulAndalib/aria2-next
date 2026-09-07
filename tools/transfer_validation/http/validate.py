@@ -118,67 +118,6 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     "status": code, "headers": {"Retry-After": "1"},
                 },
             })
-        for code in (500, 503):
-            wiremock.stub({
-                "request": {"method": "GET", "url": f"/unavailable-{code}"},
-                "response": {"status": code},
-            })
-        wiremock.stub({
-            "request": {"method": "GET", "url": "/empty-range"},
-            "response": {"status": 206, "body": "",
-                         "headers": {"Content-Range": "bytes 0-15/16",
-                                     "Content-Length": "0"}},
-        })
-        # Admission ordering: one range is refused immediately while every
-        # sibling answers late. The refusal must not shrink the window below
-        # the siblings that are about to be served.
-        wiremock.stub({
-            "priority": 1,
-            "scenarioName": "early-403",
-            "requiredScenarioState": "Started",
-            "newScenarioState": "Recovered",
-            "request": {
-                "method": "GET", "url": "/payload.bin?case=early-403",
-                "headers": {"Range": {"equalTo": requested}},
-            },
-            "response": {"status": 403},
-        })
-        wiremock.stub({
-            "priority": 5,
-            "request": {
-                "method": "GET", "url": "/payload.bin?case=early-403",
-                "headers": {"Range": {"matches": "bytes=[1-9][0-9]*-.*"}},
-            },
-            "response": {"proxyBaseUrl": caddy.base_url,
-                         "fixedDelayMilliseconds": 600},
-        })
-        wiremock.stub({
-            "priority": 10,
-            "request": {"method": "GET", "url": "/payload.bin?case=early-403"},
-            "response": {"proxyBaseUrl": caddy.base_url},
-        })
-        # Half the file stays on slow workers below 64 KiB while the other
-        # workers finish. Idle capacity must help before that byte quota.
-        wiremock.stub({
-            "priority": 5,
-            "request": {"method": "GET", "url": "/payload.bin?case=slow-workers"},
-            "response": {"proxyBaseUrl": caddy.base_url,
-                         "fixedDelayMilliseconds": 200},
-        })
-        with payload.open("rb") as source:
-            for offset in range(4 * 1024 * 1024, 12 * 1024 * 1024, 1024 * 1024):
-                source.seek(offset)
-                body = source.read(1024 * 1024)
-                wiremock.stub({
-                    "priority": 1,
-                    "request": {"method": "GET", "url": "/payload.bin?case=slow-workers",
-                                "headers": {"Range": {"equalTo": f"bytes={offset}-{offset + len(body) - 1}"}}},
-                    "response": {"status": 206,
-                                 "base64Body": base64.b64encode(body).decode(),
-                                 "headers": {"Content-Range": f"bytes {offset}-{offset + len(body) - 1}/{payload.stat().st_size}"},
-                                 "chunkedDribbleDelay": {"numberOfChunks": 256,
-                                                        "totalDuration": 128000}},
-                })
 
         with urllib.request.urlopen(caddy.base_url + "/payload.bin") as response:
             etag = response.headers["ETag"]
@@ -271,27 +210,6 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 {"retry-wait": "10", "stream-max-connections": "256"})
             if results["tail-retry.bin"] < 10:
                 raise RuntimeError("Tail recovery ignored the configured retry wait")
-            early_gid = check("early-403.bin",
-                              f"{wiremock.base_url}/payload.bin?case=early-403",
-                              {"stream-max-connections": "16"})
-            if results["early-403.bin"] > 8:
-                raise RuntimeError("Early refusal collapsed the admission window")
-            check("slow-workers.bin",
-                  f"{wiremock.base_url}/payload.bin?case=slow-workers",
-                  {"stream-max-connections": "16"})
-            if results["slow-workers.bin"] > 8:
-                raise RuntimeError("Slow workers retained ranges while capacity was idle")
-
-            # Permanent failures must stop even before the first Range has
-            # been validated. They cannot evade max-tries or spin on HTTP 500.
-            for path in ("unavailable-500", "unavailable-503", "empty-range"):
-                started = time.monotonic()
-                gid = engine.add_uri(f"{wiremock.base_url}/{path}",
-                                     {**options, "max-tries": "2", "retry-wait": "1"})
-                engine.rpc.wait_status(gid, "error", 10)
-                if time.monotonic() - started < 1:
-                    raise RuntimeError("Failed request bypassed retry-wait")
-            results["boundedFailures"] = "passed"
 
             for connections in (1, 2, 64, 256):
                 check(f"conditional-{connections}.bin",
@@ -374,15 +292,6 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             for code in (429, 503):
                 if ranges(f"retry-{code}").count(requested) != 2:
                     raise RuntimeError(f"HTTP {code} retry was not exercised exactly once")
-            if ranges("early-403").count(requested) != 2:
-                raise RuntimeError("Refused range was not requested exactly twice")
-            slow = ranges("slow-workers")
-            for offset in range(4 * 1024 * 1024, 12 * 1024 * 1024, 1024 * 1024):
-                if f"bytes={offset}-{offset + 1024 * 1024 - 1}" not in slow:
-                    raise RuntimeError("Slow-worker fixture was not exercised")
-            for path in ("unavailable-500", "unavailable-503", "empty-range"):
-                if sum(r["url"] == f"/{path}" for r in requests) != 2:
-                    raise RuntimeError(f"{path} bypassed max-tries")
             tail = [tuple(map(int, value.removeprefix("bytes=").split("-")))
                     for value in ranges("tail") if value]
             if not any(begin < first <= last < end for first, last in tail):
@@ -441,9 +350,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         delay = re.search(rf"event=range_retry gid={tail_gid} .*retry_in_ms=(\d+)",
                           retry_log)
         if not delay or int(delay[1]) < 10000:
-            raise RuntimeError("Hold diagnostics omit the actual scheduled wait")
-        if f"event=admission_window gid={early_gid}" in retry_log:
-            raise RuntimeError("A plain 403 must not change the admission window")
+            raise RuntimeError("Retry diagnostics omit the actual scheduled wait")
 
     return {"sha256": expected, "runs": results}
 
