@@ -295,6 +295,8 @@ HTTP/SFTP Options
   responses as failures. Later payload raises the observed capacity floor;
   further recovery requires new payload progress and is paced once per second.
   Failed ranges retain their retry limits and honor ``Retry-After``.
+  Extra tail requests wait while retries are deferred or awaiting their first
+  payload, so splitting does not bypass retry backoff.
 
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and

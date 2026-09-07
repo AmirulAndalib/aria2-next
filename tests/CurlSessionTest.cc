@@ -204,6 +204,14 @@ void CurlSessionTest::testTailRecovery()
   group.setMaxDownloadSpeedLimit(1_k);
   CHECK(!session->rebalanceEndgame(download, 1_m));
   group.setMaxDownloadSpeedLimit(0);
+  auto* retrying = impl.handles.back().get();
+  retrying->lease.attempts = 1;
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  retrying->lease.attempts = 0;
+  const auto retryAt = std::chrono::steady_clock::now() + 12_s;
+  impl.planner.defer({1_m, 2_m}, retryAt);
+  CHECK(!session->rebalanceEndgame(download, 1_m));
+  REQUIRE(impl.planner.takeReady(retryAt));
   CHECK(session->rebalanceEndgame(download, 1_m));
   REQUIRE_EQ(33, impl.handles.size());
   auto* donor = impl.handles.front().get();

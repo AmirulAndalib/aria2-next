@@ -1734,6 +1734,16 @@ bool CurlSession::rebalanceEndgame(
       impl.group->getMaxDownloadSpeedLimit() > 0) {
     return false;
   }
+  // Deferred retries still own work. Creating helpers during their cooldown
+  // would bypass backoff; an in-flight retry must receive data first.
+  if (impl.planner.hasPending() ||
+      std::any_of(impl.handles.begin(), impl.handles.end(),
+                  [](const auto& handle) {
+                    return handle->lease.attempts > 0 &&
+                           handle->writeOffset == handle->lease.begin;
+                  })) {
+    return false;
+  }
   // Let idle connections help while preserving the donor's live prefix.
   // A meaningful body sample protects fresh requests and bounds cancellation
   // by actual forward progress, rather than a lifetime redistribution count.
