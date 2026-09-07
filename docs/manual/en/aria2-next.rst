@@ -290,6 +290,12 @@ HTTP/SFTP Options
   recent body progress and a meaningful received-data sample, so connection
   setup and response latency alone do not trigger repeated restarts.
 
+  HTTP ``403`` does not estimate server capacity. HTTP ``429`` or ``503``
+  reduces concurrency once per request generation without treating pending
+  responses as failures. Later payload raises the observed capacity floor;
+  further recovery requires new payload progress and is paced once per second.
+  Failed ranges retain their retry limits and honor ``Retry-After``.
+
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and
   are preserved in the stream state database. Parallel and resumed requests

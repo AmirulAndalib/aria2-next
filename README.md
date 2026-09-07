@@ -30,6 +30,9 @@ retry only unfinished data. Connection setup and low-speed timeouts use libcurl;
 server overload reduces new request concurrency and staggers retries. Slow tail
 ranges are split only when the remaining work justifies another request. Paused
 stream tasks restore their saved progress before resuming network activity.
+HTTP 403 does not lower the concurrency budget. HTTP 429/503 reduces it once
+per request generation; subsequent payload progress restores concurrency
+without waiting for an entire range to complete.
 
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted. Aria2 Next then replaces the metadata-only native handle with a checked libtorrent handle that already contains the final file priorities. This prevents stale partfiles from entering the payload session.
 

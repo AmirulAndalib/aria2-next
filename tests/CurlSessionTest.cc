@@ -55,6 +55,7 @@ public:
   void testFailureMessageUsesTheFailureLayer();
   void testShutdownWithLiveSocket();
   void testTailRecovery();
+  void testConnectionRecovery();
   void sendHeader(CurlHandle& handle, const std::string& line);
 };
 
@@ -69,6 +70,53 @@ A2_TEST(CurlSessionTest, testRetryableFailureClassification)
 A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
 A2_TEST(CurlSessionTest, testTailRecovery)
+A2_TEST(CurlSessionTest, testConnectionRecovery)
+
+void CurlSessionTest::testConnectionRecovery()
+{
+  Option option;
+  option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-recovery");
+  CurlSession session(&option);
+  auto download = std::make_shared<CurlDownload>(
+      std::vector<std::string>{"http://example.test/payload"});
+  auto& impl = *download->impl_;
+  impl.maxConnections = impl.connectionLimit = 8;
+  for (int i = 0; i < 7; ++i) {
+    auto handle = make_unique<CurlHandle>();
+    handle->lease = {0, 1_m};
+    handle->rangeAccepted = i == 0;
+    handle->writeOffset = i == 0 ? 1 : 0;
+    impl.handles.push_back(std::move(handle));
+  }
+  // Pending responses cannot turn one overload response into a capacity of 1.
+  session.penalizeConnectionLimit(download, 0);
+  CHECK_EQ(4, impl.connectionLimit);
+  session.penalizeConnectionLimit(download, 0);
+  CHECK_EQ(4, impl.connectionLimit);
+  for (auto& handle : impl.handles) {
+    handle->rangeAccepted = true;
+  }
+  session.rewardConnectionLimit(download);
+  CHECK_EQ(4, impl.connectionLimit);
+  for (auto& handle : impl.handles) {
+    handle->writeOffset = 1;
+  }
+  download->snapshot_.sessionDownloadLength = 7;
+  session.rewardConnectionLimit(download);
+  CHECK_EQ(7, impl.connectionLimit);
+  impl.recoverConnectionsAt = {};
+  session.rewardConnectionLimit(download);
+  CHECK_EQ(7, impl.connectionLimit);
+  ++download->snapshot_.sessionDownloadLength;
+  session.rewardConnectionLimit(download);
+  CHECK_EQ(8, impl.connectionLimit);
+  // Recovery does not make a stale rejection eligible for another reduction.
+  session.penalizeConnectionLimit(download, 0);
+  CHECK_EQ(8, impl.connectionLimit);
+  impl.handles.clear();
+  session.penalizeConnectionLimit(download, 1);
+  CHECK_EQ(4, impl.connectionLimit);
+}
 
 void CurlSessionTest::testOutputFilename()
 {

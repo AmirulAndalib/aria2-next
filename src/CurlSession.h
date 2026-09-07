@@ -83,8 +83,7 @@ private:
                   CurlHandlePurpose purpose);
   void finishProbe(const std::shared_ptr<CurlDownload>& download,
                    CurlHandle* handle, CURLcode result, long responseCode,
-                   curl_off_t reportedLength,
-                   curl_off_t reportedFileTime);
+                   curl_off_t reportedLength, curl_off_t reportedFileTime);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
   void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
@@ -97,7 +96,7 @@ private:
   retryRange(const std::shared_ptr<CurlDownload>& download,
              const RangeLease& lease, curl_off_t retryAfter);
   void penalizeConnectionLimit(const std::shared_ptr<CurlDownload>& download,
-                               int requestLimit);
+                               uint64_t requestEpoch);
   void rewardConnectionLimit(const std::shared_ptr<CurlDownload>& download);
   std::vector<RangeLease>
   activeLeases(const std::shared_ptr<CurlDownload>& download) const;
@@ -118,11 +117,10 @@ private:
                                     long responseCode);
   static bool retryableFailure(CURLcode result, long responseCode,
                                int fileNotFoundCount, int maxFileNotFound,
-                               bool validatedRange,
-                               bool applicationConnected);
+                               bool validatedRange, bool applicationConnected);
   static ExistingFileDecision decideExistingFile(int64_t localLength,
-                                                  int64_t remoteLength,
-                                                  bool rangeSupported);
+                                                 int64_t remoteLength,
+                                                 bool rangeSupported);
   static std::string gid(const CurlDownload* download);
   void rebalanceLimits();
   bool refreshConnectionPoolLimits();

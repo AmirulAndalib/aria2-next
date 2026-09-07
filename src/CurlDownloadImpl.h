@@ -49,7 +49,7 @@ struct CurlHandle {
   SpeedCalc payloadSpeed;
   Timer bodySampleStart = Timer::zero();
   Timer lastPayload = Timer::zero();
-  int connectionLimit = 1;
+  uint64_t connectionEpoch = 0;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
   int64_t responseContentLength = -1;
@@ -83,6 +83,8 @@ struct CurlDownloadImpl {
   RequestGroup* group = nullptr;
   int maxConnections = 1;
   int connectionLimit = 1;
+  uint64_t connectionEpoch = 0;
+  int64_t lastRecoveryDownloadLength = 0;
   std::chrono::steady_clock::time_point recoverConnectionsAt{};
   int fileNotFoundCount = 0;
   int64_t existingLength = 0;

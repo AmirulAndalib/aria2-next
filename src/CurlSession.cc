@@ -1076,6 +1076,8 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.startMode = CurlStartMode::Transfer;
   impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
   impl.connectionLimit = impl.maxConnections;
+  impl.connectionEpoch = 0;
+  impl.lastRecoveryDownloadLength = 0;
   impl.recoverConnectionsAt = {};
   impl.preferredUriIndex %= impl.uris.size();
   const auto& uriValue = impl.uris[impl.preferredUriIndex];
@@ -1215,7 +1217,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   auto transfer = std::unique_ptr<CurlHandle>(new CurlHandle());
   transfer->download = download.get();
   transfer->lease = lease;
-  transfer->connectionLimit = impl.connectionLimit;
+  transfer->connectionEpoch = impl.connectionEpoch;
   transfer->writeOffset = lease.begin;
   transfer->bufferLimit = static_cast<size_t>(std::max<int64_t>(
       256_k, std::min<int64_t>(1_m, 32_m / impl.maxConnections)));
@@ -1473,9 +1475,9 @@ bool CurlSession::startProbe(const std::shared_ptr<CurlDownload>& download,
                              CurlHandlePurpose purpose)
 {
   const bool rangeProbe = purpose == CurlHandlePurpose::RangeProbe;
-  const RangeLease lease{
-      0, rangeProbe ? 1 : std::numeric_limits<int64_t>::max(), 0,
-      download->impl_->preferredUriIndex};
+  const RangeLease lease{0,
+                         rangeProbe ? 1 : std::numeric_limits<int64_t>::max(),
+                         0, download->impl_->preferredUriIndex};
   if (!createHandle(download, lease, true, rangeProbe, purpose)) {
     return false;
   }
@@ -1666,6 +1668,7 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     return;
   }
 
+  rewardConnectionLimit(download);
   const auto pieceLength = std::max<int64_t>(
       1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
   bool scheduled = false;
@@ -2003,20 +2006,24 @@ CurlSession::retryRange(const std::shared_ptr<CurlDownload>& download,
 }
 
 void CurlSession::penalizeConnectionLimit(
-    const std::shared_ptr<CurlDownload>& download, int requestLimit)
+    const std::shared_ptr<CurlDownload>& download, uint64_t requestEpoch)
 {
   auto& impl = *download->impl_;
-  // Responses already in flight at a higher concurrency do not each cause
-  // another reduction. Measure the work this origin has actually admitted.
-  if (requestLimit > impl.connectionLimit) {
+  // An overload response reduces one request generation once. Requests still
+  // waiting for a response provide no evidence of the origin's capacity.
+  if (requestEpoch != impl.connectionEpoch) {
     return;
   }
+  ++impl.connectionEpoch;
   const auto previous = impl.connectionLimit;
-  const auto admitted = static_cast<int>(
-      std::count_if(impl.handles.begin(), impl.handles.end(),
-                    [](const auto& handle) { return handle->rangeAccepted; }));
-  impl.connectionLimit = std::max(
-      1, admitted > 0 ? std::min(previous - 1, admitted) : previous / 2);
+  const auto admitted = static_cast<int>(std::count_if(
+      impl.handles.begin(), impl.handles.end(), [](const auto& handle) {
+        return handle->rangeAccepted &&
+               handle->writeOffset > handle->lease.begin;
+      }));
+  impl.connectionLimit =
+      std::clamp(std::max(previous / 2, admitted), 1, impl.maxConnections);
+  impl.lastRecoveryDownloadLength = download->snapshot_.sessionDownloadLength;
   impl.recoverConnectionsAt =
       std::chrono::steady_clock::now() + std::chrono::seconds(1);
   if (impl.connectionLimit != previous) {
@@ -2033,11 +2040,27 @@ void CurlSession::rewardConnectionLimit(
   auto& impl = *download->impl_;
   const auto now = std::chrono::steady_clock::now();
   if (impl.connectionLimit >= impl.maxConnections ||
-      now < impl.recoverConnectionsAt) {
+      download->snapshot_.sessionDownloadLength <=
+          impl.lastRecoveryDownloadLength) {
     return;
   }
+  const auto previous = impl.connectionLimit;
+  const auto admitted = static_cast<int>(std::count_if(
+      impl.handles.begin(), impl.handles.end(), [](const auto& handle) {
+        return handle->rangeAccepted &&
+               handle->writeOffset > handle->lease.begin;
+      }));
+  // Late payload corrects the observed floor immediately. Further growth is
+  // paced and requires fresh bytes, not completion of an entire long range.
+  impl.connectionLimit =
+      std::min(impl.maxConnections,
+               std::max(admitted,
+                        previous + (now >= impl.recoverConnectionsAt ? 1 : 0)));
+  if (impl.connectionLimit == previous) {
+    return;
+  }
+  impl.lastRecoveryDownloadLength = download->snapshot_.sessionDownloadLength;
   impl.recoverConnectionsAt = now + std::chrono::seconds(1);
-  ++impl.connectionLimit;
   A2_LOG_DEBUG(fmt("component=stream event=connection_limit_increased gid=%s "
                    "current=%d maximum=%d",
                    gid(download.get()).c_str(), impl.connectionLimit,
@@ -2099,12 +2122,10 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
   }
   if (remoteLength < 0) {
     failTask(download,
-             responseCode >= 400
-                 ? curlErrorCode(result, responseCode)
-                 : error_code::CANNOT_RESUME,
-             responseCode >= 400
-                 ? nativeFailure
-                 : "The remote file length is unavailable",
+             responseCode >= 400 ? curlErrorCode(result, responseCode)
+                                 : error_code::CANNOT_RESUME,
+             responseCode >= 400 ? nativeFailure
+                                 : "The remote file length is unavailable",
              false);
     return;
   }
@@ -2117,8 +2138,8 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
   rememberIdentity(impl, responseEtag, responseLastModified);
   download->snapshot_.totalLength = remoteLength;
 
-  switch (decideExistingFile(impl.existingLength, remoteLength,
-                             rangeSupported)) {
+  switch (
+      decideExistingFile(impl.existingLength, remoteLength, rangeSupported)) {
   case ExistingFileDecision::Complete:
     impl.planner.clear();
     impl.planner.commit(0, remoteLength);
@@ -2150,10 +2171,9 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
     break;
   }
 
-  const auto message =
-      impl.existingLength > remoteLength
-          ? "The local file is larger than the remote file"
-          : "The server does not support resuming this file";
+  const auto message = impl.existingLength > remoteLength
+                           ? "The local file is larger than the remote file"
+                           : "The server does not support resuming this file";
   failTask(download, error_code::CANNOT_RESUME, message, false);
 }
 
@@ -2242,7 +2262,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   const bool validatorMismatch = handle->validatorMismatch;
   const bool invalidRange = handle->invalidRange;
   const bool primary = handle->primary;
-  const auto requestLimit = handle->connectionLimit;
+  const auto requestEpoch = handle->connectionEpoch;
   const bool outputFailure =
       download->snapshot_.errorCode != error_code::UNDEFINED;
   cleanupHandle(*handle);
@@ -2327,11 +2347,10 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     const bool alternateMirror =
         impl.uris.size() > 1 && result != CURLE_WRITE_ERROR &&
         result != CURLE_OUT_OF_MEMORY && result != CURLE_ABORTED_BY_CALLBACK;
-    const bool overloaded =
-        ranged && impl.rangeValidated &&
-        (responseCode == 403 || responseCode == 429 || responseCode == 503);
+    const bool overloaded = ranged && impl.rangeValidated &&
+                            (responseCode == 429 || responseCode == 503);
     if (overloaded) {
-      penalizeConnectionLimit(download, requestLimit);
+      penalizeConnectionLimit(download, requestEpoch);
     }
     auto remainder = lease.remainder(writeOffset);
     if (download->snapshot_.totalLength > 0) {
@@ -2366,7 +2385,6 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   }
 
   if (ranged && rangeAccepted) {
-    rewardConnectionLimit(download);
     impl.planner.enqueue(lease.remainder(writeOffset));
     schedule(download);
     if (download->stopped() || !impl.planner.complete() ||
@@ -2574,8 +2592,8 @@ int CurlSession::socketCallback(CURL*, curl_socket_t socket, int action,
           fmt("component=stream event=socket_callback_failed message=%s",
               logging::sanitizeText(error.what()).c_str()));
     }
-  catch (...) {
-  }
+    catch (...) {
+    }
   }
   catch (...) {
     logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,
@@ -2597,8 +2615,8 @@ int CurlSession::timerCallback(CURLM*, long timeoutMs, void* userData) noexcept
           fmt("component=stream event=timer_callback_failed message=%s",
               logging::sanitizeText(error.what()).c_str()));
     }
-  catch (...) {
-  }
+    catch (...) {
+    }
   }
   catch (...) {
     logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,
