@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -39,6 +38,12 @@ struct CurlHandle;
 enum class CurlHandlePurpose;
 
 enum class ExistingFileDecision { Complete, Resume, Reject };
+
+// How a finished request that did not complete its range is treated.
+// Rejected: the origin refused or never served the request; this informs the
+//           admission window. Failed: transient transport or server trouble;
+//           the range is simply requeued. Fatal: the task cannot continue.
+enum class TransferOutcome { Rejected, Failed, Fatal };
 
 class CurlSession {
 public:
@@ -93,12 +98,12 @@ private:
   void schedule(const std::shared_ptr<CurlDownload>& download);
   bool rebalanceEndgame(const std::shared_ptr<CurlDownload>& download,
                         int64_t pieceLength);
-  std::optional<std::chrono::milliseconds>
-  retryRange(const std::shared_ptr<CurlDownload>& download,
-             const RangeLease& lease, curl_off_t retryAfter);
-  void penalizeConnectionLimit(const std::shared_ptr<CurlDownload>& download,
-                               int requestLimit);
-  void rewardConnectionLimit(const std::shared_ptr<CurlDownload>& download);
+  void discardHandle(const std::shared_ptr<CurlDownload>& download,
+                     CurlHandle* handle);
+  bool discardStalled(const std::shared_ptr<CurlDownload>& download);
+  bool requeue(const std::shared_ptr<CurlDownload>& download,
+               RangeLease remainder, uint64_t epoch, TransferOutcome outcome,
+               long responseCode, curl_off_t retryAfter);
   std::vector<RangeLease>
   activeLeases(const std::shared_ptr<CurlDownload>& download) const;
   void finalize(const std::shared_ptr<CurlDownload>& download,
@@ -116,10 +121,11 @@ private:
   static long platformSslOptions() noexcept;
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);
-  static bool retryableFailure(CURLcode result, long responseCode,
-                               int fileNotFoundCount, int maxFileNotFound,
-                               bool validatedRange,
-                               bool applicationConnected);
+  static TransferOutcome classifyOutcome(CURLcode result, long responseCode,
+                                         bool validatedRange, bool progressed,
+                                         int fileNotFoundCount,
+                                         int maxFileNotFound,
+                                         bool applicationConnected);
   static ExistingFileDecision decideExistingFile(int64_t localLength,
                                                   int64_t remoteLength,
                                                   bool rangeSupported);

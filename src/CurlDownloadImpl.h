@@ -14,8 +14,7 @@
 #define D_CURL_DOWNLOAD_IMPL_H
 
 #include <array>
-
-#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,6 +22,7 @@
 
 #include <curl/curl.h>
 
+#include "AdmissionWindow.h"
 #include "DiskWriter.h"
 #include "RangePlanner.h"
 #include "SpeedCalc.h"
@@ -48,8 +48,9 @@ struct CurlHandle {
   size_t bufferLimit = 0;
   SpeedCalc payloadSpeed;
   Timer bodySampleStart = Timer::zero();
+  Timer headersAt = Timer::zero();
   Timer lastPayload = Timer::zero();
-  int connectionLimit = 1;
+  uint64_t epoch = 0;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
   int64_t responseContentLength = -1;
@@ -80,10 +81,10 @@ struct CurlDownloadImpl {
   std::unique_ptr<DiskWriter> writer;
   std::vector<std::unique_ptr<CurlHandle>> handles;
   RangePlanner planner;
+  AdmissionWindow admission;
   RequestGroup* group = nullptr;
   int maxConnections = 1;
-  int connectionLimit = 1;
-  std::chrono::steady_clock::time_point recoverConnectionsAt{};
+  int failedRounds = 0;
   int fileNotFoundCount = 0;
   int64_t existingLength = 0;
   CurlStartMode startMode = CurlStartMode::Transfer;
@@ -96,6 +97,8 @@ struct CurlDownloadImpl {
   bool kickPending = false;
   bool stopRequested = false;
   Timer lastCheckpoint = Timer::zero();
+  Timer lastPayloadAt = Timer::zero();
+  Timer::Clock::duration bodyLatencyMax{};
 };
 
 } // namespace aria2

@@ -24,7 +24,6 @@ void RangePlanner::clear()
   chunkSize_ = 0;
   completed_.clear();
   ready_.clear();
-  deferred_.clear();
 }
 
 void RangePlanner::restore(const std::vector<StoredRange>& ranges)
@@ -117,7 +116,7 @@ void RangePlanner::enqueueGap(int64_t begin, int64_t end)
 {
   while (begin < end) {
     const auto next = std::min(end, begin + chunkSize_);
-    ready_.push_back({begin, next, 0, 0});
+    ready_.push_back({begin, next, 0});
     begin = next;
   }
 }
@@ -128,7 +127,6 @@ void RangePlanner::configure(int64_t totalLength, int64_t chunkSize,
   totalLength_ = std::max<int64_t>(0, totalLength);
   chunkSize_ = std::max<int64_t>(1, chunkSize);
   ready_.clear();
-  deferred_.clear();
   if (totalLength_ <= 0) {
     return;
   }
@@ -162,61 +160,25 @@ void RangePlanner::configure(int64_t totalLength, int64_t chunkSize,
 
 void RangePlanner::enqueue(RangeLease lease)
 {
-  if (!lease.empty()) {
-    ready_.push_back(std::move(lease));
+  if (lease.empty()) {
+    return;
   }
+  const auto position =
+      std::upper_bound(ready_.begin(), ready_.end(), lease.begin,
+                       [](int64_t value, const RangeLease& entry) {
+                         return value < entry.begin;
+                       });
+  ready_.insert(position, std::move(lease));
 }
 
-void RangePlanner::defer(RangeLease lease, TimePoint readyAt)
+std::optional<RangeLease> RangePlanner::takeReady()
 {
-  if (!lease.empty()) {
-    deferred_.push_back({std::move(lease), readyAt});
-  }
-}
-
-void RangePlanner::releaseDeferred(TimePoint now)
-{
-  for (auto it = deferred_.begin(); it != deferred_.end();) {
-    if (it->readyAt <= now) {
-      ready_.push_back(std::move(it->lease));
-      it = deferred_.erase(it);
-    }
-    else {
-      ++it;
-    }
-  }
-}
-
-std::optional<RangeLease> RangePlanner::takeReady(TimePoint now)
-{
-  releaseDeferred(now);
   if (ready_.empty()) {
     return std::nullopt;
   }
   auto lease = std::move(ready_.front());
   ready_.pop_front();
   return lease;
-}
-
-std::optional<RangePlanner::TimePoint> RangePlanner::nextDeadline() const
-{
-  if (deferred_.empty()) {
-    return std::nullopt;
-  }
-  return std::min_element(
-             deferred_.begin(), deferred_.end(),
-             [](const DeferredLease& lhs, const DeferredLease& rhs) {
-               return lhs.readyAt < rhs.readyAt;
-             })
-      ->readyAt;
-}
-
-bool RangePlanner::hasReady(TimePoint now) const
-{
-  return !ready_.empty() || std::any_of(deferred_.begin(), deferred_.end(),
-                                        [now](const DeferredLease& entry) {
-                                          return entry.readyAt <= now;
-                                        });
 }
 
 size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
@@ -227,11 +189,9 @@ size_t RangePlanner::refillReady(size_t targetCount, int64_t preferredPieceSize,
   while (ready_.size() < targetCount) {
     auto candidate = std::max_element(
         ready_.begin(), ready_.end(), [](const auto& lhs, const auto& rhs) {
-          const auto lhsLength = lhs.attempts == 0 ? lhs.length() : int64_t{0};
-          const auto rhsLength = rhs.attempts == 0 ? rhs.length() : int64_t{0};
-          return lhsLength < rhsLength;
+          return lhs.length() < rhs.length();
         });
-    if (candidate == ready_.end() || candidate->attempts != 0 ||
+    if (candidate == ready_.end() ||
         candidate->length() <= preferredPieceSize ||
         candidate->length() < minimumPieceSize * 2) {
       break;

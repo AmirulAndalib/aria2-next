@@ -118,6 +118,34 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     "status": code, "headers": {"Retry-After": "1"},
                 },
             })
+        # Admission ordering: one range is refused immediately while every
+        # sibling answers late. The refusal must not shrink the window below
+        # the siblings that are about to be served.
+        wiremock.stub({
+            "priority": 1,
+            "scenarioName": "early-403",
+            "requiredScenarioState": "Started",
+            "newScenarioState": "Recovered",
+            "request": {
+                "method": "GET", "url": "/payload.bin?case=early-403",
+                "headers": {"Range": {"equalTo": requested}},
+            },
+            "response": {"status": 403},
+        })
+        wiremock.stub({
+            "priority": 5,
+            "request": {
+                "method": "GET", "url": "/payload.bin?case=early-403",
+                "headers": {"Range": {"matches": "bytes=[1-9][0-9]*-.*"}},
+            },
+            "response": {"proxyBaseUrl": caddy.base_url,
+                         "fixedDelayMilliseconds": 600},
+        })
+        wiremock.stub({
+            "priority": 10,
+            "request": {"method": "GET", "url": "/payload.bin?case=early-403"},
+            "response": {"proxyBaseUrl": caddy.base_url},
+        })
 
         with urllib.request.urlopen(caddy.base_url + "/payload.bin") as response:
             etag = response.headers["ETag"]
@@ -210,6 +238,11 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 {"retry-wait": "10", "stream-max-connections": "256"})
             if results["tail-retry.bin"] < 10:
                 raise RuntimeError("Tail recovery ignored the configured retry wait")
+            early_gid = check("early-403.bin",
+                              f"{wiremock.base_url}/payload.bin?case=early-403",
+                              {"stream-max-connections": "16"})
+            if results["early-403.bin"] > 8:
+                raise RuntimeError("Early refusal collapsed the admission window")
 
             for connections in (1, 2, 64, 256):
                 check(f"conditional-{connections}.bin",
@@ -292,6 +325,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             for code in (429, 503):
                 if ranges(f"retry-{code}").count(requested) != 2:
                     raise RuntimeError(f"HTTP {code} retry was not exercised exactly once")
+            if ranges("early-403").count(requested) != 2:
+                raise RuntimeError("Refused range was not requested exactly twice")
             tail = [tuple(map(int, value.removeprefix("bytes=").split("-")))
                     for value in ranges("tail") if value]
             if not any(begin < first <= last < end for first, last in tail):
@@ -347,10 +382,21 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         # The logger buffers debug output. Check the flushed pre-restart log,
         # rather than racing the logger immediately after RPC completion.
         retry_log = (run.logs / "before-restart.engine.log").read_text()
-        delay = re.search(rf"event=range_retry gid={tail_gid} .*retry_in_ms=(\d+)",
+        delay = re.search(rf"event=admission_hold gid={tail_gid} .*hold_ms=(\d+)",
                           retry_log)
         if not delay or int(delay[1]) < 10000:
-            raise RuntimeError("Retry diagnostics omit the actual scheduled wait")
+            raise RuntimeError("Hold diagnostics omit the actual scheduled wait")
+        # The early refusal is judged once, and the siblings served afterwards
+        # lift the window back to at least their own count.
+        windows = [int(value) for value in re.findall(
+            rf"event=admission_window gid={early_gid} .*current=(\d+)", retry_log)]
+        rejected = retry_log.count(
+            f"event=admission_window gid={early_gid} reason=rejected")
+        if rejected != 1 or not windows or windows[-1] < 7:
+            raise RuntimeError(
+                f"Early refusal mis-sized the admission window: {rejected} {windows}")
+        if retry_log.count(f"event=admission_hold gid={early_gid}"):
+            raise RuntimeError("A plain 403 must not pause the whole task")
 
     return {"sha256": expected, "runs": results}
 
