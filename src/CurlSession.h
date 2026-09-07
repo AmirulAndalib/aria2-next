@@ -40,10 +40,9 @@ enum class CurlHandlePurpose;
 enum class ExistingFileDecision { Complete, Resume, Reject };
 
 // How a finished request that did not complete its range is treated.
-// Rejected: the origin refused or never served the request; this informs the
-//           admission window. Failed: transient transport or server trouble;
-//           the range is simply requeued. Fatal: the task cannot continue.
-enum class TransferOutcome { Rejected, Failed, Fatal };
+// Only explicit overload changes admission. All retryable outcomes retain
+// their range's attempt budget and deadline.
+enum class TransferOutcome { Overloaded, Retryable, Fatal };
 
 class CurlSession {
 public:
@@ -88,8 +87,7 @@ private:
                   CurlHandlePurpose purpose);
   void finishProbe(const std::shared_ptr<CurlDownload>& download,
                    CurlHandle* handle, CURLcode result, long responseCode,
-                   curl_off_t reportedLength,
-                   curl_off_t reportedFileTime);
+                   curl_off_t reportedLength, curl_off_t reportedFileTime);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
   void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
@@ -100,7 +98,6 @@ private:
                         int64_t pieceLength);
   void discardHandle(const std::shared_ptr<CurlDownload>& download,
                      CurlHandle* handle);
-  bool discardStalled(const std::shared_ptr<CurlDownload>& download);
   bool requeue(const std::shared_ptr<CurlDownload>& download,
                RangeLease remainder, uint64_t epoch, TransferOutcome outcome,
                long responseCode, curl_off_t retryAfter);
@@ -122,13 +119,13 @@ private:
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);
   static TransferOutcome classifyOutcome(CURLcode result, long responseCode,
-                                         bool validatedRange, bool progressed,
+                                         bool validatedRange,
                                          int fileNotFoundCount,
                                          int maxFileNotFound,
                                          bool applicationConnected);
   static ExistingFileDecision decideExistingFile(int64_t localLength,
-                                                  int64_t remoteLength,
-                                                  bool rangeSupported);
+                                                 int64_t remoteLength,
+                                                 bool rangeSupported);
   static std::string gid(const CurlDownload* download);
   void rebalanceLimits();
   bool refreshConnectionPoolLimits();

@@ -51,9 +51,8 @@
     "                              output and standard error will be redirected to\n" \
     "                              \"/dev/null\". Requires RPC, an input file, or a URI.")
 #define TEXT_RETRY_WAIT                                                 \
-  _(" --retry-wait=SEC             Set the minimum pause after a stream request is\n" \
-    "                              refused with 429/503 or a round serves nothing,\n" \
-    "                              and the base interval for concurrency probes.\n" \
+  _(" --retry-wait=SEC             Set the minimum wait before retrying a failed\n" \
+    "                              stream range. Retries also use backoff.\n" \
     "                              A longer HTTP Retry-After delay takes precedence.")
 #define TEXT_STREAM_MAX_CONNECTIONS                                     \
   _(" --stream-max-connections=N  Set the per-file HTTP connection ceiling.")

@@ -14,6 +14,7 @@
 #define D_RANGE_PLANNER_H
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -27,6 +28,8 @@ struct RangeLease {
   int64_t begin = 0;
   int64_t end = 0;
   size_t uriIndex = 0;
+  size_t attempts = 0;
+  std::chrono::steady_clock::time_point readyAt{};
 
   bool empty() const { return begin >= end; }
   int64_t length() const { return end - begin; }
@@ -39,10 +42,11 @@ struct RangeLease {
   }
 };
 
-// Tracks which bytes are done and which ranges still need a request. Ranges
-// carry no timing state: when a request may be issued is decided elsewhere.
+// Owns completed bytes and pending work, including each failed range's retry
+// budget and deadline. Waiting ranges never block other eligible work.
 class RangePlanner {
 public:
+  using TimePoint = std::chrono::steady_clock::time_point;
   using StoredRange = std::pair<int64_t, int64_t>;
 
   void clear();
@@ -60,12 +64,14 @@ public:
 
   // Ready ranges stay ordered by offset so the file fills front to back.
   void enqueue(RangeLease lease);
-  std::optional<RangeLease> takeReady();
-  bool hasReady() const { return !ready_.empty(); }
+  std::optional<RangeLease> takeReady(TimePoint now);
+  bool hasReady(TimePoint now) const;
+  bool hasPending() const { return !ready_.empty(); }
+  std::optional<TimePoint> nextDeadline(TimePoint now) const;
   size_t readyCount() const { return ready_.size(); }
 
   size_t refillReady(size_t targetCount, int64_t preferredPieceSize,
-                     int64_t minimumPieceSize);
+                     int64_t minimumPieceSize, TimePoint now);
 
 private:
   void normalizeCompleted();

@@ -404,6 +404,7 @@ bool transientTransportFailure(CURLcode result, bool applicationConnected)
   switch (result) {
   case CURLE_COULDNT_RESOLVE_HOST:
   case CURLE_COULDNT_CONNECT:
+  case CURLE_OPERATION_TIMEDOUT:
   case CURLE_PARTIAL_FILE:
   case CURLE_SEND_ERROR:
   case CURLE_RECV_ERROR:
@@ -435,24 +436,6 @@ int servedCount(const CurlDownloadImpl& impl)
                handle->rangeAccepted &&
                handle->writeOffset > handle->lease.begin;
       }));
-}
-
-// How long a response may go without body before it is considered starved:
-// generous relative to the slowest header-to-body gap seen on this task, but
-// never longer than the configured timeout.
-Timer::Clock::duration serviceGrace(const CurlDownloadImpl& impl)
-{
-  const auto timeout =
-      std::chrono::seconds(impl.group->getOption()->getAsInt(PREF_TIMEOUT));
-  return std::clamp<Timer::Clock::duration>(impl.bodyLatencyMax * 4,
-                                            std::chrono::seconds(2), timeout);
-}
-
-bool recentlyServed(const CurlDownloadImpl& impl)
-{
-  return !impl.lastPayloadAt.isZero() &&
-         impl.lastPayloadAt.difference(global::wallclock()) <=
-             serviceGrace(impl);
 }
 
 error_code::Value curlErrorCode(CURLcode result, long responseCode)
@@ -557,48 +540,37 @@ long CurlSession::platformSslOptions() noexcept
 #endif
 }
 
-TransferOutcome CurlSession::classifyOutcome(CURLcode result,
-                                             long responseCode,
+TransferOutcome CurlSession::classifyOutcome(CURLcode result, long responseCode,
                                              bool validatedRange,
-                                             bool progressed,
                                              int fileNotFoundCount,
                                              int maxFileNotFound,
                                              bool applicationConnected)
 {
-  const bool notFound = result == CURLE_REMOTE_FILE_NOT_FOUND ||
-                        (result == CURLE_HTTP_RETURNED_ERROR &&
-                         responseCode == 404);
+  const bool notFound =
+      result == CURLE_REMOTE_FILE_NOT_FOUND ||
+      (result == CURLE_HTTP_RETURNED_ERROR && responseCode == 404);
   if (notFound) {
     return maxFileNotFound > 0 && fileNotFoundCount < maxFileNotFound
-               ? TransferOutcome::Failed
+               ? TransferOutcome::Retryable
                : TransferOutcome::Fatal;
   }
-  // A request that never produced a byte was refused, queued, or dropped
-  // before service: that is what the admission window measures. A transfer
-  // that broke after delivering data is a lost connection, replaced at once.
-  const auto transient =
-      progressed ? TransferOutcome::Failed : TransferOutcome::Rejected;
-  if (result == CURLE_OPERATION_TIMEDOUT) {
-    return transient;
-  }
   if (result == CURLE_HTTP_RETURNED_ERROR) {
-    if (overloadResponse(responseCode) || responseCode == 502 ||
-        responseCode == 504) {
-      return validatedRange ? TransferOutcome::Rejected
-                            : TransferOutcome::Failed;
+    if (overloadResponse(responseCode)) {
+      return TransferOutcome::Overloaded;
     }
     if (responseCode == 403) {
-      // The same representation is being served to sibling ranges, so this
-      // refusal is an admission decision rather than an authorization failure.
-      return validatedRange ? TransferOutcome::Rejected
+      // A verified resource may reject individual ranges transiently, but
+      // 403 alone says nothing about the origin's concurrency capacity.
+      return validatedRange ? TransferOutcome::Retryable
                             : TransferOutcome::Fatal;
     }
-    return responseCode == 408 || responseCode == 425 || responseCode == 500
-               ? TransferOutcome::Failed
+    return responseCode == 408 || responseCode == 425 || responseCode == 500 ||
+                   responseCode == 502 || responseCode == 504
+               ? TransferOutcome::Retryable
                : TransferOutcome::Fatal;
   }
   return transientTransportFailure(result, applicationConnected)
-             ? transient
+             ? TransferOutcome::Retryable
              : TransferOutcome::Fatal;
 }
 
@@ -702,33 +674,26 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
     const auto& now = global::wallclock();
     if (length > 0) {
       handle->lastPayload = now;
-      impl.lastPayloadAt = now;
+      impl.admission.received();
     }
     const bool firstPayload =
         length > 0 && handle->writeOffset == handle->lease.begin;
     handle->writeOffset += static_cast<int64_t>(length);
     if (firstPayload) {
-      // Payload is proof of service: failed rounds start over, the window is
-      // told what the origin serves, and the header-to-body latency
-      // calibrates stall detection for siblings.
-      impl.failedRounds = 0;
-      if (!handle->headersAt.isZero()) {
-        impl.bodyLatencyMax =
-            std::max(impl.bodyLatencyMax, handle->headersAt.difference(now));
-      }
+      // Only this range's forward progress resets its consecutive failures.
+      handle->lease.attempts = 0;
       if (handle->ranged && handle->purpose == CurlHandlePurpose::Payload &&
-          impl.admission.admitted(handle->epoch, servedCount(impl))) {
-        logging::tryWrite(
-            spdlog::level::debug, __FILE__, __LINE__,
-            fmt("component=stream event=admission_window gid=%s "
-                "reason=served current=%d maximum=%d",
-                gid(download).c_str(), impl.admission.limit(),
-                impl.admission.maximum()));
+          impl.admission.admitted(servedCount(impl))) {
+        logging::tryWrite(spdlog::level::debug, __FILE__, __LINE__,
+                          fmt("component=stream event=admission_window gid=%s "
+                              "reason=served current=%d maximum=%d",
+                              gid(download).c_str(), impl.admission.limit(),
+                              impl.admission.maximum()));
       }
     }
-    if (length > 0 && handle->writeOffset - handle->lease.begin >= 64_k) {
-      if (handle->bodySampleStart.isZero()) {
-        handle->bodySampleStart = global::wallclock();
+    if (length > 0) {
+      if (handle->responseStartedAt.isZero()) {
+        handle->responseStartedAt = global::wallclock();
         handle->payloadSpeed.reset();
       }
       handle->payloadSpeed.update(length);
@@ -777,7 +742,6 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
       handle->headersComplete = true;
       if (handle->responseCode == 200 || handle->responseCode == 206) {
         handle->validatorMismatch = identityChanged(impl, *handle);
-        handle->headersAt = global::wallclock();
       }
       if (handle->responseCode == 206 && handle->ranged) {
         if (handle->responseTotalLength <= 0 ||
@@ -799,6 +763,8 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
             handle->lease.end =
                 std::min(handle->lease.end, handle->responseTotalLength);
             handle->rangeAccepted = true;
+            handle->responseStartedAt = global::wallclock();
+            handle->payloadSpeed.reset();
             if (handle->purpose == CurlHandlePurpose::Payload) {
               impl.rangeValidated = true;
               download->snapshot_.totalLength = handle->responseTotalLength;
@@ -1149,9 +1115,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.admission.reset(
       impl.maxConnections,
       std::chrono::seconds(group->getOption()->getAsInt(PREF_RETRY_WAIT)));
-  impl.failedRounds = 0;
-  impl.lastPayloadAt = Timer::zero();
-  impl.bodyLatencyMax = {};
   impl.preferredUriIndex %= impl.uris.size();
   const auto& uriValue = impl.uris[impl.preferredUriIndex];
   impl.currentUri = uriValue;
@@ -1717,16 +1680,21 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
   const auto now = std::chrono::steady_clock::now();
   auto& admission = impl.admission;
   const auto armRefresh = [&] {
-    if (const auto next = admission.nextEvent(now, impl.planner.hasReady())) {
-      engine_->setRefreshInterval(
-          std::max(std::chrono::milliseconds(0),
-                   std::chrono::duration_cast<std::chrono::milliseconds>(
-                       *next - now)));
+    auto next = admission.nextEvent(now, impl.planner.hasPending());
+    if (const auto retry = impl.planner.nextDeadline(now)) {
+      if (!next || *retry < *next) {
+        next = retry;
+      }
+    }
+    if (next) {
+      engine_->setRefreshInterval(std::max(
+          std::chrono::milliseconds(0),
+          std::chrono::duration_cast<std::chrono::milliseconds>(*next - now)));
     }
   };
   if (!impl.plannerConfigured) {
     if (impl.handles.empty() && admission.open(now)) {
-      if (auto lease = impl.planner.takeReady()) {
+      if (auto lease = impl.planner.takeReady(now)) {
         const bool ranged =
             impl.http && (impl.maxConnections > 1 || lease->begin > 0);
         if (!createHandle(download, *lease, true, ranged,
@@ -1745,10 +1713,6 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     return;
   }
 
-  discardStalled(download);
-  if (download->failed()) {
-    return;
-  }
   const auto pieceLength = std::max<int64_t>(
       1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
   bool scheduled = false;
@@ -1762,9 +1726,9 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     // Split queued work only for the slots that are free right now.
     impl.planner.refillReady(
         limit > impl.handles.size() ? limit - impl.handles.size() : 0,
-        preferredPiece, pieceLength);
+        preferredPiece, pieceLength, now);
     while (impl.handles.size() < limit && admission.open(now)) {
-      auto lease = impl.planner.takeReady();
+      auto lease = impl.planner.takeReady(now);
       if (!lease) {
         break;
       }
@@ -1778,18 +1742,20 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
       downloads_[handle->value] = std::make_pair(download, handle);
       scheduled = true;
     }
-    if (admission.grow(now, impl.handles.size(), impl.planner.hasReady())) {
+    const bool growthWork = impl.planner.hasReady(now) ||
+                            remaining > pieceLength * admission.limit();
+    if (admission.grow(now, impl.handles.size(), growthWork)) {
       A2_LOG_DEBUG(fmt("component=stream event=admission_window gid=%s "
-                       "reason=growth current=%d maximum=%d probe_ms=%" PRId64,
+                       "reason=growth current=%d maximum=%d",
                        gid(download.get()).c_str(), admission.limit(),
-                       admission.maximum(),
-                       static_cast<int64_t>(
-                           std::chrono::duration_cast<std::chrono::milliseconds>(
-                               admission.probeInterval())
-                               .count())));
+                       admission.maximum()));
       continue;
     }
-    if (!impl.planner.hasReady() && rebalanceEndgame(download, pieceLength)) {
+    // Retry cooldowns are pending work, not an invitation to split more live
+    // ranges and turn the same server refusal into a new request burst.
+    if (admission.open(now) && !impl.planner.hasPending() &&
+        rebalanceEndgame(download, pieceLength)) {
+      scheduled = true;
       continue;
     }
     break;
@@ -1800,7 +1766,7 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
     impl.kickPending = true;
     rebalanceLimits();
   }
-  if (impl.handles.empty() && !impl.planner.hasReady() &&
+  if (impl.handles.empty() && !impl.planner.hasPending() &&
       !impl.planner.complete() && !download->stopped()) {
     failTask(download, error_code::UNKNOWN_ERROR,
              fmt("Stream scheduler lost an unfinished range: completed=%" PRId64
@@ -1822,9 +1788,16 @@ bool CurlSession::rebalanceEndgame(
       impl.group->getMaxDownloadSpeedLimit() > 0) {
     return false;
   }
+  // A retry moved out of the queue is still recovery work until it delivers
+  // payload. Do not add speculative requests during that admission gap.
+  if (std::any_of(
+          impl.handles.begin(), impl.handles.end(),
+          [](const auto& entry) { return entry->lease.attempts > 0; })) {
+    return false;
+  }
   // Let idle connections help while preserving the donor's live prefix.
-  // A meaningful body sample protects fresh requests and bounds cancellation
-  // by actual forward progress, rather than a lifetime redistribution count.
+  // Response age protects fresh requests. A slow connection need not first
+  // accumulate a fixed byte quota to become eligible for help.
   CurlHandle* handle = nullptr;
   long double longest = 0;
   int64_t splitQuantum = pieceLength;
@@ -1832,36 +1805,44 @@ bool CurlSession::rebalanceEndgame(
   for (const auto& candidate : impl.handles) {
     const auto remaining = candidate->lease.end - candidate->writeOffset;
     if (!candidate->rangeAccepted || remaining <= 0 ||
-        candidate->bodySampleStart.isZero() ||
-        candidate->writeOffset - candidate->lease.begin < 64_k) {
+        candidate->responseStartedAt.isZero()) {
       continue;
     }
     curl_off_t firstByte = 0;
     curl_easy_getinfo(candidate->value, CURLINFO_STARTTRANSFER_TIME_T,
                       &firstByte);
     // A helper pays one request round trip before it contributes; the donor
-    // must be far enough from its end for that to pay off, and must have
-    // streamed long enough for its speed to mean something.
+    // must be far enough from its end for that to pay off, and its response
+    // must have had time to produce a body.
     const auto requestCost = std::max(0.25L, firstByte / 1000000.0L);
-    const auto bodySeconds = std::chrono::duration<long double>(
-                                 candidate->bodySampleStart.difference(now))
-                                 .count();
-    if (bodySeconds < std::max(1.0L, requestCost)) {
+    const auto responseSeconds =
+        std::chrono::duration<long double>(
+            candidate->responseStartedAt.difference(now))
+            .count();
+    if (responseSeconds < std::max(1.0L, requestCost)) {
       continue;
     }
     const auto speed = candidate->payloadSpeed.calculateNewestSpeed(2);
-    const auto idleSeconds = std::chrono::duration<long double>(
-                                 candidate->lastPayload.difference(now))
-                                 .count();
+    const auto idleSeconds =
+        std::chrono::duration<long double>((candidate->lastPayload.isZero()
+                                                ? candidate->responseStartedAt
+                                                : candidate->lastPayload)
+                                               .difference(now))
+            .count();
     if (speed == 0 && idleSeconds < std::max(2.0L, requestCost * 2)) {
       continue;
     }
     const auto remainingTime =
         speed > 0 ? static_cast<long double>(remaining) / speed
                   : std::numeric_limits<long double>::infinity();
-    const auto quantum =
-        std::max<int64_t>(64_k, static_cast<int64_t>(std::min<long double>(
-                                    pieceLength, speed * requestCost)));
+    const auto quantum = std::max<int64_t>(
+        CURL_MAX_WRITE_SIZE, static_cast<int64_t>(std::min<long double>(
+                                 pieceLength, speed * requestCost)));
+    // Do not repeatedly restart a small response before its first byte.
+    if (candidate->writeOffset == candidate->lease.begin &&
+        remaining < quantum * 2) {
+      continue;
+    }
     if ((speed == 0 || remaining >= quantum * 2) &&
         remainingTime > requestCost * 2 && remainingTime > longest) {
       handle = candidate.get();
@@ -1889,8 +1870,15 @@ bool CurlSession::rebalanceEndgame(
   auto remainder = handle->lease.remainder(handle->writeOffset);
   if (remainder.length() >= splitQuantum * 2) {
     remainder.begin += (remainder.length() / 2 / splitQuantum) * splitQuantum;
+    if (!createHandle(download, remainder, false, true,
+                      CurlHandlePurpose::Payload)) {
+      failTask(download, error_code::NETWORK_PROBLEM,
+               "Unable to start a range helper");
+      return false;
+    }
+    auto* helper = impl.handles.back().get();
     handle->lease.end = remainder.begin;
-    impl.planner.enqueue(remainder);
+    downloads_[helper->value] = std::make_pair(download, helper);
     A2_LOG_DEBUG(fmt("component=stream event=tail_assisted gid=%s "
                      "range=%" PRId64 "-%" PRId64,
                      gid(download.get()).c_str(), remainder.begin,
@@ -1922,78 +1910,6 @@ void CurlSession::discardHandle(const std::shared_ptr<CurlDownload>& download,
   }
   cleanupHandle(*handle);
   eraseHandle(*download->impl_, handle);
-}
-
-bool CurlSession::discardStalled(const std::shared_ptr<CurlDownload>& download)
-{
-  // An origin may accept a range request, answer its headers, and then never
-  // send the body while it serves sibling connections. Waiting for the low
-  // speed timeout leaves that slot dead for up to --timeout seconds. Sibling
-  // progress bounds the wait: once no body has followed the headers for far
-  // longer than any sibling needed, the slot is returned to the queue.
-  auto& impl = *download->impl_;
-  if (!recentlyServed(impl)) {
-    return false;
-  }
-  const auto& now = global::wallclock();
-  const auto grace = serviceGrace(impl);
-  // A stream that already delivered data gets more slack: brief pauses are
-  // normal under fair sharing, a multi-second silence beside active siblings
-  // is not.
-  const auto silence =
-      std::max<Timer::Clock::duration>(grace, std::chrono::seconds(5));
-  std::vector<std::pair<CurlHandle*, Timer::Clock::duration>> stalled;
-  for (const auto& handle : impl.handles) {
-    if (handle->purpose != CurlHandlePurpose::Payload ||
-        !handle->rangeAccepted || handle->headersAt.isZero()) {
-      continue;
-    }
-    const bool served = handle->writeOffset > handle->lease.begin;
-    const auto idle = served ? handle->lastPayload.difference(now)
-                             : handle->headersAt.difference(now);
-    if (idle > (served ? silence : grace)) {
-      stalled.emplace_back(handle.get(), idle);
-    }
-  }
-  for (const auto& [handle, idle] : stalled) {
-    const bool served = handle->writeOffset > handle->lease.begin;
-    if (served) {
-      try {
-        flushWriteBuffer(impl, *handle);
-      }
-      catch (const Exception& error) {
-        failTask(download, error.getErrorCode(), error.what());
-        return false;
-      }
-      catch (const std::exception& error) {
-        failTask(download, error_code::FILE_IO_ERROR, error.what());
-        return false;
-      }
-    }
-    const auto remainder = handle->lease.remainder(handle->writeOffset);
-    const auto epoch = handle->epoch;
-    A2_LOG_DEBUG(fmt("component=stream event=range_stalled gid=%s "
-                     "range=%" PRId64 "-%" PRId64 " served=%d idle_ms=%" PRId64,
-                     gid(download.get()).c_str(), remainder.begin,
-                     remainder.end, served ? 1 : 0,
-                     static_cast<int64_t>(
-                         std::chrono::duration_cast<std::chrono::milliseconds>(
-                             idle)
-                             .count())));
-    discardHandle(download, handle);
-    if (!requeue(download, remainder, epoch,
-                 served ? TransferOutcome::Failed : TransferOutcome::Rejected,
-                 0, 0)) {
-      failTask(download, error_code::HTTP_SERVICE_UNAVAILABLE,
-               "The server stopped serving range requests");
-      return false;
-    }
-  }
-  if (!stalled.empty()) {
-    download->snapshot_.completedLength =
-        impl.planner.completedLength() + bufferedLength(impl);
-  }
-  return !stalled.empty();
 }
 
 void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
@@ -2153,80 +2069,60 @@ bool CurlSession::requeue(const std::shared_ptr<CurlDownload>& download,
                           curl_off_t retryAfter)
 {
   auto& impl = *download->impl_;
-  auto& admission = impl.admission;
+  ++remainder.attempts;
+  const auto maxTries = impl.group->getOption()->getAsInt(PREF_MAX_TRIES);
+  if (maxTries > 0 && remainder.attempts >= static_cast<size_t>(maxTries)) {
+    return false;
+  }
   const auto now = std::chrono::steady_clock::now();
-  const auto retryWait =
+  const auto configured =
       std::chrono::seconds(impl.group->getOption()->getAsInt(PREF_RETRY_WAIT));
-  const auto admitted = servedCount(impl);
-  // Decisions belong to the batch of requests issued under one window value.
-  // Later failures from the same batch add no new information.
-  const bool fresh = !admission.stale(epoch);
-  const bool probe = admission.probe(epoch);
+  // Equal jitter keeps even an immediately rejected request from spinning.
+  // Server and user deadlines are lower bounds, never randomization bounds.
+  const auto backoff = std::min<long>(
+      30000, 200L << std::min<size_t>(remainder.attempts - 1, 8));
+  const auto delay = std::max(
+      std::chrono::duration_cast<std::chrono::milliseconds>(configured),
+      std::chrono::milliseconds(
+          backoff / 2 +
+          SimpleRandomizer::getInstance()->getRandomNumber(backoff / 2 + 1)));
+  // libcurl parses both HTTP dates and delta-seconds. Bound conversion to the
+  // monotonic clock's range without shortening an ordinary server deadline.
+  const auto maximumWait = std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::steady_clock::time_point::max() - now);
+  const auto serverWait = std::chrono::seconds(
+      std::clamp<curl_off_t>(retryAfter, 0, maximumWait.count()));
+  remainder.readyAt =
+      now + std::max(std::chrono::duration_cast<std::chrono::milliseconds>(
+                         serverWait),
+                     delay);
 
   if (impl.uris.size() > 1) {
     remainder.uriIndex = (remainder.uriIndex + 1) % impl.uris.size();
   }
   impl.planner.enqueue(remainder);
-
-  if (outcome == TransferOutcome::Rejected && fresh) {
-    const auto previous = admission.limit();
-    admission.rejected(epoch, admitted, now);
-    A2_LOG_DEBUG(fmt("component=stream event=admission_window gid=%s "
-                     "reason=rejected previous=%d current=%d admitted=%d "
-                     "probe_ms=%" PRId64,
-                     gid(download.get()).c_str(), previous, admission.limit(),
-                     admitted,
-                     static_cast<int64_t>(
-                         std::chrono::duration_cast<std::chrono::milliseconds>(
-                             admission.probeInterval())
-                             .count())));
-  }
-  if (overloadResponse(responseCode) || retryAfter > 0) {
-    // Retry-After speaks about time. When the refused request only tried to
-    // exceed the level the origin already serves, that level stays in use and
-    // the wait applies to the next attempt to grow. Otherwise the origin is
-    // refusing what it served before and every new request waits.
-    const auto wait = std::max<std::chrono::seconds>(
-        std::chrono::seconds(std::max<curl_off_t>(1, retryAfter)), retryWait);
-    if (probe) {
-      admission.deferGrowth(now + wait);
+  if (outcome == TransferOutcome::Overloaded) {
+    const auto previous = impl.admission.limit();
+    if (impl.admission.rejected(epoch, servedCount(impl), now)) {
+      A2_LOG_DEBUG(fmt("component=stream event=admission_window gid=%s "
+                       "reason=overload previous=%d current=%d",
+                       gid(download.get()).c_str(), previous,
+                       impl.admission.limit()));
     }
-    else {
-      admission.hold(now + wait);
-    }
-    A2_LOG_DEBUG(fmt("component=stream event=admission_hold gid=%s "
-                     "reason=retry_after scope=%s http=%ld hold_ms=%" PRId64,
-                     gid(download.get()).c_str(), probe ? "growth" : "task",
-                     responseCode,
-                     static_cast<int64_t>(
-                         std::chrono::duration_cast<std::chrono::milliseconds>(
-                             wait)
-                             .count())));
+    // A probe is still a request: Retry-After also applies when a free slot
+    // would otherwise let its rejected range be issued as a replacement.
+    impl.admission.hold(
+        std::max(remainder.readyAt, now + std::chrono::seconds(1)));
   }
-  if (outcome == TransferOutcome::Rejected && fresh && impl.handles.empty()) {
-    // The last request in flight was refused without a byte: the round is
-    // over without service. This is the only situation in which a retry
-    // counts as a try. Pending siblings decide their own fate; a connection
-    // that broke after delivering data proves the origin still serves.
-    ++impl.failedRounds;
-    const auto maxTries = impl.group->getOption()->getAsInt(PREF_MAX_TRIES);
-    if (maxTries > 0 && impl.failedRounds >= maxTries) {
-      return false;
-    }
-    const auto backoff = std::chrono::milliseconds(
-        std::min<long>(30000, 1000L << std::min(impl.failedRounds - 1, 5)));
-    const auto jitter = std::chrono::milliseconds(
-        SimpleRandomizer::getInstance()->getRandomNumber(
-            static_cast<long>(backoff.count() / 4 + 1)));
-    const auto wait =
-        std::max<std::chrono::milliseconds>(retryWait, backoff) + jitter;
-    admission.starve();
-    admission.hold(now + wait);
-    A2_LOG_DEBUG(fmt("component=stream event=admission_hold gid=%s "
-                     "reason=starved tries=%d max_tries=%d hold_ms=%" PRId64,
-                     gid(download.get()).c_str(), impl.failedRounds, maxTries,
-                     static_cast<int64_t>(wait.count())));
-  }
+  A2_LOG_DEBUG(fmt("component=stream event=range_retry gid=%s "
+                   "range=%" PRId64 "-%" PRId64
+                   " attempt=%lu http=%ld retry_in_ms=%" PRId64,
+                   gid(download.get()).c_str(), remainder.begin, remainder.end,
+                   static_cast<unsigned long>(remainder.attempts), responseCode,
+                   static_cast<int64_t>(
+                       std::chrono::duration_cast<std::chrono::milliseconds>(
+                           remainder.readyAt - now)
+                           .count())));
   engine_->setNoWait(true);
   return true;
 }
@@ -2286,12 +2182,10 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
   }
   if (remoteLength < 0) {
     failTask(download,
-             responseCode >= 400
-                 ? curlErrorCode(result, responseCode)
-                 : error_code::CANNOT_RESUME,
-             responseCode >= 400
-                 ? nativeFailure
-                 : "The remote file length is unavailable",
+             responseCode >= 400 ? curlErrorCode(result, responseCode)
+                                 : error_code::CANNOT_RESUME,
+             responseCode >= 400 ? nativeFailure
+                                 : "The remote file length is unavailable",
              false);
     return;
   }
@@ -2304,8 +2198,8 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
   rememberIdentity(impl, responseEtag, responseLastModified);
   download->snapshot_.totalLength = remoteLength;
 
-  switch (decideExistingFile(impl.existingLength, remoteLength,
-                             rangeSupported)) {
+  switch (
+      decideExistingFile(impl.existingLength, remoteLength, rangeSupported)) {
   case ExistingFileDecision::Complete:
     impl.planner.clear();
     impl.planner.commit(0, remoteLength);
@@ -2337,10 +2231,9 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
     break;
   }
 
-  const auto message =
-      impl.existingLength > remoteLength
-          ? "The local file is larger than the remote file"
-          : "The server does not support resuming this file";
+  const auto message = impl.existingLength > remoteLength
+                           ? "The local file is larger than the remote file"
+                           : "The server does not support resuming this file";
   failTask(download, error_code::CANNOT_RESUME, message, false);
 }
 
@@ -2398,6 +2291,13 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     // The native callback stopped a donor after completing its shortened
     // assignment. Its suffix is independently owned by another request.
     result = CURLE_OK;
+  }
+  if (result == CURLE_OK && handle->purpose == CurlHandlePurpose::Payload &&
+      handle->rangeAccepted && handle->writeOffset == handle->lease.begin &&
+      !handle->lease.empty()) {
+    // Content-Length: 0 can make libcurl succeed despite a nonempty
+    // Content-Range. Requeueing this as success would bypass every retry bound.
+    result = CURLE_PARTIAL_FILE;
   }
   const auto nativeFailure = failureMessage(*handle, result, responseCode);
   const auto safePrimaryIp =
@@ -2511,7 +2411,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     }
     const bool progressed = writeOffset > lease.begin;
     auto outcome = classifyOutcome(
-        result, responseCode, ranged && impl.rangeValidated, progressed,
+        result, responseCode, ranged && impl.rangeValidated,
         impl.fileNotFoundCount,
         impl.group->getOption()->getAsInt(PREF_MAX_FILE_NOT_FOUND),
         appConnectTime > 0 || startTransferTime > 0 || progressed);
@@ -2519,7 +2419,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
         impl.uris.size() > 1 && result != CURLE_WRITE_ERROR &&
         result != CURLE_OUT_OF_MEMORY && result != CURLE_ABORTED_BY_CALLBACK;
     if (outcome == TransferOutcome::Fatal && alternateMirror) {
-      outcome = TransferOutcome::Failed;
+      outcome = TransferOutcome::Retryable;
     }
     auto remainder = lease.remainder(writeOffset);
     if (download->snapshot_.totalLength > 0) {
@@ -2535,7 +2435,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
           " outcome=%s http=%ld curl=%d message=%s",
           gid(download.get()).c_str(), static_cast<int64_t>(transferId),
           static_cast<int64_t>(connectionId), remainder.begin, remainder.end,
-          outcome == TransferOutcome::Rejected ? "rejected" : "failed",
+          outcome == TransferOutcome::Overloaded ? "overloaded" : "retryable",
           responseCode, static_cast<int>(result), nativeFailure.c_str()));
       schedule(download);
       return;
@@ -2752,8 +2652,8 @@ int CurlSession::socketCallback(CURL*, curl_socket_t socket, int action,
           fmt("component=stream event=socket_callback_failed message=%s",
               logging::sanitizeText(error.what()).c_str()));
     }
-  catch (...) {
-  }
+    catch (...) {
+    }
   }
   catch (...) {
     logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,
@@ -2775,8 +2675,8 @@ int CurlSession::timerCallback(CURLM*, long timeoutMs, void* userData) noexcept
           fmt("component=stream event=timer_callback_failed message=%s",
               logging::sanitizeText(error.what()).c_str()));
     }
-  catch (...) {
-  }
+    catch (...) {
+    }
   }
   catch (...) {
     logging::tryWrite(spdlog::level::err, __FILE__, __LINE__,

@@ -131,10 +131,9 @@ void CurlSessionTest::testTailRecovery()
   auto& impl = *download->impl_;
   impl.group = &group;
   impl.writer = make_unique<ByteArrayDiskWriter>();
+  impl.http = true;
+  impl.maxConnections = 64;
   impl.admission.reset(64, std::chrono::seconds(0));
-  while (impl.admission.limit() < 64) {
-    impl.admission.admitted(impl.admission.epoch(), 0);
-  }
   auto handle = make_unique<CurlHandle>();
   handle->value = curl_easy_init();
   REQUIRE(handle->value);
@@ -142,12 +141,12 @@ void CurlSessionTest::testTailRecovery()
   handle->download = download.get();
   handle->lease = {0, 1_m};
   handle->responseRangeEnd = 1_m;
-  handle->writeOffset = 80_k;
+  handle->writeOffset = 8_k;
   global::wallclock().reset();
-  handle->bodySampleStart = global::wallclock();
+  handle->responseStartedAt = global::wallclock();
   handle->lastPayload = global::wallclock();
   handle->payloadSpeed.reset();
-  handle->payloadSpeed.update(80_k);
+  handle->payloadSpeed.update(8_k);
   impl.handles.push_back(std::move(handle));
 
   // The body sample must span at least one second before a split.
@@ -161,13 +160,13 @@ void CurlSessionTest::testTailRecovery()
   CHECK(!session->rebalanceEndgame(download, 1_m));
   group.setMaxDownloadSpeedLimit(0);
   CHECK(session->rebalanceEndgame(download, 1_m));
-  REQUIRE_EQ(33, impl.handles.size());
+  REQUIRE_EQ(34, impl.handles.size());
   auto* donor = impl.handles.front().get();
-  auto lease = impl.planner.takeReady();
-  REQUIRE(lease);
+  auto* helper = impl.handles.back().get();
+  std::optional<RangeLease> lease = helper->lease;
   CHECK_EQ(donor->lease.end, lease->begin);
   CHECK_EQ(1_m, lease->end);
-  CHECK(!impl.planner.takeReady());
+  CHECK(!impl.planner.takeReady({}));
 
   std::string body(static_cast<size_t>(1_m - donor->writeOffset), 'x');
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
@@ -175,27 +174,44 @@ void CurlSessionTest::testTailRecovery()
   CHECK_EQ(lease->begin, donor->writeOffset);
   CHECK_EQ(lease->begin, impl.writer->size());
   CHECK_EQ(error_code::UNDEFINED, download->snapshot_.errorCode);
-  impl.planner.commit(0, 80_k);
+  impl.planner.commit(0, 8_k);
   RangePlanner restored;
   restored.restore(impl.planner.completedRanges());
   restored.configure(1_m, 1_m, {});
-  auto missing = restored.takeReady();
+  auto missing = restored.takeReady({});
   REQUIRE(missing);
   CHECK_EQ(lease->begin, missing->begin);
   CHECK_EQ(lease->end, missing->end);
-  CHECK(!restored.takeReady());
-  curl_easy_cleanup(donor->value);
-  donor->value = nullptr;
+  CHECK(!restored.takeReady({}));
+  session->discardHandle(download, donor);
+  session->discardHandle(download, helper);
   impl.handles.clear();
 
   auto replacement = make_unique<CurlHandle>();
+  replacement->value = curl_easy_init();
+  REQUIRE(replacement->value);
   replacement->lease = *lease;
   replacement->writeOffset = lease->begin + 16_k;
   replacement->rangeAccepted = true;
-  replacement->bodySampleStart = global::wallclock();
+  replacement->responseStartedAt = global::wallclock();
   impl.handles.push_back(std::move(replacement));
   global::wallclock().advance(20_s);
+  impl.handles.front()->lease.attempts = 1;
   CHECK(!session->rebalanceEndgame(download, 1_m));
+  impl.handles.front()->lease.attempts = 0;
+  // A response below 64 KiB must not monopolize its unfinished range.
+  REQUIRE(session->rebalanceEndgame(download, 1_m));
+  auto* slow = impl.handles.front().get();
+  helper = impl.handles.back().get();
+  // An idle slot can take another disjoint suffix before the first helper
+  // responds. The live prefix and both helpers retain exclusive ranges.
+  REQUIRE(session->rebalanceEndgame(download, 1_m));
+  auto* nextHelper = impl.handles.back().get();
+  CHECK_EQ(slow->lease.end, nextHelper->lease.begin);
+  CHECK_EQ(nextHelper->lease.end, helper->lease.begin);
+  CHECK_EQ(helper->lease.begin, helper->writeOffset);
+  session->discardHandle(download, nextHelper);
+  session->discardHandle(download, helper);
 
   // A rejected sibling while the replacement is being served: the range goes
   // back to the queue, the window never drops below the served connection, and
@@ -203,31 +219,32 @@ void CurlSessionTest::testTailRecovery()
   const auto before = std::chrono::steady_clock::now();
   const auto epoch = impl.admission.epoch();
   REQUIRE(session->requeue(download, {0, 80_k, 0}, epoch,
-                           TransferOutcome::Rejected, 503, 12));
+                           TransferOutcome::Overloaded, 503, 12));
   CHECK_EQ(32, impl.admission.limit());
   CHECK(!impl.admission.open(before + 11_s));
   CHECK(impl.admission.open(before + 13_s));
-  CHECK_EQ(0, impl.failedRounds);
-  auto queued = impl.planner.takeReady();
+  CHECK(!impl.planner.takeReady(before + 11_s));
+  auto queued = impl.planner.takeReady(before + 13_s);
   REQUIRE(queued);
   CHECK_EQ(0, queued->begin);
   CHECK_EQ(80_k, queued->end);
+  CHECK_EQ(1, queued->attempts);
 
-  // A lone connection that broke after delivering data is replaced at once.
-  impl.handles.clear();
+  // HTTP 500 and failed probes retain a finite budget even with healthy
+  // siblings. The configured delay applies to the failed range only.
   option->put(PREF_MAX_TRIES, "2");
+  impl.admission.reset(64, std::chrono::seconds(0));
   REQUIRE(session->requeue(download, {0, 80_k, 0}, impl.admission.epoch(),
-                           TransferOutcome::Failed, 0, 0));
-  CHECK_EQ(0, impl.failedRounds);
-  CHECK(impl.admission.open(std::chrono::steady_clock::now() + 13_s));
-  // Refusals with nothing else in flight count as tries until max-tries.
-  REQUIRE(session->requeue(download, {0, 80_k, 0}, impl.admission.epoch(),
-                           TransferOutcome::Rejected, 0, 0));
-  CHECK_EQ(1, impl.failedRounds);
-  CHECK_EQ(1, impl.admission.limit());
-  CHECK(!session->requeue(download, {0, 80_k, 0}, impl.admission.epoch(),
-                          TransferOutcome::Rejected, 0, 0));
-  CHECK_EQ(2, impl.failedRounds);
+                           TransferOutcome::Retryable, 500, 0));
+  CHECK(impl.admission.open(before));
+  CHECK_EQ(64, impl.admission.limit());
+  CHECK(!impl.planner.takeReady(before + 9_s));
+  queued = impl.planner.takeReady(before + 11_s);
+  REQUIRE(queued);
+  CHECK_EQ(1, queued->attempts);
+  CHECK(!session->requeue(download, *queued, impl.admission.epoch(),
+                          TransferOutcome::Retryable, 500, 0));
+  session->discardHandle(download, slow);
   global::wallclock().reset();
 }
 
@@ -412,46 +429,37 @@ void CurlSessionTest::testOutcomeClassification()
 {
   using O = TransferOutcome;
   const auto classify = [](CURLcode result, long code, bool validated,
-                           bool progressed, bool connected = false,
-                           int notFound = 0, int maxNotFound = 0) {
-    return CurlSession::classifyOutcome(result, code, validated, progressed,
-                                        notFound, maxNotFound, connected);
+                           bool connected = false, int notFound = 0,
+                           int maxNotFound = 0) {
+    return CurlSession::classifyOutcome(result, code, validated, notFound,
+                                        maxNotFound, connected);
   };
-  // A connection lost after delivering data is replaced at once; one that
-  // never produced a byte was refused or dropped before service.
-  CHECK_EQ(O::Rejected, classify(CURLE_SSL_CONNECT_ERROR, 0, false, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_COULDNT_CONNECT, 0, true, false));
-  CHECK_EQ(O::Failed, classify(CURLE_RECV_ERROR, 0, true, true));
-  CHECK_EQ(O::Failed, classify(CURLE_PARTIAL_FILE, 206, true, true));
-  CHECK_EQ(O::Rejected, classify(CURLE_OPERATION_TIMEDOUT, 206, true, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_OPERATION_TIMEDOUT, 0, false, false));
-  CHECK_EQ(O::Failed, classify(CURLE_OPERATION_TIMEDOUT, 206, true, true));
-  CHECK_EQ(O::Fatal, classify(CURLE_PEER_FAILED_VERIFICATION, 0, false, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_SSL_CERTPROBLEM, 0, false, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_SSL_CACERT_BADFILE, 0, false, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_SSH, 0, false, false, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_SSH, 0, false, false, true));
-  CHECK_EQ(O::Failed, classify(CURLE_SSH, 0, false, true, true));
-  // Refusals of a verified representation describe admission capacity.
-  CHECK_EQ(O::Rejected, classify(CURLE_HTTP_RETURNED_ERROR, 403, true, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, 403, false, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_HTTP_RETURNED_ERROR, 429, true, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_HTTP_RETURNED_ERROR, 503, true, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_HTTP_RETURNED_ERROR, 502, true, false));
-  CHECK_EQ(O::Rejected, classify(CURLE_HTTP_RETURNED_ERROR, 504, true, false));
-  CHECK_EQ(O::Failed, classify(CURLE_HTTP_RETURNED_ERROR, 503, false, false));
-  CHECK_EQ(O::Failed, classify(CURLE_HTTP_RETURNED_ERROR, 500, true, false));
-  CHECK_EQ(O::Failed, classify(CURLE_HTTP_RETURNED_ERROR, 408, true, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, 401, true, false));
-  CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, 400, true, false));
-  // 404 follows max-file-not-found.
-  CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, 404, true, false));
-  CHECK_EQ(O::Failed,
-           classify(CURLE_HTTP_RETURNED_ERROR, 404, true, false, false, 1, 3));
+  for (auto code :
+       {CURLE_SSL_CONNECT_ERROR, CURLE_COULDNT_CONNECT, CURLE_RECV_ERROR,
+        CURLE_PARTIAL_FILE, CURLE_OPERATION_TIMEDOUT}) {
+    CHECK_EQ(O::Retryable, classify(code, 0, true));
+  }
+  for (auto code : {CURLE_PEER_FAILED_VERIFICATION, CURLE_SSL_CERTPROBLEM,
+                    CURLE_SSL_CACERT_BADFILE}) {
+    CHECK_EQ(O::Fatal, classify(code, 0, false));
+  }
+  CHECK_EQ(O::Fatal, classify(CURLE_SSH, 0, false));
+  CHECK_EQ(O::Retryable, classify(CURLE_SSH, 0, false, true));
+  for (auto code : {403, 408, 425, 500, 502, 504}) {
+    CHECK_EQ(O::Retryable, classify(CURLE_HTTP_RETURNED_ERROR, code, true));
+  }
+  for (auto code : {429, 503}) {
+    CHECK_EQ(O::Overloaded, classify(CURLE_HTTP_RETURNED_ERROR, code, false));
+    CHECK_EQ(O::Overloaded, classify(CURLE_HTTP_RETURNED_ERROR, code, true));
+  }
+  CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, 403, false));
+  for (auto code : {400, 401, 404}) {
+    CHECK_EQ(O::Fatal, classify(CURLE_HTTP_RETURNED_ERROR, code, true));
+  }
+  CHECK_EQ(O::Retryable,
+           classify(CURLE_HTTP_RETURNED_ERROR, 404, true, false, 1, 3));
   CHECK_EQ(O::Fatal,
-           classify(CURLE_HTTP_RETURNED_ERROR, 404, true, false, false, 3, 3));
-  CHECK_EQ(O::Failed,
-           classify(CURLE_REMOTE_FILE_NOT_FOUND, 0, false, false, false, 0, 1));
+           classify(CURLE_HTTP_RETURNED_ERROR, 404, true, false, 3, 3));
 }
 
 void CurlSessionTest::testFailureMessageUsesTheFailureLayer()

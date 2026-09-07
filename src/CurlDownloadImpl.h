@@ -47,8 +47,7 @@ struct CurlHandle {
   int64_t bufferOffset = 0;
   size_t bufferLimit = 0;
   SpeedCalc payloadSpeed;
-  Timer bodySampleStart = Timer::zero();
-  Timer headersAt = Timer::zero();
+  Timer responseStartedAt = Timer::zero();
   Timer lastPayload = Timer::zero();
   uint64_t epoch = 0;
   int64_t responseRangeEnd = -1;
@@ -84,7 +83,6 @@ struct CurlDownloadImpl {
   AdmissionWindow admission;
   RequestGroup* group = nullptr;
   int maxConnections = 1;
-  int failedRounds = 0;
   int fileNotFoundCount = 0;
   int64_t existingLength = 0;
   CurlStartMode startMode = CurlStartMode::Transfer;
@@ -97,8 +95,6 @@ struct CurlDownloadImpl {
   bool kickPending = false;
   bool stopRequested = false;
   Timer lastCheckpoint = Timer::zero();
-  Timer lastPayloadAt = Timer::zero();
-  Timer::Clock::duration bodyLatencyMax{};
 };
 
 } // namespace aria2
