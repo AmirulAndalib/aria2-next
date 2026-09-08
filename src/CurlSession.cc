@@ -322,19 +322,29 @@ bool parseContentLength(const std::string& value, int64_t& length)
   return util::parseLLIntNoThrow(length, value) && length >= 0;
 }
 
-bool strongEtag(const std::string& value)
+std::string normalizeStrongEtag(const std::string& value)
 {
-  return value.size() >= 2 && value.front() == '"' && value.back() == '"' &&
-         std::all_of(value.begin() + 1, value.end() - 1, [](unsigned char c) {
-           return c == 0x21 || (c >= 0x23 && c <= 0x7e) || c >= 0x80;
-         });
+  if (value.empty() || value.compare(0, 2, "W/") == 0) {
+    return {};
+  }
+  const bool quoted =
+      value.size() >= 2 && value.front() == '"' && value.back() == '"';
+  if (!std::all_of(value.begin() + (quoted ? 1 : 0),
+                   value.end() - (quoted ? 1 : 0), [](unsigned char c) {
+                     return c == 0x21 || (c >= 0x23 && c <= 0x7e) || c >= 0x80;
+                   })) {
+    return {};
+  }
+  // Some origins omit the quotes around an otherwise valid opaque tag.
+  // Normalize both responses and persisted identity, including If-Match.
+  return quoted ? value : '"' + value + '"';
 }
 
 void rememberIdentity(CurlDownloadImpl& impl, const std::string& etag,
                       const std::string& modified)
 {
-  if (impl.etag.empty() && strongEtag(etag)) {
-    impl.etag = etag;
+  if (impl.etag.empty()) {
+    impl.etag = normalizeStrongEtag(etag);
   }
   if (impl.lastModified.empty() &&
       curl_getdate(modified.c_str(), nullptr) != -1) {
@@ -345,7 +355,8 @@ void rememberIdentity(CurlDownloadImpl& impl, const std::string& etag,
 bool identityChanged(const CurlDownloadImpl& impl, const CurlHandle& handle)
 {
   if (!impl.etag.empty()) {
-    return !handle.responseEtag.empty() && impl.etag != handle.responseEtag;
+    const auto etag = normalizeStrongEtag(handle.responseEtag);
+    return !handle.responseEtag.empty() && impl.etag != etag;
   }
   const auto before = curl_getdate(impl.lastModified.c_str(), nullptr);
   const auto after = curl_getdate(handle.responseLastModified.c_str(), nullptr);

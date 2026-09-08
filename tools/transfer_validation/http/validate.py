@@ -135,8 +135,25 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             "priority": 1,
             "request": {"method": "GET", "url": "/payload.bin?case=date"},
             "response": {"proxyBaseUrl": caddy.base_url,
-                         "headers": {"ETag": "invalid-unquoted-tag"}},
+                         "headers": {"ETag": 'W/"weak"'}},
         })
+        for nonzero in (False, True):
+            wiremock.stub({
+                "priority": 1,
+                "request": {
+                    "method": "GET", "url": "/payload.bin?case=bare-etag",
+                    "headers": {"Range": {"matches":
+                        "bytes=[1-9][0-9]*-.*" if nonzero else "bytes=0-.*"}},
+                },
+                "response": {
+                    "proxyBaseUrl": caddy.base_url,
+                    "headers": {
+                        "ETag": etag.strip('"'),
+                        "Last-Modified": ("Fri, 24 Apr 2026 06:48:00 GMT" if nonzero
+                                          else modified),
+                    },
+                },
+            })
         for case in ("ignored", "changed-200", "changed-206", "changed-412", "416"):
             response = whole
             if case == "changed-200":
@@ -181,6 +198,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            check("bare-etag.bin", f"{wiremock.base_url}/payload.bin?case=bare-etag")
             automatic_url = f"{caddy.base_url}/{quote(automatic_name)}"
             for connections in (1, 64):
                 directory = engine.download_dir / f"names-{connections}"
@@ -274,6 +292,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                         if r["url"] == f"/payload.bin?case={case}"]
 
             for case, key, value in (("conditional", "ifMatch", etag),
+                                     ("bare-etag", "ifMatch", etag),
                                      ("date", "ifUnmodifiedSince", modified)):
                 partial = [r for r in requests
                            if r["url"] == f"/payload.bin?case={case}"
@@ -299,6 +318,10 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             if len([r for r in tail if begin <= r[0] < end]) > (end - begin) // 65536:
                 raise RuntimeError("Tail requests exceeded the useful body-sample budget")
 
+            bare_gid = engine.add_uri(
+                f"{wiremock.base_url}/payload.bin?case=bare-etag",
+                {**options, "out": "bare-resume.bin", "max-download-limit": "1M"},
+            )
             gid = engine.add_uri(
                 automatic_url,
                 {**options, "max-download-limit": "4M"},
@@ -308,10 +331,23 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             paused = engine.rpc.wait_status(gid, "paused")
             if not 0 < int(paused["completedLength"]) < int(paused["totalLength"]):
                 raise RuntimeError("Pause did not retain partial progress")
+            engine.rpc.call("aria2.pause", [bare_gid])
+            bare_paused = engine.rpc.wait_status(bare_gid, "paused")
+            if not 0 < int(bare_paused["completedLength"]) < int(bare_paused["totalLength"]):
+                raise RuntimeError("Bare ETag fixture did not reach partial progress")
             engine.rpc.call("aria2.saveSession")
             engine.stop()
             shutil.copyfile(engine.engine_log, run.logs / "before-restart.engine.log")
             engine.start([f"--save-session={session}", f"--input-file={session}"])
+            bare_restored = engine.rpc.wait_status(bare_gid, "paused")
+            if any(bare_restored[k] != bare_paused[k]
+                   for k in ("totalLength", "completedLength")):
+                raise RuntimeError("Bare ETag progress changed across restart")
+            engine.rpc.call("aria2.changeOption", [bare_gid, {"max-download-limit": "0"}])
+            engine.rpc.call("aria2.unpause", [bare_gid])
+            engine.rpc.wait_complete(bare_gid, 30)
+            if sha256(engine.download_dir / "bare-resume.bin") != expected:
+                raise RuntimeError("Bare ETag restart digest mismatch")
             restored = engine.rpc.wait_status(gid, "paused")
             if (any(restored[k] != paused[k]
                     for k in ("totalLength", "completedLength"))

@@ -307,7 +307,8 @@ void CurlSessionTest::testWriteErrorBoundary()
 void CurlSessionTest::testResponseIdentity()
 {
   for (const auto& tag : {"\"revision-one\"", "\"\"", "W/\"weak\"", "bare",
-                          "\"bad space\"", "\"bad\"quote\""}) {
+                          "\"bad space\"", "\"bad\"quote\"", "bad space",
+                          "W/bare", "\"unterminated", "bad\r\ntag"}) {
     CurlDownload download({"https://example.test/file"});
     CurlHandle handle;
     handle.download = &download;
@@ -320,7 +321,7 @@ void CurlSessionTest::testResponseIdentity()
     sendHeader(handle, "\r\n");
     CHECK(handle.rangeAccepted);
     CHECK_EQ(tag == std::string("\"revision-one\"") ||
-                 tag == std::string("\"\""),
+                 tag == std::string("\"\"") || tag == std::string("bare"),
              !download.impl_->etag.empty());
     CHECK(!download.impl_->lastModified.empty());
   }
@@ -342,6 +343,32 @@ void CurlSessionTest::testResponseIdentity()
     CHECK(!handle.rangeAccepted);
     CHECK(!handle.fullResponseAccepted);
     CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
+  }
+
+  for (const auto& initial : {"revision-one", "\"revision-one\""}) {
+    for (const auto& next :
+         {"revision-one", "\"revision-one\"", "revision-two"}) {
+      CurlDownload download({"https://example.test/file"});
+      CurlHandle handle;
+      handle.download = &download;
+      handle.lease = {0, 4096};
+      handle.ranged = true;
+      sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
+      sendHeader(handle, std::string("ETag: ") + initial + "\r\n");
+      sendHeader(handle, "Last-Modified: Sat, 25 Apr 2026 09:54:06 GMT\r\n");
+      sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
+      sendHeader(handle, "\r\n");
+      CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
+
+      handle.lease = {4096, 8192};
+      sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
+      sendHeader(handle, std::string("ETag: ") + next + "\r\n");
+      sendHeader(handle, "Last-Modified: Fri, 24 Apr 2026 06:48:00 GMT\r\n");
+      sendHeader(handle, "Content-Range: bytes 4096-8191/8192\r\n");
+      sendHeader(handle, "\r\n");
+      CHECK_EQ(next == std::string("revision-two"), handle.validatorMismatch);
+      CHECK_EQ(next != std::string("revision-two"), handle.rangeAccepted);
+    }
   }
 }
 

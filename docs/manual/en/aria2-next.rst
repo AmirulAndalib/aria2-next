@@ -302,7 +302,9 @@ HTTP/SFTP Options
   byte range. Completed ranges remain available to concurrent transfers and
   are preserved in the stream state database. Parallel and resumed requests
   use ``If-Match`` with a valid strong ETag, or ``If-Unmodified-Since`` with
-  a valid modification date. A changed representation stops the transfer
+  a valid modification date. Otherwise valid unquoted ETags are normalized
+  to quoted tags. Matching strong ETags take precedence over differing CDN
+  modification dates. A changed representation stops the transfer
   without mixing file versions.
 
   If a server ignores Range, a new download can restart once as a complete
