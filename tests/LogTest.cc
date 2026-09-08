@@ -149,10 +149,14 @@ void LogTest::testSanitizersProtectLogIntegrity()
       "GET /jsonrpc?token=secret HTTP/1.1\r\n"
       "Authorization: Basic secret\r\n"
       "X-Private-Token: secret\r\n"
+      "If-Range: \"revision\"\r\n"
+      "Date: Tue, 08 Sep 2026 12:00:00 GMT\r\n"
       "Content-Length: 12\r\n");
   REQUIRE(summary.find("GET /jsonrpc?<redacted> HTTP/1.1") !=
           std::string::npos);
   REQUIRE(summary.find("Content-Length=12") != std::string::npos);
+  REQUIRE(summary.find("If-Range=\"revision\"") != std::string::npos);
+  REQUIRE(summary.find("Date=Tue, 08 Sep 2026 12:00:00 GMT") != std::string::npos);
   REQUIRE(summary.find("secret") == std::string::npos);
   REQUIRE(summary.find("Authorization") == std::string::npos);
   REQUIRE(summary.find("X-Private-Token") == std::string::npos);

@@ -301,11 +301,15 @@ HTTP/SFTP Options
   Retryable failures are isolated to the unfinished suffix of the affected
   byte range. Completed ranges remain available to concurrent transfers and
   are preserved in the stream state database. Parallel and resumed requests
-  use ``If-Match`` with a valid strong ETag, or ``If-Unmodified-Since`` with
-  a valid modification date. Otherwise valid unquoted ETags are normalized
-  to quoted tags. Matching strong ETags take precedence over differing CDN
+  use ``If-Range`` with a valid strong ETag, or a modification date at least
+  60 seconds older than the response's ``Date`` header. Otherwise valid
+  unquoted ETags are normalized to quoted tags. Matching strong ETags take
+  precedence over differing CDN
   modification dates. A changed representation stops the transfer
-  without mixing file versions.
+  without mixing file versions. Missing or unusable validators cannot prove
+  that a resource is unchanged; downloads without a validator remain
+  best-effort. Errors distinguish ETag, modification time, file length,
+  invalid ranges, and rejected HTTP preconditions.
 
   If a server ignores Range, a new download can restart once as a complete
   transfer. An existing partial file is retained unless

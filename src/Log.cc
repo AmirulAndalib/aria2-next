@@ -338,7 +338,9 @@ std::string summarizeHttpMessage(const std::string& value)
     if (name != "content-length" && name != "content-range" &&
         name != "content-type" && name != "content-encoding" &&
         name != "range" && name != "accept-ranges" && name != "etag" &&
-        name != "last-modified" && name != "location") {
+        name != "last-modified" && name != "date" && name != "if-range" &&
+        name != "if-match" && name != "if-unmodified-since" &&
+        name != "location") {
       continue;
     }
     auto content = line.substr(colon + 1);

@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstring>
 #include <cstdio>
+#include <ctime>
 #include <exception>
 #include <limits>
 #include <set>
@@ -270,10 +271,26 @@ void resetResponse(CurlHandle& handle)
   handle.rangeAccepted = false;
   handle.fullResponseAccepted = false;
   handle.headersComplete = false;
-  handle.validatorMismatch = false;
-  handle.invalidRange = false;
+  handle.responseFailure = CurlResponseFailure::None;
   handle.responseEtag.clear();
   handle.responseLastModified.clear();
+  handle.responseDate.clear();
+}
+
+std::string responseHeader(CURL* easy, const char* name)
+{
+  curl_header* header = nullptr;
+  if (curl_easy_header(easy, name, 0, CURLH_HEADER, -1, &header) != CURLHE_OK) {
+    return {};
+  }
+  // Preserve the final field value while letting libcurl handle header
+  // framing, folding and separation from CONNECT, 1xx and trailer fields.
+  const auto last = header->amount - 1;
+  if (last && curl_easy_header(easy, name, last, CURLH_HEADER, -1, &header) !=
+                  CURLHE_OK) {
+    return {};
+  }
+  return header->value;
 }
 
 bool parseContentRange(const std::string& value, int64_t& first, int64_t& end,
@@ -336,31 +353,85 @@ std::string normalizeStrongEtag(const std::string& value)
     return {};
   }
   // Some origins omit the quotes around an otherwise valid opaque tag.
-  // Normalize both responses and persisted identity, including If-Match.
+  // Normalize both responses and persisted identity, including If-Range.
   return quoted ? value : '"' + value + '"';
 }
 
 void rememberIdentity(CurlDownloadImpl& impl, const std::string& etag,
-                      const std::string& modified)
+                      const std::string& modified, const std::string& date)
 {
   if (impl.etag.empty()) {
     impl.etag = normalizeStrongEtag(etag);
   }
-  if (impl.lastModified.empty() &&
-      curl_getdate(modified.c_str(), nullptr) != -1) {
+  const auto modifiedTime = curl_getdate(modified.c_str(), nullptr);
+  const auto responseTime = curl_getdate(date.c_str(), nullptr);
+  // A parseable date alone is not a strong validator. Use the conservative
+  // HTTP date-age rule also used by browser download implementations.
+  if (impl.lastModified.empty() && modifiedTime != -1 && responseTime != -1 &&
+      std::difftime(responseTime, modifiedTime) >= 60) {
     impl.lastModified = modified;
   }
 }
 
-bool identityChanged(const CurlDownloadImpl& impl, const CurlHandle& handle)
+CurlResponseFailure identityFailure(const CurlDownloadImpl& impl,
+                                    const CurlHandle& handle)
 {
   if (!impl.etag.empty()) {
     const auto etag = normalizeStrongEtag(handle.responseEtag);
-    return !handle.responseEtag.empty() && impl.etag != etag;
+    if (!handle.responseEtag.empty() && etag.empty()) {
+      return CurlResponseFailure::ValidatorUnavailable;
+    }
+    return !etag.empty() && impl.etag != etag ? CurlResponseFailure::EtagChanged
+                                              : CurlResponseFailure::None;
   }
   const auto before = curl_getdate(impl.lastModified.c_str(), nullptr);
   const auto after = curl_getdate(handle.responseLastModified.c_str(), nullptr);
-  return before != -1 && after != -1 && before != after;
+  return before != -1 && after != -1 && before != after
+             ? CurlResponseFailure::ModifiedChanged
+             : CurlResponseFailure::None;
+}
+
+const char* responseFailureName(CurlResponseFailure failure)
+{
+  switch (failure) {
+  case CurlResponseFailure::EtagChanged:
+    return "etag_changed";
+  case CurlResponseFailure::ValidatorUnavailable:
+    return "validator_unavailable";
+  case CurlResponseFailure::ModifiedChanged:
+    return "last_modified_changed";
+  case CurlResponseFailure::LengthChanged:
+    return "length_changed";
+  case CurlResponseFailure::InvalidRange:
+    return "invalid_range";
+  case CurlResponseFailure::PreconditionFailed:
+    return "precondition_failed";
+  default:
+    return "none";
+  }
+}
+
+const char* responseFailureMessage(CurlResponseFailure failure)
+{
+  switch (failure) {
+  case CurlResponseFailure::EtagChanged:
+    return "The remote resource ETag changed; existing data was preserved";
+  case CurlResponseFailure::ValidatorUnavailable:
+    return "The response no longer confirms the requested resource identity; "
+           "existing data was preserved";
+  case CurlResponseFailure::ModifiedChanged:
+    return "The remote resource Last-Modified changed; existing data was "
+           "preserved";
+  case CurlResponseFailure::LengthChanged:
+    return "The remote resource length changed; existing data was preserved";
+  case CurlResponseFailure::InvalidRange:
+    return "The server returned an invalid Content-Range response";
+  case CurlResponseFailure::PreconditionFailed:
+    return "HTTP 412: the server rejected a request precondition; existing "
+           "data was preserved";
+  default:
+    return "Invalid HTTP response";
+  }
 }
 
 void cleanupHandle(CurlHandle& handle)
@@ -623,7 +694,7 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
     if (handle->purpose == CurlHandlePurpose::HeadProbe) {
       return CURL_WRITEFUNC_ERROR;
     }
-    if (handle->validatorMismatch || handle->invalidRange ||
+    if (handle->responseFailure != CurlResponseFailure::None ||
         (handle->ranged && handle->headersComplete && !handle->rangeAccepted &&
          !handle->fullResponseAccepted)) {
       return CURL_WRITEFUNC_ERROR;
@@ -699,100 +770,97 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
   return CURL_WRITEFUNC_ERROR;
 }
 
+void CurlSession::validateResponse(CurlHandle& handle,
+                                   const std::string& contentRange)
+{
+  auto& download = *handle.download;
+  auto& impl = *download.impl_;
+  handle.headersComplete = true;
+  if (handle.responseCode == 412) {
+    handle.responseFailure = CurlResponseFailure::PreconditionFailed;
+    return;
+  }
+  if (handle.responseCode == 416) {
+    parseUnsatisfiedContentRange(contentRange, handle.unsatisfiedTotalLength);
+    return;
+  }
+  if (handle.responseCode != 200 && handle.responseCode != 206) {
+    return;
+  }
+  handle.responseFailure = identityFailure(impl, handle);
+  if (handle.responseCode == 206 && handle.ranged) {
+    int64_t first = -1;
+    if (!parseContentRange(contentRange, first, handle.responseRangeEnd,
+                           handle.responseTotalLength) ||
+        first != handle.lease.begin ||
+        handle.responseRangeEnd > handle.lease.end) {
+      handle.responseFailure = CurlResponseFailure::InvalidRange;
+    }
+    else if ((impl.planner.totalLength() > 0 &&
+              impl.planner.totalLength() != handle.responseTotalLength) ||
+             (download.snapshot_.totalLength > 0 &&
+              download.snapshot_.totalLength != handle.responseTotalLength)) {
+      handle.responseFailure = CurlResponseFailure::LengthChanged;
+    }
+    if (handle.responseFailure == CurlResponseFailure::None) {
+      handle.lease.end = std::min(handle.lease.end, handle.responseTotalLength);
+      handle.rangeAccepted = true;
+      if (handle.purpose == CurlHandlePurpose::Payload) {
+        impl.rangeValidated = true;
+        download.snapshot_.totalLength = handle.responseTotalLength;
+        rememberIdentity(impl, handle.responseEtag, handle.responseLastModified,
+                         handle.responseDate);
+      }
+    }
+  }
+  else if (handle.responseCode == 200) {
+    if (!handle.rangeValidator.empty() &&
+        ((!impl.etag.empty() && handle.responseEtag.empty()) ||
+         (impl.etag.empty() && handle.responseLastModified.empty()))) {
+      handle.responseFailure = CurlResponseFailure::ValidatorUnavailable;
+    }
+    if (download.snapshot_.totalLength > 0 &&
+        handle.responseContentLength >= 0 &&
+        download.snapshot_.totalLength != handle.responseContentLength) {
+      handle.responseFailure = CurlResponseFailure::LengthChanged;
+    }
+    if (handle.responseFailure == CurlResponseFailure::None &&
+        handle.lease.begin == 0 && impl.planner.completedLength() == 0 &&
+        !impl.plannerConfigured) {
+      handle.fullResponseAccepted = true;
+      if (handle.purpose == CurlHandlePurpose::Payload) {
+        rememberIdentity(impl, handle.responseEtag, handle.responseLastModified,
+                         handle.responseDate);
+      }
+    }
+  }
+}
+
 size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
                                   void* userData) noexcept
 {
   auto* handle = static_cast<CurlHandle*>(userData);
   auto* download = handle->download;
   try {
-    auto& impl = *download->impl_;
+    if (size != 0 && count > std::numeric_limits<size_t>::max() / size) {
+      fail(download, error_code::HTTP_PROTOCOL_ERROR, "Oversized HTTP header");
+      return CURL_WRITEFUNC_ERROR;
+    }
     const auto length = size * count;
-    std::string line(data, length);
+    const std::string line(data, length);
     if (startsWithHeader(line, "http/")) {
       resetResponse(*handle);
-      std::istringstream status(line);
-      std::string version;
-      status >> version >> handle->responseCode;
     }
-    else if (line == "\r\n" || line == "\n") {
-      handle->headersComplete = true;
-      if (handle->responseCode == 200 || handle->responseCode == 206) {
-        handle->validatorMismatch = identityChanged(impl, *handle);
-      }
-      if (handle->responseCode == 206 && handle->ranged) {
-        if (handle->responseTotalLength <= 0 ||
-            handle->responseRangeEnd <= handle->lease.begin ||
-            handle->responseRangeEnd > handle->lease.end) {
-          handle->invalidRange = true;
-        }
-        else if ((impl.planner.totalLength() > 0 &&
-                  impl.planner.totalLength() != handle->responseTotalLength) ||
-                 (download->snapshot_.totalLength > 0 &&
-                  download->snapshot_.totalLength !=
-                      handle->responseTotalLength)) {
-          handle->validatorMismatch = true;
-        }
-        else {
-          if (!handle->validatorMismatch) {
-            // A response can cover less than the assigned range. Only EOF
-            // limits our responsibility; finish() returns the missing suffix.
-            handle->lease.end =
-                std::min(handle->lease.end, handle->responseTotalLength);
-            handle->rangeAccepted = true;
-            if (handle->purpose == CurlHandlePurpose::Payload) {
-              impl.rangeValidated = true;
-              download->snapshot_.totalLength = handle->responseTotalLength;
-              rememberIdentity(impl, handle->responseEtag,
-                               handle->responseLastModified);
-            }
-          }
-        }
-      }
-      else if (handle->responseCode == 200) {
-        if (download->snapshot_.totalLength > 0 &&
-            handle->responseContentLength >= 0 &&
-            download->snapshot_.totalLength != handle->responseContentLength) {
-          handle->validatorMismatch = true;
-        }
-        if (!handle->validatorMismatch && handle->lease.begin == 0 &&
-            impl.planner.completedLength() == 0 && !impl.plannerConfigured) {
-          handle->fullResponseAccepted = true;
-          if (handle->purpose == CurlHandlePurpose::Payload) {
-            rememberIdentity(impl, handle->responseEtag,
-                             handle->responseLastModified);
-          }
-        }
-      }
-    }
-    else if (startsWithHeader(line, "etag:")) {
-      handle->responseEtag = trimHeader(line.substr(5));
-    }
-    else if (startsWithHeader(line, "last-modified:")) {
-      handle->responseLastModified = trimHeader(line.substr(14));
-    }
-    else if (startsWithHeader(line, "content-length:")) {
-      const auto value = trimHeader(line.substr(15));
-      if (!parseContentLength(value, handle->responseContentLength)) {
-        handle->responseContentLength = -1;
-      }
-    }
-    else if (startsWithHeader(line, "content-range:")) {
-      const auto value = trimHeader(line.substr(14));
-      int64_t first = -1;
-      if (handle->responseCode == 206 &&
-          parseContentRange(value, first, handle->responseRangeEnd,
-                            handle->responseTotalLength)) {
-        if (first != handle->lease.begin) {
-          handle->invalidRange = true;
-        }
-      }
-      else if (handle->responseCode == 416 &&
-               parseUnsatisfiedContentRange(value,
-                                            handle->unsatisfiedTotalLength)) {
-      }
-      else if (handle->responseCode == 206) {
-        handle->invalidRange = true;
-      }
+    else if (!handle->headersComplete && (line == "\r\n" || line == "\n")) {
+      curl_easy_getinfo(handle->value, CURLINFO_RESPONSE_CODE,
+                        &handle->responseCode);
+      handle->responseEtag = responseHeader(handle->value, "ETag");
+      handle->responseLastModified =
+          responseHeader(handle->value, "Last-Modified");
+      handle->responseDate = responseHeader(handle->value, "Date");
+      parseContentLength(responseHeader(handle->value, "Content-Length"),
+                         handle->responseContentLength);
+      validateResponse(*handle, responseHeader(handle->value, "Content-Range"));
     }
     return length;
   }
@@ -864,10 +932,14 @@ int CurlSession::debugCallback(CURL* easy, curl_infotype type, char* data,
       return 0;
     }
 
+    curl_off_t transferId = -1;
+    curl_easy_getinfo(easy, CURLINFO_XFER_ID, &transferId);
     logging::tryWrite(
         spdlog::level::trace, __FILE__, __LINE__,
-        fmt("component=stream event=curl_trace gid=%s direction=%s %s",
-            gid(handle->download).c_str(), direction, message.c_str()));
+        fmt("component=stream event=curl_trace gid=%s transfer=%" PRId64
+            " direction=%s %s",
+            gid(handle->download).c_str(), static_cast<int64_t>(transferId),
+            direction, message.c_str()));
   }
   catch (...) {
   }
@@ -1139,7 +1211,8 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
                           group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE);
   if (restoreState) {
     impl.planner.restore(state.completedRanges);
-    rememberIdentity(impl, state.etag, state.lastModified);
+    impl.etag = normalizeStrongEtag(state.etag);
+    impl.lastModified = state.lastModified;
     download->snapshot_.totalLength = state.totalLength;
   }
   else if (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE) &&
@@ -1210,7 +1283,8 @@ void CurlSession::restorePaused(const std::shared_ptr<CurlDownload>& download,
   }
   impl.group = group;
   impl.planner.restore(state.completedRanges);
-  rememberIdentity(impl, state.etag, state.lastModified);
+  impl.etag = normalizeStrongEtag(state.etag);
+  impl.lastModified = state.lastModified;
   impl.currentUri = state.uri;
   download->snapshot_.currentUri = state.uri;
   download->snapshot_.totalLength = state.totalLength;
@@ -1294,6 +1368,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   SET_CURL_OPTION(CURLOPT_PROTOCOLS_STR, "http,https,sftp");
   SET_CURL_OPTION(CURLOPT_REDIR_PROTOCOLS_STR, "http,https,sftp");
   SET_CURL_OPTION(CURLOPT_FOLLOWLOCATION, 1L);
+  SET_CURL_OPTION(CURLOPT_SUPPRESS_CONNECT_HEADERS, 1L);
   SET_CURL_OPTION(CURLOPT_FAILONERROR, 1L);
   SET_CURL_OPTION(CURLOPT_MAXREDIRS, 10L);
   // Parallel ranges retain independent connections rather than sharing one
@@ -1442,22 +1517,16 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
     SET_CURL_OPTION(CURLOPT_RESUME_FROM_LARGE,
                     static_cast<curl_off_t>(lease.begin));
   }
-  // Parallel slices and resumed transfers must retain the same representation.
-  // Unlike If-Range, these preconditions report a change explicitly with 412.
-  if (impl.http && purpose == CurlHandlePurpose::Payload) {
-    if (!impl.etag.empty()) {
-      if (!appendHeader("If-Match: " + impl.etag)) {
-        cleanupHandle(*transfer);
-        return false;
-      }
-    }
-    else {
-      const auto modified = curl_getdate(impl.lastModified.c_str(), nullptr);
-      if (modified != -1) {
-        SET_CURL_OPTION(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFUNMODSINCE);
-        SET_CURL_OPTION(CURLOPT_TIMEVALUE_LARGE,
-                        static_cast<curl_off_t>(modified));
-      }
+  // Range validators qualify the requested representation, not a token or
+  // redirect endpoint. libcurl owns redirects; response validation prevents a
+  // full 200 response from being written at the requested range offset.
+  if (transfer->ranged && purpose == CurlHandlePurpose::Payload) {
+    transfer->rangeValidator =
+        !impl.etag.empty() ? impl.etag : impl.lastModified;
+    if (!transfer->rangeValidator.empty() &&
+        !appendHeader("If-Range: " + transfer->rangeValidator)) {
+      cleanupHandle(*transfer);
+      return false;
     }
   }
   if (headers) {
@@ -2129,7 +2198,9 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
 
   const auto responseEtag = handle->responseEtag;
   const auto responseLastModified = handle->responseLastModified;
-  const bool invalidRange = handle->invalidRange;
+  const auto responseDate = handle->responseDate;
+  const bool invalidRange =
+      handle->responseFailure == CurlResponseFailure::InvalidRange;
   cleanupHandle(*handle);
   eraseHandle(impl, handle);
 
@@ -2156,7 +2227,7 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
     return;
   }
 
-  rememberIdentity(impl, responseEtag, responseLastModified);
+  rememberIdentity(impl, responseEtag, responseLastModified, responseDate);
   download->snapshot_.totalLength = remoteLength;
 
   switch (
@@ -2280,8 +2351,27 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   const bool ranged = handle->ranged;
   const bool rangeAccepted = handle->rangeAccepted;
   const bool fullResponseAccepted = handle->fullResponseAccepted;
-  const bool validatorMismatch = handle->validatorMismatch;
-  const bool invalidRange = handle->invalidRange;
+  const auto responseFailure = responseCode == 412
+                                   ? CurlResponseFailure::PreconditionFailed
+                                   : handle->responseFailure;
+  if (responseFailure != CurlResponseFailure::None) {
+    A2_LOG_DEBUG(
+        fmt("component=stream event=response_rejected gid=%s transfer=%" PRId64
+            " reason=%s http=%ld range=%" PRId64 "-%" PRId64
+            " expected_etag=%s received_etag=%s expected_modified=%s"
+            " received_modified=%s expected_length=%" PRId64
+            " received_length=%" PRId64 " uri=%s",
+            gid(download.get()).c_str(), static_cast<int64_t>(transferId),
+            responseFailureName(responseFailure), responseCode, lease.begin,
+            lease.end, logging::sanitizeText(impl.etag).c_str(),
+            logging::sanitizeText(handle->responseEtag).c_str(),
+            logging::sanitizeText(impl.lastModified).c_str(),
+            logging::sanitizeText(handle->responseLastModified).c_str(),
+            download->snapshot_.totalLength,
+            responseCode == 206 ? handle->responseTotalLength
+                                : handle->responseContentLength,
+            safeEffectiveUri.c_str()));
+  }
   const bool primary = handle->primary;
   const auto requestEpoch = handle->connectionEpoch;
   const bool outputFailure =
@@ -2323,14 +2413,12 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
              download->snapshot_.error);
     return;
   }
-  if (validatorMismatch || responseCode == 412) {
-    failTask(download, error_code::CANNOT_RESUME,
-             "The remote resource changed while resuming the download");
-    return;
-  }
-  if (invalidRange) {
-    failTask(download, error_code::HTTP_PROTOCOL_ERROR,
-             "The server returned an invalid Content-Range response");
+  if (responseFailure != CurlResponseFailure::None) {
+    failTask(download,
+             responseFailure == CurlResponseFailure::InvalidRange
+                 ? error_code::HTTP_PROTOCOL_ERROR
+                 : error_code::CANNOT_RESUME,
+             responseFailureMessage(responseFailure));
     return;
   }
   if (responseCode == 416) {

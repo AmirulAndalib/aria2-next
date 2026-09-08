@@ -37,6 +37,16 @@ enum class CurlHandlePurpose { Payload, RangeProbe, HeadProbe };
 
 enum class CurlStartMode { Transfer, InspectExisting };
 
+enum class CurlResponseFailure {
+  None,
+  EtagChanged,
+  ValidatorUnavailable,
+  ModifiedChanged,
+  LengthChanged,
+  InvalidRange,
+  PreconditionFailed
+};
+
 struct CurlHandle {
   CurlDownload* download = nullptr;
   CURL* value = nullptr;
@@ -60,11 +70,12 @@ struct CurlHandle {
   bool fullResponseAccepted = false;
   bool headersComplete = false;
   bool primary = false;
-  bool validatorMismatch = false;
-  bool invalidRange = false;
+  CurlResponseFailure responseFailure = CurlResponseFailure::None;
   CurlHandlePurpose purpose = CurlHandlePurpose::Payload;
   std::string responseEtag;
   std::string responseLastModified;
+  std::string responseDate;
+  std::string rangeValidator;
   std::string range;
   std::vector<unsigned char> writeBuffer;
   std::array<char, CURL_ERROR_SIZE> errorBuffer{};

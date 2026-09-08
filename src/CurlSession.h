@@ -143,6 +143,8 @@ private:
                           void* userData) noexcept;
   static size_t receiveHeader(char* data, size_t size, size_t count,
                               void* userData) noexcept;
+  static void validateResponse(CurlHandle& handle,
+                               const std::string& contentRange);
   static int updateProgress(void* userData, curl_off_t downloadTotal,
                             curl_off_t downloaded, curl_off_t uploadTotal,
                             curl_off_t uploaded) noexcept;

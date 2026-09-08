@@ -28,7 +28,8 @@ connections, HTTPS, empty files, short ranges, delayed headers, slow tails,
 429/503 retries, tiny-gap recovery with an explicit retry wait, progress-gated
 tail assistance, interrupted connections, Unicode paths, paused restart, and
 batch removal. Conditional requests cover ETag and date validators, unquoted
-ETags with inconsistent CDN modification dates, ignored
+ETags with inconsistent CDN modification dates, per-request timestamps,
+cookie-authenticated redirects with conditional ranges, ignored
 ranges, changed resources, and protected existing files. Compact request evidence verifies that faults were exercised and
 short responses retrieve only their missing suffix. Successful transfers require
 completed RPC state, nondecreasing sampled progress, and matching SHA-256 hashes.

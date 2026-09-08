@@ -56,7 +56,9 @@ public:
   void testShutdownWithLiveSocket();
   void testTailRecovery();
   void testConnectionRecovery();
-  void sendHeader(CurlHandle& handle, const std::string& line);
+  void respond(CurlHandle& handle, long code, const std::string& range = {},
+               const std::string& etag = {}, const std::string& modified = {},
+               const std::string& date = {});
 };
 
 A2_TEST(CurlSessionTest, testWriteErrorBoundary)
@@ -282,11 +284,20 @@ void CurlSessionTest::testShutdownWithLiveSocket()
   engine.reset();
 }
 
-void CurlSessionTest::sendHeader(CurlHandle& handle, const std::string& line)
+void CurlSessionTest::respond(CurlHandle& handle, long code,
+                              const std::string& range, const std::string& etag,
+                              const std::string& modified,
+                              const std::string& date)
 {
-  auto value = line;
-  REQUIRE_EQ(value.size(), CurlSession::receiveHeader(value.data(), 1,
-                                                      value.size(), &handle));
+  handle.responseCode = code;
+  handle.responseEtag = etag;
+  handle.responseLastModified = modified;
+  handle.responseDate = date;
+  handle.responseFailure = CurlResponseFailure::None;
+  handle.rangeAccepted = false;
+  handle.fullResponseAccepted = false;
+  handle.unsatisfiedTotalLength = -1;
+  CurlSession::validateResponse(handle, range);
 }
 
 void CurlSessionTest::testWriteErrorBoundary()
@@ -296,7 +307,6 @@ void CurlSessionTest::testWriteErrorBoundary()
   CurlHandle handle;
   handle.download = &download;
   char data[] = "data";
-
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
            CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
   CHECK_EQ(CurlSnapshot::State::Error, download.snapshot().state);
@@ -306,6 +316,8 @@ void CurlSessionTest::testWriteErrorBoundary()
 
 void CurlSessionTest::testResponseIdentity()
 {
+  const std::string modified = "Tue, 25 Aug 2026 00:00:00 GMT";
+  const std::string date = "Tue, 25 Aug 2026 00:01:00 GMT";
   for (const auto& tag : {"\"revision-one\"", "\"\"", "W/\"weak\"", "bare",
                           "\"bad space\"", "\"bad\"quote\"", "bad space",
                           "W/bare", "\"unterminated", "bad\r\ntag"}) {
@@ -314,61 +326,73 @@ void CurlSessionTest::testResponseIdentity()
     handle.download = &download;
     handle.lease = {0, 4096};
     handle.ranged = true;
-    sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-    sendHeader(handle, std::string("ETag: ") + tag + "\r\n");
-    sendHeader(handle, "Last-Modified: Tue, 25 Aug 2026 00:00:00 GMT\r\n");
-    sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
-    sendHeader(handle, "\r\n");
+    respond(handle, 206, "bytes 0-4095/8192", tag, modified, date);
     CHECK(handle.rangeAccepted);
     CHECK_EQ(tag == std::string("\"revision-one\"") ||
                  tag == std::string("\"\"") || tag == std::string("bare"),
              !download.impl_->etag.empty());
-    CHECK(!download.impl_->lastModified.empty());
+    CHECK_EQ(modified, download.impl_->lastModified);
   }
 
-  for (int code : {200, 206, 503}) {
+  for (int code : {200, 206, 412, 503}) {
     CurlDownload download({"https://example.test/file"});
     download.impl_->etag = "\"revision-one\"";
     CurlHandle handle;
     handle.download = &download;
     handle.lease = {0, 4096};
     handle.ranged = true;
-    sendHeader(handle, "HTTP/1.1 " + std::to_string(code) + " Response\r\n");
-    sendHeader(handle, "ETag: \"revision-two\"\r\n");
-    if (code == 206) {
-      sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
-    }
-    sendHeader(handle, "\r\n");
-    CHECK_EQ(code != 503, handle.validatorMismatch);
+    respond(handle, code, "bytes 0-4095/8192", "\"revision-two\"");
+    const auto expected = code == 503 ? CurlResponseFailure::None
+                          : code == 412
+                              ? CurlResponseFailure::PreconditionFailed
+                              : CurlResponseFailure::EtagChanged;
+    CHECK_EQ(expected, handle.responseFailure);
     CHECK(!handle.rangeAccepted);
     CHECK(!handle.fullResponseAccepted);
     CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
   }
 
   for (const auto& initial : {"revision-one", "\"revision-one\""}) {
-    for (const auto& next :
-         {"revision-one", "\"revision-one\"", "revision-two"}) {
+    for (const auto& next : {"revision-one", "\"revision-one\"", "revision-two",
+                             "W/\"revision-one\""}) {
       CurlDownload download({"https://example.test/file"});
       CurlHandle handle;
       handle.download = &download;
       handle.lease = {0, 4096};
       handle.ranged = true;
-      sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-      sendHeader(handle, std::string("ETag: ") + initial + "\r\n");
-      sendHeader(handle, "Last-Modified: Sat, 25 Apr 2026 09:54:06 GMT\r\n");
-      sendHeader(handle, "Content-Range: bytes 0-4095/8192\r\n");
-      sendHeader(handle, "\r\n");
+      respond(handle, 206, "bytes 0-4095/8192", initial, modified, date);
       CHECK_EQ(std::string("\"revision-one\""), download.impl_->etag);
-
       handle.lease = {4096, 8192};
-      sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-      sendHeader(handle, std::string("ETag: ") + next + "\r\n");
-      sendHeader(handle, "Last-Modified: Fri, 24 Apr 2026 06:48:00 GMT\r\n");
-      sendHeader(handle, "Content-Range: bytes 4096-8191/8192\r\n");
-      sendHeader(handle, "\r\n");
-      CHECK_EQ(next == std::string("revision-two"), handle.validatorMismatch);
-      CHECK_EQ(next != std::string("revision-two"), handle.rangeAccepted);
+      respond(handle, 206, "bytes 4096-8191/8192", next,
+              "Fri, 24 Apr 2026 06:48:00 GMT", date);
+      const auto expected = next == std::string("revision-two")
+                                ? CurlResponseFailure::EtagChanged
+                            : next == std::string("W/\"revision-one\"")
+                                ? CurlResponseFailure::ValidatorUnavailable
+                                : CurlResponseFailure::None;
+      CHECK_EQ(expected, handle.responseFailure);
+      CHECK_EQ(expected == CurlResponseFailure::None, handle.rangeAccepted);
     }
+  }
+
+  for (const auto& responseDate :
+       {"", "invalid", "Tue, 25 Aug 2026 00:00:00 GMT",
+        "Tue, 25 Aug 2026 00:00:59 GMT", "Tue, 25 Aug 2026 00:01:00 GMT"}) {
+    CurlDownload download({"https://example.test/file"});
+    CurlHandle handle;
+    handle.download = &download;
+    handle.lease = {0, 4096};
+    handle.ranged = true;
+    respond(handle, 206, "bytes 0-4095/8192", "W/\"weak\"", modified,
+            responseDate);
+    const bool qualified = responseDate == date;
+    CHECK_EQ(qualified, !download.impl_->lastModified.empty());
+    handle.lease = {4096, 8192};
+    respond(handle, 206, "bytes 4096-8191/8192", "W/\"weak\"",
+            "Tue, 25 Aug 2026 00:00:01 GMT", responseDate);
+    CHECK_EQ(qualified ? CurlResponseFailure::ModifiedChanged
+                       : CurlResponseFailure::None,
+             handle.responseFailure);
   }
 }
 
@@ -387,21 +411,23 @@ void CurlSessionTest::testRangeOwnershipAndResponseBoundaries()
     handle.lease = {item.begin, item.end};
     handle.writeOffset = item.begin;
     handle.ranged = true;
-
-    sendHeader(handle, "HTTP/1.1 206 Partial Content\r\n");
-    sendHeader(handle, "Content-Range: bytes " + std::to_string(item.begin) +
-                           "-" + std::to_string(item.responseEnd - 1) + "/" +
-                           std::to_string(item.total) + "\r\n");
-    sendHeader(handle, "\r\n");
-
+    respond(handle, 206,
+            "bytes " + std::to_string(item.begin) + "-" +
+                std::to_string(item.responseEnd - 1) + "/" +
+                std::to_string(item.total));
     CHECK(handle.rangeAccepted);
-    CHECK(!handle.invalidRange);
+    CHECK_EQ(CurlResponseFailure::None, handle.responseFailure);
     CHECK_EQ(item.responseEnd, handle.responseRangeEnd);
     CHECK_EQ(std::min(item.end, item.total), handle.lease.end);
     CHECK_EQ(item.total, download.snapshot().totalLength);
     const auto remainder = handle.lease.remainder(item.responseEnd);
     CHECK_EQ(item.responseEnd, remainder.begin);
     CHECK_EQ(std::min(item.end, item.total), remainder.end);
+    // A syntactically valid response for the wrong offset must never be
+    // accepted.
+    respond(handle, 206, "bytes 1-1023/8192");
+    CHECK_EQ(CurlResponseFailure::InvalidRange, handle.responseFailure);
+    CHECK(!handle.rangeAccepted);
   }
 }
 
@@ -413,15 +439,19 @@ void CurlSessionTest::testNonzeroRangeRejectsCompleteResponse()
   handle.lease = {1024, 2048};
   handle.writeOffset = 1024;
   handle.ranged = true;
-
-  sendHeader(handle, "HTTP/1.1 200 OK\r\n");
-  sendHeader(handle, "Content-Length: 4096\r\n");
-  sendHeader(handle, "\r\n");
+  handle.responseContentLength = 4096;
+  respond(handle, 200);
   char data[] = "data";
-
   CHECK(!handle.fullResponseAccepted);
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
            CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
+  download.impl_->etag = "\"same\"";
+  handle.rangeValidator = "\"same\"";
+  respond(handle, 200);
+  CHECK_EQ(CurlResponseFailure::ValidatorUnavailable, handle.responseFailure);
+  respond(handle, 200, {}, "\"same\"");
+  CHECK_EQ(CurlResponseFailure::None, handle.responseFailure);
+  CHECK(!handle.fullResponseAccepted);
 }
 
 void CurlSessionTest::testUnsatisfiedRangeResponseForms()
@@ -429,23 +459,12 @@ void CurlSessionTest::testUnsatisfiedRangeResponseForms()
   CurlDownload download({"https://example.test/file"});
   CurlHandle handle;
   handle.download = &download;
-
-  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
-  sendHeader(handle, "Content-Range: bytes */4096\r\n");
-  sendHeader(handle, "\r\n");
+  respond(handle, 416, "bytes */4096");
   CHECK_EQ(4096, handle.unsatisfiedTotalLength);
-  CHECK(!handle.invalidRange);
-
-  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
-  sendHeader(handle, "Content-Range: */8192\r\n");
-  sendHeader(handle, "\r\n");
+  respond(handle, 416, "*/8192");
   CHECK_EQ(8192, handle.unsatisfiedTotalLength);
-  CHECK(!handle.invalidRange);
-
-  sendHeader(handle, "HTTP/1.1 416 Range Not Satisfiable\r\n");
-  sendHeader(handle, "\r\n");
+  respond(handle, 416);
   CHECK_EQ(-1, handle.unsatisfiedTotalLength);
-  CHECK(!handle.invalidRange);
 }
 
 void CurlSessionTest::testExistingFileDecision()

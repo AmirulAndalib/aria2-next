@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -25,6 +26,8 @@ from core.services import CaddyService, ToxiproxyService, WireMockService, post_
 def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
     payload = run.fixtures / "payload.bin"
     expected = create_payload(payload, 16 * 1024 * 1024)
+    # A date validator must predate the response, not describe fixture creation.
+    os.utime(payload, (time.time() - 120, time.time() - 120))
     automatic_name = "resume-é-下载%20.bin"
     shutil.copyfile(payload, run.fixtures / automatic_name)
     with payload.open("rb") as source:
@@ -125,11 +128,32 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         wiremock.file("payload.bin", payload)
         whole = {"status": 200, "bodyFileName": "payload.bin",
                  "headers": {"ETag": etag, "Last-Modified": modified}}
+        for header in ("If-Match", "If-Unmodified-Since"):
+            wiremock.stub({
+                "priority": 1,
+                "request": {"method": "GET", "url": "/download?token=fixture",
+                            "headers": {header: {"matches": ".+"}}},
+                "response": {"status": 412},
+            })
+        wiremock.stub({
+            "priority": 10,
+            "request": {"method": "GET", "url": "/download?token=fixture"},
+            "response": {"status": 302, "headers": {
+                "Location": "/payload.bin?case=redirect",
+                "Set-Cookie": "fixture-session=valid; Path=/; HttpOnly",
+                "ETag": '"redirect-not-file"',
+            }},
+        })
         wiremock.stub({
             "priority": 1,
-            "request": {"method": "GET", "url": "/payload.bin?case=conditional",
-                        "headers": {"If-Range": {"matches": ".+"}}},
-            "response": whole,
+            "request": {"method": "GET", "url": "/payload.bin?case=redirect",
+                        "cookies": {"fixture-session": {"equalTo": "valid"}}},
+            "response": {"proxyBaseUrl": caddy.base_url},
+        })
+        wiremock.stub({
+            "priority": 2,
+            "request": {"method": "GET", "url": "/payload.bin?case=redirect"},
+            "response": {"status": 401},
         })
         wiremock.stub({
             "priority": 1,
@@ -138,6 +162,21 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                          "headers": {"ETag": 'W/"weak"'}},
         })
         for nonzero in (False, True):
+            # Dynamic endpoints sometimes stamp each response with its current
+            # time. Such dates must not become strong range validators.
+            fresh_date = f"Tue, 08 Sep 2026 23:00:0{int(nonzero)} GMT"
+            wiremock.stub({
+                "priority": 1,
+                "request": {
+                    "method": "GET", "url": "/payload.bin?case=fresh-date",
+                    "headers": {"Range": {"matches":
+                        "bytes=[1-9][0-9]*-.*" if nonzero else "bytes=0-.*"}},
+                },
+                "response": {"proxyBaseUrl": caddy.base_url, "headers": {
+                    "ETag": 'W/"weak"', "Date": fresh_date,
+                    "Last-Modified": fresh_date,
+                }},
+            })
             wiremock.stub({
                 "priority": 1,
                 "request": {
@@ -198,7 +237,12 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            for connections in (1, 64):
+                check(f"redirect-{connections}.bin",
+                      f"{wiremock.base_url}/download?token=fixture",
+                      {"stream-max-connections": str(connections)})
             check("bare-etag.bin", f"{wiremock.base_url}/payload.bin?case=bare-etag")
+            check("fresh-date.bin", f"{wiremock.base_url}/payload.bin?case=fresh-date")
             automatic_url = f"{caddy.base_url}/{quote(automatic_name)}"
             for connections in (1, 64):
                 directory = engine.download_dir / f"names-{connections}"
@@ -291,17 +335,20 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 return [r["range"] for r in requests
                         if r["url"] == f"/payload.bin?case={case}"]
 
-            for case, key, value in (("conditional", "ifMatch", etag),
-                                     ("bare-etag", "ifMatch", etag),
-                                     ("date", "ifUnmodifiedSince", modified)):
+            for case, value in (("conditional", etag), ("bare-etag", etag),
+                                ("date", modified), ("redirect", etag)):
                 partial = [r for r in requests
                            if r["url"] == f"/payload.bin?case={case}"
                            and r["range"] and not r["range"].startswith("bytes=0-")]
-                if not partial or any(r[key] != value or r["ifRange"] for r in partial):
+                if not partial or any(r["ifRange"] != value or r["ifMatch"]
+                                      or r["ifUnmodifiedSince"] for r in partial):
                     raise RuntimeError(f"Incorrect range precondition: {case}")
             if sum(r["url"] == "/payload.bin?case=ignored" and not r["range"]
                    for r in requests) != 1:
                 raise RuntimeError("Range fallback did not issue exactly one complete GET")
+            if any(r["ifRange"] or r["ifMatch"] or r["ifUnmodifiedSince"]
+                   for r in requests if r["url"] == "/payload.bin?case=fresh-date"):
+                raise RuntimeError("An unqualified date became a range validator")
 
             short = ranges("short")
             if short.count(requested) != 1 or short.count(missing) != 1:
