@@ -39,7 +39,6 @@
 
 #include <string>
 #include <deque>
-#include <map>
 #include <vector>
 #include <memory>
 
@@ -59,7 +58,6 @@ class StatCalc;
 class SocketCore;
 class CurlSession;
 class SystemResolver;
-class Request;
 class EventPoll;
 class Command;
 #ifdef ENABLE_BITTORRENT
@@ -89,37 +87,6 @@ private:
   std::unique_ptr<StatCalc> statCalc_;
 
   int haltRequested_;
-
-  class SocketPoolEntry {
-  private:
-    std::shared_ptr<SocketCore> socket_;
-    // protocol specific option string
-    std::string options_;
-
-    std::chrono::seconds timeout_;
-
-    Timer registeredTime_;
-
-  public:
-    SocketPoolEntry(const std::shared_ptr<SocketCore>& socket,
-                    const std::string& option, std::chrono::seconds timeout);
-
-    SocketPoolEntry(const std::shared_ptr<SocketCore>& socket,
-                    std::chrono::seconds timeout);
-
-    ~SocketPoolEntry();
-
-    bool isTimeout() const;
-
-    const std::shared_ptr<SocketCore>& getSocket() const { return socket_; }
-
-    const std::string& getOptions() const { return options_; }
-  };
-
-  // key = IP address:port, value = SocketPoolEntry
-  std::multimap<std::string, SocketPoolEntry> socketPool_;
-
-  Timer lastSocketPoolScan_;
 
   bool noWait_;
 
@@ -151,11 +118,6 @@ private:
 
   void afterEachIteration();
   void rebalanceGlobalDownloadLimit();
-
-  void poolSocket(const std::string& key, const SocketPoolEntry& entry);
-
-  std::multimap<std::string, SocketPoolEntry>::iterator
-  findSocketPoolEntry(const std::string& key);
 
   std::unique_ptr<RequestGroupMan> requestGroupMan_;
   std::unique_ptr<FileAllocationMan> fileAllocationMan_;
@@ -270,61 +232,6 @@ public:
   void setNoWait(bool b);
 
   void addRoutineCommand(std::unique_ptr<Command> command);
-
-  void poolSocket(const std::string& ipaddr, uint16_t port,
-                  const std::string& username, const std::string& proxyhost,
-                  uint16_t proxyport, const std::shared_ptr<SocketCore>& sock,
-                  const std::string& options,
-                  std::chrono::seconds timeout = 15_s);
-
-  void poolSocket(const std::shared_ptr<Request>& request,
-                  const std::string& username,
-                  const std::shared_ptr<Request>& proxyRequest,
-                  const std::shared_ptr<SocketCore>& socket,
-                  const std::string& options,
-                  std::chrono::seconds timeout = 15_s);
-
-  void poolSocket(const std::string& ipaddr, uint16_t port,
-                  const std::string& proxyhost, uint16_t proxyport,
-                  const std::shared_ptr<SocketCore>& sock,
-                  std::chrono::seconds timeout = 15_s);
-
-  void poolSocketForHostname(const std::string& ipaddr, uint16_t port,
-                             const std::string& hostname,
-                             const std::shared_ptr<SocketCore>& sock,
-                             std::chrono::seconds timeout = 15_s);
-
-  void poolSocket(const std::shared_ptr<Request>& request,
-                  const std::shared_ptr<Request>& proxyRequest,
-                  const std::shared_ptr<SocketCore>& socket,
-                  std::chrono::seconds timeout = 15_s);
-
-  std::shared_ptr<SocketCore> popPooledSocket(const std::string& ipaddr,
-                                              uint16_t port,
-                                              const std::string& proxyhost,
-                                              uint16_t proxyport);
-
-  std::shared_ptr<SocketCore>
-  popPooledSocketForHostname(const std::string& ipaddr, uint16_t port,
-                             const std::string& hostname);
-
-  std::shared_ptr<SocketCore>
-  popPooledSocket(std::string& options, const std::string& ipaddr,
-                  uint16_t port, const std::string& username,
-                  const std::string& proxyhost, uint16_t proxyport);
-
-  std::shared_ptr<SocketCore>
-  popPooledSocket(const std::vector<std::string>& ipaddrs, uint16_t port);
-
-  std::shared_ptr<SocketCore>
-  popPooledSocketForHostname(const std::vector<std::string>& ipaddrs,
-                             uint16_t port, const std::string& hostname);
-
-  std::shared_ptr<SocketCore>
-  popPooledSocket(std::string& options, const std::vector<std::string>& ipaddrs,
-                  uint16_t port, const std::string& username);
-
-  void evictSocketPool();
 
 #ifdef ENABLE_BITTORRENT
   const std::unique_ptr<BtSession>& getBtSession() const { return btSession_; }

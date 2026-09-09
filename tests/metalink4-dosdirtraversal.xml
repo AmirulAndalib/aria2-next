@@ -5,10 +5,10 @@
   </file>
   <file name="..\..\file1.ext">
     <size>12345</size>
-    <metaurl mediatype="torrent" name="d/file1.ext">http://example.com/example.torrent</metaurl>
+    <url>https://example.com/file1.ext</url>
   </file>
   <file name="..\..\file2.ext">
     <size>12345</size>
-    <metaurl mediatype="torrent" name="d/file2.ext">http://example.com/example.torrent</metaurl>
+    <url>https://example.com/file2.ext</url>
   </file>
 </metalink>

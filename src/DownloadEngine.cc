@@ -36,24 +36,17 @@
 
 #include <signal.h>
 
-#include <cstring>
-#include <cerrno>
 #include <algorithm>
-#include <numeric>
 #include <iterator>
 
 #include "StatCalc.h"
 #include "RequestGroup.h"
 #include "RequestGroupMan.h"
 #include "DownloadResult.h"
-#include "StatCalc.h"
 #include "Log.h"
 #include "SocketCore.h"
 #include "util.h"
 #include "a2functional.h"
-#include "DlAbortEx.h"
-#include "ServerStatMan.h"
-#include "Request.h"
 #include "EventPoll.h"
 #include "Command.h"
 #include "CurlSession.h"
@@ -61,7 +54,6 @@
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityEntry.h"
 #include "DownloadContext.h"
-#include "fmt.h"
 #include "wallclock.h"
 #ifdef ENABLE_BITTORRENT
 #  include "BtSession.h"
@@ -371,271 +363,6 @@ void DownloadEngine::addRoutineCommand(std::unique_ptr<Command> command)
   routineCommands_.push_back(std::move(command));
 }
 
-void DownloadEngine::poolSocket(const std::string& key,
-                                const SocketPoolEntry& entry)
-{
-  A2_LOG_DEBUG(fmt("Pool socket for %s", key.c_str()));
-  std::multimap<std::string, SocketPoolEntry>::value_type p(key, entry);
-  socketPool_.insert(p);
-}
-
-void DownloadEngine::evictSocketPool()
-{
-  if (socketPool_.empty()) {
-    return;
-  }
-
-  std::multimap<std::string, SocketPoolEntry> newPool;
-  for (auto& elem : socketPool_) {
-    if (!elem.second.isTimeout()) {
-      newPool.insert(elem);
-    }
-  }
-  A2_LOG_TRACE(
-      fmt("%lu entries removed.",
-          static_cast<unsigned long>(socketPool_.size() - newPool.size())));
-  socketPool_ = std::move(newPool);
-}
-
-namespace {
-std::string createSockPoolKey(const std::string& host, uint16_t port,
-                              const std::string& username,
-                              const std::string& proxyhost, uint16_t proxyport)
-{
-  std::string key;
-  if (!username.empty()) {
-    key += util::percentEncode(username);
-    key += "@";
-  }
-  key += fmt("%s(%u)", host.c_str(), port);
-  if (!proxyhost.empty()) {
-    key += fmt("/%s(%u)", proxyhost.c_str(), proxyport);
-  }
-  return key;
-}
-
-std::string createSockPoolKeyForHostname(const std::string& ipaddr,
-                                         uint16_t port,
-                                         const std::string& hostname)
-{
-  return createSockPoolKey(ipaddr, port, hostname, "", 0);
-}
-} // namespace
-
-void DownloadEngine::poolSocket(const std::string& ipaddr, uint16_t port,
-                                const std::string& username,
-                                const std::string& proxyhost,
-                                uint16_t proxyport,
-                                const std::shared_ptr<SocketCore>& sock,
-                                const std::string& options,
-                                std::chrono::seconds timeout)
-{
-  SocketPoolEntry e(sock, options, std::move(timeout));
-  poolSocket(createSockPoolKey(ipaddr, port, username, proxyhost, proxyport),
-             e);
-}
-
-void DownloadEngine::poolSocket(const std::string& ipaddr, uint16_t port,
-                                const std::string& proxyhost,
-                                uint16_t proxyport,
-                                const std::shared_ptr<SocketCore>& sock,
-                                std::chrono::seconds timeout)
-{
-  SocketPoolEntry e(sock, std::move(timeout));
-  poolSocket(createSockPoolKey(ipaddr, port, "", proxyhost, proxyport), e);
-}
-
-void DownloadEngine::poolSocketForHostname(
-    const std::string& ipaddr, uint16_t port, const std::string& hostname,
-    const std::shared_ptr<SocketCore>& sock, std::chrono::seconds timeout)
-{
-  SocketPoolEntry e(sock, std::move(timeout));
-  poolSocket(createSockPoolKeyForHostname(ipaddr, port, hostname), e);
-}
-
-namespace {
-bool getPeerInfo(Endpoint& res, const std::shared_ptr<SocketCore>& socket)
-{
-  try {
-    res = socket->getPeerInfo();
-    return true;
-  }
-  catch (RecoverableException& e) {
-    // socket->getPeerInfo() can fail if the socket has been
-    // disconnected.
-    A2_LOG_DEBUG_EX("Getting peer info failed. Pooling socket canceled.", e);
-    return false;
-  }
-}
-} // namespace
-
-void DownloadEngine::poolSocket(const std::shared_ptr<Request>& request,
-                                const std::shared_ptr<Request>& proxyRequest,
-                                const std::shared_ptr<SocketCore>& socket,
-                                std::chrono::seconds timeout)
-{
-  if (proxyRequest) {
-    // If proxy is defined, then pool socket with its hostname.
-    poolSocket(request->getHost(), request->getPort(), proxyRequest->getHost(),
-               proxyRequest->getPort(), socket, std::move(timeout));
-    return;
-  }
-
-  Endpoint peerInfo;
-  if (getPeerInfo(peerInfo, socket)) {
-    poolSocketForHostname(peerInfo.addr, peerInfo.port, request->getHost(),
-                          socket, std::move(timeout));
-  }
-}
-
-void DownloadEngine::poolSocket(const std::shared_ptr<Request>& request,
-                                const std::string& username,
-                                const std::shared_ptr<Request>& proxyRequest,
-                                const std::shared_ptr<SocketCore>& socket,
-                                const std::string& options,
-                                std::chrono::seconds timeout)
-{
-  if (proxyRequest) {
-    // If proxy is defined, then pool socket with its hostname.
-    poolSocket(request->getHost(), request->getPort(), username,
-               proxyRequest->getHost(), proxyRequest->getPort(), socket,
-               options, std::move(timeout));
-    return;
-  }
-
-  Endpoint peerInfo;
-  if (getPeerInfo(peerInfo, socket)) {
-    poolSocket(peerInfo.addr, peerInfo.port, username, "", 0, socket, options,
-               std::move(timeout));
-  }
-}
-
-std::multimap<std::string, DownloadEngine::SocketPoolEntry>::iterator
-DownloadEngine::findSocketPoolEntry(const std::string& key)
-{
-  std::pair<std::multimap<std::string, SocketPoolEntry>::iterator,
-            std::multimap<std::string, SocketPoolEntry>::iterator>
-      range = socketPool_.equal_range(key);
-  for (auto i = range.first, eoi = range.second; i != eoi; ++i) {
-    const SocketPoolEntry& e = (*i).second;
-    // We assume that if socket is readable it means peer shutdowns
-    // connection and the socket will receive EOF. So skip it.
-    if (!e.isTimeout() && !e.getSocket()->isReadable(0)) {
-      A2_LOG_DEBUG(fmt("Found socket for %s", key.c_str()));
-      return i;
-    }
-  }
-  return socketPool_.end();
-}
-
-std::shared_ptr<SocketCore>
-DownloadEngine::popPooledSocket(const std::string& ipaddr, uint16_t port,
-                                const std::string& proxyhost,
-                                uint16_t proxyport)
-{
-  std::shared_ptr<SocketCore> s;
-  auto i = findSocketPoolEntry(
-      createSockPoolKey(ipaddr, port, "", proxyhost, proxyport));
-  if (i != socketPool_.end()) {
-    s = (*i).second.getSocket();
-    socketPool_.erase(i);
-  }
-  return s;
-}
-
-std::shared_ptr<SocketCore> DownloadEngine::popPooledSocketForHostname(
-    const std::string& ipaddr, uint16_t port, const std::string& hostname)
-{
-  std::shared_ptr<SocketCore> s;
-  auto i =
-      findSocketPoolEntry(createSockPoolKeyForHostname(ipaddr, port, hostname));
-  if (i != socketPool_.end()) {
-    s = (*i).second.getSocket();
-    socketPool_.erase(i);
-  }
-  return s;
-}
-
-std::shared_ptr<SocketCore>
-DownloadEngine::popPooledSocket(std::string& options, const std::string& ipaddr,
-                                uint16_t port, const std::string& username,
-                                const std::string& proxyhost,
-                                uint16_t proxyport)
-{
-  std::shared_ptr<SocketCore> s;
-  auto i = findSocketPoolEntry(
-      createSockPoolKey(ipaddr, port, username, proxyhost, proxyport));
-  if (i != socketPool_.end()) {
-    s = (*i).second.getSocket();
-    options = (*i).second.getOptions();
-    socketPool_.erase(i);
-  }
-  return s;
-}
-
-std::shared_ptr<SocketCore>
-DownloadEngine::popPooledSocket(const std::vector<std::string>& ipaddrs,
-                                uint16_t port)
-{
-  std::shared_ptr<SocketCore> s;
-  for (const auto& ipaddr : ipaddrs) {
-    s = popPooledSocket(ipaddr, port, "", 0);
-    if (s) {
-      break;
-    }
-  }
-  return s;
-}
-
-std::shared_ptr<SocketCore> DownloadEngine::popPooledSocketForHostname(
-    const std::vector<std::string>& ipaddrs, uint16_t port,
-    const std::string& hostname)
-{
-  std::shared_ptr<SocketCore> s;
-  for (const auto& ipaddr : ipaddrs) {
-    s = popPooledSocketForHostname(ipaddr, port, hostname);
-    if (s) {
-      break;
-    }
-  }
-  return s;
-}
-
-std::shared_ptr<SocketCore>
-DownloadEngine::popPooledSocket(std::string& options,
-                                const std::vector<std::string>& ipaddrs,
-                                uint16_t port, const std::string& username)
-{
-  std::shared_ptr<SocketCore> s;
-  for (const auto& ipaddr : ipaddrs) {
-    s = popPooledSocket(options, ipaddr, port, username, "", 0);
-    if (s) {
-      break;
-    }
-  }
-  return s;
-}
-
-DownloadEngine::SocketPoolEntry::SocketPoolEntry(
-    const std::shared_ptr<SocketCore>& socket, const std::string& options,
-    std::chrono::seconds timeout)
-    : socket_(socket), options_(options), timeout_(std::move(timeout))
-{
-}
-
-DownloadEngine::SocketPoolEntry::SocketPoolEntry(
-    const std::shared_ptr<SocketCore>& socket, std::chrono::seconds timeout)
-    : socket_(socket), timeout_(std::move(timeout))
-{
-}
-
-DownloadEngine::SocketPoolEntry::~SocketPoolEntry() = default;
-
-bool DownloadEngine::SocketPoolEntry::isTimeout() const
-{
-  return registeredTime_.difference(global::wallclock()) >= timeout_;
-}
-
 cuid_t DownloadEngine::newCUID() { return cuidCounter_.newID(); }
 
 const std::string&
@@ -665,7 +392,9 @@ void DownloadEngine::removeCachedIPAddress(const std::string& hostname,
 
 void DownloadEngine::setRefreshInterval(std::chrono::milliseconds interval)
 {
-  refreshInterval_ = std::move(interval);
+  // Timer producers may shorten this iteration's wait, never postpone a
+  // deadline already requested by another transfer or protocol.
+  refreshInterval_ = std::min(refreshInterval_, interval);
 }
 
 void DownloadEngine::addCommand(std::vector<std::unique_ptr<Command>> commands)

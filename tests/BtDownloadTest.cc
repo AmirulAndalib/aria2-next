@@ -1,5 +1,7 @@
 #include "BtDownload.h"
 
+#include <filesystem>
+
 #include "a2doctest.h"
 
 #include <libtorrent/create_torrent.hpp>
@@ -80,13 +82,16 @@ void BtDownloadTest::testMetainfoInspection()
     REQUIRE_EQ(test.hasV1 ? (size_t)40 : (size_t)0, metainfo.infoHashV1.size());
     REQUIRE_EQ(test.hasV2 ? (size_t)64 : (size_t)0, metainfo.infoHashV2.size());
     REQUIRE_EQ((size_t)1, metainfo.files.front().index);
-    REQUIRE_EQ(test.multiFile ? std::string("bundle/a.bin")
-                              : std::string("single.bin"),
-               metainfo.files.front().path);
+    REQUIRE_EQ(
+        test.multiFile ? std::string("bundle/a.bin")
+                       : std::string("single.bin"),
+        std::filesystem::path(metainfo.files.front().path).generic_string());
     REQUIRE_EQ(PIECE_SIZE, metainfo.files.front().length);
     if (test.multiFile) {
       REQUIRE_EQ((size_t)2, metainfo.files.back().index);
-      REQUIRE_EQ(std::string("bundle/sub/b.bin"), metainfo.files.back().path);
+      REQUIRE_EQ(
+          std::string("bundle/sub/b.bin"),
+          std::filesystem::path(metainfo.files.back().path).generic_string());
     }
   }
 }

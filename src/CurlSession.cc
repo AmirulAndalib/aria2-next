@@ -138,6 +138,19 @@ namespace {
 
 constexpr int64_t rangePipelineDepth = 2;
 
+long otherFamily(long family)
+{
+  return family == CURL_IPRESOLVE_V4 ? CURL_IPRESOLVE_V6 : CURL_IPRESOLVE_V4;
+}
+
+CurlEndpoint& endpointFor(CurlDownloadImpl& impl, size_t uriIndex, long family)
+{
+  const size_t slot = family == CURL_IPRESOLVE_V4   ? 1
+                      : family == CURL_IPRESOLVE_V6 ? 2
+                                                    : 0;
+  return impl.endpoints[(uriIndex % impl.uris.size()) * 3 + slot];
+}
+
 int effectiveStreamMaxConnections(const Option* option)
 {
   return std::clamp(option->getAsInt(PREF_STREAM_MAX_CONNECTIONS), 1, 256);
@@ -448,6 +461,10 @@ void cleanupHandle(CurlHandle& handle)
 
 void eraseHandle(CurlDownloadImpl& impl, CurlHandle* handle)
 {
+  if (impl.plannerConfigured && !impl.fullDownload &&
+      handle->purpose == CurlHandlePurpose::Payload) {
+    impl.idleWorkers.push_back(handle->addressFamily);
+  }
   impl.handles.erase(
       std::remove_if(impl.handles.begin(), impl.handles.end(),
                      [handle](const std::unique_ptr<CurlHandle>& entry) {
@@ -627,6 +644,98 @@ long CurlSession::platformSslOptions() noexcept
 #endif
 }
 
+bool CurlSession::sameOrigin(const std::string& first,
+                             const std::string& second)
+{
+  const auto left = std::unique_ptr<CURLU, decltype(&curl_url_cleanup)>(
+      curl_url(), curl_url_cleanup);
+  const auto right = std::unique_ptr<CURLU, decltype(&curl_url_cleanup)>(
+      curl_url(), curl_url_cleanup);
+  if (!left || !right ||
+      curl_url_set(left.get(), CURLUPART_URL, first.c_str(), 0) != CURLUE_OK ||
+      curl_url_set(right.get(), CURLUPART_URL, second.c_str(), 0) !=
+          CURLUE_OK) {
+    return false;
+  }
+  for (const auto part : {CURLUPART_SCHEME, CURLUPART_HOST, CURLUPART_PORT}) {
+    char* a = nullptr;
+    char* b = nullptr;
+    const auto aResult = curl_url_get(left.get(), part, &a, CURLU_DEFAULT_PORT);
+    const auto bResult =
+        curl_url_get(right.get(), part, &b, CURLU_DEFAULT_PORT);
+    const auto aValue =
+        std::unique_ptr<char, decltype(&curl_free)>(a, curl_free);
+    const auto bValue =
+        std::unique_ptr<char, decltype(&curl_free)>(b, curl_free);
+    if (aResult != CURLUE_OK || bResult != CURLUE_OK || !util::strieq(a, b)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void CurlSession::rememberEndpoint(CurlHandle& handle)
+{
+  auto& impl = *handle.download->impl_;
+  if (!handle.value || impl.endpoints.empty() ||
+      (!handle.rangeAccepted && !handle.fullResponseAccepted) ||
+      handle.responseFailure != CurlResponseFailure::None) {
+    return;
+  }
+  auto& endpoint =
+      endpointFor(impl, handle.lease.uriIndex, handle.addressFamily);
+  if (handle.endpointGeneration != endpoint.generation) {
+    return;
+  }
+  char* effective = nullptr;
+  if (curl_easy_getinfo(handle.value, CURLINFO_EFFECTIVE_URL, &effective) ==
+          CURLE_OK &&
+      effective) {
+    // The native handle owns this pointer. Retain the validated URL, not its
+    // storage, and keep the original task URI for restart and authentication.
+    endpoint.uri = effective;
+    endpoint.resolving = false;
+    endpoint.readyAt = {};
+    if (!impl.plannerConfigured &&
+        impl.families[0] == CURL_IPRESOLVE_WHATEVER && impl.group &&
+        impl.maxConnections > 1 && handle.rangeAccepted &&
+        !impl.group->getOption()->getAsBool(PREF_DISABLE_IPV6) &&
+        impl.group->getOption()->blank(PREF_INTERFACE) &&
+        impl.group->getMaxDownloadSpeedLimit() == 0 &&
+        impl.group->getOption()->getAsLLInt(PREF_MAX_OVERALL_DOWNLOAD_LIMIT) ==
+            0) {
+      auto url = std::unique_ptr<CURLU, decltype(&curl_url_cleanup)>(
+          curl_url(), curl_url_cleanup);
+      char* host = nullptr;
+      if (url &&
+          curl_url_set(url.get(), CURLUPART_URL, effective, 0) == CURLUE_OK &&
+          curl_url_get(url.get(), CURLUPART_HOST, &host, 0) == CURLUE_OK) {
+        auto hostname =
+            std::unique_ptr<char, decltype(&curl_free)>(host, curl_free);
+        char* address = nullptr;
+        long proxy = 0;
+        curl_easy_getinfo(handle.value, CURLINFO_PRIMARY_IP, &address);
+        curl_easy_getinfo(handle.value, CURLINFO_USED_PROXY, &proxy);
+        // Literal addresses do not offer a second family. DNS, connection
+        // racing and connection reuse remain native libcurl operations.
+        if (!proxy && address && *address && host[0] != '[' &&
+            !util::isNumericHost(host)) {
+          handle.addressFamily =
+              std::strchr(address, ':') ? CURL_IPRESOLVE_V6 : CURL_IPRESOLVE_V4;
+          impl.families = {
+              {handle.addressFamily, otherFamily(handle.addressFamily)}};
+          auto& route =
+              endpointFor(impl, handle.lease.uriIndex, handle.addressFamily);
+          route.uri = effective;
+          route.resolving = false;
+          route.readyAt = {};
+          handle.endpointGeneration = route.generation;
+        }
+      }
+    }
+  }
+}
+
 bool CurlSession::retryableFailure(CURLcode result, long responseCode,
                                    int fileNotFoundCount, int maxFileNotFound,
                                    bool validatedRange,
@@ -731,6 +840,16 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
       flushWriteBuffer(impl, *handle);
       handle->bufferOffset = handle->writeOffset;
     }
+    if (length > 0 && handle->writeOffset == handle->lease.begin &&
+        A2_LOG_ENABLED(spdlog::level::debug)) {
+      char* address = nullptr;
+      curl_easy_getinfo(handle->value, CURLINFO_PRIMARY_IP, &address);
+      A2_LOG_DEBUG(fmt("component=stream event=route_payload gid=%s family=%s "
+                       "bytes=%" PRId64,
+                       gid(download).c_str(),
+                       address && std::strchr(address, ':') ? "ipv6" : "ipv4",
+                       static_cast<int64_t>(length)));
+    }
     const auto* bytes = reinterpret_cast<unsigned char*>(data);
     handle->writeBuffer.insert(handle->writeBuffer.end(), bytes,
                                bytes + length);
@@ -738,7 +857,7 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
     if (length > 0) {
       handle->lastPayload = global::wallclock();
     }
-    if (length > 0 && handle->writeOffset - handle->lease.begin >= 64_k) {
+    if (length > 0) {
       if (handle->bodySampleStart.isZero()) {
         handle->bodySampleStart = global::wallclock();
         handle->payloadSpeed.reset();
@@ -861,6 +980,7 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
       parseContentLength(responseHeader(handle->value, "Content-Length"),
                          handle->responseContentLength);
       validateResponse(*handle, responseHeader(handle->value, "Content-Range"));
+      rememberEndpoint(*handle);
     }
     return length;
   }
@@ -1145,6 +1265,9 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.handles.clear();
   closeOutput(download.get());
   impl.group = group;
+  impl.endpoints.assign(impl.uris.size() * 3, CurlEndpoint{});
+  impl.families = {{CURL_IPRESOLVE_WHATEVER, CURL_IPRESOLVE_WHATEVER}};
+  impl.idleWorkers.clear();
   impl.planner.clear();
   impl.etag.clear();
   impl.lastModified.clear();
@@ -1295,7 +1418,8 @@ void CurlSession::restorePaused(const std::shared_ptr<CurlDownload>& download,
 
 bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
                                const RangeLease& lease, bool primary,
-                               bool ranged, CurlHandlePurpose purpose)
+                               bool ranged, CurlHandlePurpose purpose,
+                               long addressFamily)
 {
   auto& impl = *download->impl_;
   const auto taskOption = impl.group->getOption().get();
@@ -1351,10 +1475,18 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
     }                                                                          \
   } while (0)
   const auto uriIndex = lease.uriIndex % impl.uris.size();
-  const auto& uriValue = impl.uris[uriIndex];
-  impl.currentUri = uriValue;
-  download->snapshot_.currentUri = uriValue;
-  markUriUsed(impl.group, uriValue);
+  auto& endpoint = endpointFor(impl, uriIndex, addressFamily);
+  const auto& originalUri = impl.uris[uriIndex];
+  const auto& uriValue = endpoint.uri.empty() ? originalUri : endpoint.uri;
+  transfer->endpointGeneration = endpoint.generation;
+  transfer->resolvingEndpoint = impl.http && endpoint.uri.empty();
+  transfer->redirectedEndpoint =
+      !endpoint.uri.empty() && uriValue != originalUri;
+  transfer->addressFamily = addressFamily;
+  const bool sourceCredentials = sameOrigin(originalUri, uriValue);
+  impl.currentUri = originalUri;
+  download->snapshot_.currentUri = originalUri;
+  markUriUsed(impl.group, originalUri);
   SET_CURL_OPTION(CURLOPT_URL, uriValue.c_str());
   if (share_) {
     SET_CURL_OPTION(CURLOPT_SHARE, share_);
@@ -1436,6 +1568,9 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   if (taskOption->getAsBool(PREF_DISABLE_IPV6)) {
     SET_CURL_OPTION(CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
   }
+  else if (transfer->addressFamily != CURL_IPRESOLVE_WHATEVER) {
+    SET_CURL_OPTION(CURLOPT_IPRESOLVE, transfer->addressFamily);
+  }
   if (!taskOption->blank(PREF_CA_CERTIFICATE)) {
     SET_CURL_OPTION(CURLOPT_CAINFO,
                     taskOption->get(PREF_CA_CERTIFICATE).c_str());
@@ -1448,7 +1583,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
     SET_CURL_OPTION(CURLOPT_SSH_PRIVATE_KEYFILE,
                     taskOption->get(PREF_PRIVATE_KEY).c_str());
   }
-  if (impl.http && !taskOption->blank(PREF_HTTP_USER)) {
+  if (impl.http && sourceCredentials && !taskOption->blank(PREF_HTTP_USER)) {
     SET_CURL_OPTION(CURLOPT_USERNAME, taskOption->get(PREF_HTTP_USER).c_str());
     SET_CURL_OPTION(CURLOPT_PASSWORD,
                     taskOption->get(PREF_HTTP_PASSWD).c_str());
@@ -1501,6 +1636,12 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   std::istringstream configuredHeaders(taskOption->get(PREF_HEADER));
   std::string header;
   while (std::getline(configuredHeaders, header)) {
+    // libcurl suppresses these on a cross-origin redirect. Starting a new
+    // range at that destination must preserve the same credential boundary.
+    if (!sourceCredentials && (startsWithHeader(header, "Authorization:") ||
+                               startsWithHeader(header, "Cookie:"))) {
+      continue;
+    }
     if (!header.empty() && !appendHeader(header)) {
       cleanupHandle(*transfer);
       return false;
@@ -1535,6 +1676,9 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   const auto addResult = curl_multi_add_handle(multi_, easy);
   const auto result = addResult == CURLM_OK;
   if (result) {
+    if (transfer->resolvingEndpoint) {
+      endpoint.resolving = true;
+    }
     impl.handles.push_back(std::move(transfer));
   }
   else {
@@ -1691,6 +1835,23 @@ void CurlSession::configurePlanner(
   }
   impl.planner.configure(total, rangeSize, active);
   impl.plannerConfigured = true;
+  // Workers retain their transport choice as they pull ranges. Fast workers
+  // naturally claim more work; no task-wide address-family winner is needed.
+  impl.idleWorkers.clear();
+  for (int i = 0; i < impl.maxConnections; ++i) {
+    impl.idleWorkers.push_back(impl.families[i % impl.families.size()]);
+  }
+  for (const auto& handle : impl.handles) {
+    if (handle->purpose != CurlHandlePurpose::Payload) {
+      continue;
+    }
+    const auto worker =
+        std::find(impl.idleWorkers.begin(), impl.idleWorkers.end(),
+                  handle->addressFamily);
+    if (worker != impl.idleWorkers.end()) {
+      impl.idleWorkers.erase(worker);
+    }
+  }
 
   const auto taskOption = impl.group->getOption();
   const bool sizeOutput =
@@ -1760,13 +1921,32 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
         adaptiveRangeSize(remaining, impl.connectionLimit, pieceLength);
     impl.planner.refillReady(static_cast<size_t>(impl.connectionLimit),
                              preferredPiece, pieceLength);
-    while (impl.handles.size() < static_cast<size_t>(impl.connectionLimit)) {
+    auto available = impl.idleWorkers.size();
+    while (impl.handles.size() < static_cast<size_t>(impl.connectionLimit) &&
+           available-- > 0) {
       auto lease = impl.planner.takeReady(now);
       if (!lease) {
         break;
       }
+      auto family = impl.idleWorkers.front();
+      impl.idleWorkers.pop_front();
+      if (endpointFor(impl, lease->uriIndex, family).unavailable) {
+        family = otherFamily(family);
+      }
+      auto& endpoint = endpointFor(impl, lease->uriIndex, family);
+      if (impl.http && endpoint.uri.empty() &&
+          (endpoint.resolving || endpoint.readyAt > now)) {
+        impl.planner.enqueue(*lease);
+        impl.idleWorkers.push_back(family);
+        if (endpoint.readyAt > now) {
+          engine_->setRefreshInterval(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  endpoint.readyAt - now));
+        }
+        continue;
+      }
       if (!createHandle(download, *lease, false, true,
-                        CurlHandlePurpose::Payload)) {
+                        CurlHandlePurpose::Payload, family)) {
         failTask(download, error_code::NETWORK_PROBLEM,
                  "Unable to create a ranged transfer");
         return;
@@ -1824,18 +2004,29 @@ bool CurlSession::rebalanceEndgame(
                   })) {
     return false;
   }
-  // Let idle connections help while preserving the donor's live prefix.
-  // A meaningful body sample protects fresh requests and bounds cancellation
-  // by actual forward progress, rather than a lifetime redistribution count.
+  // Assign idle workers the largest unfinished suffix, preserving the live
+  // prefix. Splitting does not need to predict a connection's future speed.
   CurlHandle* handle = nullptr;
+  int64_t largest = 0;
   long double longest = 0;
   int64_t splitQuantum = pieceLength;
   const auto& now = global::wallclock();
   for (const auto& candidate : impl.handles) {
     const auto remaining = candidate->lease.end - candidate->writeOffset;
-    if (!candidate->rangeAccepted || remaining <= 0 ||
-        candidate->bodySampleStart.isZero() ||
-        candidate->writeOffset - candidate->lease.begin < 64_k) {
+    if (!candidate->rangeAccepted || remaining <= 0) {
+      continue;
+    }
+    if (remaining >= 2 * 64_k) {
+      if (remaining > largest) {
+        largest = remaining;
+        handle = candidate.get();
+        splitQuantum = 64_k;
+      }
+      continue;
+    }
+    // Small tails cannot be split. Preserve fresh requests until measured
+    // remaining time justifies paying for another request.
+    if (largest > 0 || candidate->bodySampleStart.isZero()) {
       continue;
     }
     curl_off_t firstByte = 0;
@@ -1861,8 +2052,7 @@ bool CurlSession::rebalanceEndgame(
     const auto quantum =
         std::max<int64_t>(64_k, static_cast<int64_t>(std::min<long double>(
                                     pieceLength, speed * requestCost)));
-    if ((speed == 0 || remaining >= quantum * 2) &&
-        remainingTime > requestCost * 2 && remainingTime > longest) {
+    if (remainingTime > requestCost * 2 && remainingTime > longest) {
       handle = candidate.get();
       longest = remainingTime;
       splitQuantum = quantum;
@@ -1937,6 +2127,7 @@ void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
     }
   }
   impl.handles.clear();
+  impl.idleWorkers.clear();
   download->snapshot_.connections = 0;
 }
 
@@ -2374,6 +2565,36 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   }
   const bool primary = handle->primary;
   const auto requestEpoch = handle->connectionEpoch;
+  const auto endpointGeneration = handle->endpointGeneration;
+  const bool resolvingEndpoint = handle->resolvingEndpoint;
+  const bool redirectedEndpoint = handle->redirectedEndpoint;
+  const auto addressFamily = handle->addressFamily;
+  auto& endpoint = endpointFor(impl, lease.uriIndex, addressFamily);
+  const auto& peer =
+      endpointFor(impl, lease.uriIndex, otherFamily(addressFamily));
+  const bool unavailableRoute =
+      resolvingEndpoint && addressFamily != CURL_IPRESOLVE_WHATEVER &&
+      !peer.unavailable && !peer.uri.empty() &&
+      (result == CURLE_COULDNT_RESOLVE_HOST ||
+       result == CURLE_COULDNT_CONNECT || result == CURLE_OPERATION_TIMEDOUT ||
+       (result == CURLE_HTTP_RETURNED_ERROR &&
+        (responseCode == 401 || responseCode == 403 || responseCode == 404)));
+  const bool expiredEndpoint =
+      redirectedEndpoint &&
+      (responseCode == 401 || responseCode == 403 || responseCode == 404);
+  if (endpointGeneration == endpoint.generation) {
+    if (unavailableRoute) {
+      endpoint.unavailable = true;
+    }
+    if (resolvingEndpoint) {
+      endpoint.resolving = false;
+    }
+    if (expiredEndpoint) {
+      const auto generation = endpoint.generation + 1;
+      endpoint = CurlEndpoint{};
+      endpoint.generation = generation;
+    }
+  }
   const bool outputFailure =
       download->snapshot_.errorCode != error_code::UNDEFINED;
   cleanupHandle(*handle);
@@ -2448,6 +2669,12 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   }
 
   if (result != CURLE_OK) {
+    if (unavailableRoute && endpointGeneration == endpoint.generation) {
+      // One unusable route does not invalidate an already validated peer.
+      impl.planner.enqueue(lease.remainder(writeOffset));
+      schedule(download);
+      return;
+    }
     if (responseCode == 404) {
       ++impl.fileNotFoundCount;
     }
@@ -2467,7 +2694,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     }
     std::optional<std::chrono::milliseconds> retryDelay;
     if (!impl.fullDownload && !remainder.empty() &&
-        (alternateMirror ||
+        (alternateMirror || expiredEndpoint ||
          retryableFailure(result, responseCode, impl.fileNotFoundCount,
                           maxFileNotFound, ranged && impl.rangeValidated,
                           appConnectTime > 0 || startTransferTime > 0 ||
@@ -2477,6 +2704,9 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
                                          : retryAfter);
     }
     if (retryDelay) {
+      if (resolvingEndpoint && endpointGeneration == endpoint.generation) {
+        endpoint.readyAt = std::chrono::steady_clock::now() + *retryDelay;
+      }
       A2_LOG_DEBUG(fmt(
           "component=stream event=range_retry gid=%s transfer=%" PRId64
           " connection=%" PRId64 " range=%" PRId64 "-%" PRId64

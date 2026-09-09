@@ -4,6 +4,7 @@
 
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
+#include "Command.h"
 #include "ByteArrayDiskWriter.h"
 #include "DownloadContext.h"
 #include "DiskWriter.h"
@@ -56,6 +57,9 @@ public:
   void testShutdownWithLiveSocket();
   void testTailRecovery();
   void testConnectionRecovery();
+  void testEndpointOrigin();
+  void testValidatedEndpoint();
+  void testNativeTimerPreservesEarlierWakeup();
   void respond(CurlHandle& handle, long code, const std::string& range = {},
                const std::string& etag = {}, const std::string& modified = {},
                const std::string& date = {});
@@ -73,6 +77,87 @@ A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
 A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
 A2_TEST(CurlSessionTest, testTailRecovery)
 A2_TEST(CurlSessionTest, testConnectionRecovery)
+A2_TEST(CurlSessionTest, testEndpointOrigin)
+A2_TEST(CurlSessionTest, testValidatedEndpoint)
+A2_TEST(CurlSessionTest, testNativeTimerPreservesEarlierWakeup)
+
+void CurlSessionTest::testNativeTimerPreservesEarlierWakeup()
+{
+  struct ObservedPoll final : EventPoll {
+    timeval timeout{};
+    void poll(const timeval& value) override { timeout = value; }
+    bool addEvents(sock_t, Command*, EventType) override { return true; }
+    bool deleteEvents(sock_t, Command*, EventType) override { return true; }
+  };
+  struct FinishCommand final : Command {
+    FinishCommand() : Command(1) {}
+    bool execute() override { return true; }
+  };
+  auto poll = make_unique<ObservedPoll>();
+  auto* observed = poll.get();
+  DownloadEngine engine(std::move(poll));
+  Option option;
+  option.put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-timer");
+  CurlSession session(&option);
+  session.engine_ = &engine;
+  engine.setRefreshInterval(std::chrono::milliseconds(50));
+  session.updateTimeout(10000);
+  session.armTimeout();
+  engine.setNoWait(false);
+  engine.addCommand(make_unique<FinishCommand>());
+  engine.run(true);
+  CHECK_EQ(0, observed->timeout.tv_sec);
+  CHECK_EQ(50000, observed->timeout.tv_usec);
+}
+
+void CurlSessionTest::testEndpointOrigin()
+{
+  CHECK(CurlSession::sameOrigin("https://origin.test/a",
+                                "https://ORIGIN.test:443/b?token=next"));
+  CHECK(CurlSession::sameOrigin("http://origin.test/a",
+                                "http://origin.test:80/b"));
+  CHECK(!CurlSession::sameOrigin("https://origin.test/a",
+                                 "http://origin.test/a"));
+  CHECK(!CurlSession::sameOrigin("https://origin.test/a",
+                                 "https://origin.test:444/a"));
+  CHECK(
+      !CurlSession::sameOrigin("https://origin.test/a", "https://cdn.test/a"));
+  CHECK(!CurlSession::sameOrigin("invalid", "https://origin.test/a"));
+}
+
+void CurlSessionTest::testValidatedEndpoint()
+{
+  CurlDownload download({"https://origin.test/file"});
+  auto& impl = *download.impl_;
+  impl.endpoints.resize(1);
+  auto& endpoint = impl.endpoints.front();
+  endpoint.resolving = true;
+  auto easy = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(
+      curl_easy_init(), curl_easy_cleanup);
+  REQUIRE(easy);
+  REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_URL,
+                                        "https://cdn.test/file?token=one"));
+  CurlHandle handle;
+  handle.value = easy.get();
+  handle.download = &download;
+  handle.ranged = true;
+  handle.lease = {0, 4096};
+  respond(handle, 206, "bytes 1-4095/8192", "\"one\"");
+  CurlSession::rememberEndpoint(handle);
+  CHECK(endpoint.uri.empty());
+  CHECK(endpoint.resolving);
+  respond(handle, 206, "bytes 0-4095/8192", "\"one\"");
+  CurlSession::rememberEndpoint(handle);
+  CHECK_EQ("https://cdn.test/file?token=one", endpoint.uri);
+  CHECK(!endpoint.resolving);
+  CHECK_EQ("https://origin.test/file", impl.uris.front());
+  ++endpoint.generation;
+  endpoint.uri.clear();
+  endpoint.resolving = true;
+  CurlSession::rememberEndpoint(handle);
+  CHECK(endpoint.uri.empty());
+  CHECK(endpoint.resolving);
+}
 
 void CurlSessionTest::testConnectionRecovery()
 {
@@ -197,9 +282,6 @@ void CurlSessionTest::testTailRecovery()
   handle->payloadSpeed.update(80_k);
   impl.handles.push_back(std::move(handle));
 
-  global::wallclock().advance(1_s);
-  CHECK(!session->rebalanceEndgame(download, 1_m));
-  global::wallclock().advance(1_s);
   for (int i = 0; i < 32; ++i) {
     impl.handles.push_back(make_unique<CurlHandle>());
   }
@@ -243,13 +325,19 @@ void CurlSessionTest::testTailRecovery()
   impl.handles.clear();
 
   auto replacement = make_unique<CurlHandle>();
-  replacement->lease = *lease;
-  replacement->writeOffset = lease->begin + 16_k;
+  replacement->lease = {1_m - 64_k, 1_m};
+  replacement->writeOffset = 1_m - 48_k;
   replacement->rangeAccepted = true;
   replacement->bodySampleStart = global::wallclock();
   impl.handles.push_back(std::move(replacement));
-  global::wallclock().advance(20_s);
   CHECK(!session->rebalanceEndgame(download, 1_m));
+  global::wallclock().advance(20_s);
+  CHECK(session->rebalanceEndgame(download, 1_m));
+  CHECK(impl.handles.empty());
+  const auto tail = impl.planner.takeReady({});
+  REQUIRE(tail);
+  CHECK_EQ(1_m - 48_k, tail->begin);
+  CHECK_EQ(1_m, tail->end);
   const auto delay = session->retryRange(download, *lease, 12);
   REQUIRE(delay);
   CHECK(*delay >= 12_s);

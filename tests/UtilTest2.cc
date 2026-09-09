@@ -1,6 +1,6 @@
 #include "util.h"
 
-#include <cmath>
+#include <array>
 #include <cstring>
 #include <string>
 #include <iostream>
@@ -654,45 +654,16 @@ void UtilTest2::testCreateIndexPaths()
 
 void UtilTest2::testGenerateRandomData()
 {
-  using namespace std;
-
-  // Simple sanity check
-  unsigned char data1[25];
-  memset(data1, 0, sizeof(data1));
-  util::generateRandomData(data1, sizeof(data1));
-
-  unsigned char data2[25];
-  memset(data2, 0, sizeof(data2));
-  util::generateRandomData(data2, sizeof(data2));
-
-  REQUIRE(memcmp(data1, data2, sizeof(data1)) != 0);
-
-  // Simple stddev/mean tests
-  map<uint8_t, size_t> counts;
-  uint8_t bytes[1 << 20];
-  for (auto i = 0; i < 10; ++i) {
-    util::generateRandomData(bytes, sizeof(bytes));
-    for (auto b : bytes) {
-      counts[b]++;
-    }
-  }
-  REQUIRE_MESSAGE(counts.size() == 256, "Should see all kinds of bytes");
-  double sum =
-      accumulate(counts.begin(), counts.end(), 0.0,
-                 [](double total, const decltype(counts)::value_type& elem) {
-                   return total + elem.second;
-                 });
-  double mean = sum / counts.size();
-  vector<double> diff(counts.size());
-  transform(counts.begin(), counts.end(), diff.begin(),
-            [&](const decltype(counts)::value_type& elem) -> double {
-              return (double)elem.second - mean;
-            });
-  double sq_sum = inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
-  double stddev = sqrt(sq_sum / counts.size());
-  cout << "stddev: " << fixed << stddev << endl;
-  REQUIRE_MESSAGE(stddev <= 320, "stddev makes sense (lower)");
-  REQUIRE_MESSAGE(stddev >= 100, "stddev makes sense (upper)");
+  std::array<unsigned char, 66> data;
+  data.fill(0xa5);
+  util::generateRandomData(data.data() + 1, data.size() - 2);
+  CHECK_EQ(0xa5, data.front());
+  CHECK_EQ(0xa5, data.back());
+  CHECK(std::any_of(data.begin() + 1, data.end() - 1,
+                    [](unsigned char value) { return value != 0xa5; }));
+  const auto before = data;
+  util::generateRandomData(data.data() + 1, 0);
+  CHECK(data == before);
 }
 
 void UtilTest2::testFromHex()

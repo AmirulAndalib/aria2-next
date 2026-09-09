@@ -34,6 +34,20 @@ HTTP 403 does not lower the concurrency budget. HTTP 429/503 reduces it once
 per request generation; subsequent payload progress restores concurrency
 without waiting for an entire range to complete.
 
+Validated redirect destinations are reused for subsequent ranges. Expired
+destinations are refreshed through one request per source route instead of sending
+every range back through a signed entry point. Credentials retain their
+original origin boundary, and cookies remain managed by libcurl.
+
+Unrestricted parallel HTTP downloads use a bounded set of workers across
+available address families. Workers retain their transport choice while taking
+ranges from one queue; faster workers complete more work without changing the
+path of other active transfers. Redirect destinations belong to their source
+route. Received bytes stay committed to the same range planner, and idle workers
+can assist unfinished ranges. DNS, connection establishment, TLS, and pooling
+remain native libcurl operations. Explicit IPv4, interface, proxy, and rate-limit
+settings are respected.
+
 Magnet downloads keep one GID from metadata discovery through file selection, payload transfer, and seeding. With `pause-metadata=true`, the same GID remains paused with a complete file list and `bittorrent.fileSelectionState=awaiting` until a valid `select-file` is submitted. Aria2 Next then replaces the metadata-only native handle with a checked libtorrent handle that already contains the final file priorities. This prevents stale partfiles from entering the payload session.
 
 The BitTorrent session persists native IPv4 and IPv6 DHT routing state, restores paused torrents into libtorrent without activating network transfer, checkpoints fast-resume data while running, preserves representable tracker tiers, compacts only excess lowest-priority tiers, and isolates private torrents from global tracker injection. Paused tasks retain verified task and file progress across process restarts. Permanent task removal deletes fast-resume and partfile state as one native operation. TCP, uTP, PEX, Local Peer Discovery, UPnP/NAT-PMP, transport encryption, v1/v2 torrents, sparse or allocated storage, sequential mode, and HTTP/SOCKS proxying use native libtorrent facilities.

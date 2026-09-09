@@ -13,6 +13,8 @@
 #ifndef D_BT_DOWNLOAD_IMPL_H
 #define D_BT_DOWNLOAD_IMPL_H
 
+#include "common.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>

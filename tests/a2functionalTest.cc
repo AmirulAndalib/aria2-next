@@ -3,6 +3,7 @@
 #include <string>
 #include <numeric>
 #include <algorithm>
+#include <vector>
 
 #include "a2doctest.h"
 

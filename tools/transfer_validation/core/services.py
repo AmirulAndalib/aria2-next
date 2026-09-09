@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .dependencies import caddy_server, toxiproxy_server, wiremock_jar
-from .runtime import RunDirectory, free_port, wait_for_port
+from .runtime import RunDirectory, free_port, process_options, wait_for_port
 
 
 def post_json(url: str, value: dict[str, object]) -> dict[str, object]:
@@ -60,7 +60,9 @@ class WireMockService:
             "--logged-response-body-size-limit",
             "0",
         ]
-        self.process = subprocess.Popen(command, stdout=self.log, stderr=self.log)
+        self.process = subprocess.Popen(
+            command, stdout=self.log, stderr=self.log, **process_options()
+        )
         wait_for_port(self.port, 20)
         wait_for_port(self.https_port, 20)
 
@@ -111,7 +113,9 @@ class CaddyService:
             "--root",
             str(self.root),
         ]
-        self.process = subprocess.Popen(command, stdout=self.log, stderr=self.log)
+        self.process = subprocess.Popen(
+            command, stdout=self.log, stderr=self.log, **process_options()
+        )
         wait_for_port(self.port)
 
     def stop(self) -> None:
@@ -154,7 +158,9 @@ class ToxiproxyService:
             "-seed",
             "1",
         ]
-        self.process = subprocess.Popen(command, stdout=self.log, stderr=self.log)
+        self.process = subprocess.Popen(
+            command, stdout=self.log, stderr=self.log, **process_options()
+        )
         wait_for_port(self.api_port)
 
     def create_proxy(self, name: str, upstream_port: int) -> int:

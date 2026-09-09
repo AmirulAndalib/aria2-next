@@ -21,12 +21,10 @@ public:
   void setUp()
   {
     fileEntry_.setUris(
-        {"http://alpha/file", "ftp://alpha/file", "http://bravo/file"});
+        {"http://alpha/file", "sftp://alpha/file", "http://bravo/file"});
 
     sel.reset(new InorderURISelector());
   }
-
-  void tearDown() {}
 
   void testSelect();
 };
@@ -38,7 +36,7 @@ void InorderURISelectorTest::testSelect()
   std::vector<std::pair<size_t, std::string>> usedHosts;
   REQUIRE_EQ(std::string("http://alpha/file"),
                        sel->select(&fileEntry_, usedHosts));
-  REQUIRE_EQ(std::string("ftp://alpha/file"),
+  REQUIRE_EQ(std::string("sftp://alpha/file"),
                        sel->select(&fileEntry_, usedHosts));
   REQUIRE_EQ(std::string("http://bravo/file"),
                        sel->select(&fileEntry_, usedHosts));

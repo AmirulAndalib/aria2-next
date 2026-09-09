@@ -13,9 +13,12 @@
 #ifndef D_CURL_DOWNLOAD_IMPL_H
 #define D_CURL_DOWNLOAD_IMPL_H
 
+#include "common.h"
+
 #include <array>
 
 #include <chrono>
+#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
@@ -47,6 +50,14 @@ enum class CurlResponseFailure {
   PreconditionFailed
 };
 
+struct CurlEndpoint {
+  std::string uri;
+  uint64_t generation = 0;
+  bool resolving = false;
+  std::chrono::steady_clock::time_point readyAt{};
+  bool unavailable = false;
+};
+
 struct CurlHandle {
   CurlDownload* download = nullptr;
   CURL* value = nullptr;
@@ -60,6 +71,10 @@ struct CurlHandle {
   Timer bodySampleStart = Timer::zero();
   Timer lastPayload = Timer::zero();
   uint64_t connectionEpoch = 0;
+  uint64_t endpointGeneration = 0;
+  bool resolvingEndpoint = false;
+  bool redirectedEndpoint = false;
+  long addressFamily = CURL_IPRESOLVE_WHATEVER;
   int64_t responseRangeEnd = -1;
   int64_t responseTotalLength = -1;
   int64_t responseContentLength = -1;
@@ -83,6 +98,10 @@ struct CurlHandle {
 
 struct CurlDownloadImpl {
   std::vector<std::string> uris;
+  std::vector<CurlEndpoint> endpoints;
+  std::array<long, 2> families{
+      {CURL_IPRESOLVE_WHATEVER, CURL_IPRESOLVE_WHATEVER}};
+  std::deque<long> idleWorkers;
   size_t preferredUriIndex = 0;
   std::string path;
   std::string currentUri;

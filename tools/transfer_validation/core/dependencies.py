@@ -7,6 +7,7 @@ import platform
 import shutil
 import tarfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 from .runtime import BUILD_ROOT
@@ -101,14 +102,20 @@ def caddy_server() -> Path:
         BUILD_ROOT / "dependencies" / str(entry["filename"]),
         str(entry["sha256"]),
     )
-    binary = BUILD_ROOT / "dependencies" / "caddy"
+    binary_name = "caddy.exe" if platform.system() == "Windows" else "caddy"
+    binary = BUILD_ROOT / "dependencies" / binary_name
     if not binary.exists():
-        with tarfile.open(archive, "r:gz") as package:
-            member = package.getmember("caddy")
-            source = package.extractfile(member)
-            if source is None:
-                raise RuntimeError("Caddy archive does not contain its executable")
-            with binary.open("wb") as output:
-                shutil.copyfileobj(source, output)
+        if zipfile.is_zipfile(archive):
+            with zipfile.ZipFile(archive) as package:
+                with package.open(binary_name) as source, binary.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+        else:
+            with tarfile.open(archive, "r:gz") as package:
+                member = package.getmember(binary_name)
+                source = package.extractfile(member)
+                if source is None:
+                    raise RuntimeError("Caddy archive does not contain its executable")
+                with source, binary.open("wb") as output:
+                    shutil.copyfileobj(source, output)
     os.chmod(binary, 0o755)
     return binary

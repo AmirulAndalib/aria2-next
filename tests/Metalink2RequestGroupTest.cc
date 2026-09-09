@@ -156,20 +156,12 @@ void Metalink2RequestGroupTest::testGenerate_dosDirTraversal()
   option_->put(PREF_DIR, "/tmp");
   Metalink2RequestGroup().generate(
       groups, A2_TEST_DIR "/metalink4-dosdirtraversal.xml", option_);
-  REQUIRE_EQ((size_t)2, groups.size());
-  std::shared_ptr<RequestGroup> rg = groups[0];
-  std::shared_ptr<FileEntry> file =
-      rg->getDownloadContext()->getFirstFileEntry();
-  REQUIRE_EQ(std::string("/tmp/..%5C..%5Cexample.ext"),
-                       file->getPath());
-
-  rg = groups[1];
-  file = rg->getDownloadContext()->getFileEntries()[0];
-  REQUIRE_EQ(std::string("/tmp/..%5C..%5Cfile1.ext"),
-                       file->getPath());
-  file = rg->getDownloadContext()->getFileEntries()[1];
-  REQUIRE_EQ(std::string("/tmp/..%5C..%5Cfile2.ext"),
-                       file->getPath());
+  REQUIRE_EQ(size_t{3}, groups.size());
+  const char* names[] = {"example.ext", "file1.ext", "file2.ext"};
+  for (size_t i = 0; i < groups.size(); ++i) {
+    REQUIRE_EQ(std::string("/tmp/..%5C..%5C") + names[i],
+               groups[i]->getDownloadContext()->getFirstFileEntry()->getPath());
+  }
 #endif // __MINGW32__
 }
 

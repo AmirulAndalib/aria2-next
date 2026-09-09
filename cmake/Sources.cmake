@@ -448,8 +448,6 @@ set(ARIA2_SOURCES_BASE
   src/OpenedFileCounter.h
   src/SHA1IOFile.cc
   src/SHA1IOFile.h
-  src/EvictSocketPoolCommand.cc
-  src/EvictSocketPoolCommand.h
 )
 
 set(ARIA2_SOURCES_MINGW_BUILD

@@ -57,7 +57,6 @@
 #include "a2io.h"
 #include "DownloadContext.h"
 #include "array_fun.h"
-#include "EvictSocketPoolCommand.h"
 #ifdef HAVE_EPOLL
 #  include "EpollEventPoll.h"
 #endif // HAVE_EPOLL
@@ -147,8 +146,6 @@ std::unique_ptr<DownloadEngine> DownloadEngineFactory::newDownloadEngine(
       e->newCUID(), e->getFileAllocationMan().get(), e.get()));
   e->addRoutineCommand(make_unique<CheckIntegrityDispatcherCommand>(
       e->newCUID(), e->getCheckIntegrityMan().get(), e.get()));
-  e->addRoutineCommand(
-      make_unique<EvictSocketPoolCommand>(e->newCUID(), e.get(), 30_s));
 
   if (op->getAsInt(PREF_STATE_SAVE_INTERVAL) > 0) {
     e->addRoutineCommand(make_unique<StateSaveCommand>(

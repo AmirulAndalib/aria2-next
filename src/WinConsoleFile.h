@@ -14,6 +14,7 @@
 #ifndef D_WIN_CONSOLE_FILE_H
 #define D_WIN_CONSOLE_FILE_H
 
+#include "common.h"
 #include "OutputFile.h"
 
 #include <windows.h>

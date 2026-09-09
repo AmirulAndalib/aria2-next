@@ -13,6 +13,8 @@
 #ifndef D_BT_SETTINGS_H
 #define D_BT_SETTINGS_H
 
+#include "common.h"
+
 #include <string>
 #include <vector>
 

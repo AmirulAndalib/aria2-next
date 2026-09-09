@@ -5,6 +5,7 @@ import ipaddress
 import json
 import shutil
 import socket
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,10 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 BUILD_ROOT = REPOSITORY_ROOT / "build" / "transfer-validation"
+
+
+def process_options() -> dict[str, int]:
+    return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
 
 
 def free_port() -> int:

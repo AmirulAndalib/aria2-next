@@ -160,7 +160,7 @@ void RequestTest::testResetUri()
   Request req;
   req.setUri("http://aria.rednoah.com:8080/aria2/index.html");
   req.setReferer("http://aria.rednoah.com:8080/");
-  req.redirectUri("ftp://aria.rednoah.co.jp/index_en.html?view=wide");
+  req.redirectUri("https://aria.rednoah.co.jp/index_en.html?view=wide");
 
   bool v3 = req.resetUri();
   REQUIRE(v3);

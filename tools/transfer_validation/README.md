@@ -33,8 +33,21 @@ cookie-authenticated redirects with conditional ranges, ignored
 ranges, changed resources, and protected existing files. Compact request evidence verifies that faults were exercised and
 short responses retrieve only their missing suffix. Successful transfers require
 completed RPC state, nondecreasing sampled progress, and matching SHA-256 hashes.
+Redirect validation also covers single-use entry points, serialized endpoint
+refresh after expiration and overload, and cross-origin credential boundaries.
+A dual-stack fixture uses Toxiproxy to slow the IPv6 body without preventing
+connection establishment; validation requires evidence that the slow path was
+actually exercised before IPv4 completed the download. A second fixture delays
+the IPv4 response by 2.5 seconds while keeping its payload fast, guarding against
+selecting an address family before both paths have supplied a useful sample.
+Another fixture reduces the incumbent path's bandwidth after initial progress
+and checks that a healthy alternate remains available to finish the download.
 BitTorrent and ED2K checks separately wait for content completion because sharing
 tasks can remain active. These are bounded regression scenarios, not a guarantee
 against every network or server behavior. No public download service is used.
 
-The dependency lock currently contains verified macOS ARM64 artifacts. Other hosts fail with an explicit unsupported-platform message until their release artifacts and hashes are added deliberately.
+The dependency lock contains verified macOS ARM64 and Windows x64 Caddy and
+Toxiproxy artifacts. HTTP validation also requires Java 17 or newer for
+WireMock; Java 21 LTS is suitable. Windows uses native executables and hides
+service console windows. Other protocol modules still require their own
+platform dependencies. Unpinned hosts fail explicitly.

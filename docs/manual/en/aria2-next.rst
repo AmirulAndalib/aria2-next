@@ -284,6 +284,18 @@ HTTP/SFTP Options
   SFTP remains single-stream. The accepted range is ``1`` to ``256``.
   Default: ``6``
 
+  Validated redirect destinations are reused for later ranges. When a
+  destination expires, one request refreshes that source route while healthy
+  transfers continue. The original input URI remains the restart source.
+
+  With unrestricted automatic address selection, parallel HTTP downloads
+  share one range queue between workers using available address families.
+  Workers keep their transport choice across ranges, and completed workers take
+  more work without switching other active transfers to their path. Redirect
+  destinations are cached separately per source route. Explicit IPv4, interface,
+  proxy, and bandwidth settings retain native address selection. All workers
+  share the connection limit; DNS and transport setup are handled by libcurl.
+
   Parallel transfers reuse available connections and assign remaining work
   from one range queue. Idle connections can assist a slow transfer by taking
   its suffix while the original request continues its prefix. Assistance uses

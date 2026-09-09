@@ -46,7 +46,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/ProtocolDetectorTest.cc
   tests/ExceptionTest.cc
   tests/DownloadHandlersTest.cc
-  tests/DownloadEngineTest.cc
   tests/SignatureTest.cc
   tests/ServerStatManTest.cc
   tests/InorderURISelectorTest.cc

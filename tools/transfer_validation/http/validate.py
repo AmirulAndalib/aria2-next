@@ -19,7 +19,7 @@ sys.path.insert(0, str(SUITE_ROOT))
 
 from core.engine import EngineProcess
 from core.report import run_validation
-from core.runtime import RunDirectory, create_payload, sha256
+from core.runtime import RunDirectory, create_payload, free_port, sha256
 from core.services import CaddyService, ToxiproxyService, WireMockService, post_json
 
 
@@ -93,7 +93,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             "newScenarioState": "Recovered",
             "request": {
                 "method": "GET", "url": "/payload.bin?case=tail-retry",
-                "headers": {"Range": {"equalTo": missing}},
+                "headers": {"Range": {"matches": rf"bytes=(?!{begin}-)[0-9]+-{end - 1}"}},
             },
             "response": {"status": 503, "headers": {"Retry-After": "1"}},
         })
@@ -209,6 +209,73 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 "response": response,
             })
 
+        # A signed entry point is not a range server. Reuse its validated
+        # destination, and serialize refresh when that destination expires.
+        for expired_code in (401, 403, 404):
+            entry = f"/entry?refresh={expired_code}"
+            old = f"/payload.bin?case=endpoint-old-{expired_code}"
+            new = f"/payload.bin?case=endpoint-new-{expired_code}"
+            for state, next_state, response in (
+                ("Started", "issued", {"status": 302, "headers": {"Location": old}}),
+                ("issued", "retry", {"status": 503, "headers": {"Retry-After": "1"}}),
+                ("retry", "renewed", {"status": 302, "headers": {"Location": new}}),
+            ):
+                wiremock.stub({
+                    "scenarioName": f"endpoint-refresh-{expired_code}",
+                    "requiredScenarioState": state, "newScenarioState": next_state,
+                    "request": {"method": "GET", "url": entry},
+                    "response": response,
+                })
+            wiremock.stub({
+                "priority": 1,
+                "request": {"method": "GET", "url": old,
+                            "headers": {"Range": {"matches": "bytes=[1-9][0-9]*-.*"}}},
+                "response": {"status": expired_code},
+            })
+            wiremock.stub({
+                "priority": 20, "request": {"method": "GET", "url": entry},
+                "response": {"status": 403},
+            })
+        wiremock.stub({
+            "priority": 20, "request": {"method": "GET", "url": "/entry?once"},
+            "response": {"status": 403},
+        })
+        wiremock.stub({
+            "scenarioName": "endpoint-once", "requiredScenarioState": "Started",
+            "newScenarioState": "issued",
+            "request": {"method": "GET", "url": "/entry?once"},
+            "response": {"status": 302, "headers": {
+                "Location": "/payload.bin?case=endpoint-once"}},
+        })
+        wiremock.stub({
+            "request": {"method": "GET", "url": "/entry?credentials",
+                        "headers": {"Authorization": {"equalTo": "Bearer fixture"}}},
+            "response": {"status": 302, "headers": {
+                "Location": f"http://localhost:{wiremock.port}/payload.bin?case=credentials"}},
+        })
+        wiremock.stub({
+            "priority": 1,
+            "request": {"method": "GET", "url": "/payload.bin?case=credentials",
+                        "headers": {"Authorization": {"absent": True},
+                                    "Cookie": {"absent": True}}},
+            "response": {"proxyBaseUrl": caddy.base_url},
+        })
+        wiremock.stub({
+            "priority": 2,
+            "request": {"method": "GET", "url": "/payload.bin?case=credentials"},
+            "response": {"status": 403},
+        })
+        wiremock.stub({
+            "request": {"method": "GET", "url": "/entry?family-bound"},
+            "response": {"status": 302, "headers": {
+                "Location": f"http://localhost:{wiremock.port}/payload.bin?case=family-bound"}},
+        })
+        wiremock.stub({
+            "priority": 1,
+            "request": {"method": "GET", "url": "/payload.bin?case=family-bound"},
+            "response": {"status": 403},
+        })
+
         engine = EngineProcess(run, "engine", engine_path)
         session = run.state / "download.session"
         engine.start([f"--save-session={session}"])
@@ -237,6 +304,98 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            check("endpoint-once.bin", f"{wiremock.base_url}/entry?once")
+            for expired_code in (401, 403, 404):
+                check(f"endpoint-refresh-{expired_code}.bin",
+                      f"{wiremock.base_url}/entry?refresh={expired_code}")
+            check("endpoint-credentials.bin", f"{wiremock.base_url}/entry?credentials",
+                  {"header": "Authorization: Bearer fixture\nCookie: manual=private"})
+            # TCP/HTTP setup succeeds immediately on IPv6, but its body is
+            # slow. The IPv4 listener serves the same bytes at the same port.
+            dual_port = free_port()
+            post_json(f"{proxy.api_url}/proxies", {
+                "name": "fast-ipv4", "listen": f"127.0.0.1:{dual_port}",
+                "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
+            })
+            proxy.add_toxic("fast-ipv4", "latency", "latency", {"latency": 100})
+            post_json(f"{proxy.api_url}/proxies", {
+                "name": "slow-ipv6", "listen": f"[::1]:{dual_port}",
+                "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
+            })
+            proxy.add_toxic("slow-ipv6", "bandwidth", "bandwidth", {"rate": 32})
+            dual_gid = check("dual-stack.bin", f"http://localhost:{dual_port}/payload.bin")
+            if results["dual-stack.bin"] > 8:
+                raise RuntimeError("The download remained on the slow IPv6 body path")
+            # A fast body can follow a slow first response. Discovery must not
+            # discard IPv4 before it has received any payload to compare.
+            wiremock.stub({
+                "priority": 1,
+                "request": {"method": "GET", "url": "/payload.bin?case=late-family"},
+                "response": {"proxyBaseUrl": caddy.base_url,
+                             "fixedDelayMilliseconds": 2500},
+            })
+            delayed_port = free_port()
+            post_json(f"{proxy.api_url}/proxies", {
+                "name": "delayed-ipv4", "listen": f"127.0.0.1:{delayed_port}",
+                "upstream": f"127.0.0.1:{wiremock.port}", "enabled": True,
+            })
+            post_json(f"{proxy.api_url}/proxies", {
+                "name": "early-ipv6", "listen": f"[::1]:{delayed_port}",
+                "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
+            })
+            proxy.add_toxic("early-ipv6", "bandwidth", "bandwidth", {"rate": 32})
+            check("delayed-family.bin",
+                  f"http://localhost:{delayed_port}/payload.bin?case=late-family")
+            if results["delayed-family.bin"] > 12:
+                raise RuntimeError("Discovery selected a family before comparing both bodies")
+            # A healthy alternate must remain available after an early loss.
+            # Change the incumbent's bandwidth only after useful progress,
+            # using Toxiproxy rather than a custom HTTP implementation.
+            changing_port = free_port()
+            for family, listen, rate in (("ipv4", "127.0.0.1", 1024),
+                                         ("ipv6", "[::1]", 2048)):
+                name = f"changing-{family}"
+                post_json(f"{proxy.api_url}/proxies", {
+                    "name": name, "listen": f"{listen}:{changing_port}",
+                    "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
+                })
+                proxy.add_toxic(name, "bandwidth", "bandwidth", {"rate": rate})
+            proxy.add_toxic("changing-ipv4", "latency", "latency", {"latency": 100})
+            started = time.monotonic()
+            changing_gid = engine.add_uri(f"http://localhost:{changing_port}/payload.bin",
+                {**options, "out": "changing-family.bin", "stream-max-connections": "4"})
+            while time.monotonic() - started < 10:
+                progress = engine.rpc.call("aria2.tellStatus", [changing_gid])
+                if int(progress["completedLength"]) >= 8 * 1024 * 1024:
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError("The changing-path fixture did not reach its transition")
+            post_json(f"{proxy.api_url}/proxies/changing-ipv6/toxics/bandwidth",
+                      {"attributes": {"rate": 32}})
+            engine.rpc.wait_complete(changing_gid, 20)
+            if sha256(engine.download_dir / "changing-family.bin") != expected:
+                raise RuntimeError("Path reassignment corrupted the payload")
+            results["changingFamily"] = round(time.monotonic() - started, 3)
+            # A destination can be authorized on one address family only.
+            # Rejection of a discovery transfer must not expire its good peer.
+            post_json(f"{proxy.api_url}/proxies", {
+                "name": "family-bound", "listen": f"[::1]:{wiremock.port}",
+                "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
+            })
+            proxy.add_toxic("family-bound", "bandwidth", "bandwidth", {"rate": 16384})
+            with EngineProcess(run, "family-bound", engine_path) as bound:
+                bound.rpc.call("aria2.changeGlobalOption", [{"log-level": "trace"}])
+                started = time.monotonic()
+                bound_gid = bound.add_uri(f"{wiremock.base_url}/entry?family-bound",
+                    {**options, "out": "payload.bin", "retry-wait": "10"})
+                bound.rpc.wait_complete(bound_gid, 8)
+                if sha256(bound.download_dir / "payload.bin") != expected:
+                    raise RuntimeError("Address-family-bound destination corrupted the payload")
+                results["familyBoundEndpoint"] = round(time.monotonic() - started, 3)
+            if not re.search(r"event=range_finished .*http=403 ",
+                             bound.engine_log.read_text()):
+                raise RuntimeError("The unavailable address family was not exercised")
             for connections in (1, 64):
                 check(f"redirect-{connections}.bin",
                       f"{wiremock.base_url}/download?token=fixture",
@@ -253,7 +412,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 })
                 status = engine.rpc.wait_complete(gid, 30)
                 output = directory / automatic_name
-                if (status["files"][0]["path"] != str(output)
+                if (Path(status["files"][0]["path"]) != output
                         or sha256(output) != expected):
                     raise RuntimeError("Automatic output filename mismatch")
             results["automaticFilename"] = "passed"
@@ -335,6 +494,13 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 return [r["range"] for r in requests
                         if r["url"] == f"/payload.bin?case={case}"]
 
+            entry_counts = {"/entry?once": 1, "/entry?credentials": 2,
+                            "/entry?family-bound": 2}
+            entry_counts.update({f"/entry?refresh={code}": 3 for code in (401, 403, 404)})
+            for path, expected_count in entry_counts.items():
+                if sum(r["url"] == path for r in requests) != expected_count:
+                    raise RuntimeError(f"Repeated or missing endpoint resolution: {path}")
+
             for case, value in (("conditional", etag), ("bare-etag", etag),
                                 ("date", modified), ("redirect", etag)):
                 partial = [r for r in requests
@@ -351,10 +517,14 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 raise RuntimeError("An unqualified date became a range validator")
 
             short = ranges("short")
-            if short.count(requested) != 1 or short.count(missing) != 1:
-                raise RuntimeError("Short response did not request only its missing suffix")
-            if ranges("tail-retry").count(missing) != 2:
-                raise RuntimeError("Tail retry did not remain local to its missing suffix")
+            suffix_pattern = rf"bytes=(?!{begin}-)[0-9]+-{end - 1}"
+            if short.count(requested) != 1 or not any(
+                    re.fullmatch(suffix_pattern, value) for value in short if value):
+                raise RuntimeError("Short response left its final suffix unrecovered")
+            retried = ranges("tail-retry")
+            if not any(re.fullmatch(suffix_pattern, value) and retried.count(value) == 2
+                       for value in retried if value):
+                raise RuntimeError("The failed suffix was not retried exactly once")
             for code in (429, 503):
                 if ranges(f"retry-{code}").count(requested) != 2:
                     raise RuntimeError(f"HTTP {code} retry was not exercised exactly once")
@@ -362,8 +532,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     for value in ranges("tail") if value]
             if not any(begin < first <= last < end for first, last in tail):
                 raise RuntimeError("Slow tail work was not reassigned")
-            if len([r for r in tail if begin <= r[0] < end]) > (end - begin) // 65536:
-                raise RuntimeError("Tail requests exceeded the useful body-sample budget")
+            if len([r for r in tail if begin <= r[0] < end]) > 2 * (end - begin) // 65536:
+                raise RuntimeError("Tail requests exceeded the bounded split and reassignment budget")
 
             bare_gid = engine.add_uri(
                 f"{wiremock.base_url}/payload.bin?case=bare-etag",
@@ -398,7 +568,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             restored = engine.rpc.wait_status(gid, "paused")
             if (any(restored[k] != paused[k]
                     for k in ("totalLength", "completedLength"))
-                    or restored["files"][0]["path"] != str(engine.download_dir / automatic_name)
+                    or Path(restored["files"][0]["path"]) != engine.download_dir / automatic_name
                     or restored["files"][0]["path"] != paused["files"][0]["path"]):
                 raise RuntimeError("Paused progress or filename changed across restart")
             engine.rpc.call("aria2.unpause", [gid])
@@ -430,6 +600,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         # The logger buffers debug output. Check the flushed pre-restart log,
         # rather than racing the logger immediately after RPC completion.
         retry_log = (run.logs / "before-restart.engine.log").read_text()
+        if not re.search(rf"event=route_payload gid={dual_gid} "
+                         r"family=ipv6 bytes=[1-9][0-9]*", retry_log):
+            raise RuntimeError("The slow IPv6 body path was not exercised")
         delay = re.search(rf"event=range_retry gid={tail_gid} .*retry_in_ms=(\d+)",
                           retry_log)
         if not delay or int(delay[1]) < 10000:

@@ -13,6 +13,8 @@
 #ifndef D_CURL_SESSION_H
 #define D_CURL_SESSION_H
 
+#include "common.h"
+
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -78,7 +80,8 @@ private:
                RequestGroup* group);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
                     const RangeLease& lease, bool primary, bool ranged,
-                    CurlHandlePurpose purpose);
+                    CurlHandlePurpose purpose,
+                    long addressFamily = CURL_IPRESOLVE_WHATEVER);
   bool startProbe(const std::shared_ptr<CurlDownload>& download,
                   CurlHandlePurpose purpose);
   void finishProbe(const std::shared_ptr<CurlDownload>& download,
@@ -113,6 +116,8 @@ private:
   static void fail(CurlDownload* download, error_code::Value errorCode,
                    const std::string& message) noexcept;
   static long platformSslOptions() noexcept;
+  static bool sameOrigin(const std::string& first, const std::string& second);
+  static void rememberEndpoint(CurlHandle& handle);
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);
   static bool retryableFailure(CURLcode result, long responseCode,

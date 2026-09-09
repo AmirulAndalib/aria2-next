@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import base64
 import secrets
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from .rpc import RpcClient, RpcError
-from .runtime import REPOSITORY_ROOT, RunDirectory, free_port
+from .runtime import REPOSITORY_ROOT, RunDirectory, free_port, process_options
 
 
 class EngineProcess:
@@ -21,7 +22,8 @@ class EngineProcess:
     ):
         self.run = run
         self.name = name
-        self.engine = (engine or REPOSITORY_ROOT / "build/default/aria2-next").resolve()
+        default_name = "aria2-next.exe" if os.name == "nt" else "aria2-next"
+        self.engine = (engine or REPOSITORY_ROOT / "build/default" / default_name).resolve()
         if not self.engine.is_file():
             raise FileNotFoundError(f"Engine binary does not exist: {self.engine}")
         self.rpc_port = free_port()
@@ -69,7 +71,9 @@ class EngineProcess:
             command.extend(extra_options)
         self.stdout = self.stdout_path.open("wb")
         self.stderr = self.stderr_path.open("wb")
-        self.process = subprocess.Popen(command, stdout=self.stdout, stderr=self.stderr)
+        self.process = subprocess.Popen(
+            command, stdout=self.stdout, stderr=self.stderr, **process_options()
+        )
         try:
             self.rpc.wait_ready()
         except Exception:

@@ -1,77 +1,43 @@
 #include "UriListParser.h"
 
-#include <sstream>
-#include <algorithm>
-#include <iostream>
-#include <iterator>
-
 #include "a2doctest.h"
-
-#include "Exception.h"
-#include "util.h"
+#include "Option.h"
 #include "prefs.h"
-#include "OptionHandler.h"
+#include "util.h"
 
 namespace aria2 {
 
-class UriListParserTest {
-
-
-private:
-  std::string list2String(const std::vector<std::string>& src);
-
-public:
-  void setUp() {}
-
-  void testHasNext();
-};
-
-A2_TEST(UriListParserTest, testHasNext)
-
-std::string UriListParserTest::list2String(const std::vector<std::string>& src)
+TEST_CASE("UriListParser preserves entries and options with LF or CRLF")
 {
-  std::ostringstream strm;
-  std::copy(src.begin(), src.end(),
-            std::ostream_iterator<std::string>(strm, " "));
-  return util::strip(strm.str());
-}
-
-void UriListParserTest::testHasNext()
-{
-  std::string filename = A2_TEST_DIR "/filelist1.txt";
-
-  UriListParser flp(filename);
-
-  std::vector<std::string> uris;
-  Option reqOp;
-
-  REQUIRE(flp.hasNext());
-
-  flp.parseNext(uris, reqOp);
-  REQUIRE_EQ(
-      std::string("http://localhost/index.html http://localhost2/index.html"),
-      list2String(uris));
-
-  uris.clear();
-  reqOp.clear();
-
-  REQUIRE(flp.hasNext());
-
-  flp.parseNext(uris, reqOp);
-  REQUIRE_EQ(std::string("ftp://localhost/aria2.tar.bz2"),
-                       list2String(uris));
-  REQUIRE_EQ(std::string("/tmp"), reqOp.get(PREF_DIR));
-  REQUIRE_EQ(std::string("chunky_chocolate"), reqOp.get(PREF_OUT));
-
-  uris.clear();
-  reqOp.clear();
-
-  REQUIRE(!flp.hasNext());
-
-  flp.parseNext(uris, reqOp);
-  REQUIRE_EQ(std::string(""), list2String(uris));
-
-  REQUIRE(!flp.hasNext());
+  for (const std::string newline : {"\n", "\r\n"}) {
+    const std::string filename = A2_TEST_OUT_DIR "/uri-list.txt";
+    const auto input =
+        "# comment" + newline +
+        "http://localhost/index.html\thttps://mirror/index.html" + newline +
+        newline + "https://localhost/archive.tar" + newline + "  dir=/tmp" +
+        newline + "# comment" + newline + "\t out=archive.tar" + newline;
+    REQUIRE(util::saveAs(filename, input, true));
+    UriListParser parser(filename);
+    std::vector<std::string> uris;
+    Option options;
+    REQUIRE(parser.hasNext());
+    parser.parseNext(uris, options);
+    const std::vector<std::string> mirrors = {"http://localhost/index.html",
+                                              "https://mirror/index.html"};
+    REQUIRE(uris == mirrors);
+    uris.clear();
+    options.clear();
+    REQUIRE(parser.hasNext());
+    parser.parseNext(uris, options);
+    REQUIRE(uris == std::vector<std::string>{"https://localhost/archive.tar"});
+    CHECK_EQ("/tmp", options.get(PREF_DIR));
+    CHECK_EQ("archive.tar", options.get(PREF_OUT));
+    CHECK(!parser.hasNext());
+    uris.clear();
+    parser.parseNext(uris, options);
+    CHECK(uris.empty());
+    CHECK(!parser.hasNext());
+  }
 }
 
 } // namespace aria2

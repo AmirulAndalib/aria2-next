@@ -15,6 +15,7 @@
 #include "RpcResponse.h"
 #include "prefs.h"
 #include "TestUtil.h"
+#include "MessageDigest.h"
 #include "DownloadContext.h"
 #include "FeatureConfig.h"
 #include "util.h"
@@ -652,9 +653,12 @@ RpcRequest createAddMetalinkReq()
 
 void RpcMethodTest::testAddMetalink()
 {
-  File(e_->getOption()->get(PREF_DIR) +
-       "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
-      .remove();
+  const auto metadata = readFile(A2_TEST_DIR "/2files.metalink");
+  auto digest = MessageDigest::sha1();
+  digest->update(metadata.data(), metadata.size());
+  const auto metadataName = util::toHex(digest->digest()) + ".meta4";
+  const auto metadataPath = e_->getOption()->get(PREF_DIR) + "/" + metadataName;
+  File(metadataPath).remove();
   AddMetalinkRpcMethod m;
   {
     // Saving upload metadata is disabled by option.
@@ -667,9 +671,7 @@ void RpcMethodTest::testAddMetalink()
                       gid1, downcast<String>(resParams->get(0))->s().c_str()));
     REQUIRE_EQ(0, GroupId::toNumericId(
                       gid2, downcast<String>(resParams->get(1))->s().c_str()));
-    REQUIRE(!File(e_->getOption()->get(PREF_DIR) +
-                  "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
-                 .exists());
+    REQUIRE(!File(metadataPath).exists());
   }
   e_->getOption()->put(PREF_RPC_SAVE_UPLOAD_METADATA, A2_V_TRUE);
   {
@@ -682,9 +684,8 @@ void RpcMethodTest::testAddMetalink()
                       gid3, downcast<String>(resParams->get(0))->s().c_str()));
     REQUIRE_EQ(0, GroupId::toNumericId(
                       gid4, downcast<String>(resParams->get(1))->s().c_str()));
-    REQUIRE(File(e_->getOption()->get(PREF_DIR) +
-                 "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4")
-                .exists());
+    REQUIRE(File(metadataPath).exists());
+    REQUIRE_EQ(metadata, readFile(metadataPath));
 
     auto tar = findReservedGroup(e_->getRequestGroupMan().get(), gid3);
     REQUIRE(tar);
@@ -702,7 +703,7 @@ void RpcMethodTest::testAddMetalink()
     File(dir).mkdirs();
     auto opt = Dict::g();
     opt->put(PREF_DIR->k, dir);
-    File(dir + "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4").remove();
+    File(dir + "/" + metadataName).remove();
     req.params->append(std::move(opt));
 
     auto res = m.execute(std::move(req), e_.get());
@@ -715,8 +716,7 @@ void RpcMethodTest::testAddMetalink()
     REQUIRE_EQ(dir + "/aria2-5.0.0.tar.bz2",
                findReservedGroup(e_->getRequestGroupMan().get(), gid5)
                    ->getFirstFilePath());
-    REQUIRE(
-        File(dir + "/c908634fbc257fd56f0114912c2772aeeb4064f4.meta4").exists());
+    REQUIRE(File(dir + "/" + metadataName).exists());
   }
 }
 
