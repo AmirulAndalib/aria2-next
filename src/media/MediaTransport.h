@@ -6,10 +6,18 @@
 #include <memory>
 #include <string>
 #include <map>
+#include <stdexcept>
 
 namespace aria2 {
 class Option;
 namespace media {
+struct HttpError : std::runtime_error {
+  HttpError(long status, const std::string& message)
+      : std::runtime_error(message), status(status)
+  {
+  }
+  long status;
+};
 struct Resource {
   std::string path, url, mime;
   int64_t size = 0;

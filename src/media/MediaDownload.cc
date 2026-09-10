@@ -227,8 +227,9 @@ try {
                                            shared_from_this(), group, engine);
 }
 catch (const std::exception& error) {
-  if (control_)
-    control_->cancel = true;
+  if (control_) {
+    control_->requestCancel();
+  }
   snapshot_.state = "error";
   snapshot_.error = failureMessage(error);
   throw std::runtime_error(snapshot_.error);
@@ -283,8 +284,9 @@ void Download::poll(RequestGroup* group)
 void Download::stop(bool retainState)
 {
   retainState_ = retainState;
-  if (control_)
-    control_->cancel = true;
+  if (control_) {
+    control_->requestCancel();
+  }
   if (control_ && !control_->done)
     return;
   if (session_)
@@ -303,7 +305,7 @@ bool Download::finishRecording()
     finishRequested_ = true;
     return true;
   }
-  control_->finish = true;
+  control_->requestFinish();
   return true;
 }
 bool Download::stopped() const

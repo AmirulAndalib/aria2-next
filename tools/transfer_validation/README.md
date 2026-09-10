@@ -36,6 +36,7 @@ Public media validation is opt-in and is excluded from `run.py all`:
 ```sh
 python3 tools/transfer_validation/media/public.py
 python3 tools/transfer_validation/media/public.py --case dash-live
+python3 tools/transfer_validation/media/public.py --suite all
 ```
 
 The public runner requires curl, FFmpeg and ffprobe. It snapshots the executable,

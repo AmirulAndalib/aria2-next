@@ -69,8 +69,8 @@ class EngineProcess:
         ]
         if extra_options:
             command.extend(extra_options)
-        self.stdout = self.stdout_path.open("wb")
-        self.stderr = self.stderr_path.open("wb")
+        self.stdout = self.stdout_path.open("ab")
+        self.stderr = self.stderr_path.open("ab")
         self.process = subprocess.Popen(
             command, stdout=self.stdout, stderr=self.stderr, **process_options()
         )

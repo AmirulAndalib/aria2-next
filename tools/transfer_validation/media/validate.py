@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import contextmanager
 import sqlite3
 import xml.etree.ElementTree as ET
 import shutil
@@ -15,15 +16,91 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.engine import EngineProcess
 from core.report import run_validation
-from core.runtime import RunDirectory
+from core.runtime import RunDirectory, process_options
 from core.services import CaddyService, WireMockService
-from media.common import command, decoded_hash, native_env, probe
+from media.common import command, control_action, decoded_hash, native_env, probe
 
 
 def wait(
     engine: EngineProcess, gid: str, state: str = "complete", timeout: float = 30
 ) -> dict:
     return engine.rpc.wait_status(gid, state, timeout)
+
+
+def wait_duration(engine: EngineProcess, gid: str, milliseconds: int) -> dict:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        status = engine.rpc.call("aria2.tellStatus", [gid])
+        if status["status"] == "error":
+            raise AssertionError(status)
+        if int(status.get("media", {}).get("completedDuration", 0)) >= milliseconds:
+            return status
+        time.sleep(0.1)
+    raise TimeoutError(status)
+
+
+@contextmanager
+def live_source(run, source, ffmpeg, protocol, name, duration=None):
+    directory = run.fixtures / name
+    directory.mkdir()
+    suffix = "m3u8" if protocol == "hls" else "mpd"
+    manifest = directory / f"index.{suffix}"
+    args = [
+        ffmpeg,
+        "-v",
+        "error",
+        "-re",
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(source),
+        "-map",
+        "0",
+        "-c",
+        "copy",
+    ]
+    if duration:
+        args += ["-t", str(duration)]
+    args += (
+        ["-f", "hls", "-hls_time", "2", "-hls_list_size", "5"]
+        if protocol == "hls"
+        else [
+            "-f",
+            "dash",
+            "-seg_duration",
+            "2",
+            "-window_size",
+            "5",
+            "-extra_window_size",
+            "0",
+        ]
+    )
+    with (run.logs / f"{name}.producer.log").open("wb") as log:
+        producer = subprocess.Popen(
+            args + [manifest.as_posix()],
+            stdin=subprocess.PIPE,
+            stdout=log,
+            stderr=log,
+            env=native_env(),
+            **process_options(),
+        )
+        try:
+            deadline = time.monotonic() + 15
+            while not manifest.exists():
+                if time.monotonic() >= deadline or producer.poll() is not None:
+                    raise RuntimeError(f"{protocol} producer did not start")
+                time.sleep(0.1)
+            yield f"{name}/{manifest.name}"
+        finally:
+            if producer.poll() is None:
+                producer.stdin.write(b"q\n")
+                producer.stdin.flush()
+                try:
+                    producer.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    producer.terminate()
+                    producer.wait(timeout=5)
+            producer.stdin.close()
 
 
 def validate(run: RunDirectory, engine_path: Path | None) -> dict:
@@ -395,6 +472,49 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         results["liveAlignment"] = (
             "Independent playlist edges share one recording window"
         )
+        for codec, encoder, suffix, container in (
+            ("mp4a.6B", "libmp3lame", "mp3", "mp4"),
+            ("vorbis", "libvorbis", "webm", "mkv"),
+        ):
+            encoded = run.fixtures / f"audio-{encoder}.{suffix}"
+            command(
+                ffmpeg,
+                "-v",
+                "error",
+                "-i",
+                str(source),
+                "-map",
+                "0:a",
+                "-c:a",
+                encoder,
+                str(encoded),
+            )
+            timing = probe(ffprobe, str(encoded), "-show_format")["format"]
+            offset = round(float(timing.get("start_time", 0)) * 1000000)
+            manifest = run.fixtures / f"{encoder}.mpd"
+            mime = "audio/mpeg" if suffix == "mp3" else "audio/webm"
+            manifest.write_text(
+                f'<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT6S">'
+                f'<Period duration="PT6S"><AdaptationSet mimeType="{mime}" codecs="{codec}">'
+                '<Representation id="audio" bandwidth="128000">'
+                f'<SegmentList timescale="1000000" duration="6000000" presentationTimeOffset="{offset}">'
+                f'<SegmentURL media="{encoded.name}"/></SegmentList>'
+                "</Representation></AdaptationSet></Period></MPD>",
+                encoding="utf-8",
+            )
+            gid = engine.add_uri(
+                f"{server.base_url}/{manifest.name}",
+                {
+                    "out": f"{encoder}.{container}",
+                    "media-video": "none",
+                    "media-format": container,
+                },
+            )
+            output = wait(engine, gid)["files"][0]["path"]
+            assert decoded_hash(ffmpeg, output, "a", 6) == decoded_hash(
+                ffmpeg, str(encoded), "a", 6
+            ), codec
+            results[encoder] = "native audio remux preserves decoded samples"
         for name, suffix, container in (
             ("hls", "m3u8", "mp4"),
             ("fmp4", "m3u8", "mkv"),
@@ -612,6 +732,184 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         # Native servers supply fault responses; the engine must never publish
         # a successful partial presentation or silently fall back to a file.
         with WireMockService(run, "media-faults") as faults:
+            with live_source(
+                run, source, ffmpeg, "dash", "empty-dash", duration=24
+            ) as manifest:
+                empty = ET.parse(run.fixtures / manifest).getroot()
+                for timeline in empty.findall(".//{*}SegmentTimeline"):
+                    timeline.clear()
+                for state in ("Started", "ready"):
+                    faults.stub(
+                        {
+                            "scenarioName": "empty-dash",
+                            "requiredScenarioState": state,
+                            "newScenarioState": "ready",
+                            "request": {"method": "GET", "urlPath": f"/{manifest}"},
+                            "response": {
+                                "status": 200,
+                                "body": ET.tostring(empty, encoding="unicode"),
+                            }
+                            if state == "Started"
+                            else {"proxyBaseUrl": server.base_url},
+                        }
+                    )
+                faults.stub(
+                    {
+                        "priority": 10,
+                        "request": {
+                            "method": "GET",
+                            "urlPathPattern": "/empty-dash/.*",
+                        },
+                        "response": {"proxyBaseUrl": server.base_url},
+                    }
+                )
+                gid = engine.add_uri(
+                    f"{faults.base_url}/{manifest}",
+                    {"out": "empty-dash.mp4", "media-record-time": "16"},
+                )
+                status = wait(engine, gid, timeout=40)
+                output = status["files"][0]["path"]
+                assert (
+                    float(probe(ffprobe, output, "-show_format")["format"]["duration"])
+                    >= 15.9
+                ), status
+                command(
+                    ffmpeg, "-v", "error", "-xerror", "-i", output, "-f", "null", "-"
+                )
+                results["emptyLiveTimeline"] = (
+                    "an initially empty DASH timeline grows without false end-of-stream"
+                )
+
+            headers = {
+                "Authorization": {"equalTo": "Bearer media-test"},
+                "Cookie": {"equalTo": "session=media-test"},
+                "Referer": {"equalTo": "https://player.example/"},
+            }
+            authenticated = ["#EXTM3U", "#EXT-X-TARGETDURATION:2"]
+            for index in range(3):
+                route = f"/auth/index{index}.ts"
+                expected_headers = headers
+                if index == 1:
+                    route = "/foreign.ts"
+                    expected_headers = {
+                        **headers,
+                        "Authorization": {"absent": True},
+                        "Cookie": {"absent": True},
+                    }
+                faults.file(f"auth{index}.ts", run.fixtures / f"hls/index{index}.ts")
+                faults.stub(
+                    {
+                        "request": {
+                            "method": "GET",
+                            "urlPath": route,
+                            "headers": expected_headers,
+                        },
+                        "response": {"status": 200, "bodyFileName": f"auth{index}.ts"},
+                    }
+                )
+                uri = f"http://localhost:{faults.port}{route}" if index == 1 else route
+                authenticated += ["#EXTINF:2,", uri]
+            faults.stub(
+                {
+                    "request": {
+                        "method": "GET",
+                        "urlPath": "/auth/manifest",
+                        "headers": headers,
+                    },
+                    "response": {
+                        "status": 200,
+                        "body": "\n".join(authenticated + ["#EXT-X-ENDLIST", ""]),
+                    },
+                }
+            )
+            gid = engine.add_uri(
+                f"{faults.base_url}/auth/manifest",
+                {
+                    "media": "hls",
+                    "out": "authenticated.mp4",
+                    "disable-ipv6": "true",
+                    "header": [
+                        "Authorization: Bearer media-test",
+                        "Cookie: session=media-test",
+                    ],
+                    "referer": "https://player.example/",
+                },
+            )
+            output = wait(engine, gid)["files"][0]["path"]
+            assert decoded_hash(ffmpeg, output) == expected, output
+            results["requestContext"] = (
+                "credentials reach the origin and are stripped from a foreign origin"
+            )
+
+            for mode in ("late", "missing"):
+                route = f"/{mode}/manifest"
+                prefix = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n"
+                fragments = [
+                    f"#EXTINF:2,\n{faults.base_url}/{mode}/{i}.ts\n" for i in range(3)
+                ]
+                for state, body in (
+                    ("Started", prefix + fragments[0]),
+                    ("ready", prefix + "".join(fragments)),
+                ):
+                    faults.stub(
+                        {
+                            "scenarioName": f"{mode}-playlist",
+                            "requiredScenarioState": state,
+                            "request": {"method": "GET", "urlPath": route},
+                            "response": {"status": 200, "body": body},
+                        }
+                    )
+                for index in range(3):
+                    request = {"method": "GET", "urlPath": f"/{mode}/{index}.ts"}
+                    response = {"status": 200, "bodyFileName": f"auth{index}.ts"}
+                    if index == 0:
+                        for state in ("Started", "ready"):
+                            faults.stub(
+                                {
+                                    "scenarioName": f"{mode}-playlist",
+                                    "requiredScenarioState": state,
+                                    "newScenarioState": "ready",
+                                    "request": request,
+                                    "response": response,
+                                }
+                            )
+                    elif index == 1:
+                        faults.stub(
+                            {
+                                "scenarioName": f"{mode}-delivery",
+                                "requiredScenarioState": "Started",
+                                "newScenarioState": "ready",
+                                "request": request,
+                                "response": {"status": 404},
+                            }
+                        )
+                        faults.stub(
+                            {
+                                "scenarioName": f"{mode}-delivery",
+                                "requiredScenarioState": "ready",
+                                "request": request,
+                                "response": response
+                                if mode == "late"
+                                else {"status": 404},
+                            }
+                        )
+                    else:
+                        faults.stub({"request": request, "response": response})
+                gid = engine.add_uri(
+                    f"{faults.base_url}{route}",
+                    {"media": "hls", "out": f"{mode}.mp4", "media-record-time": "6"},
+                )
+                status = wait(engine, gid, "complete" if mode == "late" else "error")
+                if mode == "late":
+                    assert (
+                        decoded_hash(ffmpeg, status["files"][0]["path"]) == expected
+                    ), status
+                else:
+                    assert not Path(status["files"][0]["path"]).exists(), status
+                    engine.rpc.call("aria2.removeDownloadResult", [gid])
+            results["liveAvailability"] = (
+                "native bounded wait recovers a late segment; permanent loss fails without output"
+            )
             fragment = run.fixtures / "hls/index0.ts"
             size = fragment.stat().st_size
             faults.file("fragment.ts", fragment)
@@ -706,156 +1004,82 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                 "MIME detection succeeds; missing fragments and local-file references fail without publishing output"
             )
 
-        live_dir = run.fixtures / "live"
-        live_dir.mkdir()
-        with (run.logs / "live-producer.log").open("wb") as log:
-            producer = subprocess.Popen(
-                [
-                    ffmpeg,
-                    "-v",
-                    "error",
-                    "-re",
-                    "-stream_loop",
-                    "-1",
-                    "-i",
-                    str(source),
-                    "-map",
-                    "0",
-                    "-c",
-                    "copy",
-                    "-f",
-                    "hls",
-                    "-hls_time",
-                    "2",
-                    "-hls_list_size",
-                    "5",
-                    (live_dir / "index.m3u8").as_posix(),
-                ],
-                stdout=log,
-                stderr=log,
-                env=native_env(),
-            )
-            try:
-                until = time.monotonic() + 10
-                while not (live_dir / "index.m3u8").exists():
-                    if time.monotonic() >= until or producer.poll() is not None:
-                        raise RuntimeError("Local live producer did not start")
-                    time.sleep(0.1)
-                for name, options in (
-                    ("limited-live", {"media-record-time": "4"}),
-                    ("stopped-live", {}),
-                    ("paused-live", {}),
-                    ("resumed-live", {}),
-                    ("expired-live", {}),
+        for protocol in ("hls", "dash"):
+            operations = {}
+            with live_source(
+                run, source, ffmpeg, protocol, f"live-{protocol}"
+            ) as manifest:
+                for action in (
+                    "auto",
+                    "finish",
+                    "finish-paused",
+                    "pause",
+                    "force-pause",
+                    "restart",
+                    "crash",
+                    "remove-active",
+                    "remove-paused",
+                    "remove-force",
+                    "expired",
                 ):
-                    gid = engine.add_uri(
-                        f"{server.base_url}/live/index.m3u8",
-                        {"out": f"{name}.mp4", **options},
-                    )
-                    if name != "limited-live":
-                        until = time.monotonic() + 15
-                        while time.monotonic() < until:
-                            status = engine.rpc.call("aria2.tellStatus", [gid])
-                            if (
-                                int(
-                                    status.get("media", {}).get(
-                                        "completedDuration", "0"
-                                    )
-                                )
-                                >= 2000
-                            ):
-                                break
-                            if status["status"] == "error":
-                                raise AssertionError(status)
-                            time.sleep(0.1)
-                        if name in ("paused-live", "resumed-live", "expired-live"):
-                            engine.rpc.call("aria2.pause", [gid])
-                            paused = wait(engine, gid, "paused")
-                        if name in ("resumed-live", "expired-live"):
-                            time.sleep(3 if name == "resumed-live" else 13)
-                            engine.rpc.call("aria2.unpause", [gid])
-                            if name == "expired-live":
-                                status = wait(engine, gid, "error")
-                                assert any(
-                                    word in status["media"]["error"].lower()
-                                    for word in ("missing", "gap", "window")
-                                ), status
-                                assert not Path(status["files"][0]["path"]).exists(), (
-                                    status
-                                )
-                                engine.rpc.call("aria2.removeDownloadResult", [gid])
-                                results[name] = "out-of-window recovery rejected"
-                                continue
-                            until = time.monotonic() + 15
-                            while time.monotonic() < until:
-                                status = engine.rpc.call("aria2.tellStatus", [gid])
-                                if status["status"] == "error":
-                                    raise AssertionError(status)
-                                if int(status["media"]["completedDuration"]) > int(
-                                    paused["media"]["completedDuration"]
-                                ):
-                                    break
-                                time.sleep(0.1)
-                            else:
-                                raise TimeoutError(status)
-                        engine.rpc.call("aria2.finishMedia", [gid])
-                    status = wait(engine, gid)
-                    assert status["media"]["live"] == "true", status
-                    if name == "limited-live":
-                        assert (
-                            4000 <= int(status["media"]["completedDuration"]) <= 6000
+                    name = f"{protocol}-{action}"
+                    options = {"out": f"{name}.mp4"}
+                    if action == "auto":
+                        options["media-record-time"] = "4"
+                    gid = engine.add_uri(f"{server.base_url}/{manifest}", options)
+                    before = wait_duration(engine, gid, 2000)
+                    if action == "expired":
+                        engine.rpc.call("aria2.pause", [gid])
+                        wait(engine, gid, "paused")
+                        time.sleep(13)
+                        engine.rpc.call("aria2.unpause", [gid])
+                        status = wait(engine, gid, "error")
+                        assert any(
+                            word in status["media"]["error"].lower()
+                            for word in ("missing", "gap", "window")
                         ), status
-                    results[name] = status["media"]["completedDuration"]
-            finally:
-                producer.terminate()
-                producer.wait(timeout=10)
-
-        dash_live = run.fixtures / "live-dash"
-        dash_live.mkdir()
-        with (run.logs / "dash-producer.log").open("wb") as log:
-            producer = subprocess.Popen(
-                [
-                    ffmpeg,
-                    "-v",
-                    "error",
-                    "-re",
-                    "-stream_loop",
-                    "-1",
-                    "-i",
-                    str(source),
-                    "-map",
-                    "0",
-                    "-c",
-                    "copy",
-                    "-f",
-                    "dash",
-                    "-seg_duration",
-                    "2",
-                    "-window_size",
-                    "5",
-                    (dash_live / "index.mpd").as_posix(),
-                ],
-                stdout=log,
-                stderr=log,
-                env=native_env(),
-            )
-            try:
-                until = time.monotonic() + 10
-                while not (dash_live / "index.mpd").exists():
-                    if time.monotonic() >= until or producer.poll() is not None:
-                        raise RuntimeError("Local DASH producer did not start")
-                    time.sleep(0.1)
+                        assert not Path(status["files"][0]["path"]).exists(), status
+                        engine.rpc.call("aria2.removeDownloadResult", [gid])
+                        operations[action] = "expired recording rejected without output"
+                        continue
+                    if action != "auto":
+                        evidence = control_action(engine, gid, action)
+                        if action.startswith("remove-"):
+                            operations[action] = evidence
+                            continue
+                        if action in ("pause", "force-pause", "restart", "crash"):
+                            before = wait_duration(
+                                engine,
+                                gid,
+                                int(before["media"]["completedDuration"]) + 2000,
+                            )
+                            control_action(engine, gid, "pause")
+                            wait_duration(
+                                engine,
+                                gid,
+                                int(before["media"]["completedDuration"]) + 2000,
+                            )
+                            control_action(engine, gid, "finish")
+                    status = wait(engine, gid)
+                    output = status["files"][0]["path"]
+                    info = probe(ffprobe, output, "-show_format")
+                    assert float(info["format"]["duration"]) > 1, info
+                    for kind in ("v", "a"):
+                        decoded_hash(ffmpeg, output, kind)
+                    operations[action] = status["media"]["completedDuration"]
+            with live_source(
+                run, source, ffmpeg, protocol, f"{protocol}-natural-end", 14
+            ) as manifest:
                 gid = engine.add_uri(
-                    f"{server.base_url}/live-dash/index.mpd",
-                    {"out": "live-dash.mp4", "media-record-time": "4"},
+                    f"{server.base_url}/{manifest}",
+                    {"out": f"{protocol}-natural-end.mp4"},
                 )
-                status = wait(engine, gid)
+                status = wait(engine, gid, timeout=40)
                 assert status["media"]["live"] == "true", status
-                assert int(status["media"]["completedDuration"]) >= 4000, status
-                results["dashLive"] = status["media"]["completedDuration"]
-            finally:
-                producer.terminate()
-                producer.wait(timeout=10)
+                for kind in ("v", "a"):
+                    decoded_hash(ffmpeg, status["files"][0]["path"], kind)
+                operations["source-end"] = status["media"]["completedDuration"]
+            results[f"{protocol}LiveControls"] = operations
 
         session = engine.root / "session.txt"
         engine.rpc.call("aria2.changeGlobalOption", [{"save-session": str(session)}])

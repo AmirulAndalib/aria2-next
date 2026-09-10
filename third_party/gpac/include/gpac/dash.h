@@ -648,6 +648,13 @@ media sequence, or the immediately following sequence if the former has expired.
 Returns GF_URL_REMOVED when continuity is no longer recoverable. */
 GF_Err gf_dash_group_resume_sequence(GF_DashClient *dash, u32 group_idx, u32 sequence);
 
+/*! Restores a DASH group before initialization using its Period-relative
+presentation time in milliseconds. Native manifest timing and availability apply. */
+GF_Err gf_dash_group_resume_time(GF_DashClient *dash, u32 group_idx, u64 time_ms);
+
+/*! Restores the initial DASH Period on the MPD timeline before group setup. */
+GF_Err gf_dash_resume_at(GF_DashClient *dash, u64 time_ms);
+
 /*! sets playback speed of the session. Speed is used in adaptation logic
 \param dash the target dash client
 \param speed current playback speed

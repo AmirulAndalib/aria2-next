@@ -90,7 +90,8 @@ ExternalProject_Add(gpac_project
     --prefix=${ARIA2_DEPENDENCY_PREFIX}
     ${media_tool_args} "--extra-cflags=${media_cflags}" "--extra-ldflags=${media_ldflags}"
     --static-build --disable-all --disable-x11 --disable-rmtws
-    --enable-dashin --enable-parsers --enable-isoff --enable-isoff-write --enable-isoff-frag
+    --enable-dashin --enable-parsers --enable-vtt --enable-ttxt --enable-import --enable-txtin
+    --enable-isoff --enable-isoff-write --enable-isoff-frag
     --enable-threads --enable-network --enable-net-cap --enable-log
     --use-zlib=${ARIA2_DEPENDENCY_PREFIX}
     ${gpac_package_args}

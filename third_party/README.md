@@ -62,6 +62,17 @@ addresses parsed media sequences; DASH clock synchronization
 uses the clock response's receive time. The superbuild checks GPAC's native
 incremental build on every build and preserves unchanged installed headers.
 
+DASH recovery uses native Period and timeline positions. Client fixes preserve
+individual segment durations, infer closed Period durations on refresh, and wait
+for empty future timelines without timestamp underflow. Native seeking respects
+trimmed timelines and their end. Timeline selection retains the actual segment
+count and handles a first audio sample just after the Period start. The adapter reports delivery outcomes to GPAC;
+bounded live retries cannot silently skip media, and ordinary HLS reloads respect
+the parsed target duration.
+The native WebVTT parser and its timed-text/import dependencies are enabled for
+ISO WebVTT samples. GPAC supplies cue payloads, identifiers and settings to the
+FFmpeg packet adapter; no separate subtitle parser or media executable is used.
+
 On Windows, static-only zlib builds retain the `libz` name used by upstream
 pkg-config metadata and the maintained dependency consumers. A suffix is only
 needed when static and shared zlib are built together.

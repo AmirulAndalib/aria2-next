@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.engine import EngineProcess
 from core.runtime import REPOSITORY_ROOT, RunDirectory, sha256
-from media.common import command, decoded_hash, probe
+from media.common import command, control_action, decoded_hash, probe
 
 SHAKA = "https://storage.googleapis.com/shaka-demo-assets/"
 APPLE = "https://devstreaming-cdn.apple.com/videos/streaming/examples/"
@@ -126,7 +126,6 @@ CASES = [
         video="avc1",
         height=234,
         duration=600,
-        restart=True,
         reference={"v": APPLE + "bipbop_adv_example_hevc/v1/prog_index.m3u8"},
     ),
     dict(
@@ -172,7 +171,6 @@ CASES = [
         audio="mp4a",
         duration=60,
         live=True,
-        finish=True,
     ),
     dict(
         name="dash-live",
@@ -184,6 +182,165 @@ CASES = [
         live=True,
     ),
 ]
+
+# Exercise controls on representations whose storage or addressing differs.
+OPERATIONS = {
+    "hls-ts": [(12, "force-pause")],
+    "hls-fmp4": [(12, "restart")],
+    "hls-subtitles": [(12, "restart")],
+    "dash-avc": [(12, "force-pause"), (24, "restart")],
+    "dash-webm": [(2, "pause"), (7, "restart")],
+    "audio-only": [(2, "restart")],
+    "hls-hevc": [(12, "pause")],
+    "hls-av1": [(12, "restart")],
+    "hls-range-restart": [(12, "restart")],
+    "hls-aes-ts": [(120, "restart")],
+    "hls-aes-fmp4": [(120, "crash")],
+    "dash-periods": [(750, "restart")],
+    "hls-live": [(12, "pause"), (24, "restart"), (36, "crash"), (60, "finish-paused")],
+    "dash-live": [(12, "pause"), (24, "restart"), (36, "crash"), (60, "finish-paused")],
+}
+for case in CASES:
+    case["actions"] = OPERATIONS.get(case["name"], [])
+    if case["name"] in ("dash-webm", "audio-only"):
+        case.update(control_metric="elapsed", rate="128K")
+    if case["name"] == "dash-live":
+        case["duration"] = 60
+BASE_CASES = {case["name"]: case for case in CASES}
+for protocol in ("hls", "dash"):
+    live = BASE_CASES[f"{protocol}-live"]
+    CASES.extend(
+        [
+            dict(live, name=f"{protocol}-live-auto", duration=30, actions=[]),
+            dict(
+                live,
+                name=f"{protocol}-live-finish",
+                duration=30,
+                actions=[(30, "finish")],
+            ),
+            dict(
+                live,
+                name=f"{protocol}-live-mkv",
+                duration=30,
+                format="mkv",
+                actions=[(12, "pause"), (30, "finish")],
+            ),
+            dict(
+                live,
+                name=f"{protocol}-live-soak",
+                url=DASHIF + "livesim2/periods_60/segtimeline_1/testpic_2s/Manifest.mpd"
+                if protocol == "dash"
+                else live["url"],
+                duration=600,
+                soak=True,
+                actions=[
+                    (60, "pause"),
+                    (120, "restart"),
+                    (240, "crash"),
+                    (360, "pause"),
+                    (600, "finish-paused"),
+                ],
+            ),
+        ]
+    )
+    for mode, base in (
+        ("vod", BASE_CASES["hls-ts" if protocol == "hls" else "dash-avc"]),
+        ("live", live),
+    ):
+        for state in ("active", "paused"):
+            if mode == "vod" and state == "active":
+                state = "force"
+            CASES.append(
+                dict(
+                    base,
+                    name=f"{protocol}-{mode}-remove-{state}",
+                    actions=[(6, f"remove-{state}")],
+                    rate="128K",
+                )
+            )
+for addressing in ("segtimeline", "segtimelinenr"):
+    CASES.append(
+        dict(
+            BASE_CASES["dash-live"],
+            name=f"dash-live-{addressing}",
+            url=DASHIF + f"livesim2/{addressing}_1/testpic_2s/Manifest.mpd",
+        )
+    )
+CASES.append(
+    dict(
+        BASE_CASES["dash-live"],
+        name="dash-live-periods",
+        duration=90,
+        url=DASHIF + "livesim2/periods_60/segtimeline_1/testpic_2s/Manifest.mpd",
+        actions=[(12, "pause"), (40, "restart"), (90, "finish-paused")],
+    )
+)
+CASES.append(
+    dict(
+        BASE_CASES["dash-live"],
+        name="dash-live-periods-number",
+        duration=90,
+        url=DASHIF + "livesim2/periods_60/testpic_2s/Manifest.mpd",
+        actions=[(12, "pause"), (40, "restart"), (90, "finish-paused")],
+    )
+)
+CASES.append(
+    dict(
+        BASE_CASES["dash-live"],
+        name="dash-live-subtitles",
+        duration=90,
+        url=DASHIF
+        + "livesim2/periods_60/segtimeline_1/timesubswvtt_en/testpic_2s/Manifest.mpd",
+        subtitles="en",
+        format="mkv",
+        actions=[(12, "pause"), (40, "restart"), (90, "finish-paused")],
+    )
+)
+for name, codec, child in (
+    (
+        "hls-ac3",
+        "ac-3",
+        "Job932393e2-1e4f-4fdb-ab59-0d201f752656-107660254-Transcodeaudio_en_surround51dd_audio/prog_index.m3u8",
+    ),
+    (
+        "hls-eac3",
+        "ec-3",
+        "Job932393e2-1e4f-4fdb-ab59-0d201f752656-107660254-Transcode_audio_full_en_atmos_0_1-en_audio/prog_index.m3u8",
+    ),
+    (
+        "hls-he-aac",
+        "mp4a.40.5",
+        "Job932393e2-1e4f-4fdb-ab59-0d201f752656-107660254-Transcode_audio_en_stereo64_audio/prog_index.m3u8",
+    ),
+    (
+        "hls-he-aac-v2",
+        "mp4a.40.29",
+        "Job932393e2-1e4f-4fdb-ab59-0d201f752656-107660254-Transcode_audio_en_stereo32w441_audio/prog_index.m3u8",
+    ),
+):
+    CASES.append(
+        dict(
+            name=name,
+            url=APPLE + "adv_dv_atmos/main.m3u8",
+            audio=codec,
+            language="en-US",
+            duration=98.432,
+            actions=[(12, "restart")],
+            reference={"a": APPLE + "adv_dv_atmos/" + child},
+        )
+    )
+for codec in ("opus", "flac"):
+    CASES.append(
+        dict(
+            name=f"hls-live-{codec}",
+            url=BASE_CASES["hls-live"]["url"],
+            audio=codec,
+            duration=20,
+            live=True,
+            format="mkv",
+            actions=[],
+        )
+    )
 
 
 def select(tracks: list[dict], kind: str, codec: str, case: dict) -> str:
@@ -271,6 +428,7 @@ def validate(
                 "retry-wait": "1",
                 "connect-timeout": "10",
                 "timeout": "20",
+                "max-download-limit": case.get("rate", "0"),
             },
         )
         status = engine.rpc.wait_status(gid, "paused", 90)
@@ -291,7 +449,10 @@ def validate(
                 )
         if case.get("subtitles"):
             options["media-subtitles"] = case["subtitles"]
-        if case.get("live") and not case.get("finish"):
+        actions = case.get("actions", [])
+        if case.get("live") and not any(
+            name.startswith(("finish", "remove")) for _, name in actions
+        ):
             options["media-record-time"] = str(case["duration"])
         engine.rpc.call("aria2.changeOption", [gid, options])
         engine.rpc.call("aria2.unpause", [gid])
@@ -301,16 +462,24 @@ def validate(
             probeSeconds=round(time.monotonic() - started, 3),
         )
         downloaded = time.monotonic()
+        active_elapsed = 0.0
+        last_poll = downloaded
+        last_advance = downloaded
+        last_counters = (0, 0)
         previous = 0
-        recovered = False
-        finishing = False
+        action_index = 0
+        result["actions"] = []
         finalize_start = None
-        session = engine.root / "session.txt"
-        engine.rpc.call("aria2.changeGlobalOption", [{"save-session": str(session)}])
         with (evidence / "progress.jsonl").open("w", encoding="utf-8") as history:
-            while time.monotonic() - downloaded < 900:
+            while time.monotonic() - downloaded < max(
+                900, case["duration"] * 3 if case.get("live") else 900
+            ):
                 status = engine.rpc.call("aria2.tellStatus", [gid])
                 media = status.get("media", {})
+                now = time.monotonic()
+                if media.get("state") in ("downloading", "recording"):
+                    active_elapsed += now - last_poll
+                last_poll = now
                 history.write(
                     json.dumps(
                         {
@@ -326,6 +495,14 @@ def validate(
                 )
                 history.flush()
                 duration = int(media.get("completedDuration", 0))
+                counters = (duration, int(media.get("downloadedLength", 0)))
+                if counters != last_counters or int(status.get("downloadSpeed", 0)) > 0:
+                    last_advance = time.monotonic()
+                    last_counters = counters
+                elif time.monotonic() - last_advance > 60:
+                    raise TimeoutError(
+                        f"Media made no progress for 60 seconds: {status}"
+                    )
                 if status["status"] == "error":
                     raise RuntimeError(json.dumps(status))
                 if duration < previous:
@@ -337,38 +514,27 @@ def validate(
                     finalize_start = time.monotonic()
                 if status["status"] == "complete":
                     break
+                metric = (
+                    active_elapsed
+                    if case.get("control_metric") == "elapsed"
+                    else duration / 1000
+                )
                 if (
-                    not recovered
-                    and duration >= 12000
-                    and (case.get("restart") or case.get("finish"))
+                    action_index < len(actions)
+                    and metric >= actions[action_index][0]
+                    and media.get("state") in ("downloading", "recording")
                 ):
-                    engine.rpc.call("aria2.pause", [gid])
-                    paused = engine.rpc.wait_status(gid, "paused", 20)
-                    if case.get("restart"):
-                        engine.rpc.call("aria2.saveSession")
-                        engine.stop()
-                        engine.start(
-                            [f"--input-file={session}", f"--save-session={session}"]
-                        )
-                        restored = engine.rpc.wait_status(gid, "paused", 30)
-                        if (
-                            restored["media"]["completedDuration"]
-                            != paused["media"]["completedDuration"]
-                        ):
-                            raise AssertionError(
-                                "Restart lost committed media progress"
-                            )
-                    else:
-                        time.sleep(2)
-                    engine.rpc.call("aria2.unpause", [gid])
-                    recovered = True
-                if (
-                    case.get("finish")
-                    and duration >= case["duration"] * 1000
-                    and not finishing
-                ):
-                    engine.rpc.call("aria2.finishMedia", [gid])
-                    finishing = True
+                    action = actions[action_index][1]
+                    result["actions"].append(control_action(engine, gid, action))
+                    last_poll = time.monotonic()
+                    last_advance = last_poll
+                    action_index += 1
+                    (evidence / "actions.json").write_text(
+                        json.dumps(result["actions"], indent=2), encoding="utf-8"
+                    )
+                    if action.startswith("remove-"):
+                        result.update(success=True, removed=True)
+                        return result
                 time.sleep(0.25)
             else:
                 raise TimeoutError(f"Media task timed out: {status}")
@@ -379,8 +545,10 @@ def validate(
             or int(status["completedLength"]) != output.stat().st_size
         ):
             raise AssertionError(f"Invalid completion: {status}")
-        if case.get("restart") and not recovered:
-            raise AssertionError("Download completed before restart was exercised")
+        if action_index != len(actions):
+            raise AssertionError(
+                f"Task completed before all controls ran: {actions[action_index:]}"
+            )
         result.update(
             status=status,
             output=str(output),
@@ -400,6 +568,17 @@ def validate(
     if types != expected:
         raise AssertionError(f"Output tracks differ: {types} != {expected}")
     codec_names = {"avc1": "h264", "hvc1": "hevc", "av01": "av1", "vp09": "vp9"}
+    if case.get("audio") and case["audio"] != "muxed":
+        expected_audio = (
+            "aac"
+            if case["audio"].startswith("mp4a")
+            else {"ac-3": "ac3", "ec-3": "eac3"}.get(case["audio"], case["audio"])
+        )
+        audio = next(s for s in info["streams"] if s["codec_type"] == "audio")
+        if audio["codec_name"] != expected_audio:
+            raise AssertionError(
+                f"The engine selected a different audio codec: {audio}"
+            )
     if case.get("video"):
         video = next(s for s in info["streams"] if s["codec_type"] == "video")
         if (
@@ -419,6 +598,34 @@ def validate(
             raise AssertionError(
                 f"Live tracks do not share a zero-based timeline: {starts}"
             )
+        av_indexes = {
+            s["index"] for s in info["streams"] if s["codec_type"] in ("audio", "video")
+        }
+        previous_packets = {}
+        gaps = {}
+        for packet in probe(
+            ffprobe,
+            str(output),
+            "-show_packets",
+            "-show_entries",
+            "packet=stream_index,dts_time,duration_time",
+        )["packets"]:
+            index = packet["stream_index"]
+            if index not in av_indexes or "dts_time" not in packet:
+                continue
+            timestamp = float(packet["dts_time"])
+            if index in previous_packets:
+                before, length = previous_packets[index]
+                gap = timestamp - before - length
+                if timestamp <= before or gap > 0.1:
+                    raise AssertionError(
+                        f"Live track {index} lost continuity: {before} -> {timestamp}"
+                    )
+                gaps[index] = max(gaps.get(index, 0), gap)
+            previous_packets[index] = (timestamp, float(packet.get("duration_time", 0)))
+        result["maxPacketGapMs"] = {
+            str(i): round(gap * 1000, 3) for i, gap in gaps.items()
+        }
     hashes = {}
     for kind, stream in (("video", "v"), ("audio", "a")):
         if kind not in expected:
@@ -471,43 +678,61 @@ def validate(
         )
         if "-->" not in captions:
             raise AssertionError("Selected subtitles contain no cues")
-        originals = []
-        for index, url in enumerate(case["subtitle_reference"]):
-            file = evidence / f"reference-subtitle-{index}.vtt"
-            command(
-                curl,
-                "--fail",
-                "--location",
-                "--silent",
-                "--show-error",
-                "--max-time",
-                "30",
-                "--output",
-                str(file),
-                url,
+        if case.get("subtitle_reference"):
+            originals = []
+            for index, url in enumerate(case["subtitle_reference"]):
+                file = evidence / f"reference-subtitle-{index}.vtt"
+                command(
+                    curl,
+                    "--fail",
+                    "--location",
+                    "--silent",
+                    "--show-error",
+                    "--max-time",
+                    "30",
+                    "--output",
+                    str(file),
+                    url,
+                )
+                originals.append(file)
+            source_cues = cue_spans(ffprobe, originals)
+            output_cues = cue_spans(ffprobe, [evidence / "subtitles.vtt"])
+            if source_cues.keys() != output_cues.keys():
+                raise AssertionError(
+                    "Subtitle content differs from the published source"
+                )
+            differences = []
+            for text, intervals in source_cues.items():
+                if len(intervals) != len(output_cues[text]):
+                    raise AssertionError(
+                        "Subtitle cue intervals were lost or duplicated"
+                    )
+                differences.extend(
+                    abs(a - b)
+                    for pair, actual in zip(intervals, output_cues[text])
+                    for a, b in zip(pair, actual)
+                )
+            if max(differences, default=0) > 0.05:
+                raise AssertionError(
+                    f"Subtitle timestamps differ: {max(differences)} seconds"
+                )
+            result["subtitles"] = {
+                "cues": sum(map(len, source_cues.values())),
+                "maxTimestampErrorMs": round(max(differences, default=0) * 1000, 3),
+            }
+        else:
+            spans = sorted(
+                span
+                for spans in cue_spans(ffprobe, [evidence / "subtitles.vtt"]).values()
+                for span in spans
             )
-            originals.append(file)
-        source_cues = cue_spans(ffprobe, originals)
-        output_cues = cue_spans(ffprobe, [evidence / "subtitles.vtt"])
-        if source_cues.keys() != output_cues.keys():
-            raise AssertionError("Subtitle content differs from the published source")
-        differences = []
-        for text, intervals in source_cues.items():
-            if len(intervals) != len(output_cues[text]):
-                raise AssertionError("Subtitle cue intervals were lost or duplicated")
-            differences.extend(
-                abs(a - b)
-                for pair, actual in zip(intervals, output_cues[text])
-                for a, b in zip(pair, actual)
-            )
-        if max(differences, default=0) > 0.05:
-            raise AssertionError(
-                f"Subtitle timestamps differ: {max(differences)} seconds"
-            )
-        result["subtitles"] = {
-            "cues": sum(map(len, source_cues.values())),
-            "maxTimestampErrorMs": round(max(differences, default=0) * 1000, 3),
-        }
+            if not spans or spans[0][0] > 2.1 or spans[-1][1] < duration - 2.1:
+                raise AssertionError(
+                    f"Timed live subtitles do not cover the recording: {spans}"
+                )
+            if any(b[0] - a[1] > 2.1 for a, b in zip(spans, spans[1:])):
+                raise AssertionError("Timed live subtitle cues were lost")
+            result["subtitles"] = {"cues": len(spans), "periodicCoverage": True}
     result.update(duration=duration, decoded=hashes, success=True)
     if name == "hls-ts":
         cli_output = run.downloads / "cli.mp4"
@@ -548,6 +773,9 @@ def main() -> int:
         / ("aria2-next.exe" if os.name == "nt" else "aria2-next"),
     )
     parser.add_argument("--case", action="append", choices=[c["name"] for c in CASES])
+    parser.add_argument(
+        "--suite", choices=("standard", "soak", "all"), default="standard"
+    )
     args = parser.parse_args()
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     curl = (
@@ -560,7 +788,15 @@ def main() -> int:
     run = RunDirectory("public-media", True)
     executable = run.root / args.engine.name
     shutil.copy2(args.engine, executable)
-    selected = [case for case in CASES if not args.case or case["name"] in args.case]
+    selected = [
+        case
+        for case in CASES
+        if (
+            case["name"] in args.case
+            if args.case
+            else args.suite == "all" or bool(case.get("soak")) == (args.suite == "soak")
+        )
+    ]
     report = {
         "revision": command(
             "git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"

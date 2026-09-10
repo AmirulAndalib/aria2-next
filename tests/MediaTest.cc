@@ -6,8 +6,12 @@
 
 extern "C" {
 #include <libavformat/avformat.h>
+#include <gpac/mpd.h>
+#include <gpac/isomedia.h>
+#include <libavutil/intreadwrite.h>
 }
 #include <sqlite3.h>
+#include <array>
 #include <filesystem>
 #include <fstream>
 
@@ -90,6 +94,129 @@ TEST_CASE("Media preserves HLS subtitle timestamp maps")
   REQUIRE(!std::filesystem::exists(std::filesystem::u8path(output)));
   media::Muxer::publish(staging, output, false);
   REQUIRE(timestamps(output) == std::vector<int64_t>{0, 2000});
+}
+
+TEST_CASE("Media preserves ISO WebVTT cues and skips empty samples")
+{
+  MediaFixture fixture("media-iso-webvtt");
+  const auto path = (fixture.root / "input.mp4").u8string();
+  std::unique_ptr<GF_ISOFile, decltype(&gf_isom_delete)> file(
+      gf_isom_open(path.c_str(), GF_ISOM_OPEN_WRITE, nullptr), gf_isom_delete);
+  REQUIRE(file);
+  const auto track = gf_isom_new_track(file.get(), 0, GF_ISOM_MEDIA_TEXT, 1000);
+  REQUIRE(track != 0);
+  REQUIRE(gf_isom_set_track_enabled(file.get(), track, GF_TRUE) == GF_OK);
+  u32 description = 0;
+  REQUIRE(gf_isom_new_webvtt_description(file.get(), track, nullptr, nullptr,
+                                         &description, "WEBVTT\n") == GF_OK);
+  const auto box = [](const char* type, const std::string& payload) {
+    std::string value(4, '\0');
+    AV_WB32(value.data(), static_cast<uint32_t>(payload.size() + 8));
+    return value + std::string(type, 4) + payload;
+  };
+  const auto cues =
+      box("vttc", box("iden", "first") + box("sttg", "align:start") +
+                      box("payl", "Alpha")) +
+      box("vttc", box("payl", "Beta"));
+  const std::array<std::string, 3> samples{cues, box("vtte", ""),
+                                           box("vttc", box("payl", "Gamma"))};
+  for (size_t i = 0; i < samples.size(); ++i) {
+    GF_ISOSample sample{};
+    sample.data =
+        const_cast<u8*>(reinterpret_cast<const u8*>(samples[i].data()));
+    sample.dataLength = static_cast<u32>(samples[i].size());
+    sample.DTS = i * 1000;
+    sample.IsRAP = RAP;
+    REQUIRE(gf_isom_add_sample(file.get(), track, description, &sample) ==
+            GF_OK);
+  }
+  REQUIRE(gf_isom_set_last_sample_duration(file.get(), track, 1000) == GF_OK);
+  REQUIRE(gf_isom_close(file.release()) == GF_OK);
+  REQUIRE(timestamps(path) == std::vector<int64_t>{0, 1000, 2000});
+  media::Segment segment;
+  segment.track = "subtitle:en";
+  segment.type = "subtitle";
+  segment.path = path;
+  segment.duration = 3000;
+  segment.digest = media::Transport::digest(path);
+  const auto output = (fixture.root / "output.mkv").u8string();
+  const auto staging = media::Muxer::stage(
+      {segment}, output, fixture.root.u8string(), "mkv", false, false, true,
+      std::make_shared<media::Control>());
+  media::Muxer::publish(staging, output, false);
+  REQUIRE(timestamps(output) == std::vector<int64_t>{0, 0, 2000});
+  AVFormatContext* context = nullptr;
+  REQUIRE(avformat_open_input(&context, output.c_str(), nullptr, nullptr) >= 0);
+  std::unique_ptr<AVFormatContext, void (*)(AVFormatContext*)> input(
+      context, [](AVFormatContext* value) { avformat_close_input(&value); });
+  std::unique_ptr<AVPacket, void (*)(AVPacket*)> packet(
+      av_packet_alloc(), [](AVPacket* value) { av_packet_free(&value); });
+  REQUIRE(packet);
+  for (const auto* text : {"Alpha", "Beta", "Gamma"}) {
+    REQUIRE(av_read_frame(context, packet.get()) >= 0);
+    REQUIRE(std::string(reinterpret_cast<char*>(packet->data), packet->size) ==
+            text);
+    if (std::string(text) == "Alpha") {
+      size_t length = 0;
+      const auto id = av_packet_get_side_data(
+          packet.get(), AV_PKT_DATA_WEBVTT_IDENTIFIER, &length);
+      REQUIRE(id);
+      REQUIRE(std::string(reinterpret_cast<const char*>(id), length) ==
+              "first");
+      const auto settings = av_packet_get_side_data(
+          packet.get(), AV_PKT_DATA_WEBVTT_SETTINGS, &length);
+      REQUIRE(settings);
+      REQUIRE(std::string(reinterpret_cast<const char*>(settings), length) ==
+              "align:start");
+    }
+    av_packet_unref(packet.get());
+  }
+}
+
+TEST_CASE("Native DASH seeking respects a trimmed timeline and its end")
+{
+  GF_MPD_Period period{};
+  GF_MPD_AdaptationSet set{};
+  GF_MPD_Representation representation{};
+  GF_MPD_SegmentTemplate segmentTemplate{};
+  GF_MPD_SegmentTimeline timeline{};
+  GF_MPD_SegmentTimelineEntry entry{};
+  std::unique_ptr<GF_List, decltype(&gf_list_del)> entries(gf_list_new(),
+                                                           gf_list_del);
+  REQUIRE(entries);
+  entry.start_time = 48000;
+  entry.duration = 2000;
+  entry.repeat_count = 5;
+  REQUIRE(gf_list_add(entries.get(), &entry) == GF_OK);
+  timeline.entries = entries.get();
+  segmentTemplate.timescale = 1000;
+  segmentTemplate.segment_timeline = &timeline;
+  representation.segment_template = &segmentTemplate;
+  u32 index = 0;
+  Double start = 0, duration = 0;
+  REQUIRE(gf_mpd_seek_in_period(54, MPD_SEEK_PREV, &period, &set,
+                                &representation, &index, &start,
+                                &duration) == GF_OK);
+  REQUIRE(index == 3);
+  REQUIRE(start == 54);
+  REQUIRE(duration == 2);
+  REQUIRE(gf_mpd_seek_in_period(64, MPD_SEEK_PREV, &period, &set,
+                                &representation, &index, &start,
+                                &duration) == GF_EOS);
+  segmentTemplate.presentation_time_offset = 48000;
+  REQUIRE(gf_mpd_seek_in_period(6, MPD_SEEK_PREV, &period, &set,
+                                &representation, &index, &start,
+                                &duration) == GF_OK);
+  REQUIRE(index == 3);
+  gf_list_reset(entries.get());
+  u64 timestamp = 1, segmentDuration = 1;
+  u32 scale = 0;
+  REQUIRE(gf_mpd_get_segment_start_time_with_timescale(
+              0, &period, &set, &representation, &timestamp, &segmentDuration,
+              &scale) == GF_NOT_READY);
+  REQUIRE(timestamp == 0);
+  REQUIRE(segmentDuration == 0);
+  REQUIRE(scale == 1000);
 }
 
 TEST_CASE("Media unwraps the HLS subtitle MPEG clock at 33 bits")

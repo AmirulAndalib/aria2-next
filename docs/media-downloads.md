@@ -50,6 +50,10 @@ type. Explicit track or language requests fail when unavailable. DASH
 presentation offsets, HLS subtitle timestamp maps, initialization changes,
 and discontinuity boundaries are preserved during remuxing. Codec or track
 layout changes that cannot be combined without transcoding fail explicitly.
+WebVTT text segments and ISO WebVTT (`wvtt`) tracks can be retained in Matroska.
+GPAC parses boxed cues, including simultaneous cues and their identifiers and
+settings; FFmpeg preserves their sample timing. Unsupported subtitle inputs fail
+explicitly instead of disappearing from the output.
 
 A source `checksum` is not applied to remuxed output. Media tasks reject that
 combination; use `media=file` to save and verify the original resource instead.
@@ -143,6 +147,15 @@ control to the engine without an unbounded native retry loop.
 Live recording cannot recover media that has already left the server's window;
 gaps and a source disappearing without a proper end signal are reported as errors.
 
+DASH checkpoints use presentation time rather than a rolling playlist index.
+Resume restores the MPD Period and each selected track's committed position.
+Following Period starts close the preceding Period, and empty future timelines
+wait for publication. Completed fragment durations come from their actual native
+timeline entries, including updates after an initially empty Period. The native
+client's bounded live availability policy handles a
+briefly missing segment; exhausted delivery fails instead of skipping content.
+Playlist waits honor native timing and wake on pause, removal or finish.
+
 Remuxing writes directly to a staging file on the destination filesystem.
 Files are synchronized before their publication record is committed. Recovery
 verifies the staged or already-published file before completing an interrupted
@@ -151,7 +164,7 @@ pending. Completion/removal clears task-owned recovery data; cleanup failure
 does not invalidate a successfully published file. Existing output is protected
 unless overwriting was explicitly enabled.
 
-Media state schema 3 stores HLS live positions on the actual media clock. It
+Media state schema 4 stores stable DASH presentation positions and HLS media clocks. It
 discards incompatible earlier checkpoints and task caches. Existing downloaded
 output is kept.
 Windows media files use native extended paths without changing system-wide

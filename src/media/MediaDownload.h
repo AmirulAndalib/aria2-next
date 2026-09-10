@@ -5,6 +5,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cstdint>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -55,7 +56,24 @@ struct Control {
   std::atomic<int> connections{0};
   std::atomic<int64_t> downloadLimit{0};
   std::mutex mutex;
+  std::condition_variable wake;
   Snapshot snapshot;
+  void requestCancel()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      cancel = true;
+    }
+    wake.notify_all();
+  }
+  void requestFinish()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      finish = true;
+    }
+    wake.notify_all();
+  }
 };
 
 class Session;

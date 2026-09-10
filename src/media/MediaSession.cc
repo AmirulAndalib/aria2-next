@@ -205,6 +205,11 @@ struct Job {
         h.result = GF_OK;
       }
       catch (const std::exception& e) {
+        const auto http = dynamic_cast<const HttpError*>(&e);
+        if (http && http->status == 404 && h.job->live && h.group >= 0) {
+          h.result = GF_URL_ERROR;
+          return h.result;
+        }
         h.job->failure = failureMessage(e);
         h.result = GF_IO_ERR;
       }
@@ -283,9 +288,9 @@ struct Job {
         return GF_IO_ERR;
       }
     };
-    dash = gf_dash_new(&io, 1000, 0, GF_TRUE, GF_TRUE,
-                       GF_DASH_SELECT_BANDWIDTH_HIGHEST,
-                       live && !retained.empty() ? 100 : 0);
+    dash = gf_dash_new(
+        &io, 1000, 0, GF_TRUE, GF_TRUE, GF_DASH_SELECT_BANDWIDTH_HIGHEST,
+        live && snapshot().protocol == "hls" && !retained.empty() ? 100 : 0);
     if (!dash)
       throw std::runtime_error("Cannot create native HLS/DASH client");
     gf_dash_set_algo(dash, GF_DASH_ALGO_NONE);
@@ -306,6 +311,14 @@ struct Job {
     store.save(value);
     std::lock_guard<std::mutex> lock(control->mutex);
     control->snapshot = std::move(value);
+  }
+  void waitForNext()
+  {
+    const auto delay = std::chrono::milliseconds(
+        std::max<u32>(10, gf_dash_get_min_wait_ms(dash)));
+    std::unique_lock<std::mutex> lock(control->mutex);
+    control->wake.wait_for(lock, delay,
+                           [&] { return control->cancel || control->finish; });
   }
   void remember(const Segment& segment)
   {
@@ -357,7 +370,9 @@ struct Job {
     const auto previous =
         retained.find({segment.period, segment.track, segment.number});
     if (last != lastSegments.end()) {
-      if (segment.number > last->second.number + 1)
+      if ((segment.hls && segment.number > last->second.number + 1) ||
+          (!segment.hls &&
+           segment.start > last->second.start + last->second.duration + 1))
         throw std::runtime_error("Media segments are missing; refusing to save "
                                  "an incomplete presentation");
       if (segment.hls) {
@@ -398,6 +413,8 @@ struct Job {
     segment.discontinuity = discontinuity;
     segment.timeOffset = selectedGroup.timeOffset;
     segment.hls = gf_dash_is_m3u8(dash);
+    if (!segment.hls)
+      segment.number = segment.start;
     // GPAC segment positions already include PTO; encoded packet timestamps
     // still need the separate offset when passed to the muxer.
     return segment;
@@ -573,6 +590,13 @@ struct Job {
             throw std::runtime_error(
                 "Live media left the server's retention window; "
                 "the recording has a gap");
+          if (live && !gf_dash_is_m3u8(dash) &&
+              previous != lastSegments.end() &&
+              gf_dash_group_resume_time(dash, group,
+                                        previous->second.start +
+                                            previous->second.duration) != GF_OK)
+            throw std::runtime_error(
+                "Cannot restore the DASH recording position");
           store.select(gf_dash_get_period_start(dash), track.type, identity);
           coverage[gf_dash_get_period_start(dash)].try_emplace(identity, 0);
         }
@@ -620,6 +644,9 @@ struct Job {
             throw std::runtime_error(
                 "Cannot read initial media segment timing");
           commit(describe(group, number, start, duration, path, discontinuity));
+          gf_dash_group_store_stats(
+              dash, group, 0, 0, std::filesystem::file_size(nativePath(path)),
+              GF_FALSE, 0);
         }
         else
           groups[group].init = path;
@@ -724,6 +751,26 @@ struct Job {
     if (result < 0)
       throw std::runtime_error(failure.empty() ? gf_error_to_string(result)
                                                : failure);
+    if (!control->finish && live && !gf_dash_is_m3u8(dash) &&
+        !lastSegments.empty()) {
+      std::map<std::string, int64_t> ends;
+      for (const auto& entry : lastSegments) {
+        const auto& segment = entry.second;
+        for (const auto* type : {"audio", "video"})
+          if (segment.type == type || segment.type == "muxed")
+            ends[type] = std::max(ends[type], segment.period + segment.start +
+                                                  segment.duration);
+      }
+      if (!ends.empty()) {
+        const auto target = std::min_element(
+            ends.begin(), ends.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+        if (gf_dash_resume_at(dash, target->second) != GF_OK)
+          throw std::runtime_error(
+              "Live media left the server's retention window; "
+              "the recording has a gap");
+      }
+    }
     while (!control->cancel && !control->finish && !completed && !awaiting) {
       result = gf_dash_process(dash);
       if (awaiting)
@@ -737,7 +784,7 @@ struct Job {
         break;
       }
       if (gf_dash_is_in_setup(dash)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        waitForNext();
         continue;
       }
       bool allDone = !selected.empty(), advanced = false;
@@ -773,12 +820,25 @@ struct Job {
           groups[group].init =
               localResource(switchingInit, initFirst,
                             initLast ? static_cast<int64_t>(initLast) : -1);
-        auto path =
-            localResource(url, first, last ? static_cast<int64_t>(last) : -1);
+        std::string path;
+        try {
+          path =
+              localResource(url, first, last ? static_cast<int64_t>(last) : -1);
+        }
+        catch (const HttpError& error) {
+          if (!live || error.status != 404)
+            throw;
+          gf_dash_set_group_download_state(dash, group, 0, GF_URL_ERROR);
+          continue;
+        }
         if (!path.empty()) {
           if (key && *key)
             path = transport.decrypt(path, key, iv, !live);
           commit(describe(group, number, start, duration, path, discontinuity));
+          gf_dash_set_group_download_state(dash, group, 0, GF_OK);
+          gf_dash_group_store_stats(
+              dash, group, 0, 0, std::filesystem::file_size(nativePath(path)),
+              GF_FALSE, 0);
           gf_dash_group_discard_segment(dash, group);
           advanced = true;
         }
@@ -788,7 +848,7 @@ struct Job {
       const auto limit = option->getAsLLInt(PREF_MEDIA_RECORD_TIME);
       if (limit > 0 && snapshot().live &&
           snapshot().completedDuration >= limit * 1000)
-        control->finish = true;
+        control->requestFinish();
       if (allDone) {
         if (gf_dash_in_last_period(dash, GF_TRUE) &&
             gf_dash_is_dynamic_mpd(dash) && !control->finish)
@@ -800,8 +860,7 @@ struct Job {
           gf_dash_request_period_switch(dash);
       }
       if (!advanced && !completed)
-        std::this_thread::sleep_for(std::chrono::milliseconds(std::min<u32>(
-            100, std::max<u32>(10, gf_dash_get_min_wait_ms(dash)))));
+        waitForNext();
     }
     if (control->cancel || awaiting)
       return;
@@ -861,7 +920,7 @@ Session::Session(std::shared_ptr<Option> option, std::string uri,
 }
 Session::~Session()
 {
-  control_->cancel = true;
+  control_->requestCancel();
   join();
 }
 void Session::join()

@@ -16,7 +16,6 @@
 #include <fstream>
 #include <stdexcept>
 #include <sstream>
-#include <thread>
 
 namespace aria2 {
 namespace media {
@@ -342,17 +341,18 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
                        result == CURLE_RECV_ERROR ||
                        result == CURLE_PARTIAL_FILE;
     if (!retry || (tries > 0 && attempt + 1 >= tries) || control_->cancel)
-      throw std::runtime_error(
-          "Media HTTP request failed: status=" + std::to_string(response) +
-          " curl=" + std::to_string(result));
+      throw HttpError(response, "Media HTTP request failed: status=" +
+                                    std::to_string(response) +
+                                    " curl=" + std::to_string(result));
     curl_off_t retryAfter = 0;
     curl_easy_getinfo(h, CURLINFO_RETRY_AFTER, &retryAfter);
     const auto delay = std::max<curl_off_t>(
         std::max(1, option_->getAsInt(PREF_RETRY_WAIT)), retryAfter);
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(delay);
-    while (std::chrono::steady_clock::now() < deadline && !control_->cancel)
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::unique_lock<std::mutex> lock(control_->mutex);
+    control_->wake.wait_until(lock, deadline,
+                              [&] { return control_->cancel.load(); });
   }
 }
 std::string Transport::decrypt(const std::string& path,

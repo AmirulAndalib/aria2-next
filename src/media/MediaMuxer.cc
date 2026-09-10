@@ -2,6 +2,8 @@
 #include "MediaMuxer.h"
 #include "MediaFiles.h"
 #include "MediaTransport.h"
+#include <gpac/list.h>
+#include <gpac/webvtt.h>
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
@@ -114,6 +116,8 @@ struct Input {
   AVFormatContext* context = nullptr;
   AVIOContext* io = nullptr;
   AVPacket* packet = av_packet_alloc();
+  AVPacket* subtitlePacket = av_packet_alloc();
+  GF_List* cues = nullptr;
   std::vector<std::string> files;
   std::vector<int64_t> starts;
   std::vector<int> mapping;
@@ -131,12 +135,19 @@ struct Input {
   int64_t boundary = 0;
   int64_t end = INT64_MAX;
   bool webvtt = false;
+  bool boxedWebvtt = false;
   std::optional<int64_t> transportClock;
   bool allowPreroll = false;
   bool trimAudio = false;
   std::vector<AVCodecParameters*> parameters;
   ~Input()
   {
+    if (cues) {
+      while (auto cue = static_cast<GF_WebVTTCue*>(gf_list_pop_front(cues)))
+        gf_webvtt_cue_del(cue);
+      gf_list_del(cues);
+    }
+    av_packet_free(&subtitlePacket);
     av_packet_free(&packet);
     avformat_close_input(&context);
     if (io) {
@@ -202,7 +213,7 @@ struct Input {
   }
   void open()
   {
-    if (!packet)
+    if (!packet || !subtitlePacket)
       throw std::bad_alloc();
     for (const auto& path : files) {
       starts.push_back(size);
@@ -228,6 +239,18 @@ struct Input {
         control};
     check(avformat_open_input(&context, nullptr, nullptr, nullptr));
     check(avformat_find_stream_info(context, nullptr));
+    boxedWebvtt = type == "subtitle" && context->nb_streams == 1 &&
+                  context->streams[0]->codecpar->codec_tag == AV_RL32("wvtt");
+    if (boxedWebvtt) {
+      auto codec = context->streams[0]->codecpar;
+      codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
+      codec->codec_id = AV_CODEC_ID_WEBVTT;
+      codec->codec_tag = 0;
+    }
+    if (type == "subtitle" &&
+        (context->nb_streams != 1 ||
+         context->streams[0]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE))
+      throw std::runtime_error("Selected subtitle format cannot be remuxed");
   }
   bool openRun()
   {
@@ -266,7 +289,7 @@ struct Input {
     if (first.hls && std::strcmp(context->iformat->name, "aac") == 0)
       transportClock = packedAudioClock(context);
     if (!first.hls)
-      boundary = first.period * 1000;
+      boundary = first.period * 1000 + shift;
     clipStart = first.hls ? (first.start - presentationStart) * 1000 : 0;
     clipEnd = clipStart + first.duration * 1000;
     if (!parameters.empty()) {
@@ -292,12 +315,53 @@ struct Input {
     }
     return true;
   }
+  int readPacket()
+  {
+    for (;;) {
+      if (cues && gf_list_count(cues)) {
+        std::unique_ptr<GF_WebVTTCue, decltype(&gf_webvtt_cue_del)> cue(
+            static_cast<GF_WebVTTCue*>(gf_list_pop_front(cues)),
+            gf_webvtt_cue_del);
+        if (!cue->text || !*cue->text)
+          continue;
+        check(av_new_packet(packet, static_cast<int>(std::strlen(cue->text))));
+        std::memcpy(packet->data, cue->text, packet->size);
+        check(av_packet_copy_props(packet, subtitlePacket));
+        packet->stream_index = subtitlePacket->stream_index;
+        for (const auto& property :
+             {std::make_pair(AV_PKT_DATA_WEBVTT_IDENTIFIER, cue->id),
+              std::make_pair(AV_PKT_DATA_WEBVTT_SETTINGS, cue->settings)}) {
+          if (!property.second || !*property.second)
+            continue;
+          const auto length = std::strlen(property.second);
+          auto data = av_packet_new_side_data(packet, property.first, length);
+          if (!data)
+            throw std::bad_alloc();
+          std::memcpy(data, property.second, length);
+        }
+        return 0;
+      }
+      if (cues) {
+        gf_list_del(cues);
+        cues = nullptr;
+      }
+      const auto result = av_read_frame(context, packet);
+      if (result < 0 || !boxedWebvtt)
+        return result;
+      // GPAC owns ISO WebVTT boxes; FFmpeg owns sample timing and muxing.
+      cues = gf_webvtt_parse_cues_from_data(packet->data, packet->size, 0, 0);
+      if (!cues)
+        throw std::runtime_error("Invalid ISO WebVTT sample");
+      av_packet_unref(subtitlePacket);
+      av_packet_move_ref(subtitlePacket, packet);
+    }
+  }
   void next()
   {
     if (!prefetched)
       av_packet_unref(packet);
     for (;;) {
-      auto result = prefetched ? 0 : av_read_frame(context, packet);
+      auto result = prefetched ? 0 : readPacket();
       prefetched = false;
       if (result == AVERROR_EOF) {
         if (openRun())
@@ -672,8 +736,9 @@ std::string Muxer::stage(const std::vector<Segment>& segments,
         liveOrigin = av_rescale_q(origin, AV_TIME_BASE_Q, AVRational{1, 1000});
       }
       const auto next = periods.upper_bound({period.first.first, INT64_MAX});
-      const auto boundary =
-          next == periods.end() ? presentationDuration : next->first.first;
+      const auto boundary = next == periods.end()
+                                ? (live ? 0 : presentationDuration)
+                                : next->first.first;
       for (auto& input : inputs) {
         input->end =
             (boundary > 0 ? std::min(period.first.first + end, boundary)

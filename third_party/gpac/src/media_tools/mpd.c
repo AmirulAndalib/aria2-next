@@ -5864,6 +5864,12 @@ GF_Err gf_mpd_get_segment_start_time_with_timescale(s32 in_segment_index,
 		}
 		if (!timescale) timescale = 1;
 
+		if (timeline && !gf_list_count(timeline->entries)) {
+			*out_segment_start_time = 0;
+			if (out_opt_segment_duration) *out_opt_segment_duration = 0;
+			if (out_opt_scale) *out_opt_scale = timescale;
+			return GF_NOT_READY;
+		}
 		if (timeline) {
 			start_time = gf_mpd_segment_timeline_start(timeline, in_segment_index, &duration);
 			start_time -= pto;
@@ -5916,6 +5922,12 @@ GF_Err gf_mpd_get_segment_start_time_with_timescale(s32 in_segment_index,
 	}
 	if (!timescale) timescale = 1;
 
+	if (timeline && !gf_list_count(timeline->entries)) {
+		*out_segment_start_time = 0;
+		if (out_opt_segment_duration) *out_opt_segment_duration = 0;
+		if (out_opt_scale) *out_opt_scale = timescale;
+		return GF_NOT_READY;
+	}
 	if (timeline) {
 		start_time = gf_mpd_segment_timeline_start(timeline, in_segment_index, &duration);
 		start_time -= pto;
@@ -5987,6 +5999,9 @@ GF_Err gf_mpd_seek_in_period(Double seek_time, MPDSeekMode seek_mode,
 		GF_Err e = gf_mpd_get_segment_start_time_with_timescale(segment_idx, in_period, in_set, in_rep, &seg_start_in_scale, &segment_duration_in_scale, &timescale);
 		if (e<0)
 			return e;
+		if (!timescale || !segment_duration_in_scale)
+			return GF_EOS;
+		seg_start = seg_start_in_scale / (Double)timescale;
 		segment_duration = segment_duration_in_scale / (Double)timescale;
 
 		if (out_seg_dur) *out_seg_dur = segment_duration;
@@ -6011,7 +6026,6 @@ GF_Err gf_mpd_seek_in_period(Double seek_time, MPDSeekMode seek_mode,
 			return GF_NOT_SUPPORTED;
 		}
 
-		seg_start += segment_duration;
 		segment_idx++;
 	}
 
