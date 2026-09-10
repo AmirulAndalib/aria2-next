@@ -1,16 +1,25 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaMuxer.h"
+#include "MediaFiles.h"
+#include "MediaTransport.h"
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
 #include <libavutil/mem.h>
+#include <libavutil/parseutils.h>
 }
 #include <algorithm>
-#include <array>
+#include <charconv>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <stdexcept>
+#ifdef _WIN32
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
 
 namespace aria2 {
 namespace media {
@@ -22,6 +31,46 @@ void check(int result)
   char message[AV_ERROR_MAX_STRING_SIZE];
   av_strerror(result, message, sizeof(message));
   throw std::runtime_error(std::string("Media remux failed: ") + message);
+}
+int64_t subtitleOffset(const std::string& path)
+{
+  std::ifstream input(nativePath(path));
+  std::string line;
+  while (std::getline(input, line)) {
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line.empty())
+      break;
+    constexpr const char* prefix = "X-TIMESTAMP-MAP=";
+    if (line.compare(0, std::char_traits<char>::length(prefix), prefix))
+      continue;
+    auto local = line.find("LOCAL:");
+    auto mpeg = line.find("MPEGTS:");
+    if (local == std::string::npos || mpeg == std::string::npos)
+      throw std::runtime_error("Invalid HLS subtitle timestamp map");
+    auto cue = line.substr(local + 6, line.find(',', local) - local - 6);
+    auto clock = line.substr(mpeg + 7, line.find(',', mpeg) - mpeg - 7);
+    int64_t localTime = 0, timestamp = 0;
+    const auto parsed =
+        std::from_chars(clock.data(), clock.data() + clock.size(), timestamp);
+    if (av_parse_time(&localTime, cue.c_str(), 1) < 0 ||
+        parsed.ec != std::errc() || parsed.ptr != clock.data() + clock.size() ||
+        timestamp < 0 || timestamp >= (int64_t{1} << 33))
+      throw std::runtime_error("Invalid HLS subtitle timestamp map");
+    return av_rescale_q(timestamp, AVRational{1, 90000}, AV_TIME_BASE_Q) -
+           localTime;
+  }
+  return 0;
+}
+bool sameCodec(const AVCodecParameters* a, const AVCodecParameters* b)
+{
+  return a->codec_type == b->codec_type && a->codec_id == b->codec_id &&
+         a->width == b->width && a->height == b->height &&
+         a->sample_rate == b->sample_rate &&
+         !av_channel_layout_compare(&a->ch_layout, &b->ch_layout) &&
+         a->extradata_size == b->extradata_size &&
+         (!a->extradata_size ||
+          !std::memcmp(a->extradata, b->extradata, a->extradata_size));
 }
 struct Input {
   AVFormatContext* context = nullptr;
@@ -36,6 +85,15 @@ struct Input {
   bool ready = false;
   std::string type;
   Control* control = nullptr;
+  std::vector<Segment> segments;
+  size_t nextSegment = 0;
+  int64_t shift = 0, presentationStart = 0, clockOffset = 0;
+  int64_t clipStart = 0, clipEnd = 0;
+  int64_t boundary = 0;
+  int64_t end = INT64_MAX;
+  bool webvtt = false;
+  bool allowPreroll = false;
+  std::vector<AVCodecParameters*> parameters;
   ~Input()
   {
     av_packet_free(&packet);
@@ -44,6 +102,8 @@ struct Input {
       av_freep(&io->buffer);
       avio_context_free(&io);
     }
+    for (auto parameter : parameters)
+      avcodec_parameters_free(&parameter);
   }
   static int read(void* opaque, uint8_t* data, int length) noexcept
   {
@@ -53,8 +113,7 @@ struct Input {
     try {
       while (s.index < s.files.size()) {
         if (!s.file.is_open()) {
-          s.file.open(std::filesystem::u8path(s.files[s.index]),
-                      std::ios::binary);
+          s.file.open(nativePath(s.files[s.index]), std::ios::binary);
           if (!s.file)
             return AVERROR(EIO);
           s.file.seekg(s.position - s.starts[s.index]);
@@ -106,9 +165,11 @@ struct Input {
       throw std::bad_alloc();
     for (const auto& path : files) {
       starts.push_back(size);
-      size += std::filesystem::file_size(std::filesystem::u8path(path));
+      size += std::filesystem::file_size(nativePath(path));
     }
     auto buffer = static_cast<unsigned char*>(av_malloc(65536));
+    if (!buffer)
+      throw std::bad_alloc();
     io = avio_alloc_context(buffer, 65536, 0, this, read, nullptr, seek);
     if (!io) {
       av_free(buffer);
@@ -127,12 +188,75 @@ struct Input {
     check(avformat_open_input(&context, nullptr, nullptr, nullptr));
     check(avformat_find_stream_info(context, nullptr));
   }
+  bool openRun()
+  {
+    if (nextSegment == segments.size())
+      return false;
+    avformat_close_input(&context);
+    if (io) {
+      av_freep(&io->buffer);
+      avio_context_free(&io);
+    }
+    file.close();
+    file.clear();
+    files.clear();
+    starts.clear();
+    position = size = 0;
+    index = 0;
+    const auto& first = segments[nextSegment];
+    if (!first.init.empty())
+      files.push_back(first.init);
+    files.push_back(first.path);
+    ++nextSegment;
+    // A WebVTT header applies only to its own segment. Other compatible
+    // fragments share one native demuxer so timestamp unwrapping is retained.
+    if (type != "subtitle") {
+      while (nextSegment < segments.size() &&
+             segments[nextSegment].init == first.init &&
+             segments[nextSegment].timeOffset == first.timeOffset) {
+        files.push_back(segments[nextSegment++].path);
+      }
+    }
+    open();
+    webvtt = context->nb_streams == 1 &&
+             context->streams[0]->codecpar->codec_id == AV_CODEC_ID_WEBVTT;
+    clockOffset = first.hls ? (webvtt ? subtitleOffset(first.path) : 0)
+                            : first.period * 1000 - first.timeOffset;
+    if (!first.hls)
+      boundary = first.period * 1000;
+    clipStart = first.hls ? (first.start - presentationStart) * 1000 : 0;
+    clipEnd = clipStart + first.duration * 1000;
+    if (!parameters.empty()) {
+      if (parameters.size() != context->nb_streams)
+        throw std::runtime_error("Media track layout changed during download");
+      for (unsigned i = 0; i < context->nb_streams; ++i) {
+        const auto a = parameters[i];
+        const auto b = context->streams[i]->codecpar;
+        if (!sameCodec(a, b))
+          throw std::runtime_error("Media codec parameters changed; lossless "
+                                   "concatenation is unavailable");
+      }
+    }
+    else {
+      for (unsigned i = 0; i < context->nb_streams; ++i) {
+        auto parameter = avcodec_parameters_alloc();
+        if (!parameter)
+          throw std::bad_alloc();
+        parameters.push_back(parameter);
+        check(
+            avcodec_parameters_copy(parameter, context->streams[i]->codecpar));
+      }
+    }
+    return true;
+  }
   void next()
   {
     av_packet_unref(packet);
     for (;;) {
       auto result = av_read_frame(context, packet);
       if (result == AVERROR_EOF) {
+        if (openRun())
+          continue;
         ready = false;
         return;
       }
@@ -140,6 +264,41 @@ struct Input {
       if (packet->stream_index >= 0 &&
           static_cast<size_t>(packet->stream_index) < mapping.size() &&
           mapping[packet->stream_index] >= 0) {
+        av_packet_rescale_ts(packet,
+                             context->streams[packet->stream_index]->time_base,
+                             AV_TIME_BASE_Q);
+        const auto offset = shift + clockOffset;
+        if (packet->pts != AV_NOPTS_VALUE)
+          packet->pts += offset;
+        if (packet->dts != AV_NOPTS_VALUE)
+          packet->dts += offset;
+        if (!(webvtt && segments.front().hls) &&
+            packet->pts != AV_NOPTS_VALUE &&
+            ((!allowPreroll && packet->pts + packet->duration <= boundary) ||
+             packet->pts >= end)) {
+          // Initialization can expose a complete encoder-priming packet before
+          // the Period. It must not overlap the preceding Period's audio.
+          av_packet_unref(packet);
+          continue;
+        }
+        if (webvtt && segments.front().hls) {
+          const AVRational clock{1, 90000};
+          const auto timestamp =
+              av_rescale_q(packet->pts - shift, AV_TIME_BASE_Q, clock);
+          const auto reference =
+              av_rescale_q(clipStart - shift, AV_TIME_BASE_Q, clock);
+          packet->pts =
+              clipStart + av_rescale_q(av_compare_mod(timestamp, reference,
+                                                      uint64_t{1} << 33),
+                                       clock, AV_TIME_BASE_Q);
+          const auto end = std::min(packet->pts + packet->duration, clipEnd);
+          packet->pts = packet->dts = std::max(packet->pts, clipStart);
+          packet->duration = end - packet->pts;
+          if (packet->duration <= 0) {
+            av_packet_unref(packet);
+            continue;
+          }
+        }
         ready = true;
         return;
       }
@@ -149,6 +308,8 @@ struct Input {
 };
 struct Output {
   AVFormatContext* context = nullptr;
+  std::map<std::pair<int, unsigned>, unsigned> mapping;
+  std::map<int, size_t> written;
   ~Output()
   {
     if (context) {
@@ -164,21 +325,27 @@ bool keep(AVMediaType type, bool video, bool audio, bool subtitle)
          (type == AVMEDIA_TYPE_AUDIO && audio) ||
          (type == AVMEDIA_TYPE_SUBTITLE && subtitle);
 }
-void remux(std::vector<std::unique_ptr<Input>>& inputs, const std::string& path,
-           const std::string& format, bool video, bool audio, bool subtitles,
-           Control* control)
+void remux(Output& out, std::vector<std::unique_ptr<Input>>& inputs,
+           const std::string& path, const std::string& format, bool video,
+           bool audio, bool subtitles, Control* control)
 {
-  Output out;
-  check(avformat_alloc_output_context2(&out.context, nullptr,
-                                       format == "mkv" ? "matroska" : "mp4",
-                                       path.c_str()));
-  if (!out.context)
-    throw std::bad_alloc();
-  out.context->avoid_negative_ts = AVFMT_AVOID_NEG_TS_MAKE_ZERO;
+  const bool firstEpoch = !out.context;
+  if (firstEpoch) {
+    check(avformat_alloc_output_context2(&out.context, nullptr,
+                                         format == "mkv" ? "matroska" : "mp4",
+                                         path.c_str()));
+    if (!out.context)
+      throw std::bad_alloc();
+    // Native edit lists and codec delay preserve encoder priming; forcing
+    // every timestamp to zero would make those samples audible.
+  }
+  unsigned outputIndex = 0;
+  std::map<int, unsigned> streamOrdinals;
   const bool separateAudio =
       std::any_of(inputs.begin(), inputs.end(),
                   [](const auto& i) { return i->type == "audio"; });
   for (auto& input : inputs) {
+    input->allowPreroll = firstEpoch;
     input->mapping.assign(input->context->nb_streams, -1);
     for (unsigned i = 0; i < input->context->nb_streams; ++i) {
       auto source = input->context->streams[i];
@@ -193,20 +360,42 @@ void remux(std::vector<std::unique_ptr<Input>>& inputs, const std::string& path,
         throw std::runtime_error(
             "Selected codec is not supported by the output container; choose "
             "another media-format");
-      auto stream = avformat_new_stream(out.context, nullptr);
+      const auto key =
+          std::make_pair(static_cast<int>(type), streamOrdinals[type]++);
+      const auto found = out.mapping.find(key);
+      auto stream = firstEpoch ? avformat_new_stream(out.context, nullptr)
+                               : (found != out.mapping.end()
+                                      ? out.context->streams[found->second]
+                                      : nullptr);
       if (!stream)
-        throw std::bad_alloc();
+        throw std::runtime_error("Media track layout changed between periods");
+      ++outputIndex;
       input->mapping[i] = stream->index;
-      check(avcodec_parameters_copy(stream->codecpar, source->codecpar));
-      stream->codecpar->codec_tag = 0;
-      stream->time_base = source->time_base;
-      av_dict_copy(&stream->metadata, source->metadata, 0);
+      if (firstEpoch) {
+        out.mapping[key] = stream->index;
+        check(avcodec_parameters_copy(stream->codecpar, source->codecpar));
+        stream->codecpar->codec_tag = 0;
+        stream->time_base = source->time_base;
+        av_dict_copy(&stream->metadata, source->metadata, 0);
+      }
+      else {
+        const auto a = stream->codecpar;
+        const auto b = source->codecpar;
+        if (!sameCodec(a, b))
+          throw std::runtime_error(
+              "Media codec parameters changed between periods");
+      }
     }
   }
   if (!out.context->nb_streams)
     throw std::runtime_error("No selected media tracks can be saved");
-  check(avio_open(&out.context->pb, path.c_str(), AVIO_FLAG_WRITE));
-  check(avformat_write_header(out.context, nullptr));
+  if (outputIndex != out.context->nb_streams)
+    throw std::runtime_error("Media track layout changed between periods");
+  if (firstEpoch) {
+    check(avio_open(&out.context->pb, nativePath(path).u8string().c_str(),
+                    AVIO_FLAG_WRITE));
+    check(avformat_write_header(out.context, nullptr));
+  }
   for (auto& input : inputs)
     input->next();
   for (;;) {
@@ -216,121 +405,145 @@ void remux(std::vector<std::unique_ptr<Input>>& inputs, const std::string& path,
     for (auto& input : inputs) {
       if (!input->ready)
         continue;
-      if (!next ||
-          av_compare_ts(
-              input->packet->dts,
-              input->context->streams[input->packet->stream_index]->time_base,
-              next->packet->dts,
-              next->context->streams[next->packet->stream_index]->time_base) <
-              0)
+      if (!next || input->packet->dts < next->packet->dts)
         next = input.get();
     }
     if (!next)
       break;
     auto packet = next->packet;
-    auto source = next->context->streams[packet->stream_index];
     packet->stream_index = next->mapping[packet->stream_index];
-    av_packet_rescale_ts(packet, source->time_base,
+    av_packet_rescale_ts(packet, AV_TIME_BASE_Q,
                          out.context->streams[packet->stream_index]->time_base);
     packet->pos = -1;
+    const auto index = packet->stream_index;
     check(av_interleaved_write_frame(out.context, packet));
+    ++out.written[index];
     next->next();
   }
-  check(av_write_trailer(out.context));
-  check(avio_closep(&out.context->pb));
-}
-std::string quoted(const std::string& value)
-{
-  std::string result = "'";
-  for (char ch : value) {
-    if (ch == '\'')
-      result += "'\\''";
-    else
-      result += ch;
-  }
-  return result + "'";
 }
 } // namespace
-void Muxer::write(const std::vector<Segment>& segments,
-                  const std::string& output, const std::string& directory,
-                  const std::string& format, bool video, bool audio,
-                  bool subtitles, bool overwrite,
-                  const std::shared_ptr<Control>& control)
+std::string Muxer::stage(const std::vector<Segment>& segments,
+                         const std::string& output,
+                         const std::string& directory,
+                         const std::string& format, bool video, bool audio,
+                         bool subtitles,
+                         const std::shared_ptr<Control>& control)
 {
   if (segments.empty())
     throw std::runtime_error("No complete media segments were received");
-  std::map<int64_t, std::map<int, std::vector<Segment>>> periods;
-  for (const auto& segment : segments)
-    periods[segment.period][segment.track].push_back(segment);
-  std::vector<std::string> parts;
+  using Epoch = std::pair<int64_t, int64_t>;
+  std::map<Epoch, std::map<std::string, std::vector<Segment>>> periods;
+  std::map<std::string, std::string> verified;
+  int64_t presentationStart = INT64_MAX;
+  for (const auto& segment : segments) {
+    for (const auto& resource :
+         {std::make_pair(segment.path, segment.digest),
+          std::make_pair(segment.init, segment.initDigest)}) {
+      if (resource.first.empty())
+        continue;
+      auto found = verified.find(resource.first);
+      if (found == verified.end())
+        found =
+            verified.emplace(resource.first, Transport::digest(resource.first))
+                .first;
+      if (found->second != resource.second)
+        throw std::runtime_error(
+            "Media recovery data is damaged; resume to fetch it again");
+    }
+    periods[{segment.period, segment.discontinuity}][segment.track].push_back(
+        segment);
+    if (segment.hls)
+      presentationStart = std::min(presentationStart, segment.start);
+  }
+  const auto temporary = output + "." +
+                         nativePath(directory).filename().u8string() +
+                         ".media-partial";
+  struct Cleanup {
+    std::string path;
+    bool committed = false;
+    ~Cleanup()
+    {
+      if (!committed) {
+        std::error_code ignored;
+        std::filesystem::remove(nativePath(path), ignored);
+      }
+    }
+  } cleanup{temporary};
+  Output out;
   for (const auto& period : periods) {
     std::vector<std::unique_ptr<Input>> inputs;
+    int64_t end = 0;
     for (const auto& track : period.second) {
       auto input = std::make_unique<Input>();
       input->control = control.get();
       input->type = track.second.front().type;
-      if (!track.second.front().init.empty())
-        input->files.push_back(track.second.front().init);
+      input->segments = track.second;
+      input->presentationStart = presentationStart;
+      input->openRun();
       for (const auto& segment : track.second)
-        input->files.push_back(segment.path);
-      input->open();
+        end = std::max(end, segment.start + segment.duration);
       inputs.push_back(std::move(input));
     }
-    auto path = (std::filesystem::u8path(directory) /
-                 ("period-" + std::to_string(period.first) + "." + format))
-                    .u8string();
-    remux(inputs, path, format, video, audio, subtitles, control.get());
-    parts.push_back(path);
-  }
-  // Native concat demuxing owns the timeline across discontinuities/periods.
-  if (parts.size() > 1) {
-    auto list =
-        (std::filesystem::u8path(directory) / "recording.ffconcat").u8string();
-    std::ofstream file(std::filesystem::u8path(list));
-    file << "ffconcat version 1.0\n";
-    for (const auto& part : parts)
-      file << "file " << quoted(part) << "\n";
-    file.close();
-    if (!file)
-      throw std::runtime_error("Cannot write media remux manifest");
-    auto input = std::make_unique<Input>();
-    input->control = control.get();
-    AVDictionary* options = nullptr;
-    av_dict_set(&options, "safe", "0", 0);
-    auto result = avformat_open_input(&input->context, list.c_str(),
-                                      av_find_input_format("concat"), &options);
-    av_dict_free(&options);
-    check(result);
-    check(avformat_find_stream_info(input->context, nullptr));
-    std::vector<std::unique_ptr<Input>> inputs;
-    inputs.push_back(std::move(input));
-    auto merged =
-        (std::filesystem::u8path(directory) / ("merged." + format)).u8string();
-    remux(inputs, merged, format, video, audio, subtitles, control.get());
-    parts = {merged};
-  }
-  // Stage on the destination filesystem; only a fully finalized file is
-  // published.
-  const auto destination = std::filesystem::u8path(output);
-  const auto temporary = std::filesystem::u8path(
-      output + "." + std::filesystem::u8path(directory).filename().u8string() +
-      ".media-partial");
-  struct Cleanup {
-    std::filesystem::path path;
-    ~Cleanup()
-    {
-      std::error_code ignored;
-      std::filesystem::remove(path, ignored);
+    if (inputs.front()->segments.front().hls) {
+      int64_t origin = INT64_MAX, beginning = INT64_MAX;
+      for (const auto& input : inputs) {
+        beginning = std::min(beginning, input->segments.front().start);
+        if (!input->webvtt && input->context->start_time != AV_NOPTS_VALUE)
+          origin = std::min(origin, input->context->start_time);
+      }
+      if (origin == INT64_MAX)
+        origin = 0;
+      for (auto& input : inputs) {
+        input->boundary = (beginning - presentationStart) * 1000;
+        input->end = (end - presentationStart) * 1000;
+        input->shift = (beginning - presentationStart) * 1000 - origin;
+      }
     }
-  } cleanup{temporary};
-  std::filesystem::copy_file(std::filesystem::u8path(parts.front()), temporary,
-                             std::filesystem::copy_options::overwrite_existing);
+    else {
+      for (auto& input : inputs)
+        input->end = (period.first.first + end) * 1000;
+    }
+    remux(out, inputs, temporary, format, video, audio, subtitles,
+          control.get());
+  }
+  if (out.written.empty())
+    throw std::runtime_error("The selected media contained no samples");
+  for (unsigned i = 0; i < out.context->nb_streams; ++i) {
+    const auto type = out.context->streams[i]->codecpar->codec_type;
+    if ((type == AVMEDIA_TYPE_AUDIO || type == AVMEDIA_TYPE_VIDEO) &&
+        !out.written[i])
+      throw std::runtime_error(
+          "A selected audio or video track contained no samples");
+  }
+  check(av_write_trailer(out.context));
+  check(avio_closep(&out.context->pb));
+  syncFile(temporary);
+  syncParent(temporary);
   if (control->cancel)
     throw std::runtime_error("Media finalization interrupted");
-  if (!overwrite && std::filesystem::exists(destination))
-    throw std::runtime_error(
-        "Media output appeared during download; refusing to overwrite it");
-  std::filesystem::rename(temporary, destination);
+  cleanup.committed = true;
+  return temporary;
+}
+void Muxer::publish(const std::string& staging, const std::string& output,
+                    bool overwrite)
+{
+  const auto source = nativePath(staging);
+  const auto destination = nativePath(output);
+#ifdef _WIN32
+  if (!MoveFileExW(source.c_str(), destination.c_str(),
+                   overwrite
+                       ? MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+                       : MOVEFILE_WRITE_THROUGH))
+    throw std::system_error(GetLastError(), std::system_category(),
+                            "Cannot publish media output");
+#else
+  if (overwrite)
+    std::filesystem::rename(source, destination);
+  else {
+    std::filesystem::create_hard_link(source, destination);
+    std::filesystem::remove(source);
+  }
+#endif
 }
 } // namespace media
 } // namespace aria2

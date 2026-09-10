@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Local native-library media validation. No public media services are used."""
+
 from __future__ import annotations
 
 import json
@@ -82,16 +83,31 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         "aac",
         str(source),
     )
-    for name in ("hls", "fmp4", "dash", "byterange", "encrypted"):
+    for name in ("hls", "fmp4", "fmp4-switch", "dash", "byterange", "encrypted"):
         directory = run.fixtures / name
         directory.mkdir()
         args = [ffmpeg, "-v", "error", "-i", str(source), "-map", "0", "-c", "copy"]
         if name == "dash":
-            args += ["-f", "dash", "-seg_duration", "2", str(directory / "index.mpd")]
+            args += [
+                "-f",
+                "dash",
+                "-seg_duration",
+                "2",
+                (directory / "index.mpd").as_posix(),
+            ]
         else:
             args += ["-f", "hls", "-hls_time", "2", "-hls_list_size", "0"]
-            if name == "fmp4":
+            if name.startswith("fmp4"):
                 args += ["-hls_segment_type", "fmp4"]
+            if name == "fmp4-switch":
+                args += [
+                    "-streamid",
+                    "0:11",
+                    "-streamid",
+                    "1:12",
+                    "-hls_segment_options",
+                    "use_stream_ids_as_track_ids=1",
+                ]
             if name == "byterange":
                 args += ["-hls_flags", "single_file"]
             if name == "encrypted":
@@ -100,8 +116,24 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                 key_info = directory / "key.txt"
                 key_info.write_text(f"key.bin\n{key}\n")
                 args += ["-hls_key_info_file", str(key_info)]
-            args += [str(directory / "index.m3u8")]
+            args += [(directory / "index.m3u8").as_posix()]
         command(*args)
+    hls_manifest = run.fixtures / "hls/index.m3u8"
+    hls_manifest.write_text(
+        hls_manifest.read_text().replace(
+            "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-MEDIA-SEQUENCE:3456"
+        )
+    )
+    switched = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2"]
+    for name in ("fmp4", "fmp4-switch"):
+        if name == "fmp4-switch":
+            switched.append("#EXT-X-DISCONTINUITY")
+        switched.append(f'#EXT-X-MAP:URI="{name}/init.mp4"')
+        for index in range(3):
+            switched += ["#EXTINF:2,", f"{name}/index{index}.m4s"]
+    (run.fixtures / "switch.m3u8").write_text(
+        "\n".join(switched + ["#EXT-X-ENDLIST", ""])
+    )
     manifest = ET.parse(run.fixtures / "dash/index.mpd")
     ns = "{urn:mpeg:dash:schema:mpd:2011}"
     root = manifest.getroot()
@@ -115,6 +147,52 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
     ET.register_namespace("", ns[1:-1])
     manifest.write(
         run.fixtures / "dash/multi.mpd", encoding="utf-8", xml_declaration=True
+    )
+    offset_root = ET.parse(run.fixtures / "dash/index.mpd").getroot()
+    offset_period = offset_root.find(ns + "Period")
+    offset_period.clear()
+    offset_period.set("start", "PT0S")
+    for index, (kind, offset) in enumerate((("v", 5), ("a", 9))):
+        name = f"offset-{kind}"
+        directory = run.fixtures / name
+        directory.mkdir()
+        command(
+            ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            str(source),
+            "-map",
+            f"0:{kind}",
+            "-c",
+            "copy",
+            "-output_ts_offset",
+            str(offset),
+            "-format_options",
+            "movie_timescale=48000",
+            "-f",
+            "dash",
+            "-seg_duration",
+            "2",
+            (directory / "index.mpd").as_posix(),
+        )
+        adaptation = (
+            ET.parse(directory / "index.mpd")
+            .getroot()
+            .find(f"{ns}Period/{ns}AdaptationSet")
+        )
+        adaptation.set("id", str(index))
+        base = ET.Element(ns + "BaseURL")
+        base.text = f"{name}/"
+        adaptation.insert(0, base)
+        for template in adaptation.iter(ns + "SegmentTemplate"):
+            template.set(
+                "presentationTimeOffset",
+                str(offset * int(template.get("timescale", "1"))),
+            )
+        offset_period.append(adaptation)
+    ET.ElementTree(offset_root).write(
+        run.fixtures / "offset.mpd", encoding="utf-8", xml_declaration=True
     )
     expected = command(
         ffmpeg,
@@ -130,6 +208,20 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         "sha256",
         "-",
     ).strip()
+    expected_audio = command(
+        ffmpeg,
+        "-v",
+        "error",
+        "-i",
+        str(source),
+        "-map",
+        "0:a",
+        "-f",
+        "hash",
+        "-hash",
+        "sha256",
+        "-",
+    ).strip()
     results = {}
     subtitle_root = run.fixtures / "hls"
     (subtitle_root / "subtitles.m3u8").write_text(
@@ -139,15 +231,17 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
     )
     for i in range(3):
         (subtitle_root / f"sub{i}.vtt").write_text(
-            f"WEBVTT\n\n00:00:0{i * 2}.000 --> 00:00:0{i * 2 + 1}.500\nCaption {i}\n\n"
+            f"WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:{126000 + i * 180000}\n"
+            f"\n00:00:00.000 --> 00:00:01.500\nCaption {i}\n\n"
         )
     (subtitle_root / "master.m3u8").write_text(
         '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",URI="subtitles.m3u8"\n'
         '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=160x90,CODECS="avc1.42c00b,mp4a.40.2",SUBTITLES="subs"\nindex.m3u8\n'
     )
-    with CaddyService(run, "media", run.fixtures) as server, EngineProcess(
-        run, "media", engine_path
-    ) as engine:
+    with (
+        CaddyService(run, "media", run.fixtures) as server,
+        EngineProcess(run, "media", engine_path) as engine,
+    ):
         for name, suffix, container in (
             ("hls", "m3u8", "mp4"),
             ("fmp4", "m3u8", "mkv"),
@@ -221,6 +315,69 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         assert abs(float(info["format"]["duration"]) - 12) < 0.2, info
         results["multiPeriod"] = info["format"]["duration"]
 
+        gid = engine.add_uri(f"{server.base_url}/switch.m3u8", {"out": "switch.mp4"})
+        status = wait(engine, gid)
+        switched_info = json.loads(
+            command(
+                ffprobe,
+                "-v",
+                "error",
+                "-count_frames",
+                "-show_entries",
+                "stream=codec_type,nb_read_frames",
+                "-show_format",
+                "-of",
+                "json",
+                status["files"][0]["path"],
+            )
+        )
+        assert abs(float(switched_info["format"]["duration"]) - 12) < 0.2, switched_info
+        assert (
+            next(s for s in switched_info["streams"] if s["codec_type"] == "video")[
+                "nb_read_frames"
+            ]
+            == "180"
+        ), switched_info
+        results["initializationSwitch"] = (
+            "both initialization sections and 180 video frames retained"
+        )
+
+        gid = engine.add_uri(f"{server.base_url}/offset.mpd", {"out": "offset.mp4"})
+        status = wait(engine, gid)
+        for kind, expected_hash in (("v", expected), ("a", expected_audio)):
+            actual = command(
+                ffmpeg,
+                "-v",
+                "error",
+                "-i",
+                status["files"][0]["path"],
+                "-map",
+                f"0:{kind}",
+                "-f",
+                "hash",
+                "-hash",
+                "sha256",
+                "-",
+            ).strip()
+            assert actual == expected_hash, (kind, actual, expected_hash)
+        streams = json.loads(
+            command(
+                ffprobe,
+                "-v",
+                "error",
+                "-show_streams",
+                "-of",
+                "json",
+                status["files"][0]["path"],
+            )
+        )["streams"]
+        assert all(abs(float(stream["start_time"])) < 0.05 for stream in streams), (
+            streams
+        )
+        results["presentationOffsets"] = (
+            "different audio/video offsets removed; both decoded hashes match"
+        )
+
         gid = engine.add_uri(
             f"{server.base_url}/dash/index.mpd",
             {
@@ -269,7 +426,51 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             "-",
         )
         assert all(f"Caption {i}" in captions for i in range(3)), captions
-        results["subtitles"] = "all segmented WebVTT captions retained"
+        packets = json.loads(
+            command(
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "s",
+                "-show_entries",
+                "packet=pts_time",
+                "-of",
+                "json",
+                status["files"][0]["path"],
+            )
+        )["packets"]
+        assert len(packets) == 3 and all(
+            abs(float(packet["pts_time"]) - index * 2) < 0.1
+            for index, packet in enumerate(packets)
+        ), packets
+        results["subtitles"] = "caption content and mapped timestamps retained"
+
+        gid = engine.add_uri(
+            f"{server.base_url}/hls/master.m3u8",
+            {
+                "out": "missing-language.mkv",
+                "media-format": "mkv",
+                "media-subtitles": "missing",
+            },
+        )
+        status = wait(engine, gid, "error")
+        assert "unavailable" in status["media"]["error"], status
+        assert not Path(status["files"][0]["path"]).exists(), status
+        engine.rpc.call("aria2.removeDownloadResult", [gid])
+
+        blocked_directory = run.fixtures / "blocked-directory"
+        blocked_directory.write_text("regular file")
+        gid = engine.add_uri(
+            f"{server.base_url}/hls/index.m3u8",
+            {"dir": str(blocked_directory), "out": "blocked.mp4"},
+        )
+        status = wait(engine, gid, "error")
+        assert "Media file operation failed" in status["errorMessage"], status
+        engine.rpc.call("aria2.removeDownloadResult", [gid])
+        results["selectionAndFileErrors"] = (
+            "missing language rejected; native filesystem errors remain valid RPC JSON"
+        )
 
         gid = engine.add_uri(
             f"{server.base_url}/hls/index.m3u8",
@@ -364,6 +565,37 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     assert not Path(status["files"][0]["path"]).exists(), status
                     engine.rpc.call("aria2.removeDownloadResult", [gid])
                     assert not (engine.root / "media/tasks" / gid).exists(), gid
+            live_playlist = playlist.replace("#EXT-X-ENDLIST", "")
+            for index, state in enumerate(("Started", "loaded", "refresh")):
+                faults.stub(
+                    {
+                        "scenarioName": "live-refresh-failure",
+                        "requiredScenarioState": state,
+                        **(
+                            {"newScenarioState": ("loaded", "refresh")[index]}
+                            if index < 2
+                            else {}
+                        ),
+                        "request": {"method": "GET", "urlPath": "/refresh.m3u8"},
+                        "response": {
+                            "status": 200,
+                            "headers": {
+                                "Content-Type": "application/vnd.apple.mpegurl"
+                            },
+                            "body": live_playlist,
+                        }
+                        if index < 2
+                        else {"status": 503},
+                    }
+                )
+            gid = engine.add_uri(
+                f"{faults.base_url}/refresh.m3u8",
+                {"out": "refresh-failure.mp4", "max-tries": "1"},
+            )
+            status = wait(engine, gid, "error")
+            assert "503" in status["media"]["error"], status
+            assert not Path(status["files"][0]["path"]).exists(), status
+            engine.rpc.call("aria2.removeDownloadResult", [gid])
             results["failureHandling"] = (
                 "MIME detection succeeds; missing fragments and local-file references fail without publishing output"
             )
@@ -391,7 +623,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     "2",
                     "-hls_list_size",
                     "5",
-                    str(live_dir / "index.m3u8"),
+                    (live_dir / "index.m3u8").as_posix(),
                 ],
                 stdout=log,
                 stderr=log,
@@ -407,6 +639,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     ("limited-live", {"media-record-time": "4"}),
                     ("stopped-live", {}),
                     ("paused-live", {}),
+                    ("resumed-live", {}),
+                    ("expired-live", {}),
                 ):
                     gid = engine.add_uri(
                         f"{server.base_url}/live/index.m3u8",
@@ -428,9 +662,36 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                             if status["status"] == "error":
                                 raise AssertionError(status)
                             time.sleep(0.1)
-                        if name == "paused-live":
+                        if name in ("paused-live", "resumed-live", "expired-live"):
                             engine.rpc.call("aria2.pause", [gid])
-                            wait(engine, gid, "paused")
+                            paused = wait(engine, gid, "paused")
+                        if name in ("resumed-live", "expired-live"):
+                            time.sleep(3 if name == "resumed-live" else 13)
+                            engine.rpc.call("aria2.unpause", [gid])
+                            if name == "expired-live":
+                                status = wait(engine, gid, "error")
+                                assert any(
+                                    word in status["media"]["error"].lower()
+                                    for word in ("missing", "gap", "window")
+                                ), status
+                                assert not Path(status["files"][0]["path"]).exists(), (
+                                    status
+                                )
+                                engine.rpc.call("aria2.removeDownloadResult", [gid])
+                                results[name] = "out-of-window recovery rejected"
+                                continue
+                            until = time.monotonic() + 15
+                            while time.monotonic() < until:
+                                status = engine.rpc.call("aria2.tellStatus", [gid])
+                                if status["status"] == "error":
+                                    raise AssertionError(status)
+                                if int(status["media"]["completedDuration"]) > int(
+                                    paused["media"]["completedDuration"]
+                                ):
+                                    break
+                                time.sleep(0.1)
+                            else:
+                                raise TimeoutError(status)
                         engine.rpc.call("aria2.finishMedia", [gid])
                     status = wait(engine, gid)
                     assert status["media"]["live"] == "true", status
@@ -466,7 +727,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     "2",
                     "-window_size",
                     "5",
-                    str(dash_live / "index.mpd"),
+                    (dash_live / "index.mpd").as_posix(),
                 ],
                 stdout=log,
                 stderr=log,
@@ -508,6 +769,12 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         engine.rpc.call("aria2.saveSession")
         engine.stop()
         with sqlite3.connect(engine.root / "media/state.db") as db:
+            assert (
+                db.execute(
+                    "SELECT MIN(number) FROM media_segments WHERE gid=?", (gid,)
+                ).fetchone()[0]
+                == 3456
+            )
             cached = Path(
                 db.execute(
                     "SELECT path FROM media_segments WHERE gid=? LIMIT 1", (gid,)
@@ -574,6 +841,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     "media_tracks",
                     "media_identity",
                     "media_manifests",
+                    "media_selections",
+                    "media_publication",
                 ):
                     assert (
                         db.execute(

@@ -2430,7 +2430,7 @@ static GF_Err gf_dash_solve_m3u8_representation_xlink(GF_DASH_Group *group, GF_M
 	xlink_copy = gf_url_concatenate(dash->base_url, rep->segment_list->xlink_href);
 	e = gf_m3u8_solve_representation_xlink(rep, dash->base_url, &dash->getter, is_static, duration, signature);
 	//do not notify m3u8 update if same as last one
-	if ((e==GF_EOS) || (e==GF_NOT_READY)) {
+	if (e != GF_OK) {
 		gf_free(xlink_copy);
 		return e;
 	}
@@ -3066,14 +3066,11 @@ process_m3u8_manifest:
 								group->period->duration = dur;
 						}
 					} else {
-						if (!group->last_error_time) {
-							group->last_error_time = gf_sys_clock();
-						} else if (gf_sys_clock() - group->last_error_time > (u32) (group->segment_duration*1000)) {
-							if (!dash->in_error) {
-								GF_LOG(GF_LOG_ERROR, GF_LOG_DASH, ("[DASH] Error - cannot update manifest: %s, aborting\n", gf_error_to_string(e)));
-								dash->in_error = GF_TRUE;
-							}
-						}
+						// Return terminal I/O errors to the caller instead of retrying
+						// this same xlink forever inside a single process call.
+						if (hls_temp_rep) gf_mpd_representation_free(hls_temp_rep);
+						if (new_mpd) gf_mpd_del(new_mpd);
+						return e;
 					}
 				}
 
@@ -5106,6 +5103,23 @@ static char *gf_dash_get_fileio_url(const char *base_url, char *res_url)
 	return gf_strdup(new_res);
 }
 
+static void gf_dash_cache_segment_info(GF_DASH_Group *group, GF_MPD_Representation *rep, segment_cache_entry *entry, u32 start_number)
+{
+	u64 duration;
+	u32 scale;
+	entry->time.num = gf_dash_get_segment_start_time_with_timescale(group, &duration, &scale, NULL);
+	entry->time.den = scale;
+	entry->duration = (u32) group->current_downloaded_segment_duration;
+	entry->seg_number = start_number + group->download_segment_index;
+	if (group->dash->is_m3u8 && rep->segment_list) {
+		GF_MPD_SegmentURL *segment = gf_list_get(rep->segment_list->segment_URLs, group->download_segment_index);
+		if (segment) {
+			entry->seg_number = segment->hls_seq_num;
+			entry->seq_disc_cnt = segment->discontinuity_seq;
+		}
+	}
+}
+
 static GF_Err gf_dash_download_init_segment(GF_DashClient *dash, GF_DASH_Group *group)
 {
 	GF_Err e;
@@ -5182,7 +5196,8 @@ static GF_Err gf_dash_download_init_segment(GF_DashClient *dash, GF_DASH_Group *
 
 	if (nb_segment_read) {
 		group->init_segment_is_media = GF_TRUE;
-		group->init_segment_start_number = start_number;
+		gf_dash_cache_segment_info(group, rep, &group->cached[0], start_number);
+		group->init_segment_start_number = group->cached[0].seg_number;
 	}
 
 	if (!strstr(base_init_url, "://") || !strnicmp(base_init_url, "file://", 7) || !strnicmp(base_init_url, "gmem://", 7)
@@ -5210,7 +5225,8 @@ static GF_Err gf_dash_download_init_segment(GF_DashClient *dash, GF_DASH_Group *
 			group->cached[0].key_url = key_url;
 			memcpy(group->cached[0].key_IV, key_iv, sizeof(bin128));
 		}
-		group->cached[0].seg_number = start_number + group->download_segment_index;
+		if (!nb_segment_read)
+			group->cached[0].seg_number = start_number + group->download_segment_index;
 
 		group->nb_cached_segments = 1;
 		/*do not erase local files*/
@@ -7428,8 +7444,6 @@ static DownloadGroupStatus dash_download_group_download(GF_DashClient *dash, GF_
 	Bool remote_file = GF_FALSE;
 	const char *base_url = NULL;
 	u32 start_number=0;
-	u64 seg_dur;
-	u32 seg_scale;
 	segment_cache_entry *cache_entry;
 
 	GF_MPD_Type dyn_type = dash->mpd->type;
@@ -7821,10 +7835,8 @@ llhls_rety:
 		key_url = NULL;
 	}
 
-	cache_entry->time.num = gf_dash_get_segment_start_time_with_timescale(group, &seg_dur, &seg_scale, NULL);
-	cache_entry->time.den = seg_scale;
+	gf_dash_cache_segment_info(group, rep, cache_entry, start_number);
 	cache_entry->utc_map = seg_utc;
-	cache_entry->seg_number = group->download_segment_index + start_number;
 	cache_entry->seg_name_start = dash_strip_base_url(cache_entry->url, base_url);
 	group->loop_detected = GF_FALSE;
 	if (!base_group->nb_cached_segments) {
@@ -8643,7 +8655,7 @@ retry:
 		e = dash_check_mpd_update_and_cache(dash, &cache_is_full);
 		if (e || cache_is_full) {
 			if (e==GF_NOT_READY) return GF_IP_NETWORK_EMPTY;
-			return GF_OK;
+			return (e<0) ? e : GF_OK;
 		}
 
 		if (dash->dash_state == GF_DASH_STATE_SETUP)

@@ -33,6 +33,12 @@ Standard HLS AES-128 uses OpenSSL's native cipher implementation. MP4 cannot
 represent every subtitle/codec combination; use MKV when required. The engine
 does not silently transcode or discard selected unsupported streams.
 
+Track types use GPAC's codec registry rather than relying on a container MIME
+type. Explicit track or language requests fail when unavailable. DASH
+presentation offsets, HLS subtitle timestamp maps, initialization changes,
+and discontinuity boundaries are preserved during remuxing. Codec or track
+layout changes that cannot be combined without transcoding fail explicitly.
+
 A source `checksum` is not applied to remuxed output. Media tasks reject that
 combination; use `media=file` to save and verify the original resource instead.
 Native demuxer diagnostics are routed through the engine's debug logger, while
@@ -98,8 +104,8 @@ recovery state. Finishing and deleting are separate operations.
 ## Recovery and storage
 
 State is created on demand under `state-dir/media/state.db`. Task-owned cache
-files live under `state-dir/media/tasks/<gid>`. SQLite stores track selection,
-manifest identity, and committed segment positions. Completed network resources
+files live under `state-dir/media/tasks/<gid>`. SQLite stores stable representation
+identities, manifest identity, and committed segment positions. Completed network resources
 are content-addressed and verified before reuse. Mutable live manifests and
 resources are refreshed rather than permanently served from the resume cache.
 
@@ -107,17 +113,32 @@ Paused tasks restore their saved media progress without network activity.
 Resume reopens the native client and reuses verified completed resources. Remuxing
 is rebuilt from committed fragments; an old MP4 is never blindly appended to.
 Changed presentation/selection identity invalidates incompatible checkpoints.
+Live recovery starts within the available server window and checks segment
+continuity against committed positions before accepting new content.
+HLS checkpoint identity uses the manifest's media sequence, independent of
+segment filenames. Cancellation and terminal playlist refresh errors return
+control to the engine without an unbounded native retry loop.
 Live recording cannot recover media that has already left the server's window;
 gaps and a source disappearing without a proper end signal are reported as errors.
 
-The output is staged on its destination filesystem and published only after
-successful finalization. Completion/removal clears the task cache and database
-rows. No adjacent `.aria2` control files are created.
+Remuxing writes directly to a staging file on the destination filesystem.
+Files are synchronized before their publication record is committed. Recovery
+verifies the staged or already-published file before completing an interrupted
+publication. Selection and output format cannot change while publication is
+pending. Completion/removal clears task-owned recovery data; cleanup failure
+does not invalidate a successfully published file. Existing output is protected
+unless overwriting was explicitly enabled.
+
+Media state schema 2 replaces the earlier media schema and discards its
+incompatible checkpoints and task caches. Existing downloaded output is kept.
+Windows media files use native extended paths without changing system-wide
+long-path settings. No adjacent `.aria2` control files are created.
 
 ## Validation
 
 Run `tools/transfer_validation/run media` independently. The module uses local
 Caddy and FFmpeg-generated fixtures and checks decoded media, track selection,
-byte ranges, encryption, multi-period content, recording, and paused restart.
+byte ranges, encryption, different presentation offsets, initialization changes,
+subtitle timestamps, multi-period content, recording, and paused restart.
 FFmpeg/ffprobe executables are developer-only fixture/oracle dependencies.
 No public streaming service is used by the validation module or CTest.

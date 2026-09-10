@@ -150,7 +150,9 @@ ctest --test-dir build/default --output-on-failure
 Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, and `ARIA2_RELEASE_LTO`.
 
 The default superbuild compiles every library dependency from `third_party`.
-Only CMake, Ninja, Make, Perl, and a C11/C++17 platform toolchain are required.
+Only CMake, Ninja, a POSIX shell, Make, Perl, and a C11/C++17 platform toolchain
+are required. On Windows, MSYS2 supplies the shell, Make, and Perl; compilation
+uses the native target toolchain.
 
 ## Downloads
 

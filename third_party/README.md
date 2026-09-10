@@ -45,13 +45,22 @@ The libtorrent tree carries an aria2-next setting extension for encrypted-first
 peer negotiation with libtorrent's native plaintext fallback.
 
 GPAC is configured without a player, renderer, JavaScript runtime, external
-media codecs, or its curl backend. Its public DASH client uses aria2-next's
+media codecs, or independent TLS and cryptography backends. Its public DASH client uses aria2-next's
 libcurl I/O adapter. The retained upstream source and build support cover this
-configuration; no local protocol patches are applied.
+configuration. A local client fix preserves the first queued segment's timing
+and discontinuity and uses parsed HLS media sequence numbers instead of numbers
+inferred from filenames. Terminal manifest I/O errors return to the caller,
+including cancellation, instead of retrying the same xlink indefinitely.
+Its threading header includes the standard integer
+types required by its native atomic helpers.
+
+On Windows, static-only zlib builds retain the `libz` name used by upstream
+pkg-config metadata and the maintained dependency consumers. A suffix is only
+needed when static and shared zlib are built together.
 
 FFmpeg is built without programs, network protocols, encoders, devices, or
 filters. Only media demuxers, MP4/Matroska muxers, codec parsers, the audio
-decoders needed for reliable stream probing, and required bitstream filters
+decoders and libswresample needed for reliable stream probing, and required bitstream filters
 are enabled. Its upstream makefile support remains intact, while unused FATE
 reference data and integration fixtures are omitted. Dependency source commits
 are recorded in `packaging/dependencies.env`.

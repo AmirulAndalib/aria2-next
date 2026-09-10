@@ -23,8 +23,9 @@ The suite uses the public CLI and JSON-RPC interfaces. It does not include engin
 
 Media validation uses FFmpeg/ffprobe as local fixture generators and independent
 decoding oracles, Caddy for media resources, and WireMock for failure responses.
-It covers HLS, DASH, byte ranges, AES-128, track selection, multi-period remuxing,
-live recording, interrupted/restarted tasks, cache corruption, and removal.
+It covers HLS, DASH, byte ranges, AES-128, track selection, presentation offsets,
+initialization changes, subtitle timestamps, multi-period remuxing, live recording,
+in-window and expired-window recovery, cache corruption, and removal.
 The FFmpeg executables are not engine runtime dependencies.
 
 Generated state and payloads live under `build/transfer-validation`. Successful payloads are removed automatically. Reports and compact logs remain available for inspection. Pass `--keep-artifacts` to a protocol module when payload inspection is required.

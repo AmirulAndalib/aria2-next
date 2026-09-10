@@ -130,7 +130,7 @@ target_compile_definitions(aria2_core PRIVATE
 target_link_libraries(aria2_core PRIVATE spdlog::spdlog_header_only)
 target_link_libraries(aria2_core PUBLIC CURL::libcurl_static)
 target_link_libraries(aria2_core PUBLIC aria2::gpac aria2::avformat
-  aria2::avcodec aria2::avutil)
+  aria2::avcodec aria2::swresample aria2::avutil)
 if(ENABLE_WEBSOCKET)
   target_link_libraries(aria2_core PUBLIC wslay)
 endif()

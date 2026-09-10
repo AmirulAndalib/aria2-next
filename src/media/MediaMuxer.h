@@ -9,11 +9,12 @@ namespace aria2 {
 namespace media {
 class Muxer {
 public:
-  static void write(const std::vector<Segment>& segments,
-                    const std::string& output, const std::string& directory,
-                    const std::string& format, bool video, bool audio,
-                    bool subtitles, bool overwrite,
-                    const std::shared_ptr<Control>& control);
+  static std::string
+  stage(const std::vector<Segment>& segments, const std::string& output,
+        const std::string& directory, const std::string& format, bool video,
+        bool audio, bool subtitles, const std::shared_ptr<Control>& control);
+  static void publish(const std::string& staging, const std::string& output,
+                      bool overwrite);
 };
 } // namespace media
 } // namespace aria2

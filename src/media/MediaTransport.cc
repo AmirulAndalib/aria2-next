@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaTransport.h"
+#include "MediaFiles.h"
 
 #include "Option.h"
 #include "CurlSession.h"
@@ -49,7 +50,7 @@ bool headerIs(const std::string& line, const char* name)
 }
 std::string fileDigest(const std::string& path)
 {
-  std::ifstream input(std::filesystem::u8path(path), std::ios::binary);
+  std::ifstream input(nativePath(path), std::ios::binary);
   std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(),
                                                               EVP_MD_CTX_free);
   if (!input || !ctx || !EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr))
@@ -77,15 +78,19 @@ std::string fileDigest(const std::string& path)
 }
 } // namespace
 
+std::string Transport::digest(const std::string& path)
+{
+  return fileDigest(path);
+}
+
 void Transport::retain(const std::string& path)
 {
   if (path.empty())
     return;
-  auto name = std::filesystem::u8path(path).filename().u8string();
+  auto name = nativePath(path).filename().u8string();
   if (name.size() < 129 || name[64] != '-')
     return;
-  auto raw = (std::filesystem::u8path(path).parent_path() / name.substr(0, 129))
-                 .u8string();
+  auto raw = (nativePath(path).parent_path() / name.substr(0, 129)).u8string();
   retained_[name.substr(0, 64)] = raw;
 }
 
@@ -111,7 +116,7 @@ Transport::Transport(const Option* option, std::string source,
       directory_(std::move(directory)),
       control_(std::move(control))
 {
-  std::filesystem::create_directories(std::filesystem::u8path(directory_));
+  std::filesystem::create_directories(nativePath(directory_));
   multi_ = curl_multi_init();
   share_ = curl_share_init();
   if (!multi_ || !share_) {
@@ -141,16 +146,15 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
     throw std::runtime_error("Invalid media byte range");
   const auto key = fingerprint(url + "\n" + std::to_string(begin) + "\n" +
                                std::to_string(end));
-  auto path = (std::filesystem::u8path(directory_) / key).u8string();
+  auto path = (nativePath(directory_) / key).u8string();
   auto found = retained_.find(key);
   if (cached && found != retained_.end() &&
-      std::filesystem::is_regular_file(
-          std::filesystem::u8path(found->second))) {
-    auto name = std::filesystem::u8path(found->second).filename().u8string();
+      std::filesystem::is_regular_file(nativePath(found->second))) {
+    auto name = nativePath(found->second).filename().u8string();
     if (fileDigest(found->second) == name.substr(65, 64))
       return {found->second, url, "",
-              static_cast<int64_t>(std::filesystem::file_size(
-                  std::filesystem::u8path(found->second)))};
+              static_cast<int64_t>(
+                  std::filesystem::file_size(nativePath(found->second)))};
   }
   auto temporary = path + ".partial";
   const int tries = option_->getAsInt(PREF_MAX_TRIES);
@@ -301,14 +305,13 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
         throw std::runtime_error("Incomplete media byte range");
       const auto digest = fileDigest(temporary);
       auto committed = path + "-" + digest;
-      if (std::filesystem::exists(std::filesystem::u8path(committed)) &&
+      if (std::filesystem::exists(nativePath(committed)) &&
           fileDigest(committed) == digest)
-        std::filesystem::remove(std::filesystem::u8path(temporary));
+        std::filesystem::remove(nativePath(temporary));
       else {
         // A damaged cache entry must not win over newly verified content.
-        std::filesystem::remove(std::filesystem::u8path(committed));
-        std::filesystem::rename(std::filesystem::u8path(temporary),
-                                std::filesystem::u8path(committed));
+        std::filesystem::remove(nativePath(committed));
+        std::filesystem::rename(nativePath(temporary), nativePath(committed));
       }
       Resource resource{committed, effective ? effective : url,
                         mime ? mime : "", static_cast<int64_t>(body.bytes)};
@@ -352,20 +355,20 @@ std::string Transport::decrypt(const std::string& path,
   if (key.size != 16)
     throw std::runtime_error("HLS AES-128 key must contain 16 bytes");
   std::array<unsigned char, 16> bytes{};
-  std::ifstream keyFile(std::filesystem::u8path(key.path), std::ios::binary);
+  std::ifstream keyFile(nativePath(key.path), std::ios::binary);
   keyFile.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
   if (keyFile.gcount() != 16)
     throw std::runtime_error("Cannot read HLS AES-128 key");
   keyFile.close();
-  std::filesystem::remove(std::filesystem::u8path(key.path));
+  std::filesystem::remove(nativePath(key.path));
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(
       EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
   if (!ctx || !EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr,
                                   bytes.data(), iv))
     throw std::runtime_error("Cannot initialize HLS AES-128 decryption");
-  std::ifstream input(std::filesystem::u8path(path), std::ios::binary);
+  std::ifstream input(nativePath(path), std::ios::binary);
   auto clear = path + ".clear";
-  std::ofstream output(std::filesystem::u8path(clear + ".partial"),
+  std::ofstream output(nativePath(clear + ".partial"),
                        std::ios::binary | std::ios::trunc);
   std::array<unsigned char, 65536> in{};
   std::array<unsigned char, 65552> out{};
@@ -386,8 +389,7 @@ std::string Transport::decrypt(const std::string& path,
   output.close();
   if (!output)
     throw std::runtime_error("Cannot write decrypted media fragment");
-  std::filesystem::rename(std::filesystem::u8path(clear + ".partial"),
-                          std::filesystem::u8path(clear));
+  std::filesystem::rename(nativePath(clear + ".partial"), nativePath(clear));
   return clear;
 }
 } // namespace media

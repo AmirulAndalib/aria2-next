@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaSession.h"
+#include "MediaFiles.h"
 #include "MediaStore.h"
 #include "MediaTransport.h"
 #include "MediaMuxer.h"
@@ -9,17 +10,19 @@
 #include "fmt.h"
 
 #include <gpac/dash.h>
+#include <gpac/constants.h>
 extern "C" {
 #include <libavutil/log.h>
 }
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <limits>
 #include <map>
-#include <set>
+#include <sstream>
 #include <stdexcept>
+#include <tuple>
 
 namespace aria2 {
 namespace media {
@@ -51,6 +54,36 @@ void initialize()
   av_log_set_level(AV_LOG_WARNING);
   av_log_set_callback(nativeLog);
 }
+std::string trackType(const GF_DASHQualityInfo& info, bool hls)
+{
+  bool video = false, audio = false, text = false;
+  std::istringstream codecs(info.codec ? info.codec : "");
+  std::string codec;
+  while (std::getline(codecs, codec, ',')) {
+    const auto first = codec.find_first_not_of(" \t");
+    if (first == std::string::npos)
+      continue;
+    codec = codec.substr(first, codec.find_first_of(". \t", first) - first);
+    auto id = gf_codecid_parse(codec.c_str());
+    if (id == GF_CODECID_NONE && codec.size() == 4)
+      id = gf_codec_id_from_isobmf(gf_4cc_parse(codec.c_str()));
+    const auto type = gf_codecid_type(id);
+    video |= type == GF_STREAM_VISUAL;
+    audio |= type == GF_STREAM_AUDIO;
+    text |= type == GF_STREAM_TEXT;
+  }
+  if (video || audio || text)
+    return video && audio ? "muxed"
+           : video        ? "video"
+           : audio        ? "audio"
+                          : "subtitle";
+  const std::string mime = info.mime ? info.mime : "";
+  if (info.sample_rate || info.nb_channels || mime.rfind("audio", 0) == 0)
+    return "audio";
+  if (info.width || mime.rfind("video", 0) == 0)
+    return hls && (!info.codec || !*info.codec) ? "muxed" : "video";
+  return "subtitle";
+}
 struct Job;
 struct Io {
   Job* job;
@@ -62,6 +95,11 @@ struct Io {
   GF_Err result = GF_OK;
 };
 struct Job {
+  struct Group {
+    std::string type, identity, init;
+    int64_t timeOffset = 0;
+  };
+  using SegmentKey = std::tuple<int64_t, std::string, int64_t>;
   std::shared_ptr<Option> option;
   std::shared_ptr<Control> control;
   std::string uri, gid, directory, taskDirectory;
@@ -70,7 +108,13 @@ struct Job {
   GF_DASHFileIO io{};
   GF_DashClient* dash = nullptr;
   std::vector<int> selected;
-  std::map<int, std::string> types, initializationFiles;
+  std::map<int, Group> groups;
+  std::map<SegmentKey, Segment> retained;
+  std::map<int64_t, std::map<std::string, int64_t>> coverage;
+  std::map<std::pair<int64_t, std::string>, Segment> lastSegments;
+  std::map<std::string, std::pair<int, int64_t>> retainedPaths;
+  std::map<std::string, std::string> digests;
+  int64_t retainedBytes = 0;
   bool completed = false, awaiting = false;
   bool live = false;
   std::string failure;
@@ -82,8 +126,7 @@ struct Job {
         uri(std::move(source)),
         gid(std::move(id)),
         directory(std::move(root)),
-        taskDirectory(
-            (std::filesystem::u8path(directory) / "tasks" / gid).u8string()),
+        taskDirectory((nativePath(directory) / "tasks" / gid).u8string()),
         store(directory, gid),
         transport(option.get(), uri, taskDirectory, control)
   {
@@ -91,17 +134,19 @@ struct Job {
     auto identity =
         Transport::fingerprint(uri + "\n" + option->get(PREF_MEDIA_VIDEO) +
                                "\n" + option->get(PREF_MEDIA_AUDIO) + "\n" +
-                               option->get(PREF_MEDIA_SUBTITLES));
+                               option->get(PREF_MEDIA_SUBTITLES) + "\n" +
+                               option->get(PREF_MEDIA_FORMAT));
     if (store.identity(identity)) {
       std::lock_guard<std::mutex> lock(control->mutex);
       control->snapshot.downloadedLength = 0;
       control->snapshot.completedDuration = 0;
     }
     for (const auto& segment : store.segments()) {
+      remember(segment);
       transport.retain(segment.path);
       transport.retain(segment.init);
     }
-    std::filesystem::permissions(std::filesystem::u8path(taskDirectory),
+    std::filesystem::permissions(nativePath(taskDirectory),
                                  std::filesystem::perms::owner_all,
                                  std::filesystem::perm_options::replace);
     io.udta = this;
@@ -129,6 +174,7 @@ struct Job {
         h.begin = 0;
         h.end = -1;
         h.result = GF_OK;
+        h.resource = {};
         return GF_OK;
       }
       catch (...) {
@@ -159,7 +205,7 @@ struct Job {
         h.result = GF_OK;
       }
       catch (const std::exception& e) {
-        h.job->failure = e.what();
+        h.job->failure = failureMessage(e);
         h.result = GF_IO_ERR;
       }
       return h.result;
@@ -194,11 +240,16 @@ struct Job {
           job.live = true;
           return;
         }
-        std::ifstream input(std::filesystem::u8path(path), std::ios::binary);
+        std::ifstream input(nativePath(path), std::ios::binary);
         std::string text((std::istreambuf_iterator<char>(input)), {});
         if (job.store.manifest(std::to_string(group) + ":" + (name ? name : ""),
                                Transport::fingerprint(text))) {
           job.transport.invalidate();
+          job.retained.clear();
+          job.coverage.clear();
+          job.lastSegments.clear();
+          job.retainedPaths.clear();
+          job.retainedBytes = 0;
           auto value = job.snapshot();
           value.downloadedLength = 0;
           value.completedDuration = 0;
@@ -206,7 +257,7 @@ struct Job {
         }
       }
       catch (const std::exception& error) {
-        job.failure = error.what();
+        job.failure = failureMessage(error);
       }
     };
     io.get_utc_start_time = [](GF_DASHFileIO*, void* handle) -> u64 {
@@ -225,7 +276,7 @@ struct Job {
         return job.event(event, group, error);
       }
       catch (const std::exception& e) {
-        job.failure = e.what();
+        job.failure = failureMessage(e);
         return GF_IO_ERR;
       }
       catch (...) {
@@ -234,7 +285,8 @@ struct Job {
       }
     };
     dash = gf_dash_new(&io, 1000, 0, GF_TRUE, GF_TRUE,
-                       GF_DASH_SELECT_BANDWIDTH_HIGHEST, 0);
+                       GF_DASH_SELECT_BANDWIDTH_HIGHEST,
+                       live && !retained.empty() ? 100 : 0);
     if (!dash)
       throw std::runtime_error("Cannot create native HLS/DASH client");
     gf_dash_set_algo(dash, GF_DASH_ALGO_NONE);
@@ -256,6 +308,90 @@ struct Job {
     std::lock_guard<std::mutex> lock(control->mutex);
     control->snapshot = std::move(value);
   }
+  void remember(const Segment& segment)
+  {
+    const SegmentKey key{segment.period, segment.track, segment.number};
+    auto previous = retained.find(key);
+    if (previous != retained.end()) {
+      coverage[segment.period][segment.track] -= previous->second.duration;
+      auto& resource = retainedPaths[previous->second.path];
+      if (--resource.first == 0)
+        retainedBytes -= resource.second;
+    }
+    retained[key] = segment;
+    coverage[segment.period][segment.track] += segment.duration;
+    auto& resource = retainedPaths[segment.path];
+    if (resource.first++ == 0) {
+      resource.second = segment.bytes;
+      retainedBytes += segment.bytes;
+    }
+    auto& last = lastSegments[{segment.period, segment.track}];
+    if (last.track.empty() || last.number <= segment.number)
+      last = segment;
+  }
+  std::string digest(const std::string& path)
+  {
+    if (path.empty())
+      return {};
+    auto found = digests.find(path);
+    if (found == digests.end()) {
+      syncFile(path);
+      syncParent(path);
+      found = digests.emplace(path, Transport::digest(path)).first;
+    }
+    return found->second;
+  }
+  void commit(Segment segment)
+  {
+    auto last = lastSegments.find({segment.period, segment.track});
+    const auto previous =
+        retained.find({segment.period, segment.track, segment.number});
+    if (last != lastSegments.end()) {
+      if (segment.number > last->second.number + 1)
+        throw std::runtime_error("Media segments are missing; refusing to save "
+                                 "an incomplete presentation");
+      if (segment.hls) {
+        if (previous != retained.end())
+          segment.start = previous->second.start;
+        else if (segment.number == last->second.number + 1)
+          segment.start = last->second.start + last->second.duration;
+        else
+          return; // The refreshed live window can include earlier segments.
+      }
+    }
+    segment.bytes = std::filesystem::file_size(nativePath(segment.path));
+    segment.digest = digest(segment.path);
+    segment.initDigest = digest(segment.init);
+    if (live && previous != retained.end() &&
+        previous->second.digest != segment.digest)
+      throw std::runtime_error(
+          "A committed live media segment changed while resuming");
+    store.commit(segment);
+    remember(segment);
+    transport.retain(segment.path);
+    transport.retain(segment.init);
+  }
+  Segment describe(int group, u32 number, const GF_Fraction64& start,
+                   u32 duration, const std::string& path, u32 discontinuity)
+  {
+    auto& selectedGroup = groups.at(group);
+    Segment segment;
+    segment.period = gf_dash_get_period_start(dash);
+    segment.track = selectedGroup.identity;
+    segment.number = number;
+    segment.start =
+        start.den ? gf_timestamp_rescale_signed(start.num, start.den, 1000) : 0;
+    segment.duration = duration;
+    segment.path = path;
+    segment.init = selectedGroup.init;
+    segment.type = selectedGroup.type;
+    segment.discontinuity = discontinuity;
+    segment.timeOffset = selectedGroup.timeOffset;
+    segment.hls = gf_dash_is_m3u8(dash);
+    // GPAC segment positions already include PTO; encoded packet timestamps
+    // still need the separate offset when passed to the muxer.
+    return segment;
+  }
   std::string localResource(const char* url, int64_t begin = 0,
                             int64_t end = -1)
   {
@@ -264,10 +400,9 @@ struct Job {
     std::string value(url);
     if (value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0)
       return transport.get(value, begin, end, !live).path;
-    const auto path =
-        std::filesystem::weakly_canonical(std::filesystem::u8path(value));
-    const auto root = std::filesystem::weakly_canonical(
-        std::filesystem::u8path(taskDirectory));
+    const auto path = std::filesystem::weakly_canonical(nativePath(value));
+    const auto root =
+        std::filesystem::weakly_canonical(nativePath(taskDirectory));
     if (path.parent_path() != root || !std::filesystem::is_regular_file(path))
       throw std::runtime_error(
           "Manifest requested a file outside its media cache");
@@ -308,8 +443,7 @@ struct Job {
     }
     if (event == GF_DASH_EVENT_SELECT_GROUPS) {
       selected.clear();
-      types.clear();
-      initializationFiles.clear();
+      groups.clear();
       auto value = snapshot();
       value.tracks.clear();
       value.protocol = gf_dash_is_m3u8(dash) ? "hls" : "dash";
@@ -333,15 +467,7 @@ struct Job {
               info.disabled)
             continue;
           const std::string mime = info.mime ? info.mime : "";
-          std::string type = (info.width || mime.rfind("video", 0) == 0)
-                                 ? "video"
-                             : (info.sample_rate || info.nb_channels ||
-                                mime.rfind("audio", 0) == 0)
-                                 ? "audio"
-                                 : "subtitle";
-          if (gf_dash_is_m3u8(dash) && type == "video" &&
-              (!info.codec || !*info.codec || std::strchr(info.codec, ',')))
-            type = "muxed";
+          const auto type = trackType(info, gf_dash_is_m3u8(dash));
           Track track{std::to_string(group) + ":" + std::to_string(quality),
                       type,
                       language ? language : "",
@@ -351,6 +477,11 @@ struct Job {
                       info.bandwidth,
                       false};
           value.tracks.push_back(track);
+          A2_LOG_DEBUG(fmt("component=media event=representation id=%s type=%s "
+                           "language=%s mime=%s codec=%s",
+                           track.id.c_str(), track.type.c_str(),
+                           track.language.c_str(), mime.c_str(),
+                           track.codec.c_str()));
           auto pref =
               type == "video" || (type == "muxed" &&
                                   option->get(PREF_MEDIA_VIDEO) != "none")
@@ -373,8 +504,12 @@ struct Job {
                           : type == "audio" ? PREF_MEDIA_AUDIO
                                             : PREF_MEDIA_SUBTITLES;
         const auto& selection = option->get(pref);
+        const auto muxed = chosen.find("muxed");
+        const bool selectedMuxed = type != "subtitle" &&
+                                   muxed != chosen.end() &&
+                                   muxed->second.id == selection;
         if (selection != "best" && selection != "none" && !chosen.count(type) &&
-            !chosen.count("muxed"))
+            !selectedMuxed)
           throw std::runtime_error(
               "Requested media track or language is unavailable: " + selection);
       }
@@ -397,11 +532,37 @@ struct Job {
             GF_OK)
           throw std::runtime_error("Cannot select the requested media quality");
         selected.push_back(group);
-        types[group] = track.type;
+        GF_DASHQualityInfo info{};
+        if (gf_dash_group_get_quality_info(dash, group, quality, &info) !=
+            GF_OK)
+          throw std::runtime_error(
+              "Cannot inspect the selected representation");
+        const std::string representation = info.ID ? info.ID : "";
+        auto identity = Transport::fingerprint(
+            track.type + "\n" + track.language + "\n" + representation + "\n" +
+            track.codec + "\n" + std::to_string(track.width) + "x" +
+            std::to_string(track.height) + "\n" +
+            std::to_string(track.bandwidth));
+        u64 offset = 0;
+        u32 timescale = 0;
+        if (gf_dash_group_get_presentation_time_offset(dash, group, &offset,
+                                                       &timescale) < 0)
+          throw std::runtime_error(
+              "Cannot read the representation timestamp offset");
+        groups[group] = {
+            track.type, identity, "",
+            static_cast<int64_t>(
+                timescale ? gf_timestamp_rescale(offset, timescale, 1000000)
+                          : 0)};
+        if (!option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
+          store.select(gf_dash_get_period_start(dash), track.type, identity);
+          coverage[gf_dash_get_period_start(dash)].try_emplace(identity, 0);
+        }
       }
       if (selected.empty())
         throw std::runtime_error(
             "No media track matches the requested selection");
+      store.saveTracks(value.tracks);
       if (option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
         for (int group : selected)
           gf_dash_group_select(dash, group, GF_FALSE);
@@ -429,22 +590,21 @@ struct Job {
         if (crypto == 1 && key)
           path = transport.decrypt(path, key, iv);
         if (gf_dash_group_init_segment_is_media(dash, group)) {
-          u32 number = 0, duration = 0;
+          u32 number = 0, duration = 0, discontinuity = 0;
           GF_Fraction64 start{};
-          const char* initName = nullptr;
+          const char* segmentUrl = nullptr;
           if (gf_dash_group_next_seg_info(dash, group, 0, nullptr, &number,
-                                          &start, &duration, &initName) < 0)
+                                          &start, &duration, nullptr) < 0 ||
+              gf_dash_group_get_next_segment_location(
+                  dash, group, 0, &segmentUrl, nullptr, nullptr, nullptr,
+                  nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                  nullptr, &discontinuity) < 0)
             throw std::runtime_error(
                 "Cannot read initial media segment timing");
-          const auto period =
-              static_cast<int64_t>(gf_dash_get_period_start(dash)) * 1000000;
-          store.commit({period, group, number,
-                        static_cast<int64_t>(
-                            start.den ? start.num * 1000 / start.den : 0),
-                        duration, path, "", types[group]});
+          commit(describe(group, number, start, duration, path, discontinuity));
         }
         else
-          initializationFiles[group] = path;
+          groups[group].init = path;
         transport.retain(path);
         // GPAC queues the initialization resource as the first cache entry.
         // It has now been consumed, exactly as in the native dashin filter.
@@ -463,20 +623,9 @@ struct Job {
   }
   void progress()
   {
-    auto rows = store.segments();
-    std::map<int64_t, std::map<int, int64_t>> coverage;
-    std::set<std::string> paths;
     auto value = snapshot();
-    value.downloadedLength = 0;
+    value.downloadedLength = retainedBytes;
     value.completedDuration = 0;
-    for (const auto& row : rows) {
-      if (!std::filesystem::is_regular_file(std::filesystem::u8path(row.path)))
-        continue;
-      coverage[row.period][row.track] += row.duration;
-      if (paths.insert(row.path).second)
-        value.downloadedLength +=
-            std::filesystem::file_size(std::filesystem::u8path(row.path));
-    }
     for (const auto& period : coverage) {
       int64_t minimum = INT64_MAX;
       for (const auto& track : period.second)
@@ -486,8 +635,62 @@ struct Job {
     }
     publish(value);
   }
+  void complete(const Publication& publication)
+  {
+    syncParent(publication.output);
+    auto value = snapshot();
+    value.state = "complete";
+    value.completedLength = value.totalLength = publication.bytes;
+    {
+      std::lock_guard<std::mutex> lock(control->mutex);
+      control->snapshot = std::move(value);
+    }
+    // Once publication succeeded, cleanup errors cannot turn valid output
+    // into a failed download. The publication record makes cleanup retryable.
+    try {
+      std::filesystem::remove_all(nativePath(taskDirectory));
+      store.remove();
+    }
+    catch (const std::exception& error) {
+      A2_LOG_WARN(std::string("Media recovery cleanup failed: ") +
+                  failureMessage(error));
+    }
+  }
+  bool recoverPublication()
+  {
+    auto publication = store.publication();
+    if (!publication)
+      return false;
+    if (publication->output != snapshot().path ||
+        publication->staging !=
+            publication->output + "." + gid + ".media-partial")
+      throw std::runtime_error(
+          "Media output options changed during finalization");
+    auto matches = [&](const std::string& path) {
+      return std::filesystem::is_regular_file(nativePath(path)) &&
+             std::filesystem::file_size(nativePath(path)) ==
+                 static_cast<uint64_t>(publication->bytes) &&
+             Transport::digest(path) == publication->digest;
+    };
+    if (matches(publication->output)) {
+      std::filesystem::remove(nativePath(publication->staging));
+      complete(*publication);
+      return true;
+    }
+    if (matches(publication->staging)) {
+      Muxer::publish(publication->staging, publication->output,
+                     option->getAsBool(PREF_ALLOW_OVERWRITE));
+      complete(*publication);
+      return true;
+    }
+    std::filesystem::remove(nativePath(publication->staging));
+    store.clearPublication();
+    return false;
+  }
   void run()
   {
+    if (recoverPublication())
+      return;
     auto result = control->finish ? GF_OK : gf_dash_open(dash, uri.c_str());
     if (result < 0)
       throw std::runtime_error(failure.empty() ? gf_error_to_string(result)
@@ -513,12 +716,15 @@ struct Job {
         const char* url = nullptr;
         const char* key = nullptr;
         const char* name = nullptr;
+        const char* switchingInit = nullptr;
         u64 first = 0, last = 0;
+        u64 initFirst = 0, initLast = 0;
         bin128 iv{};
         u32 discontinuity = 0;
         auto status = gf_dash_group_get_next_segment_location(
-            dash, group, 0, &url, &first, &last, nullptr, nullptr, nullptr,
-            nullptr, nullptr, nullptr, &key, &iv, nullptr, &discontinuity);
+            dash, group, 0, &url, &first, &last, nullptr, &switchingInit,
+            &initFirst, &initLast, nullptr, nullptr, &key, &iv, nullptr,
+            &discontinuity);
         if (status == GF_EOS) {
           gf_dash_set_group_done(dash, group, GF_TRUE);
           continue;
@@ -534,21 +740,16 @@ struct Job {
                                                 &start, &duration, nullptr);
         if (info < 0)
           throw std::runtime_error(gf_error_to_string(info));
+        if (switchingInit && *switchingInit)
+          groups[group].init =
+              localResource(switchingInit, initFirst,
+                            initLast ? static_cast<int64_t>(initLast) : -1);
         auto path =
             localResource(url, first, last ? static_cast<int64_t>(last) : -1);
         if (!path.empty()) {
           if (key && *key)
             path = transport.decrypt(path, key, iv);
-          const auto period =
-              static_cast<int64_t>(gf_dash_get_period_start(dash)) * 1000000 +
-              discontinuity;
-          store.commit(
-              {period, group, number,
-               static_cast<int64_t>(start.den ? start.num * 1000 / start.den
-                                              : 0),
-               duration, path, initializationFiles[group], types[group]});
-          transport.retain(path);
-          transport.retain(initializationFiles[group]);
+          commit(describe(group, number, start, duration, path, discontinuity));
           gf_dash_group_discard_segment(dash, group);
           advanced = true;
         }
@@ -578,19 +779,20 @@ struct Job {
     auto value = snapshot();
     value.state = "finalizing";
     publish(value);
-    Muxer::write(store.segments(), value.path, taskDirectory,
-                 option->get(PREF_MEDIA_FORMAT),
-                 option->get(PREF_MEDIA_VIDEO) != "none",
-                 option->get(PREF_MEDIA_AUDIO) != "none",
-                 option->get(PREF_MEDIA_SUBTITLES) != "none",
-                 option->getAsBool(PREF_ALLOW_OVERWRITE), control);
-    value.state = "complete";
-    value.completedLength =
-        std::filesystem::file_size(std::filesystem::u8path(value.path));
-    value.totalLength = value.completedLength;
-    publish(value);
-    store.remove();
-    std::filesystem::remove_all(std::filesystem::u8path(taskDirectory));
+    auto staging = Muxer::stage(
+        store.segments(), value.path, taskDirectory,
+        option->get(PREF_MEDIA_FORMAT), option->get(PREF_MEDIA_VIDEO) != "none",
+        option->get(PREF_MEDIA_AUDIO) != "none",
+        option->get(PREF_MEDIA_SUBTITLES) != "none", control);
+    Publication publication{
+        value.path, staging, Transport::digest(staging),
+        static_cast<int64_t>(std::filesystem::file_size(nativePath(staging)))};
+    store.preparePublication(publication);
+    if (control->cancel)
+      return;
+    Muxer::publish(staging, value.path,
+                   option->getAsBool(PREF_ALLOW_OVERWRITE));
+    complete(publication);
   }
 };
 } // namespace
@@ -609,16 +811,16 @@ Session::Session(std::shared_ptr<Option> option, std::string uri,
     }
     catch (const std::exception& error) {
       std::lock_guard<std::mutex> lock(control->mutex);
-      if (!control->cancel && !control->finish &&
-          control->snapshot.state != "awaiting-selection") {
-        control->snapshot.error = error.what();
+      if (!control->cancel && control->snapshot.state != "awaiting-selection") {
+        control->snapshot.error = failureMessage(error);
         control->snapshot.state = "error";
       }
     }
     std::lock_guard<std::mutex> lock(control->mutex);
-    if (control->cancel)
+    if (control->cancel && control->snapshot.state != "complete")
       control->snapshot.state = "paused";
-    else if (control->finish && control->snapshot.state != "complete") {
+    else if (control->finish && control->snapshot.state != "complete" &&
+             control->snapshot.state != "error") {
       control->snapshot.state = "error";
       control->snapshot.error = "Recording stopped before its current segment "
                                 "completed; resume to retry";

@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaDownload.h"
+#include "MediaFiles.h"
 #include "MediaSession.h"
 #include "MediaStore.h"
 #include "ApplicationStatePath.h"
@@ -64,7 +65,8 @@ public:
       return false;
     }
     catch (const std::exception& error) {
-      group_->setLastErrorCode(error_code::FILE_IO_ERROR, error.what());
+      group_->setLastErrorCode(error_code::FILE_IO_ERROR,
+                               failureMessage(error).c_str());
       try {
         download_->stop(true);
       }
@@ -128,14 +130,13 @@ void Download::restore(RequestGroup* group)
   directory_ = state::mediaDirectory(group->getOption().get());
   if (directory_.empty())
     throw std::runtime_error("Media recovery requires a state directory");
-  if (std::filesystem::exists(std::filesystem::u8path(directory_) /
-                              "state.db")) {
+  if (std::filesystem::exists(nativePath(directory_) / "state.db")) {
     try {
       Store store(directory_, gid_);
       store.load(snapshot_);
     }
     catch (const std::exception& error) {
-      snapshot_.error = error.what();
+      snapshot_.error = failureMessage(error);
     }
   }
   snapshot_.state = "paused";
@@ -189,12 +190,15 @@ try {
                          std::filesystem::u8path(name))
                          .u8string();
   }
-  if (std::filesystem::exists(std::filesystem::u8path(snapshot_.path)) &&
-      !option->getAsBool(PREF_ALLOW_OVERWRITE))
-    throw std::runtime_error(
-        "Media output already exists; choose another path or allow-overwrite");
-  std::filesystem::create_directories(
-      std::filesystem::u8path(snapshot_.path).parent_path());
+  if (std::filesystem::exists(nativePath(snapshot_.path)) &&
+      !option->getAsBool(PREF_ALLOW_OVERWRITE)) {
+    Store store(directory_, gid_);
+    const auto publication = store.publication();
+    if (!publication || publication->output != snapshot_.path)
+      throw std::runtime_error("Media output already exists; choose another "
+                               "path or allow-overwrite");
+  }
+  std::filesystem::create_directories(nativePath(snapshot_.path).parent_path());
   group->getDownloadContext()->getFirstFileEntry()->setPath(snapshot_.path);
   group->getDownloadContext()->setBasePath(snapshot_.path);
   if (engine->getRequestGroupMan()->isSameFileBeingDownloaded(group))
@@ -226,8 +230,8 @@ catch (const std::exception& error) {
   if (control_)
     control_->cancel = true;
   snapshot_.state = "error";
-  snapshot_.error = error.what();
-  throw;
+  snapshot_.error = failureMessage(error);
+  throw std::runtime_error(snapshot_.error);
 }
 void Download::poll(RequestGroup* group)
 {

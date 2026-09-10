@@ -5,7 +5,6 @@
 #include <curl/curl.h>
 #include <memory>
 #include <string>
-#include <set>
 #include <map>
 
 namespace aria2 {
@@ -29,6 +28,7 @@ public:
   std::string decrypt(const std::string& path, const std::string& keyUrl,
                       const unsigned char* iv);
   static std::string fingerprint(const std::string& value);
+  static std::string digest(const std::string& path);
   void retain(const std::string& path);
   void invalidate() { retained_.clear(); }
 

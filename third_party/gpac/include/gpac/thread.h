@@ -61,6 +61,7 @@ The thread object allows executing some code independently of the main process o
 */
 
 #include <gpac/tools.h>
+#include <stdint.h>
 
 
  //atomic ref_count++ / ref_count--
