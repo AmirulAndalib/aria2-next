@@ -81,6 +81,8 @@ struct s_playlistElement {
 	char *video_group;
 	char *url;
 	char *init_segment_url;
+	char *init_key_uri;
+	bin128 init_key_iv;
 	char *main_codecs;
 	u64 init_byte_range_start, init_byte_range_end;
 	//informative UTC start time

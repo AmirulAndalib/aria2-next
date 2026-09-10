@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 import copy
 import sqlite3
 import xml.etree.ElementTree as ET
@@ -19,37 +17,13 @@ from core.engine import EngineProcess
 from core.report import run_validation
 from core.runtime import RunDirectory
 from core.services import CaddyService, WireMockService
-
-
-def command(*args: str) -> str:
-    # Do not inject the Python environment's native-library settings into FFmpeg.
-    result = subprocess.run(args, capture_output=True, text=True, env=native_env())
-    if result.returncode:
-        raise RuntimeError(result.stderr or f"Command failed: {args[0]}")
-    return result.stdout
-
-
-def native_env() -> dict:
-    return {
-        key: os.environ[key]
-        for key in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "TMPDIR")
-        if key in os.environ
-    }
+from media.common import command, decoded_hash, native_env, probe
 
 
 def wait(
     engine: EngineProcess, gid: str, state: str = "complete", timeout: float = 30
 ) -> dict:
-    until = time.monotonic() + timeout
-    last = {}
-    while time.monotonic() < until:
-        last = engine.rpc.call("aria2.tellStatus", [gid])
-        if last["status"] == state:
-            return last
-        if last["status"] == "error":
-            raise AssertionError(last)
-        time.sleep(0.1)
-    raise TimeoutError(last)
+    return engine.rpc.wait_status(gid, state, timeout)
 
 
 def validate(run: RunDirectory, engine_path: Path | None) -> dict:
@@ -124,6 +98,40 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-MEDIA-SEQUENCE:3456"
         )
     )
+    openssl = shutil.which("openssl")
+    if not openssl:
+        raise RuntimeError("OpenSSL is required for the encrypted fMP4 fixtures")
+    encrypted_fmp4 = run.fixtures / "encrypted-fmp4"
+    encrypted_fmp4.mkdir()
+    key = bytes(range(16))
+    (encrypted_fmp4 / "key.bin").write_bytes(key)
+    for media in (run.fixtures / "fmp4").iterdir():
+        if media.suffix not in (".mp4", ".m4s"):
+            continue
+        command(
+            openssl,
+            "enc",
+            "-aes-128-cbc",
+            "-K",
+            key.hex(),
+            "-iv",
+            "00" * 16,
+            "-in",
+            str(media),
+            "-out",
+            str(encrypted_fmp4 / media.name),
+        )
+    key_tag = f'#EXT-X-KEY:URI="key.bin",IV=0x{"00" * 16},METHOD=AES-128\n'
+    for name in ("encrypted-init", "clear-init"):
+        initialization = "init.mp4" if name == "encrypted-init" else "../fmp4/init.mp4"
+        mapping = f'#EXT-X-MAP:URI="{initialization}"\n'
+        tags = key_tag + mapping if name == "encrypted-init" else mapping + key_tag
+        (encrypted_fmp4 / f"{name}.m3u8").write_text(
+            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n"
+            + tags
+            + "".join(f"#EXTINF:2,\nindex{index}.m4s\n" for index in range(3))
+            + "#EXT-X-ENDLIST\n"
+        )
     switched = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2"]
     for name in ("fmp4", "fmp4-switch"):
         if name == "fmp4-switch":
@@ -147,6 +155,101 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
     ET.register_namespace("", ns[1:-1])
     manifest.write(
         run.fixtures / "dash/multi.mpd", encoding="utf-8", xml_declaration=True
+    )
+    clipped = copy.deepcopy(root)
+    clipped.set("mediaPresentationDuration", "PT10S")
+    for index, item in enumerate(clipped.findall(ns + "Period")):
+        item.set("start", f"PT{index * 5}S")
+        item.set("duration", "PT5S")
+    ET.ElementTree(clipped).write(run.fixtures / "dash/clipped.mpd")
+    higher = run.fixtures / "higher"
+    higher.mkdir()
+    command(
+        ffmpeg,
+        "-v",
+        "error",
+        "-i",
+        str(source),
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=880:sample_rate=48000",
+        "-t",
+        "6",
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-vf",
+        "scale=320:180",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-g",
+        "30",
+        "-c:a",
+        "aac",
+        "-f",
+        "hls",
+        "-hls_time",
+        "2",
+        "-hls_list_size",
+        "0",
+        (higher / "index.m3u8").as_posix(),
+    )
+    for language, audio_source in (("en", source), ("fr", higher / "index.m3u8")):
+        audio_dir = run.fixtures / f"audio-{language}"
+        audio_dir.mkdir()
+        if language == "fr":
+            timestamp = "".join(
+                f"\\x{byte:02x}" for byte in (126000).to_bytes(8, "big")
+            )
+            command(
+                ffmpeg,
+                "-v",
+                "error",
+                "-i",
+                audio_source.as_posix(),
+                "-map",
+                "0:a",
+                "-c",
+                "copy",
+                "-write_id3v2",
+                "1",
+                "-metadata",
+                f"id3v2_priv.com.apple.streaming.transportStreamTimestamp={timestamp}",
+                "-f",
+                "adts",
+                (audio_dir / "audio.aac").as_posix(),
+            )
+            (audio_dir / "index.m3u8").write_text(
+                "#EXTM3U\n#EXT-X-TARGETDURATION:7\n#EXTINF:6.04,\naudio.aac\n#EXT-X-ENDLIST\n"
+            )
+            continue
+        command(
+            ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            audio_source.as_posix(),
+            "-map",
+            "0:a",
+            "-c",
+            "copy",
+            "-f",
+            "hls",
+            "-hls_time",
+            "2",
+            "-hls_list_size",
+            "0",
+            (audio_dir / "index.m3u8").as_posix(),
+        )
+    (run.fixtures / "quality.m3u8").write_text(
+        '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",LANGUAGE="en",URI="audio-en/index.m3u8"\n'
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="French",LANGUAGE="fr",URI="audio-fr/index.m3u8"\n'
+        '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=160x90,CODECS="avc1.42c00b,mp4a.40.2",AUDIO="audio"\nhls/index.m3u8\n'
+        '#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=320x180,CODECS="avc1.42c00b,mp4a.40.2",AUDIO="audio"\nhigher/index.m3u8\n'
     )
     offset_root = ET.parse(run.fixtures / "dash/index.mpd").getroot()
     offset_period = offset_root.find(ns + "Period")
@@ -194,34 +297,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
     ET.ElementTree(offset_root).write(
         run.fixtures / "offset.mpd", encoding="utf-8", xml_declaration=True
     )
-    expected = command(
-        ffmpeg,
-        "-v",
-        "error",
-        "-i",
-        str(source),
-        "-map",
-        "0:v",
-        "-f",
-        "hash",
-        "-hash",
-        "sha256",
-        "-",
-    ).strip()
-    expected_audio = command(
-        ffmpeg,
-        "-v",
-        "error",
-        "-i",
-        str(source),
-        "-map",
-        "0:a",
-        "-f",
-        "hash",
-        "-hash",
-        "sha256",
-        "-",
-    ).strip()
+    expected = decoded_hash(ffmpeg, str(source), "v")
+    expected_audio = decoded_hash(ffmpeg, str(source), "a")
     results = {}
     subtitle_root = run.fixtures / "hls"
     (subtitle_root / "subtitles.m3u8").write_text(
@@ -242,6 +319,82 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         CaddyService(run, "media", run.fixtures) as server,
         EngineProcess(run, "media", engine_path) as engine,
     ):
+        clear_audio = decoded_hash(
+            ffmpeg, (run.fixtures / "fmp4/index.m3u8").as_posix(), "a", 6
+        )
+        for name in ("encrypted-init", "clear-init"):
+            gid = engine.add_uri(
+                f"{server.base_url}/encrypted-fmp4/{name}.m3u8", {"out": f"{name}.mp4"}
+            )
+            output = wait(engine, gid)["files"][0]["path"]
+            assert decoded_hash(ffmpeg, output) == expected, name
+            assert decoded_hash(ffmpeg, output, "a", 6) == clear_audio, name
+        results["encryptedFmp4"] = (
+            "key attribute order and independent initialization encryption"
+        )
+        for name in ("skewed-live", "audio-late"):
+            skewed = run.fixtures / name
+            skewed.mkdir()
+            for kind, length in (
+                ("v", "2" if name == "skewed-live" else "10"),
+                ("a", "10"),
+            ):
+                directory = skewed / kind
+                directory.mkdir()
+                manifest = directory / "index.m3u8"
+                command(
+                    ffmpeg,
+                    "-v",
+                    "error",
+                    "-i",
+                    str(source),
+                    "-map",
+                    f"0:{kind}",
+                    "-c",
+                    "copy",
+                    "-output_ts_offset",
+                    "4" if name == "audio-late" and kind == "a" else "0",
+                    "-f",
+                    "hls",
+                    "-hls_time",
+                    length,
+                    "-hls_list_size",
+                    "0",
+                    "-hls_segment_type",
+                    "fmp4",
+                    manifest.as_posix(),
+                )
+                manifest.write_text(
+                    manifest.read_text(encoding="utf-8").replace("#EXT-X-ENDLIST", ""),
+                    encoding="utf-8",
+                )
+            (skewed / "master.m3u8").write_text(
+                '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",URI="a/index.m3u8"\n'
+                '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=160x90,CODECS="avc1.42c00b,mp4a.40.2",AUDIO="audio"\nv/index.m3u8\n',
+                encoding="utf-8",
+            )
+            for container in ("mp4", "mkv"):
+                gid = engine.add_uri(
+                    f"{server.base_url}/{name}/master.m3u8",
+                    {
+                        "out": f"{name}.{container}",
+                        "media-format": container,
+                        "media-record-time": "2",
+                    },
+                )
+                status = wait(engine, gid)
+                output = status["files"][0]["path"]
+                info = probe(ffprobe, output, "-show_streams", "-show_format")
+                assert abs(float(info["format"]["duration"]) - 2) < 0.1, info
+                assert all(
+                    abs(float(s["start_time"])) < 0.1 for s in info["streams"]
+                ), info
+                assert 2000 <= int(status["media"]["completedDuration"]) < 2100, status
+                decoded_hash(ffmpeg, output, "v")
+                decoded_hash(ffmpeg, output, "a")
+        results["liveAlignment"] = (
+            "Independent playlist edges share one recording window"
+        )
         for name, suffix, container in (
             ("hls", "m3u8", "mp4"),
             ("fmp4", "m3u8", "mkv"),
@@ -259,33 +412,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             )
             status = wait(engine, gid)
             output = Path(status["files"][0]["path"])
-            actual = command(
-                ffmpeg,
-                "-v",
-                "error",
-                "-i",
-                str(output),
-                "-map",
-                "0:v",
-                "-f",
-                "hash",
-                "-hash",
-                "sha256",
-                "-",
-            ).strip()
+            actual = decoded_hash(ffmpeg, str(output), "v")
             assert actual == expected, (name, actual, expected)
-            info = json.loads(
-                command(
-                    ffprobe,
-                    "-v",
-                    "error",
-                    "-show_streams",
-                    "-show_format",
-                    "-of",
-                    "json",
-                    str(output),
-                )
-            )
+            info = probe(ffprobe, str(output), "-show_streams", "-show_format")
             assert {s["codec_type"] for s in info["streams"]} == {
                 "audio",
                 "video",
@@ -301,35 +430,74 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             }
         gid = engine.add_uri(f"{server.base_url}/dash/multi.mpd", {"out": "multi.mp4"})
         status = wait(engine, gid)
-        info = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-show_format",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
-        )
+        info = probe(ffprobe, status["files"][0]["path"], "-show_format")
         assert abs(float(info["format"]["duration"]) - 12) < 0.2, info
         results["multiPeriod"] = info["format"]["duration"]
 
+        gid = engine.add_uri(
+            f"{server.base_url}/dash/clipped.mpd", {"out": "clipped.mp4"}
+        )
+        status = wait(engine, gid)
+        info = probe(
+            ffprobe,
+            status["files"][0]["path"],
+            "-count_frames",
+            "-show_entries",
+            "stream=codec_type,nb_read_frames",
+            "-show_format",
+        )
+        assert abs(float(info["format"]["duration"]) - 10) < 0.1, info
+        assert (
+            next(s for s in info["streams"] if s["codec_type"] == "video")[
+                "nb_read_frames"
+            ]
+            == "150"
+        ), info
+        decoded_hash(ffmpeg, status["files"][0]["path"], "a")
+        results["periodBoundaries"] = (
+            "overhanging fragments clipped to the declared periods"
+        )
+
+        gid = engine.add_uri(
+            f"{server.base_url}/quality.m3u8",
+            {"out": "quality.mp4", "media-pause-after-probe": "true"},
+        )
+        tracks = wait(engine, gid, "paused")["media"]["tracks"]
+        assert {t["language"] for t in tracks if t["type"] == "audio"} == {
+            "en",
+            "fr",
+        }, tracks
+        low = next(t["id"] for t in tracks if t["height"] == "90")
+        engine.rpc.call(
+            "aria2.changeOption",
+            [
+                gid,
+                {
+                    "media-video": low,
+                    "media-audio": "fr",
+                    "media-pause-after-probe": "false",
+                },
+            ],
+        )
+        engine.rpc.call("aria2.unpause", [gid])
+        output = wait(engine, gid)["files"][0]["path"]
+        assert decoded_hash(ffmpeg, output) == expected
+        assert decoded_hash(ffmpeg, output, "a") == decoded_hash(
+            ffmpeg, (higher / "index.m3u8").as_posix(), "a"
+        )
+        results["initialSelection"] = (
+            "selected video and language applied before the first media packet"
+        )
+
         gid = engine.add_uri(f"{server.base_url}/switch.m3u8", {"out": "switch.mp4"})
         status = wait(engine, gid)
-        switched_info = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-count_frames",
-                "-show_entries",
-                "stream=codec_type,nb_read_frames",
-                "-show_format",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
+        switched_info = probe(
+            ffprobe,
+            status["files"][0]["path"],
+            "-count_frames",
+            "-show_entries",
+            "stream=codec_type,nb_read_frames",
+            "-show_format",
         )
         assert abs(float(switched_info["format"]["duration"]) - 12) < 0.2, switched_info
         assert (
@@ -345,32 +513,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         gid = engine.add_uri(f"{server.base_url}/offset.mpd", {"out": "offset.mp4"})
         status = wait(engine, gid)
         for kind, expected_hash in (("v", expected), ("a", expected_audio)):
-            actual = command(
-                ffmpeg,
-                "-v",
-                "error",
-                "-i",
-                status["files"][0]["path"],
-                "-map",
-                f"0:{kind}",
-                "-f",
-                "hash",
-                "-hash",
-                "sha256",
-                "-",
-            ).strip()
+            actual = decoded_hash(ffmpeg, status["files"][0]["path"], kind)
             assert actual == expected_hash, (kind, actual, expected_hash)
-        streams = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-show_streams",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
-        )["streams"]
+        streams = probe(ffprobe, status["files"][0]["path"], "-show_streams")["streams"]
         assert all(abs(float(stream["start_time"])) < 0.05 for stream in streams), (
             streams
         )
@@ -394,17 +539,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         )
         engine.rpc.call("aria2.unpause", [gid])
         status = wait(engine, gid)
-        info = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-show_streams",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
-        )
+        info = probe(ffprobe, status["files"][0]["path"], "-show_streams")
         assert {s["codec_type"] for s in info["streams"]} == {"audio"}, info
         results["selection"] = "audio only"
 
@@ -426,19 +561,13 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             "-",
         )
         assert all(f"Caption {i}" in captions for i in range(3)), captions
-        packets = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-select_streams",
-                "s",
-                "-show_entries",
-                "packet=pts_time",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
+        packets = probe(
+            ffprobe,
+            status["files"][0]["path"],
+            "-select_streams",
+            "s",
+            "-show_entries",
+            "packet=pts_time",
         )["packets"]
         assert len(packets) == 3 and all(
             abs(float(packet["pts_time"]) - index * 2) < 0.1
@@ -477,17 +606,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             {"out": "hls-audio.mkv", "media-format": "mkv", "media-video": "none"},
         )
         status = wait(engine, gid)
-        info = json.loads(
-            command(
-                ffprobe,
-                "-v",
-                "error",
-                "-show_streams",
-                "-of",
-                "json",
-                status["files"][0]["path"],
-            )
-        )
+        info = probe(ffprobe, status["files"][0]["path"], "-show_streams")
         assert {s["codec_type"] for s in info["streams"]} == {"audio"}, info
 
         # Native servers supply fault responses; the engine must never publish
@@ -543,20 +662,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     engine, gid, "complete" if route == "manifest" else "error"
                 )
                 if route == "manifest":
-                    actual = command(
-                        ffmpeg,
-                        "-v",
-                        "error",
-                        "-i",
-                        status["files"][0]["path"],
-                        "-map",
-                        "0:v",
-                        "-f",
-                        "hash",
-                        "-hash",
-                        "sha256",
-                        "-",
-                    ).strip()
+                    actual = decoded_hash(ffmpeg, status["files"][0]["path"], "v")
                     assert actual == expected, status
                 else:
                     assert (
@@ -790,20 +896,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         assert restored["downloadSpeed"] == "0", restored
         engine.rpc.call("aria2.unpause", [gid])
         status = wait(engine, gid)
-        actual = command(
-            ffmpeg,
-            "-v",
-            "error",
-            "-i",
-            status["files"][0]["path"],
-            "-map",
-            "0:v",
-            "-f",
-            "hash",
-            "-hash",
-            "sha256",
-            "-",
-        ).strip()
+        actual = decoded_hash(ffmpeg, status["files"][0]["path"], "v")
         assert actual == expected, actual
         results["restart"] = (
             "paused progress retained; corrupted cache re-fetched; complete video hash matches"

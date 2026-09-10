@@ -55,7 +55,6 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         })
         begin, end = 4 * 1024 * 1024, 5 * 1024 * 1024
         requested = f"bytes={begin}-{end - 1}"
-        missing = f"bytes={end - 65536}-{end - 1}"
         for case in ("short", "tail", "tail-retry"):
             body = response_body if case == "tail" else response_body[:-65536]
             response = {

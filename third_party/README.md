@@ -54,6 +54,14 @@ including cancellation, instead of retrying the same xlink indefinitely.
 Its threading header includes the standard integer
 types required by its native atomic helpers.
 
+Client integration fixes apply startup quality before initialization, preserve
+HLS rendition languages and initialization key scope, and retain standalone AAC
+and WebM download support. Explicit MP4 index ranges avoid incremental header
+requests. Fixed HLS downloads refresh only selected renditions. HLS resume
+addresses parsed media sequences; DASH clock synchronization
+uses the clock response's receive time. The superbuild checks GPAC's native
+incremental build on every build and preserves unchanged installed headers.
+
 On Windows, static-only zlib builds retain the `libz` name used by upstream
 pkg-config metadata and the maintained dependency consumers. A suffix is only
 needed when static and shared zlib are built together.

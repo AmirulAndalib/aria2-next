@@ -210,10 +210,10 @@ struct Job {
       }
       return h.result;
     };
-    io.run = [](GF_DASHFileIO*, void* handle) -> GF_Err {
+    io.run = io.init;
+    io.get_status = [](GF_DASHFileIO*, void* handle) -> GF_Err {
       return static_cast<Io*>(handle)->result;
     };
-    io.get_status = io.run;
     io.get_url = [](GF_DASHFileIO*, void* handle) -> const char* {
       auto& h = *static_cast<Io*>(handle);
       return h.resource.url.empty() ? h.url.c_str() : h.resource.url.c_str();
@@ -237,7 +237,6 @@ struct Job {
       auto& job = *static_cast<Job*>(io->udta);
       try {
         if (gf_dash_is_dynamic_mpd(job.dash)) {
-          job.live = true;
           return;
         }
         std::ifstream input(nativePath(path), std::ios::binary);
@@ -344,6 +343,17 @@ struct Job {
   void commit(Segment segment)
   {
     auto last = lastSegments.find({segment.period, segment.track});
+    if (live && segment.hls && segment.type != "subtitle" &&
+        last == lastSegments.end()) {
+      std::optional<int64_t> reference;
+      for (const auto& entry : lastSegments)
+        if (entry.first.first == segment.period &&
+            entry.second.type != "subtitle") {
+          reference = entry.second.start;
+          break;
+        }
+      segment.start = Muxer::startTime(segment, control, reference);
+    }
     const auto previous =
         retained.find({segment.period, segment.track, segment.number});
     if (last != lastSegments.end()) {
@@ -447,8 +457,8 @@ struct Job {
       auto value = snapshot();
       value.tracks.clear();
       value.protocol = gf_dash_is_m3u8(dash) ? "hls" : "dash";
-      value.live = gf_dash_is_dynamic_mpd(dash);
-      live = live || value.live;
+      value.live = live || gf_dash_is_dynamic_mpd(dash);
+      live = value.live;
       value.duration = static_cast<int64_t>(gf_dash_get_duration(dash) * 1000);
       if (gf_dash_is_smooth_streaming(dash))
         throw std::runtime_error("Smooth Streaming is not supported");
@@ -555,6 +565,14 @@ struct Job {
                 timescale ? gf_timestamp_rescale(offset, timescale, 1000000)
                           : 0)};
         if (!option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
+          auto previous =
+              lastSegments.find({gf_dash_get_period_start(dash), identity});
+          if (live && gf_dash_is_m3u8(dash) && previous != lastSegments.end() &&
+              gf_dash_group_resume_sequence(dash, group,
+                                            previous->second.number) != GF_OK)
+            throw std::runtime_error(
+                "Live media left the server's retention window; "
+                "the recording has a gap");
           store.select(gf_dash_get_period_start(dash), track.type, identity);
           coverage[gf_dash_get_period_start(dash)].try_emplace(identity, 0);
         }
@@ -588,7 +606,7 @@ struct Job {
         auto path =
             localResource(init, first, last ? static_cast<int64_t>(last) : -1);
         if (crypto == 1 && key)
-          path = transport.decrypt(path, key, iv);
+          path = transport.decrypt(path, key, iv, !live);
         if (gf_dash_group_init_segment_is_media(dash, group)) {
           u32 number = 0, duration = 0, discontinuity = 0;
           GF_Fraction64 start{};
@@ -628,9 +646,20 @@ struct Job {
     value.completedDuration = 0;
     for (const auto& period : coverage) {
       int64_t minimum = INT64_MAX;
-      for (const auto& track : period.second)
+      int64_t beginning = INT64_MIN, end = INT64_MAX;
+      for (const auto& track : period.second) {
         minimum = std::min(minimum, track.second);
-      if (minimum != INT64_MAX)
+        const auto last = lastSegments.find({period.first, track.first});
+        if (live && value.protocol == "hls" && last != lastSegments.end() &&
+            last->second.type != "subtitle") {
+          const auto stop = last->second.start + last->second.duration;
+          beginning = std::max(beginning, stop - track.second);
+          end = std::min(end, stop);
+        }
+      }
+      if (minimum > 0 && beginning != INT64_MIN)
+        value.completedDuration += std::max<int64_t>(0, end - beginning);
+      else if (minimum != INT64_MAX)
         value.completedDuration += minimum;
     }
     publish(value);
@@ -748,7 +777,7 @@ struct Job {
             localResource(url, first, last ? static_cast<int64_t>(last) : -1);
         if (!path.empty()) {
           if (key && *key)
-            path = transport.decrypt(path, key, iv);
+            path = transport.decrypt(path, key, iv, !live);
           commit(describe(group, number, start, duration, path, discontinuity));
           gf_dash_group_discard_segment(dash, group);
           advanced = true;
@@ -779,11 +808,12 @@ struct Job {
     auto value = snapshot();
     value.state = "finalizing";
     publish(value);
-    auto staging = Muxer::stage(
-        store.segments(), value.path, taskDirectory,
-        option->get(PREF_MEDIA_FORMAT), option->get(PREF_MEDIA_VIDEO) != "none",
-        option->get(PREF_MEDIA_AUDIO) != "none",
-        option->get(PREF_MEDIA_SUBTITLES) != "none", control);
+    auto staging = Muxer::stage(store.segments(), value.path, taskDirectory,
+                                option->get(PREF_MEDIA_FORMAT),
+                                option->get(PREF_MEDIA_VIDEO) != "none",
+                                option->get(PREF_MEDIA_AUDIO) != "none",
+                                option->get(PREF_MEDIA_SUBTITLES) != "none",
+                                control, value.duration, value.live);
     Publication publication{
         value.path, staging, Transport::digest(staging),
         static_cast<int64_t>(std::filesystem::file_size(nativePath(staging)))};

@@ -26,7 +26,7 @@ public:
   Resource get(const std::string& url, int64_t begin = 0, int64_t end = -1,
                bool cached = true);
   std::string decrypt(const std::string& path, const std::string& keyUrl,
-                      const unsigned char* iv);
+                      const unsigned char* iv, bool cacheKey);
   static std::string fingerprint(const std::string& value);
   static std::string digest(const std::string& path);
   void retain(const std::string& path);

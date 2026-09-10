@@ -29,6 +29,7 @@
 #include <gpac/internal/m3u8.h>
 #include <gpac/network.h>
 #include <gpac/maths.h>
+#include <gpac/constants.h>
 
 #ifndef GPAC_DISABLE_MPD
 
@@ -1211,6 +1212,7 @@ void gf_mpd_url_free(void *_item)
 {
 	GF_MPD_URL *ptr = (GF_MPD_URL*)_item;
 	if (ptr->sourceURL) gf_free(ptr->sourceURL);
+	if (ptr->key_url) gf_free(ptr->key_url);
 	if (ptr->byte_range) gf_free(ptr->byte_range);
 	gf_free(ptr);
 }
@@ -1677,7 +1679,7 @@ static char *group_to_codecs(MasterPlaylist *pl, PlaylistElement *pe, u32 *bandw
 		Stream *astream = gf_list_get(pl->streams, stidx);
 		for (k=0; k<gf_list_count(astream->variants); k++) {
 			par_pe = gf_list_get(astream->variants, k);
-			if (par_pe->main_codecs && par_pe->audio_group && strstr(par_pe->audio_group, pe->audio_group))
+			if (par_pe->codecs && par_pe->audio_group && strstr(par_pe->audio_group, pe->audio_group))
 				break;
 			par_pe = NULL;
 		}
@@ -1712,7 +1714,17 @@ static char *group_to_codecs(MasterPlaylist *pl, PlaylistElement *pe, u32 *bandw
 	while (group) {
 		char *sep = strchr(group, ',');
 		if (sep) sep[0] = 0;
-		if (!strstr(par_pe->main_codecs, group)) {
+		Bool is_audio = GF_FALSE;
+		if (!par_pe->main_codecs) {
+			char *dot = strchr(group, '.');
+			if (dot) dot[0] = 0;
+			u32 codec_id = gf_codecid_parse(group);
+			if (!codec_id && strlen(group)==4)
+				codec_id = gf_codec_id_from_isobmf(gf_4cc_parse(group));
+			is_audio = gf_codecid_type(codec_id)==GF_STREAM_AUDIO;
+			if (dot) dot[0] = '.';
+		}
+		if (is_audio || (par_pe->main_codecs && !strstr(par_pe->main_codecs, group))) {
 			grp_idx++;
 			if (grp_idx == target_idx) {
 				char *res = gf_strdup(group);
@@ -2104,10 +2116,6 @@ retry_import:
 			rep->base_URLs = gf_list_new();
 			rep->sub_representations = gf_list_new();
 
-			/*get rid of level 0 aac*/
-			if (elt && strstr(elt->url, ".aac"))
-				rep->playback.disabled = GF_TRUE;
-
 			//if hls advertises more than our importer, use hls info (some files signal always stereo in audio sample entry)
 			if (num_channels && pe->channels && (num_channels<pe->channels))
 				num_channels = pe->channels;
@@ -2325,6 +2333,8 @@ retry_import:
 				if (!rep->segment_list->initialization_segment) return GF_OUT_OF_MEM;
 
 				rep->segment_list->initialization_segment->sourceURL = gf_strdup(elt->init_segment_url);
+				rep->segment_list->initialization_segment->key_url = elt->init_key_uri ? gf_strdup(elt->init_key_uri) : NULL;
+				memcpy(rep->segment_list->initialization_segment->key_iv, elt->init_key_iv, sizeof(bin128));
 
 				if (elt->init_byte_range_end) {
 					GF_SAFEALLOC(rep->segment_list->initialization_segment->byte_range, GF_MPD_ByteRange);
@@ -2725,6 +2735,8 @@ GF_Err gf_m3u8_solve_representation_xlink(GF_MPD_Representation *rep, const char
 				rep->mime_type = gf_strdup("video/mp4");
 			}
 			rep->segment_list->initialization_segment->sourceURL = pe->init_segment_url;
+			rep->segment_list->initialization_segment->key_url = pe->init_key_uri ? gf_strdup(pe->init_key_uri) : NULL;
+			memcpy(rep->segment_list->initialization_segment->key_iv, pe->init_key_iv, sizeof(bin128));
 			pe->init_segment_url=NULL;
 
 			if (pe->init_byte_range_end) {
@@ -2758,12 +2770,6 @@ GF_Err gf_m3u8_solve_representation_xlink(GF_MPD_Representation *rep, const char
 		if (!elt)
 			continue;
 
-		//NOTE: for GPAC now, we disable stream AAC to avoid the problem when switching quality. It should be improved later !
-		if (strstr(elt->url, ".aac")) {
-			rep->playback.disabled = GF_TRUE;
-			gf_m3u8_master_playlist_del(&pl);
-			return GF_OK;
-		}
 		if (elt->drm_method==DRM_AES_128)
 			rep->crypto_type = 1;
 		else if (elt->drm_method==DRM_CENC_CBCS)
@@ -5363,6 +5369,10 @@ GF_Err gf_mpd_resolve_url(GF_MPD *mpd, GF_MPD_Representation *rep, GF_MPD_Adapta
 		switch (resolve_type) {
 		case GF_MPD_RESOLVE_URL_INIT:
 			if (init_url) {
+				if (init_url->key_url && out_key_url) {
+					*out_key_url = gf_url_concatenate(url, init_url->key_url);
+					if (out_key_iv) memcpy(*out_key_iv, init_url->key_iv, sizeof(bin128));
+				}
 				if (init_url->sourceURL) {
 					if (init_url->is_resolved) {
 						*out_url = gf_strdup(init_url->sourceURL);

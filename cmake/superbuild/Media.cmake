@@ -83,6 +83,7 @@ foreach(package IN LISTS gpac_packages)
 endforeach()
 ExternalProject_Add(gpac_project
   DEPENDS zlib_project
+  BUILD_ALWAYS TRUE
   SOURCE_DIR "${ARIA2_VENDOR_ROOT}/gpac"
   BINARY_DIR "${CMAKE_BINARY_DIR}/vendor/gpac"
   CONFIGURE_COMMAND ${media_environment} ${ARIA2_POSIX_SHELL} <SOURCE_DIR>/configure

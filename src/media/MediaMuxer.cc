@@ -6,14 +6,18 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
 #include <libavutil/mem.h>
+#include <libavutil/intreadwrite.h>
 #include <libavutil/parseutils.h>
 }
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
+#include <string_view>
 #include <stdexcept>
 #ifdef _WIN32
 #  include <windows.h>
@@ -72,6 +76,40 @@ bool sameCodec(const AVCodecParameters* a, const AVCodecParameters* b)
          (!a->extradata_size ||
           !std::memcmp(a->extradata, b->extradata, a->extradata_size));
 }
+int64_t packedAudioClock(AVFormatContext* context)
+{
+  // FFmpeg parses ID3 PRIV frames and exposes their bytes as escaped metadata.
+  const auto tag = av_dict_get(
+      context->metadata,
+      "id3v2_priv.com.apple.streaming.transportStreamTimestamp", nullptr, 0);
+  if (!tag)
+    throw std::runtime_error("Packed HLS audio has no transport timestamp");
+  std::string_view value(tag->value);
+  std::array<unsigned char, 8> bytes{};
+  for (auto& byte : bytes) {
+    if (value.empty())
+      throw std::runtime_error("Invalid packed HLS audio timestamp");
+    if (value.front() == '\\') {
+      unsigned number = 0;
+      if (value.size() < 4 || value[1] != 'x')
+        throw std::runtime_error("Invalid packed HLS audio timestamp");
+      const auto parsed =
+          std::from_chars(value.data() + 2, value.data() + 4, number, 16);
+      if (parsed.ec != std::errc() || parsed.ptr != value.data() + 4)
+        throw std::runtime_error("Invalid packed HLS audio timestamp");
+      byte = static_cast<unsigned char>(number);
+      value.remove_prefix(4);
+    }
+    else {
+      byte = static_cast<unsigned char>(value.front());
+      value.remove_prefix(1);
+    }
+  }
+  const auto clock = AV_RB64(bytes.data());
+  if (!value.empty() || clock >= (uint64_t{1} << 33))
+    throw std::runtime_error("Invalid packed HLS audio timestamp");
+  return static_cast<int64_t>(clock);
+}
 struct Input {
   AVFormatContext* context = nullptr;
   AVIOContext* io = nullptr;
@@ -83,6 +121,7 @@ struct Input {
   int64_t position = 0, size = 0;
   size_t index = 0;
   bool ready = false;
+  bool prefetched = false;
   std::string type;
   Control* control = nullptr;
   std::vector<Segment> segments;
@@ -92,7 +131,9 @@ struct Input {
   int64_t boundary = 0;
   int64_t end = INT64_MAX;
   bool webvtt = false;
+  std::optional<int64_t> transportClock;
   bool allowPreroll = false;
+  bool trimAudio = false;
   std::vector<AVCodecParameters*> parameters;
   ~Input()
   {
@@ -222,6 +263,8 @@ struct Input {
              context->streams[0]->codecpar->codec_id == AV_CODEC_ID_WEBVTT;
     clockOffset = first.hls ? (webvtt ? subtitleOffset(first.path) : 0)
                             : first.period * 1000 - first.timeOffset;
+    if (first.hls && std::strcmp(context->iformat->name, "aac") == 0)
+      transportClock = packedAudioClock(context);
     if (!first.hls)
       boundary = first.period * 1000;
     clipStart = first.hls ? (first.start - presentationStart) * 1000 : 0;
@@ -251,9 +294,11 @@ struct Input {
   }
   void next()
   {
-    av_packet_unref(packet);
+    if (!prefetched)
+      av_packet_unref(packet);
     for (;;) {
-      auto result = av_read_frame(context, packet);
+      auto result = prefetched ? 0 : av_read_frame(context, packet);
+      prefetched = false;
       if (result == AVERROR_EOF) {
         if (openRun())
           continue;
@@ -272,9 +317,14 @@ struct Input {
           packet->pts += offset;
         if (packet->dts != AV_NOPTS_VALUE)
           packet->dts += offset;
+        const bool preroll =
+            allowPreroll &&
+            !(trimAudio &&
+              context->streams[packet->stream_index]->codecpar->codec_type ==
+                  AVMEDIA_TYPE_AUDIO);
         if (!(webvtt && segments.front().hls) &&
             packet->pts != AV_NOPTS_VALUE &&
-            ((!allowPreroll && packet->pts + packet->duration <= boundary) ||
+            ((!preroll && packet->pts + packet->duration <= boundary) ||
              packet->pts >= end)) {
           // Initialization can expose a complete encoder-priming packet before
           // the Period. It must not overlap the preceding Period's audio.
@@ -422,12 +472,38 @@ void remux(Output& out, std::vector<std::unique_ptr<Input>>& inputs,
   }
 }
 } // namespace
+int64_t Muxer::startTime(const Segment& segment,
+                         const std::shared_ptr<Control>& control,
+                         std::optional<int64_t> reference)
+{
+  Input input;
+  input.control = control.get();
+  input.type = segment.type;
+  input.segments = {segment};
+  input.openRun();
+  const AVRational clock{1, 90000};
+  auto timestamp = input.transportClock ? av_rescale_q(*input.transportClock,
+                                                       clock, AV_TIME_BASE_Q)
+                                        : input.context->start_time;
+  if (timestamp == AV_NOPTS_VALUE)
+    throw std::runtime_error("Live media has no presentation timestamp");
+  if (reference)
+    timestamp =
+        *reference * 1000 +
+        av_rescale_q(
+            av_compare_mod(av_rescale_q(timestamp, AV_TIME_BASE_Q, clock),
+                           av_rescale_q(*reference, AVRational{1, 1000}, clock),
+                           uint64_t{1} << 33),
+            clock, AV_TIME_BASE_Q);
+  return av_rescale_q(timestamp, AV_TIME_BASE_Q, AVRational{1, 1000});
+}
 std::string Muxer::stage(const std::vector<Segment>& segments,
                          const std::string& output,
                          const std::string& directory,
                          const std::string& format, bool video, bool audio,
                          bool subtitles,
-                         const std::shared_ptr<Control>& control)
+                         const std::shared_ptr<Control>& control,
+                         int64_t presentationDuration, bool live)
 {
   if (segments.empty())
     throw std::runtime_error("No complete media segments were received");
@@ -470,6 +546,7 @@ std::string Muxer::stage(const std::vector<Segment>& segments,
     }
   } cleanup{temporary};
   Output out;
+  int64_t liveOrigin = INT64_MIN;
   for (const auto& period : periods) {
     std::vector<std::unique_ptr<Input>> inputs;
     int64_t end = 0;
@@ -486,22 +563,128 @@ std::string Muxer::stage(const std::vector<Segment>& segments,
     }
     if (inputs.front()->segments.front().hls) {
       int64_t origin = INT64_MAX, beginning = INT64_MAX;
+      const AVRational clock{1, 90000};
+      int64_t reference = AV_NOPTS_VALUE;
+      for (const auto& input : inputs)
+        if (!input->webvtt && !input->transportClock &&
+            input->context->start_time != AV_NOPTS_VALUE) {
+          reference = input->context->start_time;
+          break;
+        }
       for (const auto& input : inputs) {
         beginning = std::min(beginning, input->segments.front().start);
-        if (!input->webvtt && input->context->start_time != AV_NOPTS_VALUE)
+        if (input->transportClock) {
+          input->clockOffset =
+              reference == AV_NOPTS_VALUE
+                  ? av_rescale_q(*input->transportClock, clock, AV_TIME_BASE_Q)
+                  : reference +
+                        av_rescale_q(
+                            av_compare_mod(
+                                *input->transportClock,
+                                av_rescale_q(reference, AV_TIME_BASE_Q, clock),
+                                uint64_t{1} << 33),
+                            clock, AV_TIME_BASE_Q);
+          origin = std::min(origin, input->clockOffset);
+        }
+        else if (!input->webvtt && input->context->start_time != AV_NOPTS_VALUE)
           origin = std::min(origin, input->context->start_time);
       }
       if (origin == INT64_MAX)
         origin = 0;
+      int64_t commonEnd = INT64_MAX;
+      if (live) {
+        for (const auto& input : inputs) {
+          if (input->webvtt)
+            continue;
+          if (period.first == periods.begin()->first)
+            liveOrigin = std::max(liveOrigin, input->segments.front().start);
+          const auto& last = input->segments.back();
+          commonEnd = std::min(commonEnd, last.start + last.duration);
+        }
+        if (liveOrigin == INT64_MIN)
+          throw std::runtime_error("Live media has no audio or video timeline");
+        if (format == "mkv") {
+          for (auto& input : inputs) {
+            if (input->type == "audio" || input->webvtt ||
+                input->segments.front().start >= liveOrigin)
+              continue;
+            const auto target =
+                (liveOrigin - beginning) * 1000 + origin - input->clockOffset;
+            check(avformat_seek_file(input->context, -1, target, target,
+                                     INT64_MAX, 0));
+            for (;;) {
+              check(av_read_frame(input->context, input->packet));
+              const auto stream =
+                  input->context->streams[input->packet->stream_index];
+              if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                const auto timestamp = av_rescale_q(
+                    input->packet->pts, stream->time_base, AV_TIME_BASE_Q);
+                liveOrigin = beginning +
+                             (timestamp + input->clockOffset - origin) / 1000;
+                input->prefetched = true;
+                break;
+              }
+              av_packet_unref(input->packet);
+            }
+          }
+        }
+        if (commonEnd <= liveOrigin)
+          throw std::runtime_error(
+              "Live tracks have no common recording window");
+      }
+      int64_t nextBoundary = INT64_MAX;
+      const auto next = periods.upper_bound(period.first);
+      if (next != periods.end())
+        for (const auto& track : next->second)
+          nextBoundary =
+              std::min(nextBoundary,
+                       (track.second.front().start - presentationStart) * 1000);
       for (auto& input : inputs) {
         input->boundary = (beginning - presentationStart) * 1000;
-        input->end = (end - presentationStart) * 1000;
+        // Complete HLS fragments own their packet boundary. Millisecond-rounded
+        // playlist durations must not truncate audio after many short segments.
+        input->end = nextBoundary;
         input->shift = (beginning - presentationStart) * 1000 - origin;
+        if (live) {
+          // Native MP4 edit lists retain decoder preroll while exposing only
+          // the common recording window. All tracks keep their source clock.
+          input->boundary = (beginning - liveOrigin) * 1000;
+          input->shift = (beginning - liveOrigin) * 1000 - origin;
+          input->end = (commonEnd - liveOrigin) * 1000;
+          if (format == "mkv") {
+            // Matroska has no edit lists. Start at the native demuxer's next
+            // video keyframe and discard preceding audio.
+            input->trimAudio = true;
+            input->boundary = 0;
+          }
+        }
       }
     }
     else {
-      for (auto& input : inputs)
-        input->end = (period.first.first + end) * 1000;
+      if (live && liveOrigin == INT64_MIN) {
+        int64_t origin = INT64_MAX;
+        for (const auto& input : inputs)
+          if (!input->webvtt && input->context->start_time != AV_NOPTS_VALUE)
+            origin = std::min(origin,
+                              input->context->start_time + input->clockOffset);
+        if (origin == INT64_MAX)
+          throw std::runtime_error("Live media has no presentation timestamp");
+        liveOrigin = av_rescale_q(origin, AV_TIME_BASE_Q, AVRational{1, 1000});
+      }
+      const auto next = periods.upper_bound({period.first.first, INT64_MAX});
+      const auto boundary =
+          next == periods.end() ? presentationDuration : next->first.first;
+      for (auto& input : inputs) {
+        input->end =
+            (boundary > 0 ? std::min(period.first.first + end, boundary)
+                          : period.first.first + end) *
+            1000;
+        if (live) {
+          input->shift = -liveOrigin * 1000;
+          input->boundary -= liveOrigin * 1000;
+          input->end -= liveOrigin * 1000;
+        }
+      }
     }
     remux(out, inputs, temporary, format, video, audio, subtitles,
           control.get());

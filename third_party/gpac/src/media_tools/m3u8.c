@@ -64,6 +64,8 @@ typedef struct _s_accumulated_attributes {
 	u64 init_byte_range_start, init_byte_range_end;
 	PlaylistElementDRMMethod key_method;
 	char *init_url;
+	char *init_key_url;
+	bin128 init_key_iv;
 	char *key_url;
 	bin128 key_iv;
 	Bool has_iv;
@@ -122,6 +124,7 @@ GF_Err playlist_element_del(PlaylistElement * e) {
 	if (e->init_segment_url) {
 		gf_free(e->init_segment_url);
 	}
+	if (e->init_key_uri) gf_free(e->init_key_uri);
 	if (e->alt_bandwidths) {
 		gf_free(e->alt_bandwidths);
 	}
@@ -171,6 +174,8 @@ static PlaylistElement* playlist_element_new(PlaylistElementType element_type, c
 	e->name = (attribs->name ? gf_strdup(attribs->name) : NULL);
 	e->drm_method = attribs->key_method;
 	e->init_segment_url = attribs->init_url ? gf_strdup(attribs->init_url) : NULL;
+	e->init_key_uri = attribs->init_key_url ? gf_strdup(attribs->init_key_url) : NULL;
+	memcpy(e->init_key_iv, attribs->init_key_iv, sizeof(bin128));
 	e->init_byte_range_start = attribs->init_byte_range_start;
 	e->init_byte_range_end = attribs->init_byte_range_end;
 
@@ -444,58 +449,31 @@ static char** parse_attributes(const char *line, s_accumulated_attributes *attri
 		}
 		return ret;
 	}
-	ret = extract_attributes("#EXT-X-KEY:", line, 4);
+	ret = extract_attributes("#EXT-X-KEY:", line, 5);
 	if (ret) {
-		/* #EXT-X-KEY:METHOD=<method>[,URI="<URI>"] */
-		const char *method = "METHOD=";
-		const size_t method_len = strlen(method);
-		if (safe_start_equals(method, ret[0])) {
-			if (!strncmp(ret[0]+method_len, "NONE", 4)) {
-				attributes->key_method = DRM_NONE;
-				if (attributes->key_url) {
-					gf_free(attributes->key_url);
-					attributes->key_url = NULL;
-				}
-			} else if (!strncmp(ret[0]+method_len, "AES-128", 7)) {
-				attributes->key_method = DRM_AES_128;
-			} else if (!strncmp(ret[0]+method_len, "SAMPLE-AES", 10)) {
-				attributes->key_method = DRM_CENC_CBCS;
-			} else if (!strncmp(ret[0]+method_len, "SAMPLE-AES-CTR", 14)) {
-				attributes->key_method = DRM_CENC_CTR;
-			} else {
-				GF_LOG(GF_LOG_ERROR, GF_LOG_DASH,("[M3U8] EXT-X-KEY method not recognized.\n"));
-			}
-			if (ret[1] != NULL && safe_start_equals("URI=\"", ret[1])) {
-				int_value = (u32) strlen(ret[1]);
-				if (ret[1][int_value-1] == '"') {
-					if (attributes->key_url) gf_free(attributes->key_url);
-					attributes->key_url = gf_strdup(&(ret[1][5]));
-					if (attributes->key_url) {
-						u32 klen = (u32) strlen(attributes->key_url);
-						attributes->key_url[klen ? klen-1 : 0] = 0;
-					}
-				}
-			}
-			attributes->has_iv = GF_FALSE;
-			if (ret[2] != NULL && safe_start_equals("IV=", ret[2])) {
-				char *IV = ret[2] + 3;
-				if (!strncmp(IV, "0x", 2)) IV+=2;
-				if (strlen(IV) != 32) {
-					GF_LOG(GF_LOG_ERROR, GF_LOG_DASH,("[M3U8] EXT-X-KEY wrong IV len\n"));
-				} else {
-					for (i=0; i<16; i++) {
-						char szV[3];
-						u32 v;
-						szV[0] = IV[2*i];
-						szV[1] = IV[2*i + 1];
-						szV[2] = 0;
-						sscanf(szV, "%X", &v);
-						attributes->key_iv[i] = v;
-					}
-				}
-				attributes->has_iv = GF_TRUE;
-			}
+		/* Attribute order is not significant. Use the native attribute lexer. */
+		char *method = NULL, *uri = NULL, *iv = NULL;
+		for (i=0; ret[i]; i++) {
+			if (safe_start_equals("METHOD=", ret[i])) method = ret[i]+7;
+			else if (safe_start_equals("URI=", ret[i])) uri = ret[i]+4;
+			else if (safe_start_equals("IV=", ret[i])) iv = ret[i]+3;
 		}
+		if (method) {
+			if (!strcmp(method, "NONE")) attributes->key_method = DRM_NONE;
+			else if (!strcmp(method, "AES-128")) attributes->key_method = DRM_AES_128;
+			else if (!strcmp(method, "SAMPLE-AES-CTR")) attributes->key_method = DRM_CENC_CTR;
+			else attributes->key_method = DRM_CENC_CBCS;
+		}
+		gf_free(attributes->key_url);
+		attributes->key_url = NULL;
+		if (uri && attributes->key_method != DRM_NONE) {
+			u32 len = (u32) strlen(uri);
+			if (len>=2 && uri[0]=='"' && uri[len-1]=='"') {
+				attributes->key_url = gf_strdup(uri+1);
+				attributes->key_url[len-2] = 0;
+			} else attributes->key_url = gf_strdup(uri);
+		}
+		attributes->has_iv = iv && (gf_bin128_parse(iv, attributes->key_iv)==GF_OK);
 		M3U8_COMPATIBILITY_VERSION(1);
 		return ret;
 	}
@@ -521,6 +499,10 @@ static char** parse_attributes(const char *line, s_accumulated_attributes *attri
 	}
 	ret = extract_attributes("#EXT-X-MAP", line, 4);
 	if (ret) {
+		gf_free(attributes->init_key_url);
+		attributes->init_key_url = (attributes->key_method==DRM_AES_128 && attributes->key_url)
+			? gf_strdup(attributes->key_url) : NULL;
+		memcpy(attributes->init_key_iv, attributes->key_iv, sizeof(bin128));
 		/* #EXT-X-MAP:URI="<URI>"] */
 		i=0;
 		while (ret[i] != NULL) {
@@ -853,7 +835,7 @@ GF_Err gf_m3u8_master_playlist_del(MasterPlaylist **playlist) {
 	return GF_OK;
 }
 
-static Stream* master_playlist_find_matching_stream(const MasterPlaylist *pl, const u32 stream_id) {
+static Stream* master_playlist_find_matching_stream(const MasterPlaylist *pl, const u32 stream_id, const char *language) {
 	u32 count, i;
 	gf_assert(pl);
 	gf_assert(pl->streams);
@@ -863,6 +845,12 @@ static Stream* master_playlist_find_matching_stream(const MasterPlaylist *pl, co
 		Stream *cur = gf_list_get(pl->streams, i);
 		gf_assert(cur);
 		if (stream_id == cur->stream_id) {
+			/* Renditions in one HLS group can have different languages. */
+			if (stream_id >= MEDIA_TYPE_AUDIO) {
+				PlaylistElement *first = gf_list_get(cur->variants, 0);
+				const char *current = first ? first->language : NULL;
+				if (strcmp(current ? current : "", language ? language : "")) continue;
+			}
 			/* We found the program */
 			return cur;
 		}
@@ -905,7 +893,7 @@ GF_Err declare_sub_playlist(char *currentLine, const char *baseURL, s_accumulate
 		/* First, we have to find the matching stream */
 		Stream *stream = in_stream;
 		if (!in_stream)
-			stream = master_playlist_find_matching_stream(*playlist, attribs->stream_id);
+			stream = master_playlist_find_matching_stream(*playlist, attribs->stream_id, attribs->language);
 		/* We did not found the stream, we create it */
 		if (stream == NULL) {
 			stream = stream_new(attribs->stream_id);
@@ -1023,6 +1011,8 @@ GF_Err declare_sub_playlist(char *currentLine, const char *baseURL, s_accumulate
 				if (attribs->init_url) {
 					gf_free(attribs->init_url);
 					attribs->init_url = NULL;
+					gf_free(attribs->init_key_url);
+					attribs->init_key_url = NULL;
 				}
 				if (subElement == NULL) {
 					gf_m3u8_master_playlist_del(playlist);
@@ -1141,6 +1131,7 @@ static void reset_attribs(s_accumulated_attributes *attribs, Bool is_cleanup)
 		RST_ATTR(name)
 	}
 	RST_ATTR(init_url)
+	RST_ATTR(init_key_url)
 	RST_ATTR(mediaURL)
 }
 

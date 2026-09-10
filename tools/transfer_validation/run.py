@@ -23,7 +23,7 @@ def run_protocol(protocol: str, forwarded: list[str]) -> dict[str, object]:
         "exitCode": completed.returncode,
     }
     candidates = sorted(
-        (BUILD_ROOT / "runs").glob(f"*-{protocol}/result.json"),
+        (BUILD_ROOT / "runs").glob(f"*Z-{protocol}/result.json"),
         key=lambda path: path.stat().st_mtime,
     )
     if candidates:

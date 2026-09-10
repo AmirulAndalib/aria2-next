@@ -33,6 +33,18 @@ Standard HLS AES-128 uses OpenSSL's native cipher implementation. MP4 cannot
 represent every subtitle/codec combination; use MKV when required. The engine
 does not silently transcode or discard selected unsupported streams.
 
+Initial track selection applies before fetching initialization or media packets.
+HLS rendition languages remain distinct even when they share a group ID. AES-128
+initialization follows the key active at `EXT-X-MAP`, independently of later media
+keys. VOD keys are reused within the task; live keys are refreshed.
+Packed AAC uses the transport timestamp parsed by FFmpeg from ID3 metadata.
+Complete HLS fragments retain their final samples; rounded playlist durations
+do not truncate audio. Discontinuity boundaries still delimit adjacent epochs.
+
+DASH supports indexed MP4 and complete WebM representations. Declared MP4 index
+ranges are fetched together and parsed by GPAC. Period boundaries limit retained
+packets, including fragments that extend past the advertised presentation.
+
 Track types use GPAC's codec registry rather than relying on a container MIME
 type. Explicit track or language requests fail when unavailable. DASH
 presentation offsets, HLS subtitle timestamp maps, initialization changes,
@@ -88,6 +100,14 @@ payload, independently of the standard network speed. Live tasks do not report
 a fabricated total duration percentage. Frontends must use the media fields,
 not interpret unknown output size as zero download progress.
 
+HLS live progress measures the common audio/video recording window using native
+media timestamps. Independently refreshed playlists may start at different
+positions; their sequence numbers cannot synchronize different tracks. MP4 edit
+lists retain decoder preroll outside the visible recording. Matroska starts at
+the next usable video keyframe and trims preceding audio, so its recording
+boundary can differ by a keyframe interval.
+DASH live clocks are normalized to a zero-based output timeline.
+
 Media phases are `waiting`, `probing`, `awaiting-selection`, `downloading`,
 `recording`, `finalizing`, `paused`, `complete`, `error`, and `removed`. Standard
 RPC status retains the ordinary task lifecycle. Only successful muxing and
@@ -116,7 +136,9 @@ Changed presentation/selection identity invalidates incompatible checkpoints.
 Live recovery starts within the available server window and checks segment
 continuity against committed positions before accepting new content.
 HLS checkpoint identity uses the manifest's media sequence, independent of
-segment filenames. Cancellation and terminal playlist refresh errors return
+segment filenames. Resume seeks directly to that sequence instead of downloading
+the preceding server window. DASH UTC synchronization uses the clock response's
+receive time. Cancellation and terminal playlist refresh errors return
 control to the engine without an unbounded native retry loop.
 Live recording cannot recover media that has already left the server's window;
 gaps and a source disappearing without a proper end signal are reported as errors.
@@ -129,8 +151,9 @@ pending. Completion/removal clears task-owned recovery data; cleanup failure
 does not invalidate a successfully published file. Existing output is protected
 unless overwriting was explicitly enabled.
 
-Media state schema 2 replaces the earlier media schema and discards its
-incompatible checkpoints and task caches. Existing downloaded output is kept.
+Media state schema 3 stores HLS live positions on the actual media clock. It
+discards incompatible earlier checkpoints and task caches. Existing downloaded
+output is kept.
 Windows media files use native extended paths without changing system-wide
 long-path settings. No adjacent `.aria2` control files are created.
 
@@ -140,5 +163,7 @@ Run `tools/transfer_validation/run media` independently. The module uses local
 Caddy and FFmpeg-generated fixtures and checks decoded media, track selection,
 byte ranges, encryption, different presentation offsets, initialization changes,
 subtitle timestamps, multi-period content, recording, and paused restart.
-FFmpeg/ffprobe executables are developer-only fixture/oracle dependencies.
-No public streaming service is used by the validation module or CTest.
+FFmpeg/ffprobe and OpenSSL executables are developer-only fixture/oracle dependencies.
+No public streaming service is used by the local module or CTest. Run the separate
+public suite with `python3 tools/transfer_validation/media/public.py`; see the
+[public E2E plan](media-e2e.md) for sources and acceptance criteria.

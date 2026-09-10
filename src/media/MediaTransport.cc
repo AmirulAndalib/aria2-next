@@ -5,6 +5,8 @@
 #include "Option.h"
 #include "CurlSession.h"
 #include "BufferedFile.h"
+#include "Log.h"
+#include "fmt.h"
 #include "prefs.h"
 #include <openssl/evp.h>
 #include <curl/header.h>
@@ -293,6 +295,11 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
     char* mime = nullptr;
     curl_easy_getinfo(h, CURLINFO_EFFECTIVE_URL, &effective);
     curl_easy_getinfo(h, CURLINFO_CONTENT_TYPE, &mime);
+    A2_LOG_DEBUG(fmt(
+        "component=media event=http_complete url=%s status=%ld "
+        "curl=%d bytes=%llu range=%s",
+        logging::sanitizeUri(url).c_str(), response, static_cast<int>(result),
+        static_cast<unsigned long long>(body.bytes), range.c_str()));
     if (result == CURLE_OK && mc == CURLM_OK && response >= 200 &&
         response < 300) {
       if (!range.empty() && response != 206)
@@ -315,13 +322,14 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
       }
       Resource resource{committed, effective ? effective : url,
                         mime ? mime : "", static_cast<int64_t>(body.bytes)};
-      curl_off_t elapsed = 0;
+      curl_off_t elapsed = 0, firstByte = 0;
       curl_easy_getinfo(h, CURLINFO_TOTAL_TIME_T, &elapsed);
+      curl_easy_getinfo(h, CURLINFO_STARTTRANSFER_TIME_T, &firstByte);
       resource.utcStart =
           std::chrono::duration_cast<std::chrono::milliseconds>(
               std::chrono::system_clock::now().time_since_epoch())
               .count() -
-          elapsed / 1000;
+          (elapsed - firstByte) / 1000;
       curl_header* header = nullptr;
       while ((header = curl_easy_nextheader(h, CURLH_HEADER, -1, header)))
         resource.headers[header->name] = header->value;
@@ -349,9 +357,9 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
 }
 std::string Transport::decrypt(const std::string& path,
                                const std::string& keyUrl,
-                               const unsigned char* iv)
+                               const unsigned char* iv, bool cacheKey)
 {
-  auto key = get(keyUrl, 0, -1, false);
+  auto key = get(keyUrl, 0, -1, cacheKey);
   if (key.size != 16)
     throw std::runtime_error("HLS AES-128 key must contain 16 bytes");
   std::array<unsigned char, 16> bytes{};
@@ -360,7 +368,10 @@ std::string Transport::decrypt(const std::string& path,
   if (keyFile.gcount() != 16)
     throw std::runtime_error("Cannot read HLS AES-128 key");
   keyFile.close();
-  std::filesystem::remove(nativePath(key.path));
+  if (cacheKey)
+    retain(key.path);
+  else
+    std::filesystem::remove(nativePath(key.path));
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(
       EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
   if (!ctx || !EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr,

@@ -99,7 +99,7 @@ Store::Store(const std::string& directory, std::string gid)
       if (query.step())
         version = query.number(0);
     }
-    if (version != 2) {
+    if (version != 3) {
       std::filesystem::remove_all(nativePath(directory) / "tasks");
       for (const char* table :
            {"media_tasks", "media_segments", "media_identity",
@@ -142,7 +142,7 @@ Store::Store(const std::string& directory, std::string gid)
         "PRIMARY KEY(gid,period,type));"
         "CREATE TABLE IF NOT EXISTS media_publication(gid TEXT PRIMARY KEY,"
         "output TEXT NOT NULL,staging TEXT NOT NULL,digest TEXT NOT NULL,"
-        "bytes INTEGER NOT NULL); PRAGMA user_version=2;";
+        "bytes INTEGER NOT NULL); PRAGMA user_version=3;";
     if (sqlite3_exec(db_, sql, nullptr, nullptr, nullptr) != SQLITE_OK)
       throw std::runtime_error(sqlite3_errmsg(db_));
     transaction.commit();

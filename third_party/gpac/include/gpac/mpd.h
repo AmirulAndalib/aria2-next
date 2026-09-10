@@ -208,6 +208,9 @@ typedef struct
 
 	/*! GPAC internal - indicates the URL has already been solved*/
 	Bool is_resolved;
+	/*! HLS initialization encryption, captured at EXT-X-MAP. */
+	char *key_url;
+	bin128 key_iv;
 } GF_MPD_URL;
 
 /*! MPD fraction*/
