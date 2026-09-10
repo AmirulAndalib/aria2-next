@@ -1,6 +1,11 @@
 # Source inventory for conditional aria2 CMake targets.
 
 set(ARIA2_SOURCES_BASE
+  src/media/MediaDownload.cc
+  src/media/MediaSession.cc
+  src/media/MediaTransport.cc
+  src/media/MediaMuxer.cc
+  src/media/MediaStore.cc
   src/a2algo.h
   src/a2functional.h
   src/a2io.h

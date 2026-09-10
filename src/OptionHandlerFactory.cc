@@ -914,6 +914,65 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->setChangeOptionForReserved(true);
     handlers.push_back(op);
   }
+  {
+    auto* op =
+        new ParameterOptionHandler(PREF_MEDIA,
+                                   " --media=auto|file|hls|dash     Select "
+                                   "media handling (auto detects manifests).",
+                                   "auto", {"auto", "file", "hls", "dash"});
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    auto* op = new ParameterOptionHandler(
+        PREF_MEDIA_FORMAT,
+        " --media-format=mp4|mkv       Select the media output container.",
+        "mp4", {"mp4", "mkv"});
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  for (auto pref : {PREF_MEDIA_VIDEO, PREF_MEDIA_AUDIO, PREF_MEDIA_SUBTITLES}) {
+    auto* op = new DefaultOptionHandler(
+        pref,
+        " Select best, none, a language, or the group:quality ID from "
+        "media.tracks.",
+        pref == PREF_MEDIA_SUBTITLES ? "none" : "best");
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    auto* op = new BooleanOptionHandler(
+        PREF_MEDIA_PAUSE_AFTER_PROBE,
+        " --media-pause-after-probe    Pause after publishing media tracks, "
+        "before downloading segments.",
+        "false");
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
+  {
+    auto* op = new NumberOptionHandler(
+        PREF_MEDIA_RECORD_TIME,
+        " --media-record-time=SECONDS  Stop live recording after this media "
+        "duration (0: unlimited).",
+        "0", 0, 31536000);
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(op);
+  }
   // HTTP Specific Options
   {
     OptionHandler* op(new LocalFilePathOptionHandler(

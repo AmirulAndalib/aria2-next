@@ -10,6 +10,7 @@ python3 tools/transfer_validation/sftp/validate.py
 python3 tools/transfer_validation/bittorrent/validate.py
 python3 tools/transfer_validation/ed2k/validate.py
 python3 tools/transfer_validation/metalink/validate.py
+python3 tools/transfer_validation/media/validate.py
 ```
 
 Run every module sequentially with:
@@ -19,6 +20,12 @@ tools/transfer_validation/run all
 ```
 
 The suite uses the public CLI and JSON-RPC interfaces. It does not include engine internals or protocol implementations. HTTP behavior is provided by WireMock, transport interruption by Toxiproxy, SFTP by OpenSSH, torrent creation by the bundled libtorrent API, and ED2K hashing by OpenSSL.
+
+Media validation uses FFmpeg/ffprobe as local fixture generators and independent
+decoding oracles, Caddy for media resources, and WireMock for failure responses.
+It covers HLS, DASH, byte ranges, AES-128, track selection, multi-period remuxing,
+live recording, interrupted/restarted tasks, cache corruption, and removal.
+The FFmpeg executables are not engine runtime dependencies.
 
 Generated state and payloads live under `build/transfer-validation`. Successful payloads are removed automatically. Reports and compact logs remain available for inspection. Pass `--keep-artifacts` to a protocol module when payload inspection is required.
 

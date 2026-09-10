@@ -54,6 +54,8 @@
 #include "Log.h"
 #include "DownloadEngine.h"
 #include "CurlSession.h"
+#include "media/MediaDownload.h"
+#include "media/MediaStore.h"
 #include "Ed2kUploadQueue.h"
 #include "Ed2kSession.h"
 #include "message.h"
@@ -529,6 +531,8 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
       if (!group->isPauseRequested()) {
         continue;
       }
+      if (group->getMediaDownload())
+        group->getMediaDownload()->restore(group.get());
       if (group->getCurlDownload() && e->getCurlSession()) {
         e->getCurlSession()->restorePaused(group->getCurlDownload(),
                                            group.get());
@@ -577,6 +581,8 @@ void RequestGroupMan::fillRequestGroupFromReserver(DownloadEngine* e)
     std::shared_ptr<RequestGroup> groupToAdd = *reservedGroups_.begin();
     reservedGroups_.pop_front();
     if (keepRunning_ && groupToAdd->isPauseRequested()) {
+      if (groupToAdd->getMediaDownload())
+        groupToAdd->getMediaDownload()->restore(groupToAdd.get());
       if (groupToAdd->getCurlDownload() && e->getCurlSession()) {
         e->getCurlSession()->restorePaused(groupToAdd->getCurlDownload(),
                                            groupToAdd.get());
@@ -981,8 +987,25 @@ RequestGroupMan::findDownloadResult(a2_gid_t gid) const
   return downloadResults_.get(gid);
 }
 
+namespace {
+void discardMediaResult(const std::shared_ptr<DownloadResult>& result)
+{
+  if (!result || result->mediaSnapshot.protocol.empty())
+    return;
+  try {
+    media::Store::discard(state::mediaDirectory(result->option.get()),
+                          result->gid->toHex());
+  }
+  catch (const std::exception& error) {
+    throw DL_ABORT_EX(
+        fmt("Cannot discard media recovery state: %s", error.what()));
+  }
+}
+} // namespace
+
 bool RequestGroupMan::removeDownloadResult(a2_gid_t gid)
 {
+  discardMediaResult(downloadResults_.get(gid));
   const auto removed = downloadResults_.remove(gid);
 #ifdef ENABLE_BITTORRENT
   if (removed) {
@@ -1028,6 +1051,8 @@ void RequestGroupMan::addDownloadResult(
 
 void RequestGroupMan::purgeDownloadResult()
 {
+  for (const auto& result : downloadResults_)
+    discardMediaResult(result);
   downloadResults_.clear();
 #ifdef ENABLE_BITTORRENT
   collectBtStateGarbage();

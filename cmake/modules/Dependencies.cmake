@@ -41,6 +41,12 @@ aria2_import_dependency(aria2::expat expat.h
   LIBRARIES expat libexpat)
 aria2_import_dependency(aria2::sqlite sqlite3.h
   LIBRARIES sqlite3)
+aria2_import_dependency(aria2::gpac gpac/dash.h
+  LIBRARIES gpac_static)
+foreach(component avformat avcodec avutil)
+  aria2_import_dependency(aria2::${component} lib${component}/version.h
+    LIBRARIES ${component})
+endforeach()
 unset(OpenSSL_DIR CACHE)
 set(OpenSSL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL")
 find_package(OpenSSL ${ARIA2_MIN_OPENSSL_VERSION} CONFIG REQUIRED

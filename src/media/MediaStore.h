@@ -1,0 +1,43 @@
+/* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
+#ifndef D_MEDIA_STORE_H
+#define D_MEDIA_STORE_H
+
+#include "MediaDownload.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct sqlite3;
+namespace aria2 {
+namespace media {
+struct Segment {
+  int64_t period = 0;
+  int track = 0;
+  int64_t number = 0;
+  int64_t start = 0, duration = 0;
+  std::string path, init, type;
+};
+
+class Store {
+public:
+  Store(const std::string& directory, std::string gid);
+  ~Store();
+  Store(const Store&) = delete;
+  Store& operator=(const Store&) = delete;
+  static void discard(const std::string& directory, const std::string& gid);
+  void save(const Snapshot& snapshot);
+  bool load(Snapshot& snapshot);
+  void commit(const Segment& segment);
+  std::vector<Segment> segments();
+  bool identity(const std::string& value);
+  bool manifest(const std::string& name, const std::string& digest);
+  void clearSegments();
+  void remove();
+
+private:
+  sqlite3* db_ = nullptr;
+  std::string gid_;
+};
+} // namespace media
+} // namespace aria2
+#endif

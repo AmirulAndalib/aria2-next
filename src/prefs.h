@@ -251,6 +251,13 @@ extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
 // value: 1*digit
 extern PrefPtr PREF_RETRY_WAIT;
 extern PrefPtr PREF_STREAM_MAX_CONNECTIONS;
+extern PrefPtr PREF_MEDIA;
+extern PrefPtr PREF_MEDIA_FORMAT;
+extern PrefPtr PREF_MEDIA_VIDEO;
+extern PrefPtr PREF_MEDIA_AUDIO;
+extern PrefPtr PREF_MEDIA_SUBTITLES;
+extern PrefPtr PREF_MEDIA_PAUSE_AFTER_PROBE;
+extern PrefPtr PREF_MEDIA_RECORD_TIME;
 // value: true | false
 extern PrefPtr PREF_SHOW_CONSOLE_READOUT;
 // value: default | inorder | geom

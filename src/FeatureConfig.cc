@@ -33,6 +33,11 @@
  */
 /* copyright --> */
 #include "FeatureConfig.h"
+#include <gpac/setup.h>
+#include <gpac/version.h>
+extern "C" {
+#include <libavutil/avutil.h>
+}
 
 #include <curl/curl.h>
 #include <nghttp2/nghttp2ver.h>
@@ -152,6 +157,8 @@ const char* strSupportedFeature(int feature)
 
   case (FEATURE_SFTP):
     return "SFTP";
+  case FEATURE_MEDIA:
+    return "HLS/DASH";
     break;
 
   default:
@@ -162,6 +169,8 @@ const char* strSupportedFeature(int feature)
 std::string usedLibs()
 {
   std::string res;
+  res += std::string("GPAC/") + GPAC_VERSION + " FFmpeg/" + av_version_info() +
+         " ";
   res += fmt("spdlog/%d.%d.%d ", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR,
              SPDLOG_VER_PATCH);
   res += "libcurl/" LIBCURL_VERSION;

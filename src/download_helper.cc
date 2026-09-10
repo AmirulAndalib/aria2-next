@@ -39,6 +39,7 @@
 
 #include "RequestGroup.h"
 #include "CurlDownload.h"
+#include "media/MediaDownload.h"
 #include "Option.h"
 #include "prefs.h"
 #include "Metalink2RequestGroup.h"
@@ -384,7 +385,12 @@ createRequestGroup(const std::shared_ptr<Option>& optionTemplate,
                     util::fromHex(std::begin(hexDigest), std::end(hexDigest)));
   }
   rg->setDownloadContext(dctx);
-  rg->setCurlDownload(std::make_shared<CurlDownload>(uris));
+  if (!uris.empty() && media::Download::handles(uris.front(), option.get())) {
+    rg->setMediaDownload(std::make_shared<media::Download>(uris.front()));
+  }
+  else {
+    rg->setCurlDownload(std::make_shared<CurlDownload>(uris));
+  }
 
   if (option->getAsBool(PREF_ENABLE_RPC)) {
     rg->setPauseRequested(option->getAsBool(PREF_PAUSE));

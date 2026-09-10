@@ -1,0 +1,123 @@
+# Media downloads
+
+Aria2 Next downloads HLS and MPEG-DASH presentations and records live streams.
+GPAC owns manifest parsing, representation selection, segment addressing, and
+playlist updates. libcurl owns HTTP(S), TLS, cookies, proxies, and transfers.
+FFmpeg's libraries demux and remux the downloaded media without transcoding.
+There are no child download tools, player, Python runtime, or .NET runtime in
+the engine. Webpage extraction and browser resource discovery are not provided.
+
+## CLI
+
+```sh
+aria2-next 'https://example.org/video/index.m3u8'
+aria2-next --media=dash --media-format=mkv 'https://example.org/manifest'
+aria2-next --media-record-time=3600 'https://example.org/live/index.m3u8'
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `media` | `auto` | `auto`, `file`, `hls`, or `dash`. Auto recognizes manifest URL suffixes and HTTP content types; explicit HLS/DASH also supports extensionless endpoints. File saves the resource unchanged. |
+| `media-format` | `mp4` | Output container: `mp4` or `mkv`. |
+| `media-video` | `best` | Highest bandwidth video source, `none`, or a `group:quality` ID. |
+| `media-audio` | `best` | Audio source: `best`, `none`, a language, or a `group:quality` ID. |
+| `media-subtitles` | `none` | Subtitle source: `none`, `best`, a language, or a `group:quality` ID. |
+| `media-pause-after-probe` | `false` | Publish the available representations and pause before fetching payload segments. |
+| `media-record-time` | `0` | Live media duration limit in seconds; zero records until stopped or the source ends. Stops at a complete segment boundary. |
+
+Only representations supported by the native client can be selected. Multiplexed
+HLS sources can contain both video and audio; packet filtering applies the
+requested output track types. Download quality is fixed, not dynamically reduced
+to follow network speed. DRM and unsupported encryption modes fail explicitly.
+Standard HLS AES-128 uses OpenSSL's native cipher implementation. MP4 cannot
+represent every subtitle/codec combination; use MKV when required. The engine
+does not silently transcode or discard selected unsupported streams.
+
+A source `checksum` is not applied to remuxed output. Media tasks reject that
+combination; use `media=file` to save and verify the original resource instead.
+Native demuxer diagnostics are routed through the engine's debug logger, while
+terminal failures remain visible at error level.
+
+Existing HTTP options configure authentication, request headers, timeouts,
+proxying, certificate validation, and per-task rate limits. Browser-supplied
+Cookie and Authorization headers retain their original origin boundary. Remote
+manifests cannot request arbitrary local files or executable protocols.
+
+## RPC
+
+Use `aria2.addUri` and the normal task control methods. A media presentation
+keeps one GID throughout discovery, selection, download/recording, and remuxing.
+Segments are not exposed as separate tasks.
+`changeUri` does not replace a media presentation; submit a new task for a new
+source URI.
+
+`tellStatus`, `tellActive`, `tellWaiting`, and stopped task results expose a
+`media` object. Example during a finite download:
+
+```json
+{
+  "status": "active",
+  "totalLength": "0",
+  "completedLength": "0",
+  "media": {
+    "state": "downloading",
+    "protocol": "hls",
+    "live": "false",
+    "duration": "60000",
+    "completedDuration": "20000",
+    "downloadedLength": "4194304",
+    "progress": "0.333333",
+    "lengthKnown": "false",
+    "error": "",
+    "tracks": []
+  }
+}
+```
+
+Durations use milliseconds and integer counters use decimal strings. Media
+progress is based on completed media duration. Output byte lengths remain
+unknown until remuxing finishes: source segment bytes are not the same quantity
+as the final container size. `media.downloadedLength` reports retained media
+payload, independently of the standard network speed. Live tasks do not report
+a fabricated total duration percentage. Frontends must use the media fields,
+not interpret unknown output size as zero download progress.
+
+Media phases are `waiting`, `probing`, `awaiting-selection`, `downloading`,
+`recording`, `finalizing`, `paused`, `complete`, `error`, and `removed`. Standard
+RPC status retains the ordinary task lifecycle. Only successful muxing and
+publishing the output file produce a completed task.
+
+To choose tracks, add with `media-pause-after-probe=true`, inspect `media.tracks`,
+then use `changeOption` to set the selection and `media-pause-after-probe=false`
+before `unpause`. Task options affecting selection or output change while paused.
+
+`aria2.finishMedia(gid)` ends an active or paused live recording and finalizes
+its completed media. Pause retains the task; remove cancels it and discards its
+recovery state. Finishing and deleting are separate operations.
+
+## Recovery and storage
+
+State is created on demand under `state-dir/media/state.db`. Task-owned cache
+files live under `state-dir/media/tasks/<gid>`. SQLite stores track selection,
+manifest identity, and committed segment positions. Completed network resources
+are content-addressed and verified before reuse. Mutable live manifests and
+resources are refreshed rather than permanently served from the resume cache.
+
+Paused tasks restore their saved media progress without network activity.
+Resume reopens the native client and reuses verified completed resources. Remuxing
+is rebuilt from committed fragments; an old MP4 is never blindly appended to.
+Changed presentation/selection identity invalidates incompatible checkpoints.
+Live recording cannot recover media that has already left the server's window;
+gaps and a source disappearing without a proper end signal are reported as errors.
+
+The output is staged on its destination filesystem and published only after
+successful finalization. Completion/removal clears the task cache and database
+rows. No adjacent `.aria2` control files are created.
+
+## Validation
+
+Run `tools/transfer_validation/run media` independently. The module uses local
+Caddy and FFmpeg-generated fixtures and checks decoded media, track selection,
+byte ranges, encryption, multi-period content, recording, and paused restart.
+FFmpeg/ffprobe executables are developer-only fixture/oracle dependencies.
+No public streaming service is used by the validation module or CTest.

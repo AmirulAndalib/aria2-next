@@ -298,6 +298,13 @@ PrefPtr PREF_MAX_DOWNLOAD_RESULT = makePref("max-download-result");
 // value: 1*digit
 PrefPtr PREF_RETRY_WAIT = makePref("retry-wait");
 PrefPtr PREF_STREAM_MAX_CONNECTIONS = makePref("stream-max-connections");
+PrefPtr PREF_MEDIA = makePref("media");
+PrefPtr PREF_MEDIA_FORMAT = makePref("media-format");
+PrefPtr PREF_MEDIA_VIDEO = makePref("media-video");
+PrefPtr PREF_MEDIA_AUDIO = makePref("media-audio");
+PrefPtr PREF_MEDIA_SUBTITLES = makePref("media-subtitles");
+PrefPtr PREF_MEDIA_PAUSE_AFTER_PROBE = makePref("media-pause-after-probe");
+PrefPtr PREF_MEDIA_RECORD_TIME = makePref("media-record-time");
 // value: true | false
 PrefPtr PREF_SHOW_CONSOLE_READOUT = makePref("show-console-readout");
 // value: default | inorder

@@ -216,6 +216,15 @@ public:
   static const char* getMethodName() { return "aria2.unpause"; }
 };
 
+class FinishMediaRpcMethod : public RpcMethod {
+protected:
+  std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                     DownloadEngine* e) override;
+
+public:
+  static const char* getMethodName() { return "aria2.finishMedia"; }
+};
+
 class UnpauseAllRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,

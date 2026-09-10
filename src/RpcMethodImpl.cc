@@ -54,6 +54,7 @@
 #include "RequestGroup.h"
 #include "CurlSession.h"
 #include "CurlDownload.h"
+#include "media/MediaDownload.h"
 #include "download_helper.h"
 #include "util.h"
 #include "fmt.h"
@@ -655,6 +656,8 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
           e->getRequestGroupMan()->getEd2kSession()->discardDownload(
               group.get());
         }
+        if (group->getMediaDownload())
+          group->getMediaDownload()->stop(false);
         e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {
@@ -1269,10 +1272,41 @@ void gatherPeer(List* peers, const BtSnapshot& snapshot)
 #endif // ENABLE_BITTORRENT
 
 namespace {
+void gatherMedia(Dict* entry, const media::Snapshot& snapshot)
+{
+  auto info = Dict::g();
+  info->put("state", snapshot.state);
+  info->put("protocol", snapshot.protocol);
+  info->put("live", snapshot.live ? VLB_TRUE : VLB_FALSE);
+  info->put("duration", util::itos(snapshot.duration));
+  info->put("completedDuration", util::itos(snapshot.completedDuration));
+  info->put("downloadedLength", util::itos(snapshot.downloadedLength));
+  if (!snapshot.live && snapshot.duration > 0)
+    info->put("progress", fmt("%.6f", snapshot.progress()));
+  info->put("lengthKnown", snapshot.totalLength > 0 ? VLB_TRUE : VLB_FALSE);
+  info->put("error", snapshot.error);
+  auto tracks = List::g();
+  for (const auto& track : snapshot.tracks) {
+    auto item = Dict::g();
+    item->put("id", track.id);
+    item->put("type", track.type);
+    item->put("language", track.language);
+    item->put("codec", track.codec);
+    item->put("width", util::itos(track.width));
+    item->put("height", util::itos(track.height));
+    item->put("bandwidth", util::itos(track.bandwidth));
+    item->put("selected", track.selected ? VLB_TRUE : VLB_FALSE);
+    tracks->append(std::move(item));
+  }
+  info->put("tracks", std::move(tracks));
+  entry->put("media", std::move(info));
+}
 void gatherProgress(Dict* entryDict, const std::shared_ptr<RequestGroup>& group,
                     DownloadEngine* e, const std::vector<std::string>& keys)
 {
   gatherProgressCommon(entryDict, group, keys);
+  if (group->getMediaDownload() && requested_key(keys, "media"))
+    gatherMedia(entryDict, group->getMediaDownload()->snapshot());
 #ifdef ENABLE_BITTORRENT
   if (group->getDownloadContext()->hasAttribute(CTX_ATTR_BT)) {
     gatherProgressBitTorrent(entryDict, group, keys);
@@ -1302,6 +1336,8 @@ void gatherStoppedDownload(Dict* entryDict,
                            const std::shared_ptr<DownloadResult>& ds,
                            const std::vector<std::string>& keys)
 {
+  if (!ds->mediaSnapshot.protocol.empty() && requested_key(keys, "media"))
+    gatherMedia(entryDict, ds->mediaSnapshot);
   if (requested_key(keys, KEY_GID)) {
     entryDict->put(KEY_GID, ds->gid->toHex());
   }
@@ -2002,6 +2038,22 @@ ChangePositionRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
   return Integer::g(destPos);
 }
 
+std::unique_ptr<ValueBase> FinishMediaRpcMethod::process(const RpcRequest& req,
+                                                         DownloadEngine* e)
+{
+  auto gid = str2Gid(checkRequiredParam<String>(req, 0));
+  auto group = e->getRequestGroupMan()->findGroup(gid);
+  if (!group || !group->getMediaDownload() ||
+      !group->getMediaDownload()->finishRecording())
+    throw DL_ABORT_EX("The task is not an active live recording");
+  if (group->isPauseRequested()) {
+    group->setPauseRequested(false);
+    e->getRequestGroupMan()->requestQueueCheck();
+    e->setRefreshInterval(std::chrono::milliseconds(0));
+  }
+  return createGIDResponse(gid);
+}
+
 std::unique_ptr<ValueBase>
 GetSessionInfoRpcMethod::process(const RpcRequest& req, DownloadEngine* e)
 {
@@ -2077,6 +2129,10 @@ std::unique_ptr<ValueBase> ChangeUriRpcMethod::process(const RpcRequest& req,
   if (!group) {
     throw DL_ABORT_EX(
         fmt("Cannot remove URIs from GID#%s", GroupId::toHex(gid).c_str()));
+  }
+  if (group->getMediaDownload()) {
+    throw DL_ABORT_EX("Media presentations have one source URI; submit a new "
+                      "task to change it");
   }
   auto& files = group->getDownloadContext()->getFileEntries();
   if (files.size() <= index) {

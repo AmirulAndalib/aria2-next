@@ -28,6 +28,7 @@
 #include "ChecksumCheckIntegrityEntry.h"
 #include "CurlCheckIntegrityEntry.h"
 #include "CurlDownload.h"
+#include "media/MediaDownload.h"
 #include "CurlDownloadCommand.h"
 #include "CurlDownloadImpl.h"
 #include "Command.h"
@@ -674,6 +675,44 @@ bool CurlSession::sameOrigin(const std::string& first,
   return true;
 }
 
+bool CurlSession::matchesRange(CURL* handle, int64_t begin, int64_t end,
+                               int64_t length)
+{
+  int64_t first = 0, limit = 0, total = 0;
+  return parseContentRange(responseHeader(handle, "Content-Range"), first,
+                           limit, total) &&
+         first == begin && (end < 0 ? limit == total : limit - 1 == end) &&
+         limit - first == length;
+}
+
+CURLcode CurlSession::configureTls(CURL* handle, const Option* option)
+{
+  CURLcode result = CURLE_OK;
+  auto set = [&](CURLoption key, auto value) {
+    if (result == CURLE_OK)
+      result = curl_easy_setopt(handle, key, value);
+  };
+  const long verify = option->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L;
+  set(CURLOPT_SSL_VERIFYPEER, verify);
+  set(CURLOPT_SSL_VERIFYHOST, verify ? 2L : 0L);
+  set(CURLOPT_PROXY_SSL_VERIFYPEER, verify);
+  set(CURLOPT_PROXY_SSL_VERIFYHOST, verify ? 2L : 0L);
+  set(CURLOPT_SSL_OPTIONS, platformSslOptions());
+  set(CURLOPT_PROXY_SSL_OPTIONS, platformSslOptions());
+  const auto& minimum = option->get(PREF_MIN_TLS_VERSION);
+  const long version = minimum == A2_V_TLS13   ? CURL_SSLVERSION_TLSv1_3
+                       : minimum == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
+                                               : CURL_SSLVERSION_TLSv1_1;
+  set(CURLOPT_SSLVERSION, version);
+  if (!option->blank(PREF_CA_CERTIFICATE))
+    set(CURLOPT_CAINFO, option->get(PREF_CA_CERTIFICATE).c_str());
+  if (!option->blank(PREF_CERTIFICATE))
+    set(CURLOPT_SSLCERT, option->get(PREF_CERTIFICATE).c_str());
+  if (!option->blank(PREF_PRIVATE_KEY))
+    set(CURLOPT_SSLKEY, option->get(PREF_PRIVATE_KEY).c_str());
+  return result;
+}
+
 void CurlSession::rememberEndpoint(CurlHandle& handle)
 {
   auto& impl = *handle.download->impl_;
@@ -808,6 +847,8 @@ size_t CurlSession::writeData(char* data, size_t size, size_t count,
          !handle->fullResponseAccepted)) {
       return CURL_WRITEFUNC_ERROR;
     }
+    if (download->snapshot_.mediaManifest)
+      return CURL_WRITEFUNC_ERROR;
     if (!impl.writer) {
       fail(download, error_code::FILE_OPEN_ERROR,
            "The output file is not open");
@@ -979,6 +1020,19 @@ size_t CurlSession::receiveHeader(char* data, size_t size, size_t count,
       handle->responseDate = responseHeader(handle->value, "Date");
       parseContentLength(responseHeader(handle->value, "Content-Length"),
                          handle->responseContentLength);
+      if (handle->responseCode >= 200 && handle->responseCode < 300 &&
+          handle->lease.begin == 0 && download->impl_->existingLength == 0 &&
+          download->impl_->group->getOption()->get(PREF_MEDIA) == "auto" &&
+          media::Download::manifestMime(
+              responseHeader(handle->value, "Content-Type"))) {
+        download->snapshot_.mediaManifest = true;
+        const auto mime = responseHeader(handle->value, "Content-Type");
+        download->impl_->group->getOption()->put(
+            PREF_MEDIA, curl_strequal(mime.substr(0, mime.find(';')).c_str(),
+                                      "application/dash+xml")
+                            ? "dash"
+                            : "hls");
+      }
       validateResponse(*handle, responseHeader(handle->value, "Content-Range"));
       rememberEndpoint(*handle);
     }
@@ -1085,6 +1139,7 @@ bool CurlSession::openOutput(const std::shared_ptr<CurlDownload>& download,
                              bool preserveExisting)
 {
   auto& impl = *download->impl_;
+  impl.createdOutput = !File(impl.path).exists();
   const auto fallbackError = preserveExisting ? error_code::FILE_OPEN_ERROR
                                               : error_code::FILE_CREATE_ERROR;
   impl.writer.reset();
@@ -1546,22 +1601,15 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
       return false;
     }
   }
-  SET_CURL_OPTION(CURLOPT_SSL_VERIFYPEER,
-                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
-  SET_CURL_OPTION(CURLOPT_SSL_VERIFYHOST,
-                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
-  SET_CURL_OPTION(CURLOPT_PROXY_SSL_VERIFYPEER,
-                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 1L : 0L);
-  SET_CURL_OPTION(CURLOPT_PROXY_SSL_VERIFYHOST,
-                  taskOption->getAsBool(PREF_CHECK_CERTIFICATE) ? 2L : 0L);
-  const auto sslOptions = platformSslOptions();
-  SET_CURL_OPTION(CURLOPT_SSL_OPTIONS, sslOptions);
-  SET_CURL_OPTION(CURLOPT_PROXY_SSL_OPTIONS, sslOptions);
-  const auto& minimumTls = taskOption->get(PREF_MIN_TLS_VERSION);
-  const long sslVersion = minimumTls == A2_V_TLS13   ? CURL_SSLVERSION_TLSv1_3
-                          : minimumTls == A2_V_TLS12 ? CURL_SSLVERSION_TLSv1_2
-                                                     : CURL_SSLVERSION_TLSv1_1;
-  SET_CURL_OPTION(CURLOPT_SSLVERSION, sslVersion);
+  if (const auto result = configureTls(transfer->value, taskOption);
+      result != CURLE_OK) {
+    const auto message =
+        fmt("Cannot configure TLS: %s", curl_easy_strerror(result));
+    A2_LOG_ERROR(message);
+    fail(download.get(), error_code::NETWORK_PROBLEM, message);
+    cleanupHandle(*transfer);
+    return false;
+  }
   if (!taskOption->blank(PREF_INTERFACE)) {
     SET_CURL_OPTION(CURLOPT_INTERFACE, taskOption->get(PREF_INTERFACE).c_str());
   }
@@ -1571,15 +1619,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   else if (transfer->addressFamily != CURL_IPRESOLVE_WHATEVER) {
     SET_CURL_OPTION(CURLOPT_IPRESOLVE, transfer->addressFamily);
   }
-  if (!taskOption->blank(PREF_CA_CERTIFICATE)) {
-    SET_CURL_OPTION(CURLOPT_CAINFO,
-                    taskOption->get(PREF_CA_CERTIFICATE).c_str());
-  }
-  if (!taskOption->blank(PREF_CERTIFICATE)) {
-    SET_CURL_OPTION(CURLOPT_SSLCERT, taskOption->get(PREF_CERTIFICATE).c_str());
-  }
   if (!taskOption->blank(PREF_PRIVATE_KEY)) {
-    SET_CURL_OPTION(CURLOPT_SSLKEY, taskOption->get(PREF_PRIVATE_KEY).c_str());
     SET_CURL_OPTION(CURLOPT_SSH_PRIVATE_KEYFILE,
                     taskOption->get(PREF_PRIVATE_KEY).c_str());
   }
@@ -2465,6 +2505,16 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
 {
   auto& impl = *download->impl_;
   long responseCode = handle->responseCode;
+  if (download->snapshot_.mediaManifest) {
+    cancelHandles(download);
+    closeOutput(download.get());
+    store_.removePath(impl.path);
+    if (impl.createdOutput && File(impl.path).size() == 0)
+      File(impl.path).remove();
+    download->snapshot_.state = CurlSnapshot::State::Stopped;
+    eraseTask(download.get());
+    return;
+  }
   curl_off_t retryAfter = 0;
   curl_off_t reportedLength = 0;
   curl_off_t reportedFileTime = -1;
@@ -3094,8 +3144,10 @@ void CurlSession::rebalanceLimits()
   }
   const auto taskShare =
       globalDownloadLimit_ > 0
-          ? std::max<int64_t>(1, globalDownloadLimit_ /
-                                     static_cast<int64_t>(taskHandles.size()))
+          ? std::max<int64_t>(1,
+                              globalDownloadLimit_ /
+                                  static_cast<int64_t>(taskHandles.size() +
+                                                       externalDownloadCount_))
           : 0;
   for (const auto& entry : downloads_) {
     const auto task =
@@ -3133,6 +3185,14 @@ void CurlSession::setGlobalDownloadLimit(int64_t limit)
     return;
   }
   globalDownloadLimit_ = limit;
+  rebalanceLimits();
+}
+
+void CurlSession::setExternalDownloadCount(size_t count)
+{
+  if (externalDownloadCount_ == count)
+    return;
+  externalDownloadCount_ = count;
   rebalanceLimits();
 }
 

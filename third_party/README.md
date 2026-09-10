@@ -9,6 +9,8 @@ without downloading library dependencies during configuration or compilation.
 | curl | 8.21.0 | Static HTTP, HTTPS, and SFTP transfer engine |
 | doctest | 2.4.12 | Header-only unit test framework |
 | Expat | 2.8.1 | Static XML parser |
+| FFmpeg | 8.1.2 | Static media demuxing, bitstream filters, and MP4/Matroska muxing |
+| GPAC | 26.07.0 | Static native HLS/DASH client |
 | libssh2 | 1.11.1 | Static SFTP transport |
 | libtorrent-rasterbar | 2.1.1 | Static BitTorrent engine |
 | nghttp2 | 1.70.0 | Static HTTP/2 framing library used by curl |
@@ -41,3 +43,15 @@ trees are excluded.
 
 The libtorrent tree carries an aria2-next setting extension for encrypted-first
 peer negotiation with libtorrent's native plaintext fallback.
+
+GPAC is configured without a player, renderer, JavaScript runtime, external
+media codecs, or its curl backend. Its public DASH client uses aria2-next's
+libcurl I/O adapter. The retained upstream source and build support cover this
+configuration; no local protocol patches are applied.
+
+FFmpeg is built without programs, network protocols, encoders, devices, or
+filters. Only media demuxers, MP4/Matroska muxers, codec parsers, the audio
+decoders needed for reliable stream probing, and required bitstream filters
+are enabled. Its upstream makefile support remains intact, while unused FATE
+reference data and integration fixtures are omitted. Dependency source commits
+are recorded in `packaging/dependencies.env`.

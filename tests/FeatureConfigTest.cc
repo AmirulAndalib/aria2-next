@@ -69,7 +69,7 @@ void FeatureConfigTest::testFeatureSummary()
       "XML-RPC",
 #endif // ENABLE_XML_RPC
 
-      "SFTP",
+      "SFTP",           "HLS/DASH",
   };
 
   std::string featuresString =

@@ -127,6 +127,7 @@ struct CurlDownloadImpl {
   bool plannerConfigured = false;
   bool kickPending = false;
   bool stopRequested = false;
+  bool createdOutput = false;
   Timer lastCheckpoint = Timer::zero();
 };
 

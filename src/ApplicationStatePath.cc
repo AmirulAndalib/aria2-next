@@ -60,6 +60,11 @@ std::string streamDatabaseFile(const Option* option)
                            : util::applyDir(directory, "state.db");
 }
 
+std::string mediaDirectory(const Option* option)
+{
+  return protocolDirectory(option, "media");
+}
+
 } // namespace state
 
 } // namespace aria2

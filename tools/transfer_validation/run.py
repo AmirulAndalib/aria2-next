@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 BUILD_ROOT = ROOT.parents[1] / "build" / "transfer-validation"
-PROTOCOLS = ("http", "sftp", "bittorrent", "ed2k", "metalink")
+PROTOCOLS = ("http", "sftp", "bittorrent", "ed2k", "metalink", "media")
 
 
 def run_protocol(protocol: str, forwarded: list[str]) -> dict[str, object]:

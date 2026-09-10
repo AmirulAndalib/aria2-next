@@ -51,6 +51,11 @@ public:
                                  RequestGroup* group, DownloadEngine* engine);
   size_t activeCount() const { return tasks_.size(); }
   void setGlobalDownloadLimit(int64_t limit);
+  void setExternalDownloadCount(size_t count);
+  static CURLcode configureTls(CURL* handle, const Option* option);
+  static bool matchesRange(CURL* handle, int64_t begin, int64_t end,
+                           int64_t length);
+  static bool sameOrigin(const std::string& first, const std::string& second);
   void poll();
   void armTimeout();
   void advance(const std::shared_ptr<CurlDownload>& download);
@@ -64,6 +69,7 @@ private:
   const Option* option_;
   DownloadEngine* engine_ = nullptr;
   int64_t globalDownloadLimit_ = 0;
+  size_t externalDownloadCount_ = 0;
   long connectionPoolLimit_ = 0;
   StreamStore store_;
   std::map<CURL*, std::pair<std::shared_ptr<CurlDownload>, CurlHandle*>>
@@ -116,7 +122,6 @@ private:
   static void fail(CurlDownload* download, error_code::Value errorCode,
                    const std::string& message) noexcept;
   static long platformSslOptions() noexcept;
-  static bool sameOrigin(const std::string& first, const std::string& second);
   static void rememberEndpoint(CurlHandle& handle);
   static std::string failureMessage(const CurlHandle& handle, CURLcode result,
                                     long responseCode);

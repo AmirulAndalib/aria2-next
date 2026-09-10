@@ -52,6 +52,7 @@ std::unique_ptr<RpcMethod> noSuchRpcMethod;
 namespace {
 std::vector<std::string> rpcMethodNames = {
     "aria2.addUri",
+    "aria2.finishMedia",
     "aria2.ed2kSearch",
     "aria2.getEd2kSearchResults",
 #ifdef ENABLE_BITTORRENT
@@ -126,6 +127,8 @@ const std::vector<std::string>& allNotificationsNames()
 namespace {
 std::unique_ptr<RpcMethod> createMethod(const std::string& methodName)
 {
+  if (methodName == FinishMediaRpcMethod::getMethodName())
+    return make_unique<FinishMediaRpcMethod>();
   if (methodName == AddUriRpcMethod::getMethodName()) {
     return make_unique<AddUriRpcMethod>();
   }

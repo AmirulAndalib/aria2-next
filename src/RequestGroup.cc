@@ -62,6 +62,7 @@
 #include "Ed2kCommand.h"
 #include "Ed2kListenCommand.h"
 #include "CurlDownload.h"
+#include "media/MediaDownload.h"
 #include "CurlSession.h"
 #include "Ed2kSession.h"
 #include "Ed2kKadCommand.h"
@@ -210,6 +211,8 @@ bool RequestGroup::isCheckIntegrityReady()
 
 bool RequestGroup::downloadFinished() const
 {
+  if (mediaDownload_)
+    return mediaDownload_->snapshot().state == "complete";
   if (curlDownload_) {
     return curlDownload_->snapshot().state == CurlSnapshot::State::Complete;
   }
@@ -226,6 +229,8 @@ bool RequestGroup::downloadFinished() const
 
 bool RequestGroup::allDownloadFinished() const
 {
+  if (mediaDownload_)
+    return mediaDownload_->snapshot().state == "complete";
   if (curlDownload_) {
     return curlDownload_->snapshot().state == CurlSnapshot::State::Complete;
   }
@@ -277,6 +282,15 @@ void RequestGroup::createInitialCommand(
   // file allocation takes a time.  For downloads in which file size
   // is unknown, session timer will not be reset.
   downloadContext_->resetDownloadStartTime();
+  if (mediaDownload_) {
+    try {
+      commands.push_back(mediaDownload_->start(this, e));
+    }
+    catch (const std::exception& error) {
+      throw DOWNLOAD_FAILURE_EXCEPTION(error.what());
+    }
+    return;
+  }
   if (curlDownload_) {
     commands.push_back(e->getCurlSession()->start(curlDownload_, this, e));
     return;
@@ -570,6 +584,8 @@ std::string RequestGroup::getFirstFilePath() const
 
 int64_t RequestGroup::getTotalLength() const
 {
+  if (mediaDownload_)
+    return mediaDownload_->snapshot().totalLength;
   if (curlDownload_) {
     return curlDownload_->snapshot().totalLength;
   }
@@ -591,6 +607,8 @@ int64_t RequestGroup::getTotalLength() const
 
 int64_t RequestGroup::getCompletedLength() const
 {
+  if (mediaDownload_)
+    return mediaDownload_->snapshot().completedLength;
   if (curlDownload_) {
     return curlDownload_->snapshot().completedLength;
   }
@@ -614,6 +632,11 @@ std::vector<int64_t> RequestGroup::getFileCompletedLengths() const
 {
   const auto& files = downloadContext_->getFileEntries();
   std::vector<int64_t> completed(files.size(), 0);
+  if (mediaDownload_) {
+    if (!completed.empty())
+      completed[0] = mediaDownload_->snapshot().completedLength;
+    return completed;
+  }
   if (curlDownload_) {
     if (!completed.empty()) {
       completed[0] =
@@ -689,6 +712,8 @@ void RequestGroup::decreaseStreamConnection() { --numStreamConnection_; }
 
 int RequestGroup::getNumConnection() const
 {
+  if (mediaDownload_)
+    return mediaDownload_->snapshot().connections;
   int numConnection = curlDownload_ ? curlDownload_->snapshot().connections
                                     : numStreamConnection_;
 #ifdef ENABLE_BITTORRENT
@@ -725,7 +750,8 @@ TransferStat RequestGroup::calculateStat() const
   }
 #endif // ENABLE_BITTORRENT
   if (state_ != STATE_ACTIVE || haltRequested_ || pauseRequested_ ||
-      (curlDownload_ && curlDownload_->stopped())
+      (curlDownload_ && curlDownload_->stopped()) ||
+      (mediaDownload_ && mediaDownload_->stopped())
 #ifdef ENABLE_BITTORRENT
       || (btDownload_ && (btDownload_->stopped() || btDownload_->failed()))
 #endif // ENABLE_BITTORRENT
@@ -793,6 +819,9 @@ void RequestGroup::setRestartRequested(bool f) { restartRequested_ = f; }
 
 void RequestGroup::releaseRuntimeResource(DownloadEngine* e)
 {
+  if (mediaDownload_ && !mediaDownload_->stopped()) {
+    mediaDownload_->stop(isPauseRequested() || isShutdownRequested());
+  }
   if (curlDownload_ && !curlDownload_->stopped()) {
     e->getCurlSession()->stop(curlDownload_,
                               isPauseRequested() || isShutdownRequested());
@@ -936,6 +965,8 @@ std::shared_ptr<DownloadResult> RequestGroup::createDownloadResult() const
   TransferStat st = calculateStat();
   auto res = std::make_shared<DownloadResult>();
   res->gid = gid_;
+  if (mediaDownload_)
+    res->mediaSnapshot = mediaDownload_->snapshot();
   res->attrs = downloadContext_->getAttributes();
   res->fileEntries = downloadContext_->getFileEntries();
   res->fileCompletedLengths = getFileCompletedLengths();

@@ -66,6 +66,9 @@ class Option;
 class RequestGroup;
 class CheckIntegrityEntry;
 class CurlDownload;
+namespace media {
+class Download;
+}
 struct DownloadResult;
 class URIResult;
 class RequestGroupMan;
@@ -113,6 +116,7 @@ private:
   RequestGroupMan* requestGroupMan_;
 
   std::shared_ptr<CurlDownload> curlDownload_;
+  std::shared_ptr<media::Download> mediaDownload_;
 
 #ifdef ENABLE_BITTORRENT
   std::shared_ptr<BtDownload> btDownload_;
@@ -272,6 +276,15 @@ public:
   const std::shared_ptr<CurlDownload>& getCurlDownload() const
   {
     return curlDownload_;
+  }
+
+  const std::shared_ptr<media::Download>& getMediaDownload() const
+  {
+    return mediaDownload_;
+  }
+  void setMediaDownload(std::shared_ptr<media::Download> download)
+  {
+    mediaDownload_ = std::move(download);
   }
 
   void setCurlDownload(std::shared_ptr<CurlDownload> download)
