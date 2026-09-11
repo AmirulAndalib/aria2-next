@@ -11,6 +11,11 @@
  */
 /* copyright --> */
 #include "BtStateStore.h"
+#include <cstddef>
+#include <cstdio>
+#include <set>
+#include <string>
+#include <system_error>
 
 #include "ApplicationStatePath.h"
 
@@ -26,7 +31,10 @@
 #include "MessageDigest.h"
 #include "fmt.h"
 #include "message_digest_helper.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Encoding.h"
+#include "support/FilePath.h"
+#include "support/Random.h"
 
 namespace aria2 {
 

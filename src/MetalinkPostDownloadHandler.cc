@@ -32,24 +32,28 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskAdaptor.h"
+#include "FileEntry.h"
+#include "Option.h"
+#include "PieceStorage.h"
 #include "MetalinkPostDownloadHandler.h"
+#include "a2functional.h"
+#include <memory>
+#include <string>
+#include <vector>
 
 #include <deque>
 
 #include "RequestGroup.h"
 #include "Metalink2RequestGroup.h"
 #include "Log.h"
-#include "DiskAdaptor.h"
-#include "PieceStorage.h"
 #include "DownloadHandlerConstants.h"
 #include "ContentTypeRequestGroupCriteria.h"
 #include "Exception.h"
 #include "prefs.h"
-#include "Option.h"
 #include "DownloadContext.h"
 #include "download_helper.h"
 #include "fmt.h"
-#include "FileEntry.h"
 #include "RequestGroupMan.h"
 
 namespace aria2 {

@@ -1,37 +1,20 @@
+#include "TimeA2.h"
+#include <cstddef>
+#include <cstdio>
+#include <ctime>
+#include <memory>
 #include "ServerStatMan.h"
-
-#include <iostream>
 
 #include "a2doctest.h"
 
 #include "ServerStat.h"
-#include "Exception.h"
-#include "util.h"
+#include "a2functional.h"
 #include "BufferedFile.h"
 #include "TestUtil.h"
 
 namespace aria2 {
 
-class ServerStatManTest {
-
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testAddAndFind();
-  void testSave();
-  void testLoad();
-  void testRemoveStaleServerStat();
-};
-
-A2_TEST(ServerStatManTest, testAddAndFind)
-A2_TEST(ServerStatManTest, testSave)
-A2_TEST(ServerStatManTest, testLoad)
-A2_TEST(ServerStatManTest, testRemoveStaleServerStat)
-
-void ServerStatManTest::testAddAndFind()
+TEST_CASE("ServerStatManTest.testAddAndFind")
 {
   std::shared_ptr<ServerStat> localhost_http(
       new ServerStat("localhost", "http"));
@@ -56,7 +39,7 @@ void ServerStatManTest::testAddAndFind()
   }
 }
 
-void ServerStatManTest::testSave()
+TEST_CASE("ServerStatManTest.testSave")
 {
   std::shared_ptr<ServerStat> localhost_http(
       new ServerStat("localhost", "http"));
@@ -81,32 +64,32 @@ void ServerStatManTest::testSave()
   const char* filename = A2_TEST_OUT_DIR "/aria2_ServerStatManTest_testSave";
   REQUIRE(ssm.save(filename));
   REQUIRE_EQ(std::string("host=localhost, protocol=ftp,"
-                                   " dl_speed=30000,"
-                                   " sc_avg_speed=0,"
-                                   " mc_avg_speed=0,"
-                                   " last_updated=1210000001,"
-                                   " counter=0,"
-                                   " status=OK\n"
+                         " dl_speed=30000,"
+                         " sc_avg_speed=0,"
+                         " mc_avg_speed=0,"
+                         " last_updated=1210000001,"
+                         " counter=0,"
+                         " status=OK\n"
 
-                                   "host=localhost, protocol=http,"
-                                   " dl_speed=25000,"
-                                   " sc_avg_speed=100,"
-                                   " mc_avg_speed=101,"
-                                   " last_updated=1210000000,"
-                                   " counter=5,"
-                                   " status=OK\n"
+                         "host=localhost, protocol=http,"
+                         " dl_speed=25000,"
+                         " sc_avg_speed=100,"
+                         " mc_avg_speed=101,"
+                         " last_updated=1210000000,"
+                         " counter=5,"
+                         " status=OK\n"
 
-                                   "host=mirror, protocol=http,"
-                                   " dl_speed=0,"
-                                   " sc_avg_speed=0,"
-                                   " mc_avg_speed=0,"
-                                   " last_updated=1210000002,"
-                                   " counter=0,"
-                                   " status=ERROR\n"),
-                       readFile(filename));
+                         "host=mirror, protocol=http,"
+                         " dl_speed=0,"
+                         " sc_avg_speed=0,"
+                         " mc_avg_speed=0,"
+                         " last_updated=1210000002,"
+                         " counter=0,"
+                         " status=ERROR\n"),
+             readFile(filename));
 }
 
-void ServerStatManTest::testLoad()
+TEST_CASE("ServerStatManTest.testLoad")
 {
   const char* filename = A2_TEST_OUT_DIR "/aria2_ServerStatManTest_testLoad";
   std::string in =
@@ -132,7 +115,7 @@ void ServerStatManTest::testLoad()
   REQUIRE_EQ(102, localhost_http->getMultiConnectionAvgSpeed());
   REQUIRE_EQ(6, localhost_http->getCounter());
   REQUIRE_EQ(static_cast<time_t>(1210000000),
-                       localhost_http->getLastUpdated().getTimeFromEpoch());
+             localhost_http->getLastUpdated().getTimeFromEpoch());
   REQUIRE_EQ(ServerStat::OK, localhost_http->getStatus());
 
   std::shared_ptr<ServerStat> mirror = ssm.find("mirror", "http");
@@ -140,7 +123,7 @@ void ServerStatManTest::testLoad()
   REQUIRE_EQ(ServerStat::A2_ERROR, mirror->getStatus());
 }
 
-void ServerStatManTest::testRemoveStaleServerStat()
+TEST_CASE("ServerStatManTest.testRemoveStaleServerStat")
 {
   Time now;
   std::shared_ptr<ServerStat> localhost_http(

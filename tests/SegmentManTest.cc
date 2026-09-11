@@ -1,3 +1,9 @@
+#include "Command.h"
+#include "a2functional.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
 #include "SegmentMan.h"
 
 #include "a2doctest.h"
@@ -8,23 +14,20 @@
 #include "Segment.h"
 #include "Option.h"
 #include "Piece.h"
-#include "PieceSelector.h"
 #include "FileEntry.h"
 #include "PeerStat.h"
 
 namespace aria2 {
 
 class SegmentManTest {
-
-
-private:
+protected:
   std::shared_ptr<Option> option_;
   std::shared_ptr<DownloadContext> dctx_;
   std::shared_ptr<DefaultPieceStorage> pieceStorage_;
   std::shared_ptr<SegmentMan> segmentMan_;
 
 public:
-  void setUp()
+  SegmentManTest()
   {
     size_t pieceLength = 1_m;
     uint64_t totalLength = 64_m;
@@ -33,27 +36,9 @@ public:
     pieceStorage_.reset(new DefaultPieceStorage(dctx_, option_.get()));
     segmentMan_.reset(new SegmentMan(dctx_, pieceStorage_));
   }
-
-  void testNullBitfield();
-  void testCompleteSegment();
-  void testGetSegment_sameFileEntry();
-  void testRegisterPeerStat();
-  void testCancelAllSegments();
-  void testCancelPartialSegmentResumesAtMissingBlock();
-  void testGetPeerStat();
-  void testGetCleanSegmentIfOwnerIsIdle();
 };
 
-A2_TEST(SegmentManTest, testNullBitfield)
-A2_TEST(SegmentManTest, testCompleteSegment)
-A2_TEST(SegmentManTest, testGetSegment_sameFileEntry)
-A2_TEST(SegmentManTest, testRegisterPeerStat)
-A2_TEST(SegmentManTest, testCancelAllSegments)
-A2_TEST(SegmentManTest, testCancelPartialSegmentResumesAtMissingBlock)
-A2_TEST(SegmentManTest, testGetPeerStat)
-A2_TEST(SegmentManTest, testGetCleanSegmentIfOwnerIsIdle)
-
-void SegmentManTest::testNullBitfield()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testNullBitfield")
 {
   Option op;
   std::shared_ptr<DownloadContext> dctx(
@@ -77,7 +62,7 @@ void SegmentManTest::testNullBitfield()
   REQUIRE(segmentMan.getSegment(2, minSplitSize));
 }
 
-void SegmentManTest::testCompleteSegment()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testCompleteSegment")
 {
   Option op;
   size_t pieceLength = 1_m;
@@ -103,7 +88,7 @@ void SegmentManTest::testCompleteSegment()
   REQUIRE_EQ((size_t)2, segments[1]->getIndex());
 }
 
-void SegmentManTest::testGetSegment_sameFileEntry()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testGetSegment_sameFileEntry")
 {
   Option op;
   std::shared_ptr<DownloadContext> dctx(new DownloadContext());
@@ -144,7 +129,7 @@ void SegmentManTest::testGetSegment_sameFileEntry()
   REQUIRE_EQ((size_t)3, segments.size());
 }
 
-void SegmentManTest::testRegisterPeerStat()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testRegisterPeerStat")
 {
   Option op;
   std::shared_ptr<DownloadContext> dctx(new DownloadContext());
@@ -159,7 +144,7 @@ void SegmentManTest::testRegisterPeerStat()
   REQUIRE_EQ((size_t)2, segman.getPeerStats().size());
 }
 
-void SegmentManTest::testCancelAllSegments()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testCancelAllSegments")
 {
   segmentMan_->getSegmentWithIndex(1, 0);
   segmentMan_->getSegmentWithIndex(2, 1);
@@ -170,7 +155,9 @@ void SegmentManTest::testCancelAllSegments()
   REQUIRE(segmentMan_->getSegmentWithIndex(4, 1));
 }
 
-void SegmentManTest::testCancelPartialSegmentResumesAtMissingBlock()
+TEST_CASE_FIXTURE(
+    SegmentManTest,
+    "SegmentManTest.testCancelPartialSegmentResumesAtMissingBlock")
 {
   auto segment = segmentMan_->getSegmentWithIndex(1, 0);
   REQUIRE(segment);
@@ -181,17 +168,18 @@ void SegmentManTest::testCancelPartialSegmentResumesAtMissingBlock()
   auto resumed = segmentMan_->getSegmentWithIndex(2, 0);
   REQUIRE(resumed);
   REQUIRE_EQ(static_cast<int64_t>(Piece::BLOCK_LENGTH * 2),
-                       resumed->getWrittenLength());
+             resumed->getWrittenLength());
 }
 
-void SegmentManTest::testGetPeerStat()
+TEST_CASE_FIXTURE(SegmentManTest, "SegmentManTest.testGetPeerStat")
 {
   std::shared_ptr<PeerStat> peerStat1(new PeerStat(1));
   segmentMan_->registerPeerStat(peerStat1);
   REQUIRE_EQ((cuid_t)1, segmentMan_->getPeerStat(1)->getCuid());
 }
 
-void SegmentManTest::testGetCleanSegmentIfOwnerIsIdle()
+TEST_CASE_FIXTURE(SegmentManTest,
+                  "SegmentManTest.testGetCleanSegmentIfOwnerIsIdle")
 {
   std::shared_ptr<Segment> seg1 = segmentMan_->getSegmentWithIndex(1, 0);
   std::shared_ptr<Segment> seg2 = segmentMan_->getSegmentWithIndex(2, 1);

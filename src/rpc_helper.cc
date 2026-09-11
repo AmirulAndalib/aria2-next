@@ -33,6 +33,10 @@
  */
 /* copyright --> */
 #include "rpc_helper.h"
+#include "ValueBase.h"
+#include <cstddef>
+#include <memory>
+#include <utility>
 #include "XmlParser.h"
 #include "RpcRequest.h"
 #include "XmlRpcRequestParserStateMachine.h"

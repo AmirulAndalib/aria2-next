@@ -42,9 +42,12 @@
 #include <algorithm>
 #include <limits>
 
-#include "util.h"
-#include "DlAbortEx.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "a2functional.h"
 #include "fmt.h"
+#include "DlAbortEx.h"
+#include "a2iterator.h"
 
 namespace aria2 {
 

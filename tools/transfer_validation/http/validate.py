@@ -303,6 +303,21 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            original = f"{caddy.base_url}/replaced-before-start.bin"
+            replacement = f"{caddy.base_url}/payload.bin"
+            gid = engine.add_uri(original, {
+                **options, "out": "changed-uri.bin", "pause": "true",
+            })
+            changed = engine.rpc.call("aria2.changeUri", [
+                gid, 1, [original], [replacement],
+            ])
+            if changed != [1, 1]:
+                raise RuntimeError(f"URI replacement count mismatch: {changed}")
+            engine.rpc.call("aria2.unpause", [gid])
+            engine.rpc.wait_complete(gid, 30)
+            if sha256(engine.download_dir / "changed-uri.bin") != expected:
+                raise RuntimeError("URI replacement did not reach the stream backend")
+            results["changedUri"] = "replacement downloaded with matching SHA-256"
             check("endpoint-once.bin", f"{wiremock.base_url}/entry?once")
             for expired_code in (401, 403, 404):
                 check(f"endpoint-refresh-{expired_code}.bin",
@@ -325,8 +340,8 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             dual_gid = check("dual-stack.bin", f"http://localhost:{dual_port}/payload.bin")
             if results["dual-stack.bin"] > 8:
                 raise RuntimeError("The download remained on the slow IPv6 body path")
-            # A fast body can follow a slow first response. Discovery must not
-            # discard IPv4 before it has received any payload to compare.
+            # Delayed IPv4 workers must remain usable while IPv6 makes progress.
+            # Verify actual payload on both routes after the buffered log flushes.
             wiremock.stub({
                 "priority": 1,
                 "request": {"method": "GET", "url": "/payload.bin?case=late-family"},
@@ -343,10 +358,10 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                 "upstream": f"127.0.0.1:{caddy.port}", "enabled": True,
             })
             proxy.add_toxic("early-ipv6", "bandwidth", "bandwidth", {"rate": 32})
-            check("delayed-family.bin",
-                  f"http://localhost:{delayed_port}/payload.bin?case=late-family")
-            if results["delayed-family.bin"] > 12:
-                raise RuntimeError("Discovery selected a family before comparing both bodies")
+            delayed_gid = check(
+                "delayed-family.bin",
+                f"http://localhost:{delayed_port}/payload.bin?case=late-family",
+            )
             # A healthy alternate must remain available after an early loss.
             # Change the incumbent's bandwidth only after useful progress,
             # using Toxiproxy rather than a custom HTTP implementation.
@@ -602,6 +617,12 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         if not re.search(rf"event=route_payload gid={dual_gid} "
                          r"family=ipv6 bytes=[1-9][0-9]*", retry_log):
             raise RuntimeError("The slow IPv6 body path was not exercised")
+        for family in ("ipv4", "ipv6"):
+            if not re.search(
+                rf"event=route_payload gid={delayed_gid} "
+                rf"family={family} bytes=[1-9][0-9]*", retry_log
+            ):
+                raise RuntimeError(f"The delayed-family case did not receive {family} payload")
         delay = re.search(rf"event=range_retry gid={tail_gid} .*retry_in_ms=(\d+)",
                           retry_log)
         if not delay or int(delay[1]) < 10000:

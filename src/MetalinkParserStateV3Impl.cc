@@ -33,13 +33,20 @@
  */
 /* copyright --> */
 #include "MetalinkParserStateV3Impl.h"
+#include "MetalinkParserStateImpl.h"
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
+#include "a2io.h"
 
 #include <cstring>
 
 #include "MetalinkParserStateMachine.h"
-#include "RecoverableException.h"
 #include "MetalinkResource.h"
-#include "util.h"
+#include "support/Numbers.h"
+#include "support/FilePath.h"
 #include "XmlAttr.h"
 
 namespace aria2 {

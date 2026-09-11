@@ -4,22 +4,12 @@
 
 #include "a2doctest.h"
 
-#include "Exception.h"
-#include "util.h"
+#include "a2functional.h"
 #include "BitfieldMan.h"
 
 namespace aria2 {
 
-class GeomStreamPieceSelectorTest {
-
-
-public:
-  void testOnBitfieldInit();
-};
-
-A2_TEST(GeomStreamPieceSelectorTest, testOnBitfieldInit)
-
-void GeomStreamPieceSelectorTest::testOnBitfieldInit()
+TEST_CASE("GeomStreamPieceSelectorTest.testOnBitfieldInit")
 {
   BitfieldMan bf(1_k, 20_k);
   bf.setBitRange(0, 10);

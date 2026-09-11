@@ -1,5 +1,14 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
+#include "FileEntry.h"
 #include "MediaDownload.h"
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <curl/urlapi.h>
+#include <exception>
+#include <memory>
+#include <mutex>
+#include <utility>
 #include "MediaFiles.h"
 #include "MediaSession.h"
 #include "MediaStore.h"
@@ -9,8 +18,6 @@
 #include "DownloadEngine.h"
 #include "CurlSession.h"
 #include "RequestGroupMan.h"
-#include "FileEntry.h"
-#include "GroupId.h"
 #include "Log.h"
 #include "fmt.h"
 #include "NetStat.h"
@@ -18,7 +25,7 @@
 #include "RequestGroup.h"
 #include "error_code.h"
 #include "prefs.h"
-#include "util.h"
+#include "support/FilePath.h"
 #include <curl/curl.h>
 #include <filesystem>
 #include <algorithm>

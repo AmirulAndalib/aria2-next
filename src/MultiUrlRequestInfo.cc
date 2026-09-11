@@ -32,7 +32,16 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "MultiUrlRequestInfo.h"
+#include "common.h"
+#include "error_code.h"
+#include <chrono>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include <signal.h>
 
@@ -47,14 +56,17 @@
 #include "DownloadEngineFactory.h"
 #include "RecoverableException.h"
 #include "message.h"
-#include "util.h"
+#include "support/Network.h"
+#include "platform/Process.h"
+#include "a2functional.h"
+#include "fmt.h"
+#include "DlAbortEx.h"
 #include "Option.h"
 #include "ConsoleStatCalc.h"
 #include "NullStatCalc.h"
 #include "File.h"
 #include "SessionSerializer.h"
 #include "TimeA2.h"
-#include "fmt.h"
 #include "SocketCore.h"
 #include "NullOutputFile.h"
 #include "UriListParser.h"
@@ -161,7 +173,7 @@ void MultiUrlRequestInfo::printMessageForContinue()
   if (!option_->getAsBool(PREF_QUIET)) {
     global::cout()->printf(
         "\n%s\n%s\n",
-        _("aria2 will resume download if the transfer is restarted."),
+        _("Aria2 Next will resume download if the transfer is restarted."),
         _("If there are any errors, then see the log file. See '-l' option in "
           "help/man page for details."));
   }
@@ -183,11 +195,10 @@ int MultiUrlRequestInfo::prepare()
       // We set server TLS context to the SocketCore before creating
       // DownloadEngine instance.
       auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
-      std::shared_ptr<TLSContext> svTlsContext(
-          TLSContext::make(minTLSVer));
+      std::shared_ptr<TLSContext> svTlsContext(TLSContext::make(minTLSVer));
       if (!svTlsContext->good() || !svTlsContext->addCredentialFile(
-              option_->get(PREF_RPC_CERTIFICATE),
-              option_->get(PREF_RPC_PRIVATE_KEY))) {
+                                       option_->get(PREF_RPC_CERTIFICATE),
+                                       option_->get(PREF_RPC_PRIVATE_KEY))) {
         throw DL_ABORT_EX("Loading private key and/or certificate for secure "
                           "RPC failed.");
       }

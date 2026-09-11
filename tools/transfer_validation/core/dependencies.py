@@ -111,3 +111,23 @@ def caddy_server() -> Path:
                     shutil.copyfileobj(source, output)
     os.chmod(binary, 0o755)
     return binary
+
+
+def sftpgo_server() -> Path:
+    metadata = _lock()["sftpgo"]
+    entry = metadata["platforms"].get(platform_key())
+    if entry is None:
+        raise RuntimeError(f"SFTPGo is not pinned for {platform_key()}")
+    archive = _download(
+        entry["url"], BUILD_ROOT / "dependencies" / entry["filename"],
+        entry["sha256"],
+    )
+    directory = BUILD_ROOT / "dependencies" / f"sftpgo-{metadata['version']}"
+    directory.mkdir(parents=True, exist_ok=True)
+    binary = directory / "sftpgo.exe"
+    if not binary.exists():
+        with zipfile.ZipFile(archive) as package:
+            # The archive root is x86-64; x86 and ARM64 live in subdirectories.
+            with package.open(binary.name) as source, binary.open("wb") as output:
+                shutil.copyfileobj(source, output)
+    return binary

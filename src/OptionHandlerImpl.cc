@@ -33,34 +33,40 @@
  */
 /* copyright --> */
 #include "OptionHandlerImpl.h"
+#include "AbstractOptionHandler.h"
+#include "OptionHandler.h"
+#include "common.h"
+#include <cerrno>
+#include <cinttypes>
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
+#include <string>
 
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <utility>
 #include <algorithm>
-#include <numeric>
 #include <sstream>
 #include <iterator>
 #include <vector>
-#include <stdexcept>
 
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "support/FilePath.h"
+#include "support/Storage.h"
+#include "fmt.h"
+#include "message.h"
 #include "DlAbortEx.h"
 #include "prefs.h"
 #include "Option.h"
-#include "fmt.h"
 #include "Request.h"
-#include "a2functional.h"
-#include "message.h"
 #include "File.h"
 #include "FileEntry.h"
 #include "a2io.h"
-#include "Log.h"
 #include "uri.h"
 #include "SegList.h"
-#include "array_fun.h"
-#include "help_tags.h"
 #include "MessageDigest.h"
 
 namespace aria2 {

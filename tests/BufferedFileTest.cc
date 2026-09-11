@@ -1,6 +1,7 @@
+#include "IOFile.h"
+#include <cstddef>
 #include "BufferedFile.h"
 
-#include <iostream>
 #include <sstream>
 
 #include "a2doctest.h"
@@ -9,18 +10,7 @@
 
 namespace aria2 {
 
-class BufferedFileTest {
-
-
-public:
-  void testOpen();
-  void testTransferWithClosedFile();
-};
-
-A2_TEST(BufferedFileTest, testOpen)
-A2_TEST(BufferedFileTest, testTransferWithClosedFile)
-
-void BufferedFileTest::testOpen()
+TEST_CASE("BufferedFileTest.testOpen")
 {
   File f(A2_TEST_OUT_DIR "/aria2_BufferedFileTest_testOpen");
   f.remove();
@@ -55,7 +45,7 @@ void BufferedFileTest::testOpen()
   REQUIRE(rd.eof());
 }
 
-void BufferedFileTest::testTransferWithClosedFile()
+TEST_CASE("BufferedFileTest.testTransferWithClosedFile")
 {
   File f(A2_TEST_OUT_DIR "/aria2_BufferedFileTest_testTransferWithClosedFile");
   f.remove();

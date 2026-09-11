@@ -11,6 +11,10 @@
  */
 /* copyright --> */
 #include "ed2k_packet.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include "DlAbortEx.h"
 #include "ed2k_hash.h"
@@ -193,10 +197,7 @@ Tag readTag(const std::string& data, size_t& offset)
   return tag;
 }
 
-void skipTag(const std::string& data, size_t& offset)
-{
-  readTag(data, offset);
-}
+void skipTag(const std::string& data, size_t& offset) { readTag(data, offset); }
 
 std::string createTagHeader(uint8_t type, uint8_t id)
 {

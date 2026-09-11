@@ -32,8 +32,11 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#include "DirectDiskAdaptor.h"
 #include "FileEntry.h"
+#include "DirectDiskAdaptor.h"
+#include "TimeA2.h"
+#include <cstddef>
+#include <string>
 #include "File.h"
 
 namespace aria2 {

@@ -33,11 +33,11 @@
  */
 /* copyright --> */
 #include "AbstractOptionHandler.h"
-
-#include <algorithm>
+#include "Exception.h"
+#include <cstdint>
+#include <string>
 
 #include "OptionHandlerException.h"
-#include "a2functional.h"
 #include "Option.h"
 #include "prefs.h"
 #include "help_tags.h"

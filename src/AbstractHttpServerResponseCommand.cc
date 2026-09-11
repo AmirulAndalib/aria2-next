@@ -33,6 +33,11 @@
  */
 /* copyright --> */
 #include "AbstractHttpServerResponseCommand.h"
+#include "Command.h"
+#include "a2functional.h"
+#include <cinttypes>
+#include <cstddef>
+#include <memory>
 #include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "HttpServer.h"
@@ -105,9 +110,9 @@ bool AbstractHttpServerResponseCommand::execute()
   }
   catch (RecoverableException& e) {
     A2_LOG_DEBUG_EX(fmt("CUID#%" PRId64
-                       " - Error occurred while transmitting response body.",
-                       getCuid()),
-                   e);
+                        " - Error occurred while transmitting response body.",
+                        getCuid()),
+                    e);
     return true;
   }
   if (httpServer_->sendBufferIsEmpty()) {
@@ -117,8 +122,8 @@ bool AbstractHttpServerResponseCommand::execute()
   else {
     if (timeoutTimer_.difference(global::wallclock()) >= 30_s) {
       A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                      " - HttpServer: Timeout while transmitting response.",
-                      getCuid()));
+                       " - HttpServer: Timeout while transmitting response.",
+                       getCuid()));
       return true;
     }
     else {

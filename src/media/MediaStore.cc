@@ -1,5 +1,11 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaStore.h"
+#include "media/MediaDownload.h"
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 #include "MediaFiles.h"
 
 #include <sqlite3.h>

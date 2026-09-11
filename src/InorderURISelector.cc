@@ -33,6 +33,11 @@
  */
 /* copyright --> */
 #include "InorderURISelector.h"
+#include <cstddef>
+#include <deque>
+#include <string>
+#include <utility>
+#include <vector>
 #include "FileEntry.h"
 
 namespace aria2 {

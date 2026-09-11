@@ -1,9 +1,23 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaTransport.h"
+#include "media/MediaDownload.h"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <curl/curl.h>
+#include <curl/easy.h>
+#include <curl/multi.h>
+#include <curl/system.h>
+#include <ios>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
 #include "MediaFiles.h"
 
 #include "Option.h"
-#include "CurlSession.h"
+#include "transport/CurlOptions.h"
+#include "transport/HttpHeaders.h"
 #include "BufferedFile.h"
 #include "Log.h"
 #include "fmt.h"
@@ -193,7 +207,7 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
         static_cast<long>(option_->getAsInt(PREF_TIMEOUT)));
     set(CURLOPT_LOW_SPEED_LIMIT, 1L);
     set(CURLOPT_USERAGENT, option_->get(PREF_USER_AGENT).c_str());
-    const auto tlsResult = CurlSession::configureTls(h, option_);
+    const auto tlsResult = http::configureTls(h, option_);
     if (tlsResult != CURLE_OK)
       throw std::runtime_error(curl_easy_strerror(tlsResult));
     if (!option_->blank(PREF_INTERFACE))
@@ -227,7 +241,7 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
     curl_slist* rawHeaders = nullptr;
     std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(
         nullptr, curl_slist_free_all);
-    const bool credentials = CurlSession::sameOrigin(source_, url);
+    const bool credentials = http::sameOrigin(source_, url);
     std::istringstream configuredHeaders(option_->get(PREF_HEADER));
     std::string header;
     while (std::getline(configuredHeaders, header)) {
@@ -303,8 +317,7 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
         response < 300) {
       if (!range.empty() && response != 206)
         throw std::runtime_error("Server ignored a required media byte range");
-      if (response == 206 &&
-          !CurlSession::matchesRange(h, begin, end, body.bytes))
+      if (response == 206 && !http::matchesRange(h, begin, end, body.bytes))
         throw std::runtime_error(
             "Server returned an incorrect media byte range");
       if (end >= 0 && body.bytes != static_cast<uint64_t>(end - begin + 1))

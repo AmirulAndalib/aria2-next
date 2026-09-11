@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <ios>
+#include <string>
 #include "SingleFileAllocationIterator.h"
 #include <fstream>
 #include "a2doctest.h"
@@ -8,19 +11,7 @@
 
 namespace aria2 {
 
-class SingleFileAllocationIteratorTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testAllocate();
-};
-
-A2_TEST(SingleFileAllocationIteratorTest, testAllocate)
-
-void SingleFileAllocationIteratorTest::testAllocate()
+TEST_CASE("SingleFileAllocationIteratorTest.testAllocate")
 {
   std::string dir = A2_TEST_OUT_DIR;
   std::string fname = "aria2_SingleFileAllocationIteratorTest_testAllocate";

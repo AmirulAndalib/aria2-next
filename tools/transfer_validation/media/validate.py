@@ -18,25 +18,14 @@ from core.engine import EngineProcess
 from core.report import run_validation
 from core.runtime import RunDirectory, process_options
 from core.services import CaddyService, WireMockService
-from media.common import command, control_action, decoded_hash, native_env, probe
+from media.common import command, control_action, decoded_hash, native_env, probe, wait_duration
+from media.timeline import validate_epoch_timeline
 
 
 def wait(
     engine: EngineProcess, gid: str, state: str = "complete", timeout: float = 30
 ) -> dict:
     return engine.rpc.wait_status(gid, state, timeout)
-
-
-def wait_duration(engine: EngineProcess, gid: str, milliseconds: int) -> dict:
-    deadline = time.monotonic() + 30
-    while time.monotonic() < deadline:
-        status = engine.rpc.call("aria2.tellStatus", [gid])
-        if status["status"] == "error":
-            raise AssertionError(status)
-        if int(status.get("media", {}).get("completedDuration", 0)) >= milliseconds:
-            return status
-        time.sleep(0.1)
-    raise TimeoutError(status)
 
 
 @contextmanager
@@ -732,6 +721,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         # Native servers supply fault responses; the engine must never publish
         # a successful partial presentation or silently fall back to a file.
         with WireMockService(run, "media-faults") as faults:
+            results["epochTimeline"] = validate_epoch_timeline(
+                run, source, ffmpeg, ffprobe, engine, server, faults
+            )
             with live_source(
                 run, source, ffmpeg, "dash", "empty-dash", duration=24
             ) as manifest:

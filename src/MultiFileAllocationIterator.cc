@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "MultiFileAllocationIterator.h"
+#include "DiskAdaptor.h"
+#include "a2functional.h"
+#include <cinttypes>
+#include <cstdint>
+#include <iterator>
+#include "fmt.h"
 #include "MultiDiskAdaptor.h"
 #include "FileEntry.h"
 #include "AdaptiveFileAllocationIterator.h"
@@ -96,9 +102,9 @@ void MultiFileAllocationIterator::allocateChunk()
     if ((*entryItr_)->needsFileAllocation() &&
         (*entryItr_)->size() < fileEntry->getLength()) {
       A2_LOG_DEBUG(fmt("Allocating file %s: target size=%" PRId64
-                      ", current size=%" PRId64,
-                      (*entryItr_)->getFilePath().c_str(),
-                      fileEntry->getLength(), (*entryItr_)->size()));
+                       ", current size=%" PRId64,
+                       (*entryItr_)->getFilePath().c_str(),
+                       fileEntry->getLength(), (*entryItr_)->size()));
       switch (diskAdaptor_->getFileAllocationMethod()) {
       case (DiskAdaptor::FILE_ALLOC_ADAPTIVE):
 #ifdef HAVE_SOME_FALLOCATE

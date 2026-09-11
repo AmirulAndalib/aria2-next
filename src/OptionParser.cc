@@ -33,6 +33,15 @@
  */
 /* copyright --> */
 #include "OptionParser.h"
+#include "aria2/aria2.h"
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <ostream>
+#include <stdlib.h>
+#include <string>
+#include <vector>
 
 #include <unistd.h>
 #include <getopt.h>
@@ -42,30 +51,28 @@
 #include <istream>
 #include <utility>
 
-#include "util.h"
+#include "support/Text.h"
+#include "platform/Process.h"
+#include "a2functional.h"
+#include "fmt.h"
+#include "DlAbortEx.h"
+#include "prefs.h"
 #include "OptionHandlerImpl.h"
 #include "Option.h"
-#include "a2functional.h"
 #include "array_fun.h"
-#include "OptionHandlerFactory.h"
+#include "options/OptionCatalog.h"
 #include "LegacyInputAdapter.h"
-#include "DlAbortEx.h"
 #include "error_code.h"
 #include "UnknownOptionException.h"
 #include "Log.h"
-#include "fmt.h"
 
 namespace aria2 {
 
-OptionParser::OptionParser()
-    : handlers_(option::countOption(), nullptr), shortOpts_(256)
+OptionParser::OptionParser() : handlers_(option::countOption()), shortOpts_(256)
 {
 }
 
-OptionParser::~OptionParser()
-{
-  std::for_each(handlers_.begin(), handlers_.end(), Deleter());
-}
+OptionParser::~OptionParser() = default;
 
 namespace {
 template <typename InputIterator>
@@ -307,22 +314,20 @@ void OptionParser::parse(Option& option, const KeyVals& options) const
   }
 }
 
-void OptionParser::setOptionHandlers(
-    const std::vector<OptionHandler*>& handlers)
+void OptionParser::setOptionHandlers(OptionHandlers handlers)
 {
-  for (const auto& h : handlers) {
-    addOptionHandler(h);
-  }
+  for (auto& handler : handlers)
+    addOptionHandler(std::move(handler));
 }
 
-void OptionParser::addOptionHandler(OptionHandler* handler)
+void OptionParser::addOptionHandler(std::unique_ptr<OptionHandler> handler)
 {
   size_t optId = handler->getPref()->i;
   assert(optId < handlers_.size());
-  handlers_[optId] = handler;
   if (handler->getShortName()) {
     shortOpts_[static_cast<unsigned char>(handler->getShortName())] = optId;
   }
+  handlers_[optId] = std::move(handler);
 }
 
 void OptionParser::parseDefaultValues(Option& option) const
@@ -339,7 +344,7 @@ std::vector<const OptionHandler*> OptionParser::findByTag(uint32_t tag) const
   std::vector<const OptionHandler*> result;
   for (const auto& h : handlers_) {
     if (h && !h->isHidden() && h->hasTag(tag)) {
-      result.push_back(h);
+      result.push_back(h.get());
     }
   }
   return result;
@@ -354,7 +359,7 @@ OptionParser::findByNameSubstring(const std::string& substring) const
       size_t nameLen = strlen(h->getName());
       if (std::search(h->getName(), h->getName() + nameLen, substring.begin(),
                       substring.end()) != h->getName() + nameLen) {
-        result.push_back(h);
+        result.push_back(h.get());
       }
     }
   }
@@ -366,7 +371,7 @@ std::vector<const OptionHandler*> OptionParser::findAll() const
   std::vector<const OptionHandler*> result;
   for (const auto& h : handlers_) {
     if (h && !h->isHidden()) {
-      result.push_back(h);
+      result.push_back(h.get());
     }
   }
   return result;
@@ -380,11 +385,11 @@ const OptionHandler* OptionParser::find(PrefPtr pref) const
 const OptionHandler* OptionParser::findById(size_t id) const
 {
   if (id >= handlers_.size()) {
-    return handlers_[0];
+    return handlers_[0].get();
   }
-  const OptionHandler* h = handlers_[id];
+  const OptionHandler* h = handlers_[id].get();
   if (!h || h->isHidden()) {
-    return handlers_[0];
+    return handlers_[0].get();
   }
   else {
     return h;
@@ -394,9 +399,9 @@ const OptionHandler* OptionParser::findById(size_t id) const
 const OptionHandler* OptionParser::findByIdInternal(size_t id) const
 {
   if (id >= handlers_.size()) {
-    return handlers_[0];
+    return handlers_[0].get();
   }
-  return handlers_[id];
+  return handlers_[id].get();
 }
 
 const OptionHandler* OptionParser::findByShortName(char shortName) const
@@ -411,8 +416,7 @@ const std::shared_ptr<OptionParser>& OptionParser::getInstance()
 {
   if (!optionParser_) {
     optionParser_ = std::make_shared<OptionParser>();
-    optionParser_->setOptionHandlers(
-        OptionHandlerFactory::createOptionHandlers());
+    optionParser_->setOptionHandlers(option::createHandlers());
   }
   return optionParser_;
 }

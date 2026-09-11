@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "wallclock.h"
+#include "TimerA2.h"
 
 namespace aria2 {
 

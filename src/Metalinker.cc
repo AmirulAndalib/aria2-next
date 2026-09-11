@@ -33,9 +33,13 @@
  */
 /* copyright --> */
 #include "Metalinker.h"
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include "MetalinkEntry.h"
 #include <algorithm>
-#include <functional>
 
 namespace aria2 {
 

@@ -10,13 +10,20 @@
  * (at your option) any later version.
  */
 /* copyright --> */
+#include "DiskAdaptor.h"
 #include "Ed2kPeerTransfer.h"
+#include "Command.h"
+#include "ed2k_aich.h"
+#include "ed2k_peer.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 #include <algorithm>
 #include <limits>
 #include <vector>
 
-#include "DiskAdaptor.h"
 #include "DlRetryEx.h"
 #include "DownloadContext.h"
 #include "Ed2kAttribute.h"
@@ -66,10 +73,9 @@ int64_t addReceivedRange(std::vector<PartRange>& ranges, int64_t begin,
 bool receivedRangeCovers(const std::vector<PartRange>& ranges, int64_t begin,
                          int64_t end)
 {
-  return std::any_of(ranges.begin(), ranges.end(),
-                     [&](const PartRange& range) {
-                       return range.begin <= begin && end <= range.end;
-                     });
+  return std::any_of(ranges.begin(), ranges.end(), [&](const PartRange& range) {
+    return range.begin <= begin && end <= range.end;
+  });
 }
 
 void eraseReceivedRange(std::vector<PartRange>& ranges, int64_t begin,
@@ -129,13 +135,12 @@ std::shared_ptr<Segment> PeerTransfer::getOrCreateSegment(size_t index) const
   return std::make_shared<PiecedSegment>(dctx_->getPieceLength(), piece);
 }
 
-std::shared_ptr<Segment>
-PeerTransfer::writePartData(int64_t begin, const std::string& data)
+std::shared_ptr<Segment> PeerTransfer::writePartData(int64_t begin,
+                                                     const std::string& data)
 {
   if (begin < 0 || data.empty() ||
       static_cast<uint64_t>(data.size()) >
-          static_cast<uint64_t>(std::numeric_limits<int64_t>::max() -
-                                begin)) {
+          static_cast<uint64_t>(std::numeric_limits<int64_t>::max() - begin)) {
     throw DL_RETRY_EX("Bad ED2K part range.");
   }
   const auto end = begin + static_cast<int64_t>(data.size());
@@ -148,7 +153,8 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
   const auto pieceEnd =
       std::min(pieceBegin + static_cast<int64_t>(dctx_->getPieceLength()),
                dctx_->getTotalLength());
-  if (begin >= pieceBegin && end <= pieceEnd && pieceStorage_->hasPiece(index)) {
+  if (begin >= pieceBegin && end <= pieceEnd &&
+      pieceStorage_->hasPiece(index)) {
     return nullptr;
   }
   if (begin < pieceBegin || end > pieceEnd) {
@@ -174,9 +180,9 @@ PeerTransfer::writePartData(int64_t begin, const std::string& data)
   for (auto block = firstBlock; block <= lastBlock; ++block) {
     const auto blockBegin =
         pieceBegin + static_cast<int64_t>(block) * blockLength;
-    const auto blockEnd =
-        std::min(blockBegin + static_cast<int64_t>(piece->getBlockLength(block)),
-                 pieceEnd);
+    const auto blockEnd = std::min(
+        blockBegin + static_cast<int64_t>(piece->getBlockLength(block)),
+        pieceEnd);
     if (!piece->hasBlock(block) &&
         receivedRangeCovers(attrs->receivedPartRanges, blockBegin, blockEnd)) {
       piece->completeBlock(block);
@@ -207,12 +213,11 @@ bool PeerTransfer::applyAichRecovery(const std::shared_ptr<Piece>& piece,
     return false;
   }
 
-  auto recoverySet =
-      std::find_if(attrs->aichRecoverySets.begin(),
-                   attrs->aichRecoverySets.end(),
-                   [&](const AichRecoverySet& item) {
-                     return item.partIndex == piece->getIndex();
-                   });
+  auto recoverySet = std::find_if(attrs->aichRecoverySets.begin(),
+                                  attrs->aichRecoverySets.end(),
+                                  [&](const AichRecoverySet& item) {
+                                    return item.partIndex == piece->getIndex();
+                                  });
   if (recoverySet == attrs->aichRecoverySets.end()) {
     return false;
   }
@@ -241,7 +246,8 @@ bool PeerTransfer::applyAichRecovery(const std::shared_ptr<Piece>& piece,
   return keptAny;
 }
 
-bool PeerTransfer::completeVerifiedSegment(const std::shared_ptr<Segment>& segment)
+bool PeerTransfer::completeVerifiedSegment(
+    const std::shared_ptr<Segment>& segment)
 {
   if (!segment) {
     return false;
@@ -249,8 +255,8 @@ bool PeerTransfer::completeVerifiedSegment(const std::shared_ptr<Segment>& segme
   if (!segmentMan_->completeSegment(cuid_, segment)) {
     return false;
   }
-  const auto begin = static_cast<int64_t>(segment->getIndex()) *
-                     dctx_->getPieceLength();
+  const auto begin =
+      static_cast<int64_t>(segment->getIndex()) * dctx_->getPieceLength();
   const auto end = std::min(begin + static_cast<int64_t>(segment->getLength()),
                             dctx_->getTotalLength());
   eraseReceivedRange(getEd2kAttrs(dctx_)->receivedPartRanges, begin, end);

@@ -1,27 +1,15 @@
+#include "ValueBase.h"
+#include <utility>
 #include "json.h"
 
 #include "a2doctest.h"
 
-#include "RecoverableException.h"
-#include "util.h"
-#include "array_fun.h"
+#include "support/Encoding.h"
 #include "base64.h"
 
 namespace aria2 {
 
-class JsonTest {
-
-
-private:
-public:
-  void testEncode();
-  void testDecodeGetParams();
-};
-
-A2_TEST(JsonTest, testEncode)
-A2_TEST(JsonTest, testDecodeGetParams)
-
-void JsonTest::testEncode()
+TEST_CASE("JsonTest.testEncode")
 {
   {
     auto dict = Dict::g();
@@ -35,36 +23,34 @@ void JsonTest::testEncode()
     dict->put("attrs", std::move(attrs));
 
     REQUIRE_EQ(std::string("{\"attrs\":{\"license\":\"GPL\"},"
-                                     "\"files\":[\"aria2c\"],"
-                                     "\"loc\":80000,"
-                                     "\"name\":\"aria2\"}"),
-                         json::encode(dict.get()));
+                           "\"files\":[\"aria2c\"],"
+                           "\"loc\":80000,"
+                           "\"name\":\"aria2\"}"),
+               json::encode(dict.get()));
   }
   {
     auto list = List::g();
     list->append("\"\\/\b\f\n\r\t");
     REQUIRE_EQ(std::string("[\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"]"),
-                         json::encode(list.get()));
+               json::encode(list.get()));
   }
   {
     auto list = List::g();
     std::string s;
     s += 0x1Fu;
     list->append(s);
-    REQUIRE_EQ(std::string("[\"\\u001F\"]"),
-                         json::encode(list.get()));
+    REQUIRE_EQ(std::string("[\"\\u001F\"]"), json::encode(list.get()));
   }
   {
     auto list = List::g();
     list->append(Bool::gTrue());
     list->append(Bool::gFalse());
     list->append(Null::g());
-    REQUIRE_EQ(std::string("[true,false,null]"),
-                         json::encode(list.get()));
+    REQUIRE_EQ(std::string("[true,false,null]"), json::encode(list.get()));
   }
 }
 
-void JsonTest::testDecodeGetParams()
+TEST_CASE("JsonTest.testDecodeGetParams")
 {
   {
     std::string s = "[1,2,3]";
@@ -77,9 +63,9 @@ void JsonTest::testDecodeGetParams()
     query += "jsoncallback=cb";
     json::JsonGetParam gparam = json::decodeGetParams(query);
     REQUIRE_EQ(std::string("{\"method\":\"sum\","
-                                     "\"id\":\"300\","
-                                     "\"params\":[1,2,3]}"),
-                         gparam.request);
+                           "\"id\":\"300\","
+                           "\"params\":[1,2,3]}"),
+               gparam.request);
     REQUIRE_EQ(std::string("cb"), gparam.callback);
   }
   {
@@ -96,8 +82,8 @@ void JsonTest::testDecodeGetParams()
     std::string query = "?method=sum&id=300";
     json::JsonGetParam gparam = json::decodeGetParams(query);
     REQUIRE_EQ(std::string("{\"method\":\"sum\","
-                                     "\"id\":\"300\"}"),
-                         gparam.request);
+                           "\"id\":\"300\"}"),
+               gparam.request);
     REQUIRE_EQ(std::string(), gparam.callback);
   }
 }

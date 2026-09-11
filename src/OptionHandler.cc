@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "OptionHandler.h"
+#include "common.h"
+#include "console.h"
+#include <string>
 #include <ostream>
 
 #define DEFAULT_MSG _("                              Default: ")

@@ -1,24 +1,11 @@
+#include <ctime>
 #include "timegm.h"
 
 #include <cstring>
-#include <iostream>
 
 #include "a2doctest.h"
 
 namespace aria2 {
-
-class TimegmTest {
-
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testTimegm();
-};
-
-A2_TEST(TimegmTest, testTimegm)
 
 namespace {
 void setTime(struct tm* tm, int yr, int mon, int day, int h, int m, int s)
@@ -32,7 +19,7 @@ void setTime(struct tm* tm, int yr, int mon, int day, int h, int m, int s)
 }
 } // namespace
 
-void TimegmTest::testTimegm()
+TEST_CASE("TimegmTest.testTimegm")
 {
   struct tm tm;
   memset(&tm, 0, sizeof(tm));

@@ -17,7 +17,8 @@
 #include "ARC4Encryptor.h"
 #include "MessageDigest.h"
 #include "ed2k_constants.h"
-#include "ed2k_helper.h"
+#include "ed2k_hash.h"
+#include "ed2k_packet.h"
 #include "ed2k_link.h"
 #include "message_digest_helper.h"
 
@@ -40,7 +41,8 @@ std::string md5Digest(const std::string& data)
   auto md5 = MessageDigest::create("md5");
   message_digest::digest(digest.data(), digest.size(), md5.get(), data.data(),
                          data.size());
-  return std::string(reinterpret_cast<const char*>(digest.data()), digest.size());
+  return std::string(reinterpret_cast<const char*>(digest.data()),
+                     digest.size());
 }
 
 void initializeUdpCipher(ARC4Encryptor& cipher, const std::string& keyData)
@@ -76,8 +78,7 @@ bool isPlainUdpMarker(uint8_t marker)
 } // namespace
 
 std::string createTcpObfuscationKey(const std::string& userHash,
-                                    uint8_t magicValue,
-                                    uint32_t randomKeyPart)
+                                    uint8_t magicValue, uint32_t randomKeyPart)
 {
   if (userHash.size() != HASH_LENGTH) {
     return std::string();
@@ -113,8 +114,7 @@ std::string createServerTcpObfuscationKey(const std::string& sharedSecret,
 }
 
 std::string encryptServerUdpDatagram(const std::string& datagram,
-                                     uint32_t baseKey,
-                                     uint16_t randomKeyPart)
+                                     uint32_t baseKey, uint16_t randomKeyPart)
 {
   if (datagram.empty() || baseKey == 0) {
     return std::string();
@@ -135,14 +135,15 @@ std::string encryptServerUdpDatagram(const std::string& datagram,
   encrypted[2] = static_cast<char>(randomKeyPart >> 8);
 
   const auto sync = udpSyncBytes();
-  cipher.encrypt(sync.size(),
-                 reinterpret_cast<unsigned char*>(&encrypted[3]), sync.data());
+  cipher.encrypt(sync.size(), reinterpret_cast<unsigned char*>(&encrypted[3]),
+                 sync.data());
   const unsigned char paddingLength = 0;
   cipher.encrypt(1, reinterpret_cast<unsigned char*>(&encrypted[7]),
                  &paddingLength);
-  cipher.encrypt(datagram.size(),
-                 reinterpret_cast<unsigned char*>(&encrypted[UDP_HEADER_LENGTH]),
-                 reinterpret_cast<const unsigned char*>(datagram.data()));
+  cipher.encrypt(
+      datagram.size(),
+      reinterpret_cast<unsigned char*>(&encrypted[UDP_HEADER_LENGTH]),
+      reinterpret_cast<const unsigned char*>(datagram.data()));
   return encrypted;
 }
 
@@ -175,13 +176,14 @@ bool decryptServerUdpDatagram(std::string& datagram,
   if (paddingLength != 0) {
     std::array<unsigned char, 15> padding{};
     cipher.encrypt(paddingLength, padding.data(),
-                   reinterpret_cast<const unsigned char*>(
-                       encrypted.data() + UDP_HEADER_LENGTH));
+                   reinterpret_cast<const unsigned char*>(encrypted.data() +
+                                                          UDP_HEADER_LENGTH));
   }
   const auto offset = UDP_HEADER_LENGTH + paddingLength;
   datagram.resize(encrypted.size() - offset);
-  cipher.encrypt(datagram.size(), reinterpret_cast<unsigned char*>(&datagram[0]),
-                 reinterpret_cast<const unsigned char*>(encrypted.data() + offset));
+  cipher.encrypt(
+      datagram.size(), reinterpret_cast<unsigned char*>(&datagram[0]),
+      reinterpret_cast<const unsigned char*>(encrypted.data() + offset));
   return true;
 }
 
@@ -209,19 +211,19 @@ std::string encryptPeerUdpDatagram(const std::string& datagram,
   encrypted[1] = static_cast<char>(randomKeyPart);
   encrypted[2] = static_cast<char>(randomKeyPart >> 8);
   const auto sync = peerUdpSyncBytes();
-  cipher.encrypt(sync.size(),
-                 reinterpret_cast<unsigned char*>(&encrypted[3]), sync.data());
+  cipher.encrypt(sync.size(), reinterpret_cast<unsigned char*>(&encrypted[3]),
+                 sync.data());
   const unsigned char paddingLength = 0;
   cipher.encrypt(1, reinterpret_cast<unsigned char*>(&encrypted[7]),
                  &paddingLength);
-  cipher.encrypt(datagram.size(),
-                 reinterpret_cast<unsigned char*>(&encrypted[UDP_HEADER_LENGTH]),
-                 reinterpret_cast<const unsigned char*>(datagram.data()));
+  cipher.encrypt(
+      datagram.size(),
+      reinterpret_cast<unsigned char*>(&encrypted[UDP_HEADER_LENGTH]),
+      reinterpret_cast<const unsigned char*>(datagram.data()));
   return encrypted;
 }
 
-bool decryptPeerUdpDatagram(std::string& datagram,
-                            const std::string& encrypted,
+bool decryptPeerUdpDatagram(std::string& datagram, const std::string& encrypted,
                             const std::string& localUserHash,
                             uint32_t remotePublicIp)
 {
@@ -252,13 +254,14 @@ bool decryptPeerUdpDatagram(std::string& datagram,
   if (paddingLength != 0) {
     std::array<unsigned char, 15> padding{};
     cipher.encrypt(paddingLength, padding.data(),
-                   reinterpret_cast<const unsigned char*>(
-                       encrypted.data() + UDP_HEADER_LENGTH));
+                   reinterpret_cast<const unsigned char*>(encrypted.data() +
+                                                          UDP_HEADER_LENGTH));
   }
   const auto offset = UDP_HEADER_LENGTH + paddingLength;
   datagram.resize(encrypted.size() - offset);
-  cipher.encrypt(datagram.size(), reinterpret_cast<unsigned char*>(&datagram[0]),
-                 reinterpret_cast<const unsigned char*>(encrypted.data() + offset));
+  cipher.encrypt(
+      datagram.size(), reinterpret_cast<unsigned char*>(&datagram[0]),
+      reinterpret_cast<const unsigned char*>(encrypted.data() + offset));
   return true;
 }
 

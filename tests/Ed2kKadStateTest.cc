@@ -1,44 +1,22 @@
+#include "ed2k_kad.h"
+#include "ed2k_link.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
 #include "Ed2kKadState.h"
 
 #include "a2doctest.h"
 
 #include "Ed2kAttribute.h"
 #include "ed2k_constants.h"
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
 
 namespace aria2 {
 
 namespace ed2k {
-
-class Ed2kKadStateTest {
-
-public:
-  void testRoutingPromotesReplacementOnFailure();
-  void testRoutingFindClosestAndSnapshot();
-  void testRoutingDistanceUsesKadWireWordOrder();
-  void testRoutingRouterContactKeepsKadMetadata();
-  void testRoutingFindsKnownContactByEndpoint();
-  void testRoutingFindClosestExcludesRequester();
-  void testRoutingBootstrapAndRefresh();
-  void testKadSourceSearchCadence();
-  void testTraversalContinuesBeforeSearch();
-  void testExpiredTransactionCarriesContactForFailure();
-  void testTransactionCompletionMatchesTarget();
-  void testTransactionCompletionAndExpiry();
-};
-
-A2_TEST(Ed2kKadStateTest, testRoutingPromotesReplacementOnFailure)
-A2_TEST(Ed2kKadStateTest, testRoutingFindClosestAndSnapshot)
-A2_TEST(Ed2kKadStateTest, testRoutingDistanceUsesKadWireWordOrder)
-A2_TEST(Ed2kKadStateTest, testRoutingRouterContactKeepsKadMetadata)
-A2_TEST(Ed2kKadStateTest, testRoutingFindsKnownContactByEndpoint)
-A2_TEST(Ed2kKadStateTest, testRoutingFindClosestExcludesRequester)
-A2_TEST(Ed2kKadStateTest, testRoutingBootstrapAndRefresh)
-A2_TEST(Ed2kKadStateTest, testKadSourceSearchCadence)
-A2_TEST(Ed2kKadStateTest, testTraversalContinuesBeforeSearch)
-A2_TEST(Ed2kKadStateTest, testExpiredTransactionCarriesContactForFailure)
-A2_TEST(Ed2kKadStateTest, testTransactionCompletionMatchesTarget)
-A2_TEST(Ed2kKadStateTest, testTransactionCompletionAndExpiry)
 
 namespace {
 
@@ -69,14 +47,14 @@ Endpoint endpoint(const std::string& host, uint16_t port)
 
 } // namespace
 
-void Ed2kKadStateTest::testRoutingPromotesReplacementOnFailure()
+TEST_CASE("Ed2kKadStateTest.testRoutingPromotesReplacementOnFailure")
 {
   auto self = hashFromHex("23a8ceff57a7a32d562d649ed7893796");
   KadRoutingTable table(self, 1);
-  auto live = contactFromHex("31d6cfe0d16ae931b73c59d7e0c089c0",
-                             "1.2.3.4", 4672);
-  auto replacement = contactFromHex("31d6cfe0d14ce931b73c59d7e0c04bc0",
-                                    "5.6.7.8", 4672);
+  auto live =
+      contactFromHex("31d6cfe0d16ae931b73c59d7e0c089c0", "1.2.3.4", 4672);
+  auto replacement =
+      contactFromHex("31d6cfe0d14ce931b73c59d7e0c04bc0", "5.6.7.8", 4672);
 
   table.nodeSeen(live, 10);
   table.heardAbout(replacement, 11);
@@ -89,16 +67,16 @@ void Ed2kKadStateTest::testRoutingPromotesReplacementOnFailure()
   REQUIRE_EQ((size_t)0, table.replacementSize());
 }
 
-void Ed2kKadStateTest::testRoutingFindClosestAndSnapshot()
+TEST_CASE("Ed2kKadStateTest.testRoutingFindClosestAndSnapshot")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
-  auto nearContact = contactFromHex("00000000000000000000000000000001",
-                                    "1.2.3.4", 4672);
-  auto farContact = contactFromHex("80000000000000000000000000000000",
-                                   "5.6.7.8", 4672);
-  auto unconfirmed = contactFromHex("00000000000000000000000000000002",
-                                    "9.9.9.9", 4672);
+  auto nearContact =
+      contactFromHex("00000000000000000000000000000001", "1.2.3.4", 4672);
+  auto farContact =
+      contactFromHex("80000000000000000000000000000000", "5.6.7.8", 4672);
+  auto unconfirmed =
+      contactFromHex("00000000000000000000000000000002", "9.9.9.9", 4672);
   table.nodeSeen(farContact, 10);
   table.nodeSeen(nearContact, 11);
   table.heardAbout(unconfirmed, 12);
@@ -120,14 +98,14 @@ void Ed2kKadStateTest::testRoutingFindClosestAndSnapshot()
   REQUIRE_EQ((size_t)1, restored.getRouterNodes().size());
 }
 
-void Ed2kKadStateTest::testRoutingDistanceUsesKadWireWordOrder()
+TEST_CASE("Ed2kKadStateTest.testRoutingDistanceUsesKadWireWordOrder")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
-  auto closer = contactFromHex("01000000000000000000000000000000",
-                               "203.0.113.1", 4672);
-  auto farther = contactFromHex("00010000000000000000000000000000",
-                                "203.0.113.2", 4672);
+  auto closer =
+      contactFromHex("01000000000000000000000000000000", "203.0.113.1", 4672);
+  auto farther =
+      contactFromHex("00010000000000000000000000000000", "203.0.113.2", 4672);
   table.nodeSeen(farther, 10);
   table.nodeSeen(closer, 11);
 
@@ -137,12 +115,12 @@ void Ed2kKadStateTest::testRoutingDistanceUsesKadWireWordOrder()
   REQUIRE_EQ(farther.id, contacts[1].id);
 }
 
-void Ed2kKadStateTest::testRoutingRouterContactKeepsKadMetadata()
+TEST_CASE("Ed2kKadStateTest.testRoutingRouterContactKeepsKadMetadata")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
-  auto contact = contactFromHex("00000000000000000000000000000009",
-                                "203.0.113.9", 4672);
+  auto contact =
+      contactFromHex("00000000000000000000000000000009", "203.0.113.9", 4672);
   contact.udpKey = 0x55667788;
 
   table.addRouterNode(contact);
@@ -166,16 +144,16 @@ void Ed2kKadStateTest::testRoutingRouterContactKeepsKadMetadata()
   REQUIRE_EQ((uint32_t)0x55667788, routers[0].udpKey);
 }
 
-void Ed2kKadStateTest::testRoutingFindsKnownContactByEndpoint()
+TEST_CASE("Ed2kKadStateTest.testRoutingFindsKnownContactByEndpoint")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
-  auto live = contactFromHex("00000000000000000000000000000009",
-                             "203.0.113.9", 4672);
-  auto replacement = contactFromHex("0000000000000000000000000000000a",
-                                    "203.0.113.10", 4673);
-  auto router = contactFromHex("0000000000000000000000000000000b",
-                               "203.0.113.11", 4674);
+  auto live =
+      contactFromHex("00000000000000000000000000000009", "203.0.113.9", 4672);
+  auto replacement =
+      contactFromHex("0000000000000000000000000000000a", "203.0.113.10", 4673);
+  auto router =
+      contactFromHex("0000000000000000000000000000000b", "203.0.113.11", 4674);
   table.nodeSeen(live, 10);
   table.heardAbout(replacement, 11);
   table.addRouterNode(router);
@@ -190,29 +168,28 @@ void Ed2kKadStateTest::testRoutingFindsKnownContactByEndpoint()
   REQUIRE(!table.findByEndpoint(found, endpoint("203.0.113.12", 4675)));
 }
 
-void Ed2kKadStateTest::testRoutingFindClosestExcludesRequester()
+TEST_CASE("Ed2kKadStateTest.testRoutingFindClosestExcludesRequester")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
-  auto requester = contactFromHex("00000000000000000000000000000001",
-                                  "203.0.113.1", 4672);
-  auto other = contactFromHex("00000000000000000000000000000002",
-                              "203.0.113.2", 4672);
+  auto requester =
+      contactFromHex("00000000000000000000000000000001", "203.0.113.1", 4672);
+  auto other =
+      contactFromHex("00000000000000000000000000000002", "203.0.113.2", 4672);
   table.nodeSeen(requester, 10);
   table.nodeSeen(other, 11);
 
-  auto closest =
-      table.findClosestExcluding(self, requester.id, 8, false);
+  auto closest = table.findClosestExcluding(self, requester.id, 8, false);
 
   REQUIRE_EQ((size_t)1, closest.size());
   REQUIRE_EQ(other.id, closest[0].id);
 
-  auto kad1 = contactFromHex("00000000000000000000000000000003",
-                             "203.0.113.3", 4672);
+  auto kad1 =
+      contactFromHex("00000000000000000000000000000003", "203.0.113.3", 4672);
   kad1.version = 1;
   table.nodeSeen(kad1, 12);
-  auto dnsPort = contactFromHex("00000000000000000000000000000004",
-                                "203.0.113.4", 53);
+  auto dnsPort =
+      contactFromHex("00000000000000000000000000000004", "203.0.113.4", 53);
   dnsPort.version = 5;
   table.nodeSeen(dnsPort, 13);
   auto acceptedDnsPort = dnsPort;
@@ -224,7 +201,7 @@ void Ed2kKadStateTest::testRoutingFindClosestExcludesRequester()
   REQUIRE_EQ((size_t)3, all.size());
 }
 
-void Ed2kKadStateTest::testRoutingBootstrapAndRefresh()
+TEST_CASE("Ed2kKadStateTest.testRoutingBootstrapAndRefresh")
 {
   auto self = hashFromHex("00000000000000000000000000000000");
   KadRoutingTable table(self, 10);
@@ -238,18 +215,17 @@ void Ed2kKadStateTest::testRoutingBootstrapAndRefresh()
   REQUIRE(!table.needRefresh(target, 210));
 }
 
-void Ed2kKadStateTest::testKadSourceSearchCadence()
+TEST_CASE("Ed2kKadStateTest.testKadSourceSearchCadence")
 {
   Ed2kAttribute attrs;
   attrs.link.hash = hashFromHex("0123456789abcdef0123456789abcdef");
-  attrs.kadRoutingTable =
-      std::make_shared<KadRoutingTable>(
-          hashFromHex("00000000000000000000000000000000"));
+  attrs.kadRoutingTable = std::make_shared<KadRoutingTable>(
+      hashFromHex("00000000000000000000000000000000"));
 
   REQUIRE(!shouldStartEd2kKadSourceSearch(&attrs, 100));
 
-  auto seed = contactFromHex("11111111111111111111111111111111",
-                             "203.0.113.1", 4672);
+  auto seed =
+      contactFromHex("11111111111111111111111111111111", "203.0.113.1", 4672);
   attrs.kadRoutingTable->heardAbout(seed, 100);
   REQUIRE(shouldStartEd2kKadSourceSearch(&attrs, 100));
 
@@ -273,13 +249,13 @@ void Ed2kKadStateTest::testKadSourceSearchCadence()
   REQUIRE(!shouldStartEd2kKadSourceSearch(&attrs, 20000));
 }
 
-void Ed2kKadStateTest::testTraversalContinuesBeforeSearch()
+TEST_CASE("Ed2kKadStateTest.testTraversalContinuesBeforeSearch")
 {
   auto target = hashFromHex("0123456789abcdef0123456789abcdef");
-  auto seed = contactFromHex("11111111111111111111111111111111",
-                             "203.0.113.1", 4672);
-  auto closer = contactFromHex("0123456789abcdef0123456789abcdee",
-                               "203.0.113.2", 4672);
+  auto seed =
+      contactFromHex("11111111111111111111111111111111", "203.0.113.1", 4672);
+  auto closer =
+      contactFromHex("0123456789abcdef0123456789abcdee", "203.0.113.2", 4672);
   KadTraversal traversal(KadTraversalKind::SOURCE_LOOKUP, target, 12345, 1, 2);
 
   auto actions = traversal.start(std::vector<KadContact>{seed});
@@ -296,10 +272,10 @@ void Ed2kKadStateTest::testTraversalContinuesBeforeSearch()
   REQUIRE_EQ((size_t)2, actions.size());
   REQUIRE_EQ(KadTraversalActionType::SEARCH, actions[0].type);
   REQUIRE_EQ(KadTraversalActionType::SEARCH, actions[1].type);
-  const bool pairedEitherOrder = (actions[0].contact.id == seed.id &&
-                                  actions[1].contact.id == closer.id) ||
-                                 (actions[0].contact.id == closer.id &&
-                                  actions[1].contact.id == seed.id);
+  const bool pairedEitherOrder =
+      (actions[0].contact.id == seed.id &&
+       actions[1].contact.id == closer.id) ||
+      (actions[0].contact.id == closer.id && actions[1].contact.id == seed.id);
   REQUIRE(pairedEitherOrder);
   REQUIRE(!traversal.done());
   traversal.onSearchResponse(actions[0].contact);
@@ -308,13 +284,13 @@ void Ed2kKadStateTest::testTraversalContinuesBeforeSearch()
   REQUIRE(traversal.done());
 }
 
-void Ed2kKadStateTest::testExpiredTransactionCarriesContactForFailure()
+TEST_CASE("Ed2kKadStateTest.testExpiredTransactionCarriesContactForFailure")
 {
   KadTransactionTable table;
   KadTransaction tx;
   tx.endpoint = endpoint("203.0.113.9", 4672);
-  tx.contact = contactFromHex("31d6cfe0d16ae931b73c59d7e0c089c0",
-                              "203.0.113.9", 4672);
+  tx.contact =
+      contactFromHex("31d6cfe0d16ae931b73c59d7e0c089c0", "203.0.113.9", 4672);
   tx.expectedOpcode = KAD_RES;
   tx.targetId = hashFromHex("00000000000000000000000000000000");
   tx.sentTime = 100;
@@ -327,7 +303,7 @@ void Ed2kKadStateTest::testExpiredTransactionCarriesContactForFailure()
   REQUIRE_EQ(tx.contact.udpPort, expired[0].contact.udpPort);
 }
 
-void Ed2kKadStateTest::testTransactionCompletionMatchesTarget()
+TEST_CASE("Ed2kKadStateTest.testTransactionCompletionMatchesTarget")
 {
   KadTransactionTable table;
   KadTransaction refresh;
@@ -348,14 +324,13 @@ void Ed2kKadStateTest::testTransactionCompletionMatchesTarget()
 
   KadTransaction completed;
   REQUIRE(table.complete(endpoint("203.0.113.9", 4672), KAD_RES,
-                                lookup.targetId, completed));
-  REQUIRE_EQ(KadTransactionPurpose::SOURCE_LOOKUP,
-                       completed.purpose);
+                         lookup.targetId, completed));
+  REQUIRE_EQ(KadTransactionPurpose::SOURCE_LOOKUP, completed.purpose);
   REQUIRE_EQ(lookup.targetId, completed.targetId);
   REQUIRE_EQ((size_t)1, table.size());
 }
 
-void Ed2kKadStateTest::testTransactionCompletionAndExpiry()
+TEST_CASE("Ed2kKadStateTest.testTransactionCompletionAndExpiry")
 {
   KadTransactionTable table;
   KadTransaction tx;
@@ -366,8 +341,8 @@ void Ed2kKadStateTest::testTransactionCompletionAndExpiry()
   table.add(tx);
 
   KadTransaction completed;
-  REQUIRE(table.complete(endpoint("203.0.113.9", 4672),
-                                KAD_BOOTSTRAP_RES, completed));
+  REQUIRE(table.complete(endpoint("203.0.113.9", 4672), KAD_BOOTSTRAP_RES,
+                         completed));
   REQUIRE_EQ(tx.targetId, completed.targetId);
   REQUIRE_EQ((size_t)0, table.size());
 

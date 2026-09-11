@@ -6,6 +6,7 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/TestUtil.cc
   tests/TestUtil.h
   tests/SocketCoreTest.cc
+  tests/SocketTlsTest.cc
   tests/SystemResolverTest.cc
   tests/array_funTest.cc
   tests/Base64Test.cc
@@ -22,8 +23,14 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/SingleFileAllocationIteratorTest.cc
   tests/RequestGroupTest.cc
   tests/RangePlannerTest.cc
-  tests/UtilTest1.cc
-  tests/UtilTest2.cc
+  tests/support/TextMatchTest.cc
+  tests/support/TextSplitTest.cc
+  tests/support/ContentDispositionTest.cc
+  tests/support/ExtendedFilenameTest.cc
+  tests/support/EncodingTest.cc
+  tests/support/NumbersTest.cc
+  tests/support/FilePathTest.cc
+  tests/support/NetworkTest.cc
   tests/UtilSecurityTest.cc
   tests/UriListParserTest.cc
   tests/HttpHeaderProcessorTest.cc
@@ -43,7 +50,6 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/SpeedCalcTest.cc
   tests/MultiDiskAdaptorTest.cc
   tests/MultiFileAllocationIteratorTest.cc
-  tests/FixedNumberRandomizer.h
   tests/ProtocolDetectorTest.cc
   tests/ExceptionTest.cc
   tests/DownloadHandlersTest.cc
@@ -57,10 +63,16 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/OptionParserTest.cc
   tests/DNSCacheTest.cc
   tests/DownloadHelperTest.cc
+  tests/ed2k/TaskBootstrapTest.cc
+  tests/ed2k/SourcePolicyTest.cc
+  tests/ed2k/PeerConnectionPolicyTest.cc
+  tests/ed2k/PeerReaskTest.cc
+  tests/ed2k/DatagramSchedulingTest.cc
+  tests/ed2k/ServerSchedulingTest.cc
+  tests/ed2k/RequestedRangesTest.cc
   tests/SequentialPickerTest.cc
   tests/RarestPieceSelectorTest.cc
   tests/PieceStatManTest.cc
-  tests/InorderPieceSelector.h
   tests/a2algoTest.cc
   tests/bitfieldTest.cc
   tests/DownloadContextTest.cc
@@ -73,7 +85,18 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/JsonTest.cc
   tests/ValueBaseJsonParserTest.cc
   tests/RpcResponseTest.cc
-  tests/RpcMethodTest.cc
+  tests/rpc/RpcTestSupport.cc
+  tests/rpc/RpcTestSupport.h
+  tests/rpc/SystemMethodsTest.cc
+  tests/rpc/UriMethodsTest.cc
+  tests/rpc/MetainfoMethodsTest.cc
+  tests/rpc/MetalinkMethodsTest.cc
+  tests/rpc/OptionMethodsTest.cc
+  tests/rpc/Ed2kMethodsTest.cc
+  tests/rpc/TransferStatusTest.cc
+  tests/rpc/BitTorrentSessionTest.cc
+  tests/rpc/BitTorrentSelectionTest.cc
+  tests/rpc/TaskControlTest.cc
   tests/WebSocketSessionManTest.cc
   tests/BufferedFileTest.cc
   tests/GeomStreamPieceSelectorTest.cc
@@ -89,9 +112,22 @@ set(ARIA2_TEST_SOURCES_BASE
   tests/IteratableChunkChecksumValidatorTest.cc
   tests/IteratableChecksumValidatorTest.cc
   tests/MessageDigestTest.cc
-  tests/Ed2kHelperTest.cc
+  tests/ed2k/LinkTest.cc
+  tests/ed2k/PeerCodecTest.cc
+  tests/ed2k/ServerCodecTest.cc
+  tests/ed2k/SearchCodecTest.cc
+  tests/ed2k/CompressionTest.cc
+  tests/ed2k/IntegrityCodecTest.cc
+  tests/ed2k/KadPacketTest.cc
+  tests/ed2k/StateCodecTest.cc
   tests/Ed2kPolicyWindowsMacroSmokeTest.cc
-  tests/Ed2kCommandTest.cc
+  tests/ed2k/CommandTestSupport.cc
+  tests/ed2k/CommandTestSupport.h
+  tests/ed2k/ServerCommandTest.cc
+  tests/ed2k/PeerCommandTest.cc
+  tests/ed2k/PeerObfuscationTest.cc
+  tests/ed2k/TaskLifecycleTest.cc
+  tests/ed2k/KadCommandTest.cc
   tests/Ed2kKadStateTest.cc
   tests/Ed2kSessionTest.cc
   tests/Ed2kStoreTest.cc
@@ -116,9 +152,6 @@ set(ARIA2_TEST_SOURCES_HAVE_ZLIB
   tests/GZipFileTest.cc
 )
 
-set(ARIA2_TEST_SOURCES_HAVE_SQLITE3
-)
-
 set(ARIA2_TEST_SOURCES_ENABLE_BITTORRENT
   tests/BtDownloadTest.cc
   tests/BtPeerBlocklistTest.cc
@@ -132,7 +165,10 @@ set(ARIA2_TEST_SOURCES_ENABLE_METALINK
   tests/MetalinkPostDownloadHandlerTest.cc
   tests/MetalinkHelperTest.cc
   tests/MetalinkParserControllerTest.cc
-  tests/MetalinkProcessorTest.cc
+  tests/metalink/Version4Test.cc
+  tests/metalink/Version3Test.cc
+  tests/metalink/InputValidationTest.cc
+  tests/metalink/PieceValidationTest.cc
 )
 
 set(ARIA2_TEST_SOURCES_NOT_HAVE_TIMEGM

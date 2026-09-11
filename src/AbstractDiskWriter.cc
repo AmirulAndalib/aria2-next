@@ -32,7 +32,25 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "AbstractDiskWriter.h"
+#include "RecoverableException.h"
+#include <algorithm>
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <errhandlingapi.h>
+#include <ioapiset.h>
+#include <limits>
+#include <memoryapi.h>
+#include <string>
+#include <winerror.h>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 
 #include <unistd.h>
 #ifdef HAVE_MMAP
@@ -45,11 +63,14 @@
 #include <cassert>
 
 #include "File.h"
-#include "util.h"
+#include "support/FilePath.h"
+#include "platform/Process.h"
+#include "platform/NativeText.h"
+#include "a2functional.h"
+#include "fmt.h"
 #include "message.h"
 #include "DlAbortEx.h"
 #include "a2io.h"
-#include "fmt.h"
 #include "DownloadFailureException.h"
 #include "error_code.h"
 #include "Log.h"

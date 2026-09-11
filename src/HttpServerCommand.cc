@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "HttpServerCommand.h"
+#include "Command.h"
+#include <cinttypes>
+#include <memory>
 #include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "HttpServer.h"
@@ -45,14 +48,14 @@
 #include "RecoverableException.h"
 #include "prefs.h"
 #include "Option.h"
-#include "util.h"
-#include "wallclock.h"
+#include "a2functional.h"
 #include "fmt.h"
+#include "message.h"
+#include "wallclock.h"
 #include "SocketRecvBuffer.h"
 #include "base64.h"
 #include "MessageDigest.h"
 #include "message_digest_helper.h"
-#include "message.h"
 #ifdef ENABLE_WEBSOCKET
 #  include "WebSocketResponseCommand.h"
 #endif // ENABLE_WEBSOCKET
@@ -232,9 +235,9 @@ bool HttpServerCommand::execute()
         if (e_->getOption()->getAsInt(PREF_RPC_MAX_REQUEST_SIZE) <
             httpServer_->getContentLength()) {
           A2_LOG_DEBUG(fmt("Request too long. ContentLength=%" PRId64 "."
-                          " See --rpc-max-request-size option to loose"
-                          " this limitation.",
-                          httpServer_->getContentLength()));
+                           " See --rpc-max-request-size option to loose"
+                           " this limitation.",
+                           httpServer_->getContentLength()));
           return true;
         }
         e_->addCommand(make_unique<HttpServerBodyCommand>(
@@ -257,9 +260,9 @@ bool HttpServerCommand::execute()
   catch (RecoverableException& e) {
     if (std::string(e.what()) != EX_EOF_FROM_PEER) {
       A2_LOG_DEBUG_EX(fmt("CUID#%" PRId64
-                         " - Error occurred while reading HTTP request",
-                         getCuid()),
-                     e);
+                          " - Error occurred while reading HTTP request",
+                          getCuid()),
+                      e);
     }
     return true;
   }

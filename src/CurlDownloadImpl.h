@@ -16,6 +16,7 @@
 #include "common.h"
 
 #include <array>
+#include <algorithm>
 
 #include <chrono>
 #include <deque>
@@ -26,6 +27,7 @@
 
 #include <curl/curl.h>
 
+#include "stream/CurlHandle.h"
 #include "DiskWriter.h"
 #include "RangePlanner.h"
 #include "SpeedCalc.h"
@@ -36,21 +38,14 @@ namespace aria2 {
 class RequestGroup;
 class CurlDownload;
 
-enum class CurlHandlePurpose { Payload, RangeProbe, HeadProbe };
-
 enum class CurlStartMode { Transfer, InspectExisting };
 
-enum class CurlResponseFailure {
-  None,
-  EtagChanged,
-  ValidatorUnavailable,
-  ModifiedChanged,
-  LengthChanged,
-  InvalidRange,
-  PreconditionFailed
-};
-
 struct CurlEndpoint {
+  static long alternateFamily(long family)
+  {
+    return family == CURL_IPRESOLVE_V4 ? CURL_IPRESOLVE_V6 : CURL_IPRESOLVE_V4;
+  }
+
   std::string uri;
   uint64_t generation = 0;
   bool resolving = false;
@@ -58,45 +53,31 @@ struct CurlEndpoint {
   bool unavailable = false;
 };
 
-struct CurlHandle {
-  CurlDownload* download = nullptr;
-  CURL* value = nullptr;
-  curl_slist* headers = nullptr;
-  RangeLease lease;
-  int64_t writeOffset = 0;
-  int64_t appliedLimit = -1;
-  int64_t bufferOffset = 0;
-  size_t bufferLimit = 0;
-  SpeedCalc payloadSpeed;
-  Timer bodySampleStart = Timer::zero();
-  Timer lastPayload = Timer::zero();
-  uint64_t connectionEpoch = 0;
-  uint64_t endpointGeneration = 0;
-  bool resolvingEndpoint = false;
-  bool redirectedEndpoint = false;
-  long addressFamily = CURL_IPRESOLVE_WHATEVER;
-  int64_t responseRangeEnd = -1;
-  int64_t responseTotalLength = -1;
-  int64_t responseContentLength = -1;
-  int64_t unsatisfiedTotalLength = -1;
-  long responseCode = 0;
-  bool ranged = false;
-  bool rangeAccepted = false;
-  bool fullResponseAccepted = false;
-  bool headersComplete = false;
-  bool primary = false;
-  CurlResponseFailure responseFailure = CurlResponseFailure::None;
-  CurlHandlePurpose purpose = CurlHandlePurpose::Payload;
-  std::string responseEtag;
-  std::string responseLastModified;
-  std::string responseDate;
-  std::string rangeValidator;
-  std::string range;
-  std::vector<unsigned char> writeBuffer;
-  std::array<char, CURL_ERROR_SIZE> errorBuffer{};
-};
-
 struct CurlDownloadImpl {
+  void eraseHandle(CurlHandle* handle)
+  {
+    if (plannerConfigured && !fullDownload &&
+        handle->purpose == CurlHandlePurpose::Payload) {
+      idleWorkers.push_back(handle->addressFamily);
+    }
+    handles.erase(
+        std::remove_if(handles.begin(), handles.end(),
+                       [handle](const std::unique_ptr<CurlHandle>& entry) {
+                         return entry.get() == handle;
+                       }),
+        handles.end());
+  }
+
+  // Redirect destinations belong to an original URI and address family. The
+  // generation prevents late completions from overwriting a refreshed route.
+  CurlEndpoint& endpoint(size_t uriIndex, long family)
+  {
+    const size_t slot = family == CURL_IPRESOLVE_V4   ? 1
+                        : family == CURL_IPRESOLVE_V6 ? 2
+                                                      : 0;
+    return endpoints[(uriIndex % uris.size()) * 3 + slot];
+  }
+
   std::vector<std::string> uris;
   std::vector<CurlEndpoint> endpoints;
   std::array<long, 2> families{

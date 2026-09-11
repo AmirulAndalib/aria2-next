@@ -33,15 +33,20 @@
  */
 /* copyright --> */
 #include "SocketBuffer.h"
+#include "a2netcompat.h"
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <cassert>
-#include <algorithm>
 
 #include "SocketCore.h"
 #include "DlAbortEx.h"
 #include "message.h"
 #include "fmt.h"
-#include "Log.h"
 #include "a2functional.h"
 
 namespace aria2 {

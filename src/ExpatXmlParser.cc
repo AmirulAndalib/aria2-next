@@ -33,6 +33,15 @@
  */
 /* copyright --> */
 #include "ExpatXmlParser.h"
+#include "XmlParser.h"
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <expat.h>
+#include <expat_external.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "Log.h"
 #include "fmt.h"
@@ -40,9 +49,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "a2io.h"
 #include "ParserStateMachine.h"
-#include "a2functional.h"
 #include "XmlAttr.h"
 
 namespace aria2 {

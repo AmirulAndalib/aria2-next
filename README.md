@@ -235,7 +235,7 @@ The corresponding source is stored under [`third_party/`](third_party/), so libr
 | `CMakeLists.txt` | Project declaration and module entry point |
 | `CMakePresets.json` | Standard configure, build, and test presets |
 | `cmake/` | CMake modules, source inventories, and generated config templates |
-| `src/` | aria2 command-line client and core implementation |
+| `src/` | Aria2 Next command-line client and core implementation; see the [ownership map](docs/architecture.md) |
 | `src/includes/aria2/` | public libaria2 headers |
 | `tests/` | doctest unit test suite registered through CTest |
 | `docs/` | manual sources, completion tooling, and maintenance records |

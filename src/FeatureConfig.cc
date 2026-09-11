@@ -32,7 +32,14 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "FeatureConfig.h"
+#include "common.h"
+#include <cstdint>
+#include <curl/curlver.h>
+#include <string>
 #include <gpac/setup.h>
 #include <gpac/version.h>
 extern "C" {
@@ -65,7 +72,8 @@ extern "C" {
 #ifdef ENABLE_BITTORRENT
 #  include <libtorrent/version.hpp>
 #endif
-#include "util.h"
+#include "a2functional.h"
+#include "fmt.h"
 
 namespace aria2 {
 

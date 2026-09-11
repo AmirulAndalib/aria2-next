@@ -10,16 +10,24 @@
  * (at your option) any later version.
  */
 /* copyright --> */
+#include "FileEntry.h"
 #include "Ed2kShareIndex.h"
+#include "ContextAttribute.h"
+#include "a2functional.h"
+#include "ed2k_link.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include <algorithm>
 #include <limits>
 
 #include "DefaultDiskWriter.h"
 #include "DiskWriter.h"
 #include "DownloadContext.h"
 #include "Ed2kAttribute.h"
-#include "FileEntry.h"
 #include "PieceStorage.h"
 #include "RequestGroup.h"
 #include "RequestGroupMan.h"
@@ -47,8 +55,8 @@ bool readDiskRange(const std::string& path, std::string& data, int64_t begin,
     return false;
   }
   data.assign(length, '\0');
-  const auto read = writer->readData(
-      reinterpret_cast<unsigned char*>(&data[0]), length, begin);
+  const auto read = writer->readData(reinterpret_cast<unsigned char*>(&data[0]),
+                                     length, begin);
   return read == static_cast<ssize_t>(length);
 }
 
@@ -99,10 +107,7 @@ public:
   }
 
   const std::string& hash() const override { return hash_; }
-  const std::string& aichRootHash() const override
-  {
-    return aichRootHash_;
-  }
+  const std::string& aichRootHash() const override { return aichRootHash_; }
   const std::vector<std::string>& pieceHashes() const override
   {
     return pieceHashes_;
@@ -125,8 +130,7 @@ public:
     }
     return bits;
   }
-  bool readRange(std::string& data, int64_t begin,
-                 int64_t end) const override
+  bool readRange(std::string& data, int64_t begin, int64_t end) const override
   {
     return verifiedRange(begin, end) && readDiskRange(path_, data, begin, end);
   }
@@ -182,8 +186,8 @@ createActiveSharedSource(DownloadContext* dctx, PieceStorage* pieceStorage,
   return make_unique<ActiveSharedSource>(*attrs, dctx, pieceStorage, path);
 }
 
-std::unique_ptr<SharedSource>
-findSharedSource(RequestGroupMan* rgman, const std::string& hash)
+std::unique_ptr<SharedSource> findSharedSource(RequestGroupMan* rgman,
+                                               const std::string& hash)
 {
   if (!rgman || hash.size() != HASH_LENGTH) {
     return nullptr;
@@ -257,8 +261,8 @@ bool createOfferFilesPayload(
     if (source->size() > std::numeric_limits<uint32_t>::max()) {
       tags += createUInt32Tag(0x02, static_cast<uint32_t>(source->size()));
       tags += createUInt32Tag(
-          0x3a, static_cast<uint32_t>(
-                    static_cast<uint64_t>(source->size()) >> 32));
+          0x3a,
+          static_cast<uint32_t>(static_cast<uint64_t>(source->size()) >> 32));
       ++tagCount;
     }
     else {

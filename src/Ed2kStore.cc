@@ -11,10 +11,13 @@
  */
 /* copyright --> */
 #include "Ed2kStore.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include <sqlite3.h>
 
-#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -145,9 +148,10 @@ int stepRows(sqlite3_stmt* stmt, const char* operation)
 {
   const auto result = sqlite3_step(stmt);
   if (result != SQLITE_ROW && result != SQLITE_DONE) {
-    A2_LOG_ERROR(fmt(
-        "component=storage store=ed2k event=sqlite_failed %s",
-        sqlite::diagnostic(sqlite3_db_handle(stmt), result, operation).c_str()));
+    A2_LOG_ERROR(
+        fmt("component=storage store=ed2k event=sqlite_failed %s",
+            sqlite::diagnostic(sqlite3_db_handle(stmt), result, operation)
+                .c_str()));
   }
   return result;
 }
@@ -183,9 +187,9 @@ bool Ed2kStore::open()
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
       nullptr);
   if (openResult != SQLITE_OK) {
-    A2_LOG_ERROR(
-        fmt("component=storage store=ed2k event=sqlite_failed path=%s %s",
-            path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
+    A2_LOG_ERROR(fmt(
+        "component=storage store=ed2k event=sqlite_failed path=%s %s",
+        path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
     if (db_) {
       sqlite3_close_v2(db_);
       db_ = nullptr;
@@ -233,9 +237,8 @@ bool Ed2kStore::open()
   }
   if (version != CURRENT_SCHEMA_VERSION) {
     if (version != 0) {
-      A2_LOG_WARN(
-          fmt("Resetting incompatible ED2K database schema version %d.",
-              version));
+      A2_LOG_WARN(fmt("Resetting incompatible ED2K database schema version %d.",
+                      version));
     }
     if (!exec("DROP TABLE IF EXISTS download_pieces") ||
         !exec("DROP TABLE IF EXISTS downloads") ||
@@ -567,9 +570,8 @@ bool Ed2kStore::saveRuntime(const std::string& clientHash,
   return commit();
 }
 
-DownloadStateLoadResult
-Ed2kStore::loadDownload(PersistedDownloadState& state,
-                        const std::string& gid) const
+DownloadStateLoadResult Ed2kStore::loadDownload(PersistedDownloadState& state,
+                                                const std::string& gid) const
 {
   if (!db_) {
     return DownloadStateLoadResult::Error;

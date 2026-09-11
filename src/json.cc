@@ -33,12 +33,18 @@
  */
 /* copyright --> */
 #include "json.h"
+#include "ValueBase.h"
+#include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <sstream>
 
-#include "array_fun.h"
 #include "a2functional.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Encoding.h"
+#include "a2iterator.h"
 #include "base64.h"
 
 namespace aria2 {

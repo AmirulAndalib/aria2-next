@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <utility>
 #include "Metalinker.h"
 
 #include "a2doctest.h"
@@ -7,20 +9,7 @@
 
 namespace aria2 {
 
-class MetalinkerTest {
-
-
-private:
-public:
-  void setUp() {}
-  void tearDown() {}
-
-  void testQueryEntry();
-};
-
-A2_TEST(MetalinkerTest, testQueryEntry)
-
-void MetalinkerTest::testQueryEntry()
+TEST_CASE("MetalinkerTest.testQueryEntry")
 {
   Metalinker metalinker;
   auto entry1 = make_unique<MetalinkEntry>();

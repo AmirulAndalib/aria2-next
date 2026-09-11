@@ -33,12 +33,15 @@
  */
 /* copyright --> */
 #include "SingleFileAllocationIterator.h"
+#include "common.h"
+#include <cstdint>
 
 #include <cstring>
 #include <cstdlib>
 
 #include "BinaryStream.h"
-#include "util.h"
+#include "support/Storage.h"
+#include "a2functional.h"
 #include "a2io.h"
 #include "Log.h"
 
@@ -72,8 +75,8 @@ void SingleFileAllocationIterator::init()
   if (!noticeDone) {
     noticeDone = true;
     A2_LOG_INFO(_("Allocating disk space. Use --file-allocation=none to"
-                    " disable it. See --file-allocation option in man page for"
-                    " more details."));
+                  " disable it. See --file-allocation option in man page for"
+                  " more details."));
   }
 #ifdef HAVE_POSIX_MEMALIGN
   buffer_ = reinterpret_cast<unsigned char*>(

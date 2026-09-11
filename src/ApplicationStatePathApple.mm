@@ -15,7 +15,8 @@
 #import <Foundation/Foundation.h>
 
 #include "DlAbortEx.h"
-#include "util.h"
+#include "support/FilePath.h"
+#include "DlAbortEx.h"
 
 namespace aria2 {
 

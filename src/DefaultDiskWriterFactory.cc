@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "DefaultDiskWriterFactory.h"
+#include <memory>
+#include <string>
 #include "DefaultDiskWriter.h"
 #include "a2functional.h"
 

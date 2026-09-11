@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "GrowSegment.h"
+#include <cstdint>
+#include <memory>
+#include <string>
 #include "Piece.h"
 
 namespace aria2 {

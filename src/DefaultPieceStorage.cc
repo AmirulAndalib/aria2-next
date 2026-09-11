@@ -32,9 +32,19 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskWriter.h"
 #include "DefaultPieceStorage.h"
+#include "Command.h"
+#include "TimerA2.h"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include <numeric>
 #include <algorithm>
 #include <limits>
 
@@ -44,30 +54,23 @@
 #include "prefs.h"
 #include "DirectDiskAdaptor.h"
 #include "MultiDiskAdaptor.h"
-#include "DiskWriter.h"
 #include "BitfieldMan.h"
 #include "message.h"
 #include "DefaultDiskWriterFactory.h"
 #include "FileEntry.h"
-#include "DlAbortEx.h"
-#include "util.h"
 #include "a2functional.h"
-#include "Option.h"
 #include "fmt.h"
+#include "Option.h"
 #include "RarestPieceSelector.h"
 #include "DefaultStreamPieceSelector.h"
 #include "InorderStreamPieceSelector.h"
 #include "RandomStreamPieceSelector.h"
 #include "GeomStreamPieceSelector.h"
-#include "array_fun.h"
 #include "PieceStatMan.h"
 #include "wallclock.h"
-#include "bitfield.h"
-#include "SingletonHolder.h"
 #include "Notifier.h"
 #include "WrDiskCache.h"
 #include "RequestGroup.h"
-#include "SimpleRandomizer.h"
 #include "ContextAttribute.h"
 
 namespace aria2 {
@@ -88,8 +91,7 @@ DefaultPieceStorage::DefaultPieceStorage(
       pieceSelector_(make_unique<RarestPieceSelector>(pieceStatMan_)),
       wrDiskCache_(nullptr)
 {
-  const std::string& pieceSelectorOpt =
-      option_->get(PREF_ED2K_PIECE_SELECTOR);
+  const std::string& pieceSelectorOpt = option_->get(PREF_ED2K_PIECE_SELECTOR);
   if (pieceSelectorOpt.empty() || pieceSelectorOpt == A2_V_DEFAULT) {
     streamPieceSelector_ =
         make_unique<DefaultStreamPieceSelector>(bitfieldMan_.get());
@@ -175,7 +177,6 @@ std::shared_ptr<Piece> DefaultPieceStorage::findUsedPiece(size_t index) const
     return *i;
   }
 }
-
 
 bool DefaultPieceStorage::hasMissingUnusedPiece()
 {
@@ -306,8 +307,7 @@ int64_t DefaultPieceStorage::getCompletedLength()
   return completedLength;
 }
 
-int64_t DefaultPieceStorage::getCompletedLength(int64_t offset,
-                                                int64_t length)
+int64_t DefaultPieceStorage::getCompletedLength(int64_t offset, int64_t length)
 {
   const auto totalLength = getTotalLength();
   if (offset < 0 || length <= 0 || offset >= totalLength) {

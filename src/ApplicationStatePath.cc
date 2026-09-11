@@ -11,10 +11,11 @@
  */
 /* copyright --> */
 #include "ApplicationStatePath.h"
+#include <string>
 
 #include "Option.h"
 #include "prefs.h"
-#include "util.h"
+#include "support/FilePath.h"
 
 namespace aria2 {
 

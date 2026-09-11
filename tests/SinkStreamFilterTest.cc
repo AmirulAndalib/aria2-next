@@ -1,29 +1,25 @@
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include "SinkStreamFilter.h"
 
 #include <cstdlib>
-#include <iostream>
 #include "a2doctest.h"
 
-#include "Segment.h"
 #include "ByteArrayDiskWriter.h"
-#include "SinkStreamFilter.h"
 #include "MockSegment.h"
 
 namespace aria2 {
 
 class SinkStreamFilterTest {
-
-
+protected:
   class MockSegment2 : public MockSegment {
   public:
     MockSegment2(int32_t length) : length(length), writtenLength(0) {}
 
     virtual int64_t getLength() const override { return length; }
 
-    virtual int64_t getWrittenLength() const override
-    {
-      return writtenLength;
-    }
+    virtual int64_t getWrittenLength() const override { return writtenLength; }
 
     virtual void updateWrittenLength(int64_t bytes) override
     {
@@ -41,22 +37,17 @@ class SinkStreamFilterTest {
   void clearWriter() { writer_->setString(""); }
 
 public:
-  void setUp()
+  SinkStreamFilterTest()
   {
     writer_.reset(new ByteArrayDiskWriter());
     filter_.reset(new SinkStreamFilter());
     filter_->init();
     segment_.reset(new MockSegment2(16));
   }
-
-  void testTransform_with_length();
-  void testTransform_without_length();
 };
 
-A2_TEST(SinkStreamFilterTest, testTransform_with_length)
-A2_TEST(SinkStreamFilterTest, testTransform_without_length)
-
-void SinkStreamFilterTest::testTransform_with_length()
+TEST_CASE_FIXTURE(SinkStreamFilterTest,
+                  "SinkStreamFilterTest.testTransform_with_length")
 {
   // If segment_->getLength() > 0, make sure that at most
   // segment_->getLength()-segment_->getWrittenLength() bytes are
@@ -68,7 +59,8 @@ void SinkStreamFilterTest::testTransform_with_length()
   REQUIRE_EQ((ssize_t)16, r);
 }
 
-void SinkStreamFilterTest::testTransform_without_length()
+TEST_CASE_FIXTURE(SinkStreamFilterTest,
+                  "SinkStreamFilterTest.testTransform_without_length")
 {
   // If segment_->getLength() == 0, all incoming bytes are written.
   segment_->length = 0;

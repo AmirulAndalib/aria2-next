@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include "DefaultDiskWriter.h"
 #include "a2doctest.h"
 
@@ -8,20 +11,7 @@
 
 namespace aria2 {
 
-class DefaultDiskWriterTest {
-
-private:
-public:
-  void setUp() {}
-
-  void testSize();
-  void testUtf8PathAndResume();
-};
-
-A2_TEST(DefaultDiskWriterTest, testSize)
-A2_TEST(DefaultDiskWriterTest, testUtf8PathAndResume)
-
-void DefaultDiskWriterTest::testSize()
+TEST_CASE("DefaultDiskWriterTest.testSize")
 {
   DefaultDiskWriter dw(A2_TEST_DIR "/4096chunk.txt");
   dw.enableReadOnly();
@@ -29,7 +19,7 @@ void DefaultDiskWriterTest::testSize()
   REQUIRE_EQ((int64_t)4_k, dw.size());
 }
 
-void DefaultDiskWriterTest::testUtf8PathAndResume()
+TEST_CASE("DefaultDiskWriterTest.testUtf8PathAndResume")
 {
   const std::string path = A2_TEST_OUT_DIR "/下载目录/结果文件.bin";
   File(path).remove();

@@ -11,13 +11,16 @@
  */
 /* copyright --> */
 #include "ed2k_policy.h"
+#include "ed2k_peer.h"
+#include "ed2k_server.h"
+#include <cstddef>
+#include <vector>
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
 
 #include "ed2k_constants.h"
-#include "ed2k_link.h"
 
 namespace aria2 {
 
@@ -106,7 +109,8 @@ bool retryDue(const ServerState& server, int64_t now)
 
 bool supportsTcpFileSize(const ServerState& server, int64_t fileSize)
 {
-  return fileSize <= static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) ||
+  return fileSize <=
+             static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) ||
          (server.tcpFlags & SRV_TCPFLG_LARGEFILES) != 0;
 }
 
@@ -220,8 +224,7 @@ PeerAction selectPeerAction(std::vector<PeerState>& peers, int64_t now,
     }
   }
 
-  const bool canStartActive =
-      activeSourceCap == 0 || active < activeSourceCap;
+  const bool canStartActive = activeSourceCap == 0 || active < activeSourceCap;
   if (canStartActive && connectPeer) {
     return PeerAction{PeerActionType::CONNECT, connectPeer};
   }
@@ -332,7 +335,7 @@ uint32_t rankPieceSelection(const PieceSelectionCandidate& candidate,
                                  (100 - completion));
   }
   return static_cast<uint32_t>(candidate.requested ? 40000 + completion
-                                                    : 20000 + 100 - completion);
+                                                   : 20000 + 100 - completion);
 }
 
 } // namespace ed2k

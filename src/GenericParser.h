@@ -38,7 +38,8 @@
 #include <array>
 #include "common.h"
 #include "a2io.h"
-#include "util.h"
+#include "platform/NativeText.h"
+#include "a2functional.h"
 
 namespace aria2 {
 

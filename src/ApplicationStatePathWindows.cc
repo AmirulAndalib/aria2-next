@@ -10,13 +10,18 @@
  * (at your option) any later version.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
+#include <string>
+#include <winerror.h>
 #include "ApplicationStatePath.h"
 
-#include <windows.h>
 #include <shlobj.h>
 
 #include "DlAbortEx.h"
-#include "util.h"
+#include "support/FilePath.h"
+#include "platform/NativeText.h"
 
 namespace aria2 {
 
@@ -25,9 +30,8 @@ namespace state {
 std::string defaultDirectory()
 {
   PWSTR path = nullptr;
-  const auto result =
-      SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT, nullptr,
-                           &path);
+  const auto result = SHGetKnownFolderPath(FOLDERID_LocalAppData,
+                                           KF_FLAG_DEFAULT, nullptr, &path);
   if (FAILED(result) || !path) {
     throw DL_ABORT_EX(
         "Unable to resolve the Windows application state directory");

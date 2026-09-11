@@ -35,8 +35,6 @@ if(NOT IS_DIRECTORY "${ARIA2_BOOST_ROOT}/boost/asio")
 endif()
 
 function(aria2_check_include header variable)
-  string(REGEX REPLACE "[^A-Za-z0-9]" "_" _safe "${header}")
-  string(TOUPPER "${_safe}" _safe)
   check_include_file("${header}" "${variable}")
 endfunction()
 

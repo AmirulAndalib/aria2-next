@@ -49,8 +49,8 @@
 #include "URIResult.h"
 #include "error_code.h"
 #include "TimerA2.h"
-#include "util.h"
 #include "a2functional.h"
+#include "prefs.h"
 
 namespace aria2 {
 

@@ -2,22 +2,11 @@
 
 #include "a2doctest.h"
 
-#include "util.h"
+#include "support/Encoding.h"
 
 namespace aria2 {
 
-class Base32Test {
-
-
-public:
-  void testEncode();
-  void testDecode();
-};
-
-A2_TEST(Base32Test, testEncode)
-A2_TEST(Base32Test, testDecode)
-
-void Base32Test::testEncode()
+TEST_CASE("Base32Test.testEncode")
 {
   REQUIRE_EQ(std::string(), base32::encode(""));
   REQUIRE_EQ(std::string("GE======"), base32::encode("1"));
@@ -30,7 +19,7 @@ void Base32Test::testEncode()
                        base32::encode(util::fromHex(s.begin(), s.end())));
 }
 
-void Base32Test::testDecode()
+TEST_CASE("Base32Test.testDecode")
 {
   std::string s = "";
   REQUIRE_EQ(std::string(), base32::decode(s.begin(), s.end()));

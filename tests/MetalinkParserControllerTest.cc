@@ -1,3 +1,7 @@
+#include "a2functional.h"
+#include <cstddef>
+#include <cstdint>
+#include "support/Encoding.h"
 #include "MetalinkParserController.h"
 
 #include "a2doctest.h"
@@ -13,35 +17,7 @@
 
 namespace aria2 {
 
-class MetalinkParserControllerTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testEntryTransaction();
-  void testResourceTransaction();
-  void testResourceTransaction_withBaseUri();
-  void testMetaurlTransaction();
-  void testChecksumTransaction();
-  void testChunkChecksumTransaction();
-  void testChunkChecksumTransactionV4();
-  void testSignatureTransaction();
-};
-
-A2_TEST(MetalinkParserControllerTest, testEntryTransaction)
-A2_TEST(MetalinkParserControllerTest, testResourceTransaction)
-A2_TEST(MetalinkParserControllerTest, testResourceTransaction_withBaseUri)
-A2_TEST(MetalinkParserControllerTest, testMetaurlTransaction)
-A2_TEST(MetalinkParserControllerTest, testChecksumTransaction)
-A2_TEST(MetalinkParserControllerTest, testChunkChecksumTransaction)
-A2_TEST(MetalinkParserControllerTest, testChunkChecksumTransactionV4)
-A2_TEST(MetalinkParserControllerTest, testSignatureTransaction)
-
-void MetalinkParserControllerTest::testEntryTransaction()
+TEST_CASE("MetalinkParserControllerTest.testEntryTransaction")
 {
   MetalinkParserController ctrl;
 
@@ -67,7 +43,7 @@ void MetalinkParserControllerTest::testEntryTransaction()
   }
 }
 
-void MetalinkParserControllerTest::testResourceTransaction()
+TEST_CASE("MetalinkParserControllerTest.testResourceTransaction")
 {
   MetalinkParserController ctrl;
   ctrl.newEntryTransaction();
@@ -97,7 +73,7 @@ void MetalinkParserControllerTest::testResourceTransaction()
   }
 }
 
-void MetalinkParserControllerTest::testResourceTransaction_withBaseUri()
+TEST_CASE("MetalinkParserControllerTest.testResourceTransaction_withBaseUri")
 {
   MetalinkParserController ctrl;
   ctrl.setBaseUri("http://base/dir/file");
@@ -121,14 +97,13 @@ void MetalinkParserControllerTest::testResourceTransaction_withBaseUri()
     auto m = ctrl.getResult();
     REQUIRE_EQ((size_t)1, m->getEntries()[0]->resources.size());
     auto& res = m->getEntries()[0]->resources[0];
-    REQUIRE_EQ(std::string("http://base/dir/aria2.tar.bz2"),
-                         res->url);
+    REQUIRE_EQ(std::string("http://base/dir/aria2.tar.bz2"), res->url);
     REQUIRE_EQ(MetalinkResource::TYPE_HTTP, res->type);
 
 #ifdef ENABLE_BITTORRENT
     REQUIRE_EQ((size_t)2, m->getEntries()[0]->metaurls.size());
     REQUIRE_EQ(std::string("http://base/meta/aria2.tar.bz2.torrent"),
-                         m->getEntries()[0]->metaurls[0]->url);
+               m->getEntries()[0]->metaurls[0]->url);
 
     REQUIRE_EQ(
         std::string(
@@ -138,7 +113,7 @@ void MetalinkParserControllerTest::testResourceTransaction_withBaseUri()
   }
 }
 
-void MetalinkParserControllerTest::testMetaurlTransaction()
+TEST_CASE("MetalinkParserControllerTest.testMetaurlTransaction")
 {
   MetalinkParserController ctrl;
   ctrl.newEntryTransaction();
@@ -161,7 +136,7 @@ void MetalinkParserControllerTest::testMetaurlTransaction()
 
     auto& metaurl = m->getEntries()[0]->metaurls[0];
     REQUIRE_EQ(std::string("http://example.org/chocolate.torrent"),
-                         metaurl->url);
+               metaurl->url);
     REQUIRE_EQ(std::string("torrent"), metaurl->mediatype);
     REQUIRE_EQ(std::string("mybirthdaycake"), metaurl->name);
     REQUIRE_EQ(999, metaurl->priority);
@@ -175,7 +150,7 @@ void MetalinkParserControllerTest::testMetaurlTransaction()
 #endif // !ENABLE_BITTORRENT
 }
 
-void MetalinkParserControllerTest::testChecksumTransaction()
+TEST_CASE("MetalinkParserControllerTest.testChecksumTransaction")
 {
   MetalinkParserController ctrl;
   ctrl.newEntryTransaction();
@@ -199,7 +174,7 @@ void MetalinkParserControllerTest::testChecksumTransaction()
     auto& md = m->getEntries()[0]->checksum;
     REQUIRE_EQ(std::string("md5"), md->getHashType());
     REQUIRE_EQ(std::string("acbd18db4cc2f85cedef654fccc4a4d8"),
-                         util::toHex(md->getDigest()));
+               util::toHex(md->getDigest()));
 
     REQUIRE(!m->getEntries()[1]->checksum);
 
@@ -207,7 +182,7 @@ void MetalinkParserControllerTest::testChecksumTransaction()
   }
 }
 
-void MetalinkParserControllerTest::testChunkChecksumTransaction()
+TEST_CASE("MetalinkParserControllerTest.testChunkChecksumTransaction")
 {
   MetalinkParserController ctrl;
   ctrl.newEntryTransaction();
@@ -239,15 +214,15 @@ void MetalinkParserControllerTest::testChunkChecksumTransaction()
     REQUIRE_EQ((int32_t)256_k, md->getPieceLength());
     REQUIRE_EQ((size_t)5, md->countPieceHash());
     REQUIRE_EQ(std::string("1cbd18db4cc2f85cedef654fccc4a4d8"),
-                         md->getPieceHashes()[0]);
+               md->getPieceHashes()[0]);
     REQUIRE_EQ(std::string("2cbd18db4cc2f85cedef654fccc4a4d8"),
-                         md->getPieceHashes()[1]);
+               md->getPieceHashes()[1]);
     REQUIRE_EQ(std::string("3cbd18db4cc2f85cedef654fccc4a4d8"),
-                         md->getPieceHashes()[2]);
+               md->getPieceHashes()[2]);
     REQUIRE_EQ(std::string("4cbd18db4cc2f85cedef654fccc4a4d8"),
-                         md->getPieceHashes()[3]);
+               md->getPieceHashes()[3]);
     REQUIRE_EQ(std::string("5cbd18db4cc2f85cedef654fccc4a4d8"),
-                         md->getPieceHashes()[4]);
+               md->getPieceHashes()[4]);
 
     REQUIRE(!m->getEntries()[1]->chunkChecksum);
 
@@ -255,7 +230,7 @@ void MetalinkParserControllerTest::testChunkChecksumTransaction()
   }
 }
 
-void MetalinkParserControllerTest::testChunkChecksumTransactionV4()
+TEST_CASE("MetalinkParserControllerTest.testChunkChecksumTransactionV4")
 {
   MetalinkParserController ctrl;
   ctrl.newEntryTransaction();
@@ -286,15 +261,12 @@ void MetalinkParserControllerTest::testChunkChecksumTransactionV4()
     REQUIRE_EQ(std::string("sha-1"), md->getHashType());
     REQUIRE_EQ((int32_t)256_k, md->getPieceLength());
     REQUIRE_EQ((size_t)3, md->countPieceHash());
-    REQUIRE_EQ(
-        std::string("5bd9f7248df0f3a6a86ab6c95f48787d546efa14"),
-        util::toHex(md->getPieceHashes()[0]));
-    REQUIRE_EQ(
-        std::string("9413ee70957a09d55704123687478e07f18c7b29"),
-        util::toHex(md->getPieceHashes()[1]));
-    REQUIRE_EQ(
-        std::string("44213f9f4d59b557314fadcd233232eebcac8012"),
-        util::toHex(md->getPieceHashes()[2]));
+    REQUIRE_EQ(std::string("5bd9f7248df0f3a6a86ab6c95f48787d546efa14"),
+               util::toHex(md->getPieceHashes()[0]));
+    REQUIRE_EQ(std::string("9413ee70957a09d55704123687478e07f18c7b29"),
+               util::toHex(md->getPieceHashes()[1]));
+    REQUIRE_EQ(std::string("44213f9f4d59b557314fadcd233232eebcac8012"),
+               util::toHex(md->getPieceHashes()[2]));
 
     REQUIRE(!m->getEntries()[1]->chunkChecksum);
 
@@ -302,7 +274,7 @@ void MetalinkParserControllerTest::testChunkChecksumTransactionV4()
   }
 }
 
-void MetalinkParserControllerTest::testSignatureTransaction()
+TEST_CASE("MetalinkParserControllerTest.testSignatureTransaction")
 {
   static std::string pgpSignature =
       "-----BEGIN PGP SIGNATURE-----\n"

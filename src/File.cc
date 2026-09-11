@@ -32,7 +32,24 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "File.h"
+#include "TimeA2.h"
+#include "a2io.h"
+#include <algorithm>
+#include <cerrno>
+#include <chrono>
+#include <cstdint>
+#include <errhandlingapi.h>
+#include <iterator>
+#include <string>
+#include <sys/stat.h>
+#ifdef _WIN32
+#  include <direct.h>
+#  include <windows.h>
+#endif
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -45,10 +62,15 @@
 #include <cstring>
 #include <cstdio>
 
-#include "util.h"
+#include "support/Text.h"
+#include "support/FilePath.h"
+#include "platform/Process.h"
+#include "platform/NativeText.h"
+#include "a2functional.h"
+#include "fmt.h"
+#include "message.h"
 #include "array_fun.h"
 #include "Log.h"
-#include "fmt.h"
 
 namespace aria2 {
 

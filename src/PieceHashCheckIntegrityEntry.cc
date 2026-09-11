@@ -32,11 +32,13 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "Command.h"
 #include "PieceHashCheckIntegrityEntry.h"
+#include <memory>
+#include <utility>
 #include "RequestGroup.h"
 #include "IteratableChunkChecksumValidator.h"
 #include "DownloadContext.h"
-#include "PieceStorage.h"
 #include "a2functional.h"
 
 namespace aria2 {

@@ -33,6 +33,11 @@
  */
 /* copyright --> */
 #include "console.h"
+#include <memory>
+#include <utility>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "NullOutputFile.h"
 #ifdef __MINGW32__
 #  include "WinConsoleFile.h"

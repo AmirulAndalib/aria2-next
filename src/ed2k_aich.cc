@@ -11,6 +11,11 @@
  */
 /* copyright --> */
 #include "ed2k_aich.h"
+#include "RecoverableException.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <utility>
 
 #include <algorithm>
 
@@ -97,9 +102,8 @@ bool identifierPathReachesRange(uint32_t ident, size_t targetOffset,
       length = rightLength;
       currentLeft = false;
     }
-    currentBase = length <= static_cast<size_t>(PIECE_LENGTH)
-                      ? EMBLOCK_LENGTH
-                      : PIECE_LENGTH;
+    currentBase = length <= static_cast<size_t>(PIECE_LENGTH) ? EMBLOCK_LENGTH
+                                                              : PIECE_LENGTH;
     bit >>= 1;
   }
   return offset == targetOffset && length == targetSize && bit == 0;
@@ -149,11 +153,10 @@ std::string recoveryRootForRange(const AichRecoveryData& recovery,
                              ? EMBLOCK_LENGTH
                              : PIECE_LENGTH;
   const auto leftHash = recoveryRootForRange(
-      recovery, targetOffset, leftSize, dataSize, rootBaseSize, leftBase,
-      true);
-  const auto rightHash = recoveryRootForRange(
-      recovery, targetOffset + leftSize, rightSize, dataSize, rootBaseSize,
-      rightBase, false);
+      recovery, targetOffset, leftSize, dataSize, rootBaseSize, leftBase, true);
+  const auto rightHash =
+      recoveryRootForRange(recovery, targetOffset + leftSize, rightSize,
+                           dataSize, rootBaseSize, rightBase, false);
   if (leftHash.empty() || rightHash.empty()) {
     return std::string();
   }
@@ -218,8 +221,7 @@ std::string createAichAnswerPayload(const std::string& fileHash,
                                     const std::string& rootHash,
                                     const std::string& recoveryData)
 {
-  return createAichRequestPayload(fileHash, partIndex, rootHash) +
-         recoveryData;
+  return createAichRequestPayload(fileHash, partIndex, rootHash) + recoveryData;
 }
 
 bool parseAichAnswerPayload(AichAnswer& answer, const std::string& payload,
@@ -243,9 +245,8 @@ bool parseAichAnswerPayload(AichAnswer& answer, const std::string& payload,
   answer.fileHash = payload.substr(0, HASH_LENGTH);
   answer.partIndex = readUInt16(payload.data() + HASH_LENGTH);
   answer.rootHash = payload.substr(HASH_LENGTH + 2, AICH_HASH_LENGTH);
-  answer.recoveryData.assign(payload.begin() + HASH_LENGTH + 2 +
-                                 AICH_HASH_LENGTH,
-                             payload.end());
+  answer.recoveryData.assign(
+      payload.begin() + HASH_LENGTH + 2 + AICH_HASH_LENGTH, payload.end());
   return true;
 }
 
@@ -332,8 +333,8 @@ bool buildAichRecoverySet(AichRecoverySet& recoverySet,
   verified.partIndex = partIndex;
   for (size_t offset = 0; offset < partSize; offset += EMBLOCK_LENGTH) {
     const auto blockSize = std::min<size_t>(EMBLOCK_LENGTH, partSize - offset);
-    auto hash = hashForRange(recovery, partOffset + offset, blockSize,
-                             fileSize, fileBase, true);
+    auto hash = hashForRange(recovery, partOffset + offset, blockSize, fileSize,
+                             fileBase, true);
     if (hash.empty()) {
       return false;
     }

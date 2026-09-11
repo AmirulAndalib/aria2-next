@@ -1365,7 +1365,6 @@ setup_multicast_clock:
 		u64 start_segtime = 0;
 		u64 segtime = 0;
 		u64 current_time_rescale;
-		u64 timeline_duration = 0;
 		u32 count;
 		u64 last_s_dur=0;
 		u32 i, seg_idx = 0;
@@ -1385,9 +1384,6 @@ setup_multicast_clock:
 			if (!i && (current_time_rescale + ent->duration < ent->start_time)) {
 				current_time_rescale = current_time_no_timeshift * timescale / 1000;
 			}
-			timeline_duration += (1+ent->repeat_count)*ent->duration;
-
-			if (i+1 == count) timeline_duration -= ent->duration;
 			last_s_dur=ent->duration;
 		}
 
@@ -1435,10 +1431,8 @@ setup_multicast_clock:
 					group->ast_at_init = availabilityStartTime;
 					group->ast_offset = (u32) (ast_offset*1000);
 
-					//to remove - this is a hack to speedup starting for some strange MPDs which announce the live point as the first segment but have already produced the complete timeline
-					if (group->dash->utc_drift_estimate<0) {
-						group->ast_at_init -= (timeline_duration - (segtime-start_segtime)) *1000/timescale;
-					}
+					/* The MPD/UTC mapping defines the availability epoch. Selecting an
+					   earlier retained segment must not shift that epoch or underflow it. */
 
 					if ((current_time_rescale > segtime + ent->duration) /* <=> is_last*/) {
 						group->start_playback_range = 0;

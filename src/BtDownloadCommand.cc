@@ -10,16 +10,21 @@
  * (at your option) any later version.
  */
 /* copyright --> */
+#include "Option.h"
 #include "BtDownloadCommand.h"
+#include "Command.h"
+#include "aria2/aria2.h"
+#include <chrono>
+#include <memory>
+#include <utility>
 
 #include "BtDownload.h"
 #include "BtSession.h"
 #include "DownloadEngine.h"
-#include "Option.h"
 #include "RequestGroup.h"
 #include "error_code.h"
 #include "prefs.h"
-#include "util.h"
+#include "platform/Process.h"
 #include "Notifier.h"
 #include "SingletonHolder.h"
 

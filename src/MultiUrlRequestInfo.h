@@ -36,6 +36,7 @@
 #define D_MULTI_URL_REQUEST_INFO_H
 
 #include "common.h"
+#include "platform/Process.h"
 
 #include <signal.h>
 
@@ -43,7 +44,7 @@
 #include <memory>
 
 #include "DownloadResult.h"
-#include "util.h"
+#include "a2functional.h"
 
 namespace aria2 {
 
@@ -62,7 +63,7 @@ private:
 
   std::unique_ptr<DownloadEngine> e_;
 
-  sigset_t mask_;
+  util::SignalMask mask_;
 
   bool useSignalHandler_;
 

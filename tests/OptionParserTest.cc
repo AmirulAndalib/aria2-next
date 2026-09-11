@@ -1,3 +1,9 @@
+#include "OptionHandler.h"
+#include "aria2/aria2.h"
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "OptionParser.h"
 
 #include <cstring>
@@ -7,86 +13,52 @@
 
 #include "OptionHandlerImpl.h"
 #include "Exception.h"
-#include "util.h"
+#include "a2functional.h"
+#include "prefs.h"
 #include "Option.h"
 #include "UnknownOptionException.h"
 #include "array_fun.h"
-#include "prefs.h"
 #include "help_tags.h"
 
 namespace aria2 {
 
 class OptionParserTest {
-
-
-private:
+protected:
   std::shared_ptr<OptionParser> oparser_;
 
 public:
-  void setUp()
+  OptionParserTest()
   {
     oparser_.reset(new OptionParser());
 
-    OptionHandler* timeout(
+    std::unique_ptr<OptionHandler> timeout(
         new DefaultOptionHandler(PREF_TIMEOUT, NO_DESCRIPTION, "ALPHA", "",
                                  OptionHandler::REQ_ARG, 'A'));
     timeout->addTag(TAG_BASIC);
     timeout->setEraseAfterParse(true);
-    oparser_->addOptionHandler(timeout);
+    oparser_->addOptionHandler(std::move(timeout));
 
-    OptionHandler* dir(new DefaultOptionHandler(PREF_DIR));
+    std::unique_ptr<OptionHandler> dir(new DefaultOptionHandler(PREF_DIR));
     dir->addTag(TAG_BASIC);
     dir->addTag(TAG_HTTP);
     dir->addTag(TAG_FILE);
-    oparser_->addOptionHandler(dir);
+    oparser_->addOptionHandler(std::move(dir));
 
-    DefaultOptionHandler* daemon(
+    std::unique_ptr<DefaultOptionHandler> daemon(
         new DefaultOptionHandler(PREF_DAEMON, NO_DESCRIPTION, "CHARLIE", "",
                                  OptionHandler::REQ_ARG, 'C'));
     daemon->hide();
     daemon->addTag(TAG_FILE);
-    oparser_->addOptionHandler(daemon);
+    oparser_->addOptionHandler(std::move(daemon));
 
-    OptionHandler* out(new UnitNumberOptionHandler(PREF_OUT, NO_DESCRIPTION,
-                                                   "1M", -1, -1, 'D'));
+    std::unique_ptr<OptionHandler> out(new UnitNumberOptionHandler(
+        PREF_OUT, NO_DESCRIPTION, "1M", -1, -1, 'D'));
     out->addTag(TAG_FILE);
-    oparser_->addOptionHandler(out);
+    oparser_->addOptionHandler(std::move(out));
   }
-
-  void tearDown() {}
-
-  void testFindAll();
-  void testFindByNameSubstring();
-  void testFindByTag();
-  void testFind();
-  void testFindByShortName();
-  void testFindById();
-  void testParseDefaultValues();
-  void testParseDefaultValuesDoesNotInjectCompileTimeCABundle();
-  void testLogRotationOptions();
-  void testP2PSharingOptionsAreNotBtOnly();
-  void testParseArg();
-  void testParse();
-  void testParseInternal();
-  void testParseKeyVals();
 };
 
-A2_TEST(OptionParserTest, testFindAll)
-A2_TEST(OptionParserTest, testFindByNameSubstring)
-A2_TEST(OptionParserTest, testFindByTag)
-A2_TEST(OptionParserTest, testFind)
-A2_TEST(OptionParserTest, testFindByShortName)
-A2_TEST(OptionParserTest, testFindById)
-A2_TEST(OptionParserTest, testParseDefaultValues)
-A2_TEST(OptionParserTest, testParseDefaultValuesDoesNotInjectCompileTimeCABundle)
-A2_TEST(OptionParserTest, testLogRotationOptions)
-A2_TEST(OptionParserTest, testP2PSharingOptionsAreNotBtOnly)
-A2_TEST(OptionParserTest, testParseArg)
-A2_TEST(OptionParserTest, testParse)
-A2_TEST(OptionParserTest, testParseInternal)
-A2_TEST(OptionParserTest, testParseKeyVals)
-
-void OptionParserTest::testFindAll()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFindAll")
 {
   std::vector<const OptionHandler*> res = oparser_->findAll();
   REQUIRE_EQ((size_t)3, res.size());
@@ -95,7 +67,7 @@ void OptionParserTest::testFindAll()
   REQUIRE_EQ(std::string("out"), std::string(res[2]->getName()));
 }
 
-void OptionParserTest::testFindByNameSubstring()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFindByNameSubstring")
 {
   std::vector<const OptionHandler*> res = oparser_->findByNameSubstring("i");
   REQUIRE_EQ((size_t)2, res.size());
@@ -103,7 +75,7 @@ void OptionParserTest::testFindByNameSubstring()
   REQUIRE_EQ(std::string("dir"), std::string(res[1]->getName()));
 }
 
-void OptionParserTest::testFindByTag()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFindByTag")
 {
   std::vector<const OptionHandler*> res = oparser_->findByTag(TAG_FILE);
   REQUIRE_EQ((size_t)2, res.size());
@@ -111,7 +83,7 @@ void OptionParserTest::testFindByTag()
   REQUIRE_EQ(std::string("out"), std::string(res[1]->getName()));
 }
 
-void OptionParserTest::testFind()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFind")
 {
   const OptionHandler* dir = oparser_->find(PREF_DIR);
   REQUIRE(dir);
@@ -124,7 +96,7 @@ void OptionParserTest::testFind()
   REQUIRE(!log);
 }
 
-void OptionParserTest::testFindByShortName()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFindByShortName")
 {
   const OptionHandler* timeout = oparser_->findByShortName('A');
   REQUIRE(timeout);
@@ -133,7 +105,7 @@ void OptionParserTest::testFindByShortName()
   REQUIRE(!oparser_->findByShortName('C'));
 }
 
-void OptionParserTest::testFindById()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testFindById")
 {
   const OptionHandler* timeout = oparser_->findById(PREF_TIMEOUT->i);
   REQUIRE(timeout);
@@ -142,7 +114,7 @@ void OptionParserTest::testFindById()
   REQUIRE(!oparser_->findById(9999));
 }
 
-void OptionParserTest::testParseDefaultValues()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testParseDefaultValues")
 {
   Option option;
   oparser_->parseDefaultValues(option);
@@ -152,7 +124,9 @@ void OptionParserTest::testParseDefaultValues()
   REQUIRE(!option.defined(PREF_DIR));
 }
 
-void OptionParserTest::testParseDefaultValuesDoesNotInjectCompileTimeCABundle()
+TEST_CASE_FIXTURE(
+    OptionParserTest,
+    "OptionParserTest.testParseDefaultValuesDoesNotInjectCompileTimeCABundle")
 {
   Option option;
   OptionParser::getInstance()->parseDefaultValues(option);
@@ -160,14 +134,13 @@ void OptionParserTest::testParseDefaultValuesDoesNotInjectCompileTimeCABundle()
   REQUIRE(!option.defined(PREF_CA_CERTIFICATE));
 }
 
-void OptionParserTest::testLogRotationOptions()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testLogRotationOptions")
 {
   auto parser = OptionParser::getInstance();
 
   Option defaults;
   parser->parseDefaultValues(defaults);
-  REQUIRE_EQ((int64_t)10_m,
-                       defaults.getAsLLInt(PREF_LOG_MAX_SIZE));
+  REQUIRE_EQ((int64_t)10_m, defaults.getAsLLInt(PREF_LOG_MAX_SIZE));
   REQUIRE_EQ(4, defaults.getAsInt(PREF_LOG_MAX_FILES));
   REQUIRE_EQ(V_DEBUG, defaults.get(PREF_LOG_LEVEL));
   REQUIRE_EQ(V_INFO, defaults.get(PREF_CONSOLE_LOG_LEVEL));
@@ -177,8 +150,7 @@ void OptionParserTest::testLogRotationOptions()
   input << "log-max-size=20M\n";
   input << "log-max-files=6\n";
   parser->parse(configured, input);
-  REQUIRE_EQ((int64_t)20_m,
-                       configured.getAsLLInt(PREF_LOG_MAX_SIZE));
+  REQUIRE_EQ((int64_t)20_m, configured.getAsLLInt(PREF_LOG_MAX_SIZE));
   REQUIRE_EQ(6, configured.getAsInt(PREF_LOG_MAX_FILES));
 
   try {
@@ -187,10 +159,10 @@ void OptionParserTest::testLogRotationOptions()
   }
   catch (Exception&) {
   }
-
 }
 
-void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
+TEST_CASE_FIXTURE(OptionParserTest,
+                  "OptionParserTest.testP2PSharingOptionsAreNotBtOnly")
 {
   auto parser = OptionParser::getInstance();
   const auto seedRatio = parser->find(PREF_SEED_RATIO);
@@ -208,12 +180,12 @@ void OptionParserTest::testP2PSharingOptionsAreNotBtOnly()
   REQUIRE(detachShareOnly->hasTag(TAG_ED2K));
 }
 
-void OptionParserTest::testParseArg()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testParseArg")
 {
-  OptionHandler* detachShareOnly(new BooleanOptionHandler(
-      PREF_DETACH_SHARE_ONLY, NO_DESCRIPTION, A2_V_FALSE,
-      OptionHandler::OPT_ARG));
-  oparser_->addOptionHandler(detachShareOnly);
+  std::unique_ptr<OptionHandler> detachShareOnly(
+      new BooleanOptionHandler(PREF_DETACH_SHARE_ONLY, NO_DESCRIPTION,
+                               A2_V_FALSE, OptionHandler::OPT_ARG));
+  oparser_->addOptionHandler(std::move(detachShareOnly));
 
   Option option;
   char prog[7];
@@ -236,14 +208,8 @@ void OptionParserTest::testParseArg()
   char nonopt2[8];
   strncpy(nonopt2, "nonopt2", sizeof(nonopt2));
 
-  char* argv[] = {prog,
-                  optionTimeout,
-                  argTimeout,
-                  optionDir,
-                  argDir,
-                  optionDetachShareOnly,
-                  nonopt1,
-                  nonopt2};
+  char* argv[] = {prog,   optionTimeout,         argTimeout, optionDir,
+                  argDir, optionDetachShareOnly, nonopt1,    nonopt2};
   int argc = arraySize(argv);
 
   std::stringstream s;
@@ -254,7 +220,7 @@ void OptionParserTest::testParseArg()
   REQUIRE_EQ(std::string("timeout=ALPHA\n"
                          "dir=BRAVO\n"
                          "detach-share-only=true\n"),
-                       s.str());
+             s.str());
 
   REQUIRE_EQ((size_t)2, nonopts.size());
   REQUIRE_EQ(std::string("nonopt1"), nonopts[0]);
@@ -263,7 +229,7 @@ void OptionParserTest::testParseArg()
   REQUIRE_EQ(std::string("*****"), std::string(argTimeout));
 }
 
-void OptionParserTest::testParse()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testParse")
 {
   Option option;
   std::istringstream in("timeout=Hello\n"
@@ -277,7 +243,7 @@ void OptionParserTest::testParse()
   CHECK_THROWS_AS(oparser_->parse(option, unknown), UnknownOptionException);
 }
 
-void OptionParserTest::testParseInternal()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testParseInternal")
 {
   Option option;
   std::istringstream in("daemon=true\n"
@@ -287,7 +253,7 @@ void OptionParserTest::testParseInternal()
   REQUIRE_EQ(std::string("Hello"), option.get(PREF_TIMEOUT));
 }
 
-void OptionParserTest::testParseKeyVals()
+TEST_CASE_FIXTURE(OptionParserTest, "OptionParserTest.testParseKeyVals")
 {
   Option option;
   KeyVals kv;

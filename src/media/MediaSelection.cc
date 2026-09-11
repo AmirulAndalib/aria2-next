@@ -1,0 +1,201 @@
+/* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
+#include "Option.h"
+#include "media/MediaDownload.h"
+#include "media/MediaTransport.h"
+#include <cstdint>
+#include <gpac/dash.h>
+#include <gpac/setup.h>
+#include <gpac/tools.h>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include "MediaJob.h"
+#include "prefs.h"
+#include "Log.h"
+#include "fmt.h"
+#include <gpac/constants.h>
+#include <sstream>
+
+namespace aria2::media {
+
+namespace {
+std::string trackType(const GF_DASHQualityInfo& info, bool hls)
+{
+  bool video = false, audio = false, text = false;
+  std::istringstream codecs(info.codec ? info.codec : "");
+  std::string codec;
+  while (std::getline(codecs, codec, ',')) {
+    const auto first = codec.find_first_not_of(" \t");
+    if (first == std::string::npos)
+      continue;
+    codec = codec.substr(first, codec.find_first_of(". \t", first) - first);
+    auto id = gf_codecid_parse(codec.c_str());
+    if (id == GF_CODECID_NONE && codec.size() == 4)
+      id = gf_codec_id_from_isobmf(gf_4cc_parse(codec.c_str()));
+    const auto type = gf_codecid_type(id);
+    video |= type == GF_STREAM_VISUAL;
+    audio |= type == GF_STREAM_AUDIO;
+    text |= type == GF_STREAM_TEXT;
+  }
+  if (video || audio || text)
+    return video && audio ? "muxed"
+           : video        ? "video"
+           : audio        ? "audio"
+                          : "subtitle";
+  const std::string mime = info.mime ? info.mime : "";
+  if (info.sample_rate || info.nb_channels || mime.rfind("audio", 0) == 0)
+    return "audio";
+  if (info.width || mime.rfind("video", 0) == 0)
+    return hls && (!info.codec || !*info.codec) ? "muxed" : "video";
+  return "subtitle";
+}
+} // namespace
+
+std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
+{
+  std::map<std::string, Track> chosen;
+  for (u32 group = 0; group < gf_dash_get_group_count(dash); ++group) {
+    gf_dash_group_select(dash, group, GF_FALSE);
+    if (!gf_dash_is_group_selectable(dash, group))
+      continue;
+    const auto language = gf_dash_group_get_language(dash, group);
+    for (u32 quality = 0;
+         quality < gf_dash_group_get_num_qualities(dash, group); ++quality) {
+      GF_DASHQualityInfo info{};
+      if (gf_dash_group_get_quality_info(dash, group, quality, &info) !=
+              GF_OK ||
+          info.disabled)
+        continue;
+      const std::string mime = info.mime ? info.mime : "";
+      const auto type = trackType(info, gf_dash_is_m3u8(dash));
+      Track track{std::to_string(group) + ":" + std::to_string(quality),
+                  type,
+                  language ? language : "",
+                  info.codec ? info.codec : "",
+                  static_cast<int>(info.width),
+                  static_cast<int>(info.height),
+                  info.bandwidth,
+                  false};
+      value.tracks.push_back(track);
+      A2_LOG_DEBUG(fmt("component=media event=representation id=%s type=%s "
+                       "language=%s mime=%s codec=%s",
+                       track.id.c_str(), track.type.c_str(),
+                       track.language.c_str(), mime.c_str(),
+                       track.codec.c_str()));
+      auto pref = type == "video" || (type == "muxed" &&
+                                      option->get(PREF_MEDIA_VIDEO) != "none")
+                      ? PREF_MEDIA_VIDEO
+                  : type == "audio" || type == "muxed" ? PREF_MEDIA_AUDIO
+                                                       : PREF_MEDIA_SUBTITLES;
+      const auto& selection = option->get(pref);
+      if (selection == "none")
+        continue;
+      if (selection != "best" && selection != track.id &&
+          selection != track.language)
+        continue;
+      if (!chosen.count(type) || chosen[type].bandwidth < track.bandwidth)
+        chosen[type] = track;
+    }
+  }
+  for (const auto& type :
+       {std::string("video"), std::string("audio"), std::string("subtitle")}) {
+    const auto pref = type == "video"   ? PREF_MEDIA_VIDEO
+                      : type == "audio" ? PREF_MEDIA_AUDIO
+                                        : PREF_MEDIA_SUBTITLES;
+    const auto& selection = option->get(pref);
+    const auto muxed = chosen.find("muxed");
+    const bool selectedMuxed = type != "subtitle" && muxed != chosen.end() &&
+                               muxed->second.id == selection;
+    if (selection != "best" && selection != "none" && !chosen.count(type) &&
+        !selectedMuxed)
+      throw std::runtime_error(
+          "Requested media track or language is unavailable: " + selection);
+  }
+  return chosen;
+}
+
+void MediaJob::selectTrack(const Track& track)
+{
+  auto separator = track.id.find(':');
+  auto group = std::stoi(track.id.substr(0, separator));
+  auto quality = std::stoi(track.id.substr(separator + 1));
+  const char* descriptor = nullptr;
+  if (gf_dash_group_enum_descriptor(dash, group, GF_MPD_DESC_CONTENT_PROTECTION,
+                                    0, nullptr, &descriptor, nullptr))
+    throw std::runtime_error("DRM-protected media is not supported");
+  gf_dash_group_select(dash, group, GF_TRUE);
+  if (gf_dash_group_select_quality(dash, group, nullptr, quality) != GF_OK)
+    throw std::runtime_error("Cannot select the requested media quality");
+  selected.push_back(group);
+  GF_DASHQualityInfo info{};
+  if (gf_dash_group_get_quality_info(dash, group, quality, &info) != GF_OK)
+    throw std::runtime_error("Cannot inspect the selected representation");
+  const std::string representation = info.ID ? info.ID : "";
+  auto identity = Transport::fingerprint(
+      track.type + "\n" + track.language + "\n" + representation + "\n" +
+      track.codec + "\n" + std::to_string(track.width) + "x" +
+      std::to_string(track.height) + "\n" + std::to_string(track.bandwidth));
+  u64 offset = 0;
+  u32 timescale = 0;
+  if (gf_dash_group_get_presentation_time_offset(dash, group, &offset,
+                                                 &timescale) < 0)
+    throw std::runtime_error("Cannot read the representation timestamp offset");
+  groups[group] = {
+      track.type, identity, "",
+      static_cast<int64_t>(
+          timescale ? gf_timestamp_rescale(offset, timescale, 1000000) : 0)};
+  if (!option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
+    auto previous =
+        lastSegments.find({gf_dash_get_period_start(dash), identity});
+    if (live && gf_dash_is_m3u8(dash) && previous != lastSegments.end() &&
+        gf_dash_group_resume_sequence(dash, group, previous->second.number) !=
+            GF_OK)
+      throw std::runtime_error("Live media left the server's retention window; "
+                               "the recording has a gap");
+    if (live && !gf_dash_is_m3u8(dash) && previous != lastSegments.end() &&
+        gf_dash_group_resume_time(
+            dash, group, previous->second.start + previous->second.duration) !=
+            GF_OK)
+      throw std::runtime_error("Cannot restore the DASH recording position");
+    store.select(gf_dash_get_period_start(dash), track.type, identity);
+    coverage[gf_dash_get_period_start(dash)].try_emplace(identity, 0);
+  }
+}
+
+GF_Err MediaJob::selectGroups()
+{
+  selected.clear();
+  groups.clear();
+  auto value = snapshot();
+  value.tracks.clear();
+  value.protocol = gf_dash_is_m3u8(dash) ? "hls" : "dash";
+  value.live = live || gf_dash_is_dynamic_mpd(dash);
+  live = value.live;
+  value.duration = static_cast<int64_t>(gf_dash_get_duration(dash) * 1000);
+  if (gf_dash_is_smooth_streaming(dash))
+    throw std::runtime_error("Smooth Streaming is not supported");
+  auto chosen = chooseTracks(value);
+  for (auto& track : value.tracks) {
+    auto choice = chosen.find(track.type);
+    track.selected = choice != chosen.end() && choice->second.id == track.id;
+    if (!track.selected)
+      continue;
+    selectTrack(track);
+  }
+  if (selected.empty())
+    throw std::runtime_error("No media track matches the requested selection");
+  store.saveTracks(value.tracks);
+  if (option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
+    for (int group : selected)
+      gf_dash_group_select(dash, group, GF_FALSE);
+    value.state = "awaiting-selection";
+    awaiting = true;
+    publish(value);
+    return GF_SERVICE_ERROR;
+  }
+  value.state = value.live ? "recording" : "downloading";
+  publish(value);
+  return GF_OK;
+}
+
+} // namespace aria2::media

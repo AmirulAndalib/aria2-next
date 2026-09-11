@@ -32,6 +32,13 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include <algorithm>
+#include <cstdio>
+#include <ios>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include "common.h"
 
 #include "ApplicationStatePath.h"
@@ -44,9 +51,9 @@
 #include "Option.h"
 #include "prefs.h"
 #include "OptionParser.h"
-#include "OptionHandlerFactory.h"
 #include "OptionHandler.h"
-#include "util.h"
+#include "support/Text.h"
+#include "a2functional.h"
 #include "message.h"
 #include "Exception.h"
 #include "a2io.h"

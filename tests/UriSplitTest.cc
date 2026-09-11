@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "uri_split.h"
 
 #include <cstring>
@@ -5,20 +6,7 @@
 
 #include "a2doctest.h"
 
-#include "uri_split.h"
-
 namespace aria2 {
-
-class UriSplitTest {
-
-
-public:
-  void testUriSplit();
-  void testUriSplit_fail();
-};
-
-A2_TEST(UriSplitTest, testUriSplit)
-A2_TEST(UriSplitTest, testUriSplit_fail)
 
 namespace {
 const char* fieldstr[] = {
@@ -29,11 +17,11 @@ const char* fieldstr[] = {
 #define CHECK_FIELD_SET(RES, FLAGS)                                            \
   for (int i = 0; i < USR_MAX; ++i) {                                          \
     int mask = 1 << i;                                                         \
-    if ((FLAGS)&mask) {                                                        \
-      REQUIRE_MESSAGE((RES.field_set & mask) != 0, fieldstr[i]);                \
+    if ((FLAGS) & mask) {                                                      \
+      REQUIRE_MESSAGE((RES.field_set & mask) != 0, fieldstr[i]);               \
     }                                                                          \
     else {                                                                     \
-      REQUIRE_MESSAGE(!(RES.field_set & mask), fieldstr[i]);            \
+      REQUIRE_MESSAGE(!(RES.field_set & mask), fieldstr[i]);                   \
     }                                                                          \
   }
 
@@ -44,7 +32,7 @@ std::string mkstr(const uri_split_result& res, int field, const char* base)
 }
 } // namespace
 
-void UriSplitTest::testUriSplit()
+TEST_CASE("UriSplitTest.testUriSplit")
 {
   uri_split_result res;
   const char* uri;
@@ -90,8 +78,7 @@ void UriSplitTest::testUriSplit()
                            (1 << USR_PASSWD));
   REQUIRE_EQ(std::string("aria2.sf.net"), mkstr(res, USR_HOST, uri));
   REQUIRE_EQ(std::string("/path/"), mkstr(res, USR_PATH, uri));
-  REQUIRE_EQ(std::string("user@foo.com:pass"),
-                       mkstr(res, USR_USERINFO, uri));
+  REQUIRE_EQ(std::string("user@foo.com:pass"), mkstr(res, USR_USERINFO, uri));
   REQUIRE_EQ(std::string("user@foo.com"), mkstr(res, USR_USER, uri));
   REQUIRE_EQ(std::string("pass"), mkstr(res, USR_PASSWD, uri));
 
@@ -379,12 +366,11 @@ void UriSplitTest::testUriSplit()
   CHECK_FIELD_SET(res, (1 << USR_SCHEME) | (1 << USR_HOST) | (1 << USR_PATH) |
                            (1 << USR_QUERY) | (1 << USR_BASENAME));
   REQUIRE_EQ(std::string("/index.html"), mkstr(res, USR_PATH, uri));
-  REQUIRE_EQ(std::string("index.html"),
-                       mkstr(res, USR_BASENAME, uri));
+  REQUIRE_EQ(std::string("index.html"), mkstr(res, USR_BASENAME, uri));
   REQUIRE_EQ(std::string("foo"), mkstr(res, USR_QUERY, uri));
 }
 
-void UriSplitTest::testUriSplit_fail()
+TEST_CASE("UriSplitTest.testUriSplit_fail")
 {
   REQUIRE_EQ(-1, uri_split(nullptr, ""));
   REQUIRE_EQ(-1, uri_split(nullptr, "h"));
@@ -405,8 +391,7 @@ void UriSplitTest::testUriSplit_fail()
   REQUIRE_EQ(-1, uri_split(nullptr, "http://user@"));
   REQUIRE_EQ(-1, uri_split(nullptr, "http://[]"));
   REQUIRE_EQ(-1, uri_split(nullptr, "http://[::"));
-  REQUIRE_EQ(
-      -1, uri_split(nullptr, "https://U@[7:7A:EC6f:::4:Cc6:dDe:75]"));
+  REQUIRE_EQ(-1, uri_split(nullptr, "https://U@[7:7A:EC6f:::4:Cc6:dDe:75]"));
   REQUIRE_EQ(-1, uri_split(nullptr, "http://user[::1]"));
   REQUIRE_EQ(-1, uri_split(nullptr, "http://user[::1]x"));
   REQUIRE_EQ(-1, uri_split(nullptr, "http://user:pass[::1]"));

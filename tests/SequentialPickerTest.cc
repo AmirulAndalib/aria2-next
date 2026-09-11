@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "SequentialPicker.h"
 
 #include "a2doctest.h"
@@ -6,16 +7,7 @@
 
 namespace aria2 {
 
-class SequentialPickerTest {
-
-
-public:
-  void testPick();
-};
-
-A2_TEST(SequentialPickerTest, testPick)
-
-void SequentialPickerTest::testPick()
+TEST_CASE("SequentialPickerTest.testPick")
 {
   SequentialPicker<int> picker;
 

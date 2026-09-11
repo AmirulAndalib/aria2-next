@@ -33,13 +33,16 @@
  */
 /* copyright --> */
 #include "SeedCheckCommand.h"
+#include "Command.h"
+#include <chrono>
+#include <memory>
+#include <utility>
 #include "DownloadEngine.h"
 #include "PieceStorage.h"
 #include "Log.h"
 #include "SeedCriteria.h"
 #include "message.h"
 #include "RequestGroup.h"
-#include "fmt.h"
 
 namespace aria2 {
 
@@ -75,8 +78,7 @@ bool SeedCheckCommand::execute()
   if (checkStarted_) {
     if (seedCriteria_->evaluate()) {
       A2_LOG_INFO(MSG_SEEDING_END);
-      requestGroup_->setForceHaltRequested(true,
-                                           RequestGroup::SHARE_COMPLETE);
+      requestGroup_->setForceHaltRequested(true, RequestGroup::SHARE_COMPLETE);
       e_->setRefreshInterval(std::chrono::milliseconds(0));
       return true;
     }

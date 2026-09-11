@@ -1,3 +1,4 @@
+#include <ctime>
 #include "TimeA2.h"
 
 #include <iostream>
@@ -5,37 +6,16 @@
 #include "a2doctest.h"
 
 #include "Exception.h"
-#include "util.h"
+#include "common.h"
 
 namespace aria2 {
 
 class TimeTest {
-
-
 public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testParseRFC1123();
   void testParseRFC1123Alt();
-  void testParseRFC850();
-  void testParseRFC850Ext();
-  void testParseAsctime();
-  void testParseHTTPDate();
-  void testOperatorLess();
-  void testToHTTPDate();
 };
 
-A2_TEST(TimeTest, testParseRFC1123)
-A2_TEST(TimeTest, testParseRFC850)
-A2_TEST(TimeTest, testParseRFC850Ext)
-A2_TEST(TimeTest, testParseAsctime)
-A2_TEST(TimeTest, testParseHTTPDate)
-A2_TEST(TimeTest, testOperatorLess)
-A2_TEST(TimeTest, testToHTTPDate)
-
-void TimeTest::testParseRFC1123()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testParseRFC1123")
 {
   Time t1 = Time::parseRFC1123("Sat, 06 Sep 2008 15:26:33 GMT");
   REQUIRE_EQ((time_t)1220714793, t1.getTimeFromEpoch());
@@ -47,25 +27,25 @@ void TimeTest::testParseRFC1123Alt()
   REQUIRE_EQ((time_t)1220714793, t1.getTimeFromEpoch());
 }
 
-void TimeTest::testParseRFC850()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testParseRFC850")
 {
   Time t1 = Time::parseRFC850("Saturday, 06-Sep-08 15:26:33 GMT");
   REQUIRE_EQ((time_t)1220714793, t1.getTimeFromEpoch());
 }
 
-void TimeTest::testParseRFC850Ext()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testParseRFC850Ext")
 {
   Time t1 = Time::parseRFC850Ext("Saturday, 06-Sep-2008 15:26:33 GMT");
   REQUIRE_EQ((time_t)1220714793, t1.getTimeFromEpoch());
 }
 
-void TimeTest::testParseAsctime()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testParseAsctime")
 {
   Time t1 = Time::parseAsctime("Sun Sep  6 15:26:33 2008");
   REQUIRE_EQ((time_t)1220714793, t1.getTimeFromEpoch());
 }
 
-void TimeTest::testParseHTTPDate()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testParseHTTPDate")
 {
   REQUIRE_EQ(
       (time_t)1220714793,
@@ -82,21 +62,20 @@ void TimeTest::testParseHTTPDate()
   REQUIRE(Time::parseHTTPDate("Sat, 2008-09-06 15:26:33 GMT").bad());
 }
 
-void TimeTest::testOperatorLess()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testOperatorLess")
 {
   REQUIRE(Time(1) < Time(2));
   REQUIRE(!(Time(1) < Time(1)));
   REQUIRE(!(Time(2) < Time(1)));
 }
 
-void TimeTest::testToHTTPDate()
+TEST_CASE_FIXTURE(TimeTest, "TimeTest.testToHTTPDate")
 {
 // This test disabled for MinGW32, because the garbage will be
 // displayed and it hides real errors.
 #ifndef __MINGW32__
   Time t(1220714793);
-  REQUIRE_EQ(std::string("Sat, 06 Sep 2008 15:26:33 GMT"),
-                       t.toHTTPDate());
+  REQUIRE_EQ(std::string("Sat, 06 Sep 2008 15:26:33 GMT"), t.toHTTPDate());
 #endif // !__MINGW32__
 }
 

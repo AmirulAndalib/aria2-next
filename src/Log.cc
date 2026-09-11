@@ -11,6 +11,15 @@
  */
 /* copyright --> */
 #include "Log.h"
+#include "spdlog/common-inl.h"
+#include "spdlog/common.h"
+#include "spdlog/details/log_msg.h"
+#include "spdlog/formatter.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <utility>
 
 #include <algorithm>
 #include <atomic>
@@ -30,7 +39,8 @@
 #include "DlAbortEx.h"
 #include "Exception.h"
 #include "File.h"
-#include "util.h"
+#include "support/Text.h"
+#include "platform/NativeText.h"
 
 namespace aria2 {
 namespace logging {
@@ -55,8 +65,7 @@ std::atomic<uint64_t> settingsRevision{1};
 
 class BoundedFormatter final : public spdlog::formatter {
 public:
-  BoundedFormatter(std::unique_ptr<spdlog::formatter> formatter,
-                   size_t maxSize)
+  BoundedFormatter(std::unique_ptr<spdlog::formatter> formatter, size_t maxSize)
       : formatter_(std::move(formatter)), maxSize_(maxSize)
   {
   }
@@ -141,18 +150,16 @@ void enforceLogBounds(const Settings& settings)
   if (active.exists() &&
       active.size() > static_cast<int64_t>(settings.maxFileSize) &&
       !truncateFile(settings.file)) {
-    throw DL_ABORT_EX("Failed to truncate oversized log file " +
-                      settings.file);
+    throw DL_ABORT_EX("Failed to truncate oversized log file " + settings.file);
   }
 }
 
 std::unique_ptr<spdlog::formatter> fileFormatter(size_t maxSize)
 {
-  std::unique_ptr<spdlog::formatter> pattern(new spdlog::pattern_formatter(
-      "%Y-%m-%d %H:%M:%S.%f [%l] [%s:%#] %v"));
-  return std::unique_ptr<spdlog::formatter>(
-      new BoundedFormatter(std::move(pattern),
-                           std::min(maxSize, MAX_RECORD_SIZE)));
+  std::unique_ptr<spdlog::formatter> pattern(
+      new spdlog::pattern_formatter("%Y-%m-%d %H:%M:%S.%f [%l] [%s:%#] %v"));
+  return std::unique_ptr<spdlog::formatter>(new BoundedFormatter(
+      std::move(pattern), std::min(maxSize, MAX_RECORD_SIZE)));
 }
 
 std::shared_ptr<spdlog::logger> makeLogger(const Settings& settings)
@@ -403,8 +410,8 @@ bool enabled(spdlog::level::level_enum level)
   return logger()->should_log(level);
 }
 
-void write(spdlog::level::level_enum level, const char* sourceFile,
-           int lineNum, const char* message)
+void write(spdlog::level::level_enum level, const char* sourceFile, int lineNum,
+           const char* message)
 {
   const auto safeMessage = sanitizeText(message ? message : "");
   logger()->log(spdlog::source_loc(sourceFile, lineNum, ""), level,
@@ -423,14 +430,14 @@ void tryWrite(spdlog::level::level_enum level, const char* sourceFile,
   }
 }
 
-void write(spdlog::level::level_enum level, const char* sourceFile,
-           int lineNum, const std::string& message)
+void write(spdlog::level::level_enum level, const char* sourceFile, int lineNum,
+           const std::string& message)
 {
   write(level, sourceFile, lineNum, message.c_str());
 }
 
-void write(spdlog::level::level_enum level, const char* sourceFile,
-           int lineNum, const char* message, const Exception& exception)
+void write(spdlog::level::level_enum level, const char* sourceFile, int lineNum,
+           const char* message, const Exception& exception)
 {
   const auto detail = level <= spdlog::level::debug
                           ? exception.stackTrace()
@@ -439,9 +446,8 @@ void write(spdlog::level::level_enum level, const char* sourceFile,
         std::string(message ? message : "") + ": " + detail);
 }
 
-void write(spdlog::level::level_enum level, const char* sourceFile,
-           int lineNum, const std::string& message,
-           const Exception& exception)
+void write(spdlog::level::level_enum level, const char* sourceFile, int lineNum,
+           const std::string& message, const Exception& exception)
 {
   write(level, sourceFile, lineNum, message.c_str(), exception);
 }

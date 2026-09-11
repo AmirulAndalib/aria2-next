@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "DefaultDiskWriter.h"
+#include "AbstractDiskWriter.h"
+#include <cstdint>
+#include <string>
 
 namespace aria2 {
 

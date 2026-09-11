@@ -33,13 +33,16 @@
  */
 /* copyright --> */
 #include "GZipEncoder.h"
+#include <cstdint>
+#include <zlib.h>
 
 #include <array>
 #include <cstring>
 
 #include "fmt.h"
 #include "DlAbortEx.h"
-#include "util.h"
+#include "support/Numbers.h"
+#include "a2functional.h"
 
 namespace aria2 {
 

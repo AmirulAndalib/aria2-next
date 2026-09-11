@@ -33,16 +33,17 @@
  */
 /* copyright --> */
 #include "CheckIntegrityCommand.h"
+#include "Command.h"
+#include "RealtimeCommand.h"
+#include <memory>
+#include <utility>
+#include <vector>
 #include "CheckIntegrityEntry.h"
 #include "DownloadEngine.h"
 #include "RequestGroup.h"
 #include "Log.h"
 #include "message.h"
-#include "prefs.h"
 #include "DownloadContext.h"
-#include "a2functional.h"
-#include "RecoverableException.h"
-#include "util.h"
 #include "fmt.h"
 
 namespace aria2 {

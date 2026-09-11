@@ -4,22 +4,7 @@
 
 namespace aria2 {
 
-class SegListTest {
-
-
-public:
-  void testNext();
-  void testPeek();
-  void testClear();
-  void testNormalize();
-};
-
-A2_TEST(SegListTest, testNext)
-A2_TEST(SegListTest, testPeek)
-A2_TEST(SegListTest, testClear)
-A2_TEST(SegListTest, testNormalize)
-
-void SegListTest::testNext()
+TEST_CASE("SegListTest.testNext")
 {
   SegList<int> sgl;
   sgl.add(-500, -498);
@@ -41,7 +26,7 @@ void SegListTest::testNext()
   REQUIRE_EQ(0, sgl.next());
 }
 
-void SegListTest::testPeek()
+TEST_CASE("SegListTest.testPeek")
 {
   SegList<int> sgl;
   sgl.add(1, 3);
@@ -56,7 +41,7 @@ void SegListTest::testPeek()
   REQUIRE(!sgl.hasNext());
 }
 
-void SegListTest::testClear()
+TEST_CASE("SegListTest.testClear")
 {
   SegList<int> sgl;
   sgl.add(1, 3);
@@ -67,7 +52,7 @@ void SegListTest::testClear()
   REQUIRE_EQ(2, sgl.next());
 }
 
-void SegListTest::testNormalize()
+TEST_CASE("SegListTest.testNormalize")
 {
   SegList<int> sgl;
   sgl.add(10, 15);

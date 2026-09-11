@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "XmlRpcRequestParserController.h"
+#include "ValueBase.h"
+#include <memory>
+#include <utility>
 
 #include <cassert>
 

@@ -33,6 +33,19 @@
  */
 /* copyright --> */
 #include "ConsoleStatCalc.h"
+#include "GroupId.h"
+#include "TransferStat.h"
+#include <chrono>
+#include <consoleapi2.h>
+#include <cstdint>
+#include <memory>
+#include <processenv.h>
+#include <string>
+#include <utility>
+#include <vector>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 
 #ifdef HAVE_TERMIOS_H
 #  include <termios.h>
@@ -61,7 +74,9 @@
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityMan.h"
 #include "CheckIntegrityEntry.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "a2functional.h"
 #include "DownloadContext.h"
 #include "wallclock.h"
 #include "FileEntry.h"
@@ -135,9 +150,14 @@ void appendProgressBar(ColorizedStream& o, int64_t completed, int64_t total,
   if (utf8Console()) {
     // U+2588 FULL BLOCK, U+2589..U+258F partial left blocks, U+2591 LIGHT
     // SHADE for the unfilled remainder.
-    static const char* const partial[] = {
-        "",             "\xE2\x96\x8F", "\xE2\x96\x8E", "\xE2\x96\x8D",
-        "\xE2\x96\x8C", "\xE2\x96\x8B", "\xE2\x96\x8A", "\xE2\x96\x89"};
+    static const char* const partial[] = {"",
+                                          "\xE2\x96\x8F",
+                                          "\xE2\x96\x8E",
+                                          "\xE2\x96\x8D",
+                                          "\xE2\x96\x8C",
+                                          "\xE2\x96\x8B",
+                                          "\xE2\x96\x8A",
+                                          "\xE2\x96\x89"};
     const double cells = frac * width;
     size_t full = static_cast<size_t>(cells);
     const int eighth =

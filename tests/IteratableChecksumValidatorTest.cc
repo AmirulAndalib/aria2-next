@@ -1,3 +1,5 @@
+#include "DiskAdaptor.h"
+#include <memory>
 #include "IteratableChecksumValidator.h"
 
 #include "a2doctest.h"
@@ -6,27 +8,10 @@
 #include "DownloadContext.h"
 #include "DefaultPieceStorage.h"
 #include "Option.h"
-#include "DiskAdaptor.h"
-#include "FileEntry.h"
-#include "PieceSelector.h"
 
 namespace aria2 {
 
-class IteratableChecksumValidatorTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testValidate();
-  void testValidate_fail();
-};
-
-A2_TEST(IteratableChecksumValidatorTest, testValidate)
-A2_TEST(IteratableChecksumValidatorTest, testValidate_fail)
-
-void IteratableChecksumValidatorTest::testValidate()
+TEST_CASE("IteratableChecksumValidatorTest.testValidate")
 {
   Option option;
   std::shared_ptr<DownloadContext> dctx(new DownloadContext(
@@ -47,7 +32,7 @@ void IteratableChecksumValidatorTest::testValidate()
   REQUIRE(ps->downloadFinished());
 }
 
-void IteratableChecksumValidatorTest::testValidate_fail()
+TEST_CASE("IteratableChecksumValidatorTest.testValidate_fail")
 {
   Option option;
   std::shared_ptr<DownloadContext> dctx(new DownloadContext(

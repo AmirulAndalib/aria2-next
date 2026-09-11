@@ -14,6 +14,7 @@
 #define D_BT_SESSION_H
 
 #include "common.h"
+#include <libtorrent/fwd.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -81,17 +82,67 @@ public:
   struct Impl;
 
 private:
+  // Alert processing stays on the engine thread and uses native typed events.
+  void dispatchAlert(libtorrent::alert* alert);
+  void refreshNativeStatus();
+  std::shared_ptr<BtDownload>
+  findDownload(const libtorrent::torrent_handle& handle) const;
+  static std::string gidFor(const std::shared_ptr<BtDownload>& download);
+  void handleAlert(libtorrent::add_torrent_alert* alert);
+  void handleAlert(libtorrent::log_alert* alert);
+  void handleAlert(libtorrent::torrent_log_alert* alert);
+  void handleAlert(libtorrent::peer_error_alert* alert);
+  void handleAlert(libtorrent::peer_connect_alert* alert);
+  void handleAlert(libtorrent::peer_disconnected_alert* alert);
+  void handleAlert(libtorrent::tracker_announce_alert* alert);
+  void handleAlert(libtorrent::tracker_reply_alert* alert);
+  void handleAlert(libtorrent::dht_bootstrap_alert* alert);
+  void handleAlert(libtorrent::torrent_checked_alert* alert);
+  void handleAlert(libtorrent::fastresume_rejected_alert* alert);
+  void handleAlert(libtorrent::hash_failed_alert* alert);
+  void handleAlert(libtorrent::state_changed_alert* alert);
+  void handleAlert(libtorrent::session_stats_alert* alert);
+  void handleAlert(libtorrent::state_update_alert* alert);
+  void handleAlert(libtorrent::peer_info_alert* alert);
+  void handleAlert(libtorrent::file_progress_alert* alert);
+  void handleAlert(libtorrent::file_prio_alert* alert);
+  void handleAlert(libtorrent::file_priorities_alert* alert);
+  void handleAlert(libtorrent::metadata_received_alert* alert);
+  void handleAlert(libtorrent::torrent_finished_alert* alert);
+  void handleAlert(libtorrent::save_resume_data_alert* alert);
+  void handleAlert(libtorrent::save_resume_data_failed_alert* alert);
+  void handleAlert(libtorrent::torrent_removed_alert* alert);
+  void handleAlert(libtorrent::torrent_deleted_alert* alert);
+  void handleAlert(libtorrent::torrent_delete_failed_alert* alert);
+  void handleAlert(libtorrent::file_error_alert* alert);
+  void handleAlert(libtorrent::torrent_error_alert* alert);
+  void handleAlert(libtorrent::storage_moved_alert* alert);
+  void handleAlert(libtorrent::storage_moved_failed_alert* alert);
+  void handleAlert(libtorrent::file_rename_failed_alert* alert);
+  void handleAlert(libtorrent::tracker_error_alert* alert);
+  void handleAlert(libtorrent::tracker_warning_alert* alert);
+  void handleAlert(libtorrent::listen_succeeded_alert* alert);
+  void handleAlert(libtorrent::listen_failed_alert* alert);
+  void handleAlert(libtorrent::external_ip_alert* alert);
+  void handleAlert(libtorrent::portmap_alert* alert);
+  void handleAlert(libtorrent::portmap_error_alert* alert);
+  void handleAlert(libtorrent::dht_stats_alert* alert);
+  void handleAlert(libtorrent::alerts_dropped_alert* alert);
+  void handleAlert(libtorrent::socks5_alert* alert);
+  void handleAlert(libtorrent::performance_alert* alert);
+  void handleAlert(libtorrent::ip_ban_alert* alert);
+
   enum class AttachMode { Running, RestorePaused };
   enum class DeleteIntent { Replace, Permanent };
 
   std::unique_ptr<Impl> impl_;
-  void attach(const std::shared_ptr<BtDownload>& download,
-              RequestGroup* group, AttachMode mode);
+  void attach(const std::shared_ptr<BtDownload>& download, RequestGroup* group,
+              AttachMode mode);
   void requestResumeCheckpoint(BtDownload* download, bool force = false);
   void finishResumeSave(BtDownload* download);
-  bool applyDownloadOptionsInternal(
-      const std::shared_ptr<BtDownload>& download, const Option* option,
-      bool synchronizeFileSelection);
+  bool applyDownloadOptionsInternal(const std::shared_ptr<BtDownload>& download,
+                                    const Option* option,
+                                    bool synchronizeFileSelection);
   bool synchronizeSelection(BtDownload* download);
   void finishFilePriorityUpdate(BtDownload* download);
   void continueSelectionSynchronization(BtDownload* download);

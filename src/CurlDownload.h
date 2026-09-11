@@ -59,6 +59,7 @@ public:
 
 private:
   friend class CurlSession;
+  friend struct CurlHandle;
   friend class CurlDownloadCommand;
   friend class CurlSessionTest;
 

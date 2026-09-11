@@ -88,6 +88,10 @@ public:
   };
 
 private:
+  void restoreEd2kFile(DownloadEngine* engine);
+  void createEd2kCommands(std::vector<std::unique_ptr<Command>>& commands,
+                          DownloadEngine* engine);
+
   // If this download is a part of another download(for example,
   // downloading torrent file described in Metalink file), this field
   // has the GID of parent RequestGroup. 0 means this is a parent
@@ -218,19 +222,9 @@ public:
     return segmentMan_;
   }
 
-  // Returns first bootstrap commands to initiate a download.
   // Create the first command for the selected native transport backend.
   void createInitialCommand(std::vector<std::unique_ptr<Command>>& commands,
                             DownloadEngine* e);
-
-  void createNextCommandWithAdj(std::vector<std::unique_ptr<Command>>& commands,
-                                DownloadEngine* e, int numAdj);
-
-  void createNextCommand(std::vector<std::unique_ptr<Command>>& commands,
-                         DownloadEngine* e, int numCommand);
-
-  void createNextCommand(std::vector<std::unique_ptr<Command>>& commands,
-                         DownloadEngine* e);
 
   bool downloadFinished() const;
 

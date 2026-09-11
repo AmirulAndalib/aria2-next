@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "WrDiskCache.h"
+#include <cinttypes>
+#include <cstddef>
+#include <utility>
 
 #include <algorithm>
 #include <cassert>

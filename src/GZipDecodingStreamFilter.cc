@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "GZipDecodingStreamFilter.h"
+#include "StreamFilter.h"
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+#include <zlib.h>
 
 #include <cassert>
 

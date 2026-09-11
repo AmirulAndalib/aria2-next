@@ -1,4 +1,6 @@
-#include "util.h"
+#include <cstddef>
+#include "support/Text.h"
+#include "support/Encoding.h"
 #include "util_security.h"
 
 #include "a2doctest.h"
@@ -210,27 +212,7 @@ static struct hmachash {
 
 namespace aria2 {
 
-class SecurityTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testCompareByte();
-  void testCompareArray();
-  void testHMAC();
-  void testHMACRandom();
-  void testPBKDF2();
-};
-
-A2_TEST(SecurityTest, testCompareByte)
-A2_TEST(SecurityTest, testCompareArray)
-A2_TEST(SecurityTest, testHMAC)
-A2_TEST(SecurityTest, testHMACRandom)
-A2_TEST(SecurityTest, testPBKDF2)
-
-void SecurityTest::testCompareByte()
+TEST_CASE("SecurityTest.testCompareByte")
 {
   REQUIRE(util::security::compare('a', 'a'));
   REQUIRE(util::security::compare('\0', '\0'));
@@ -241,7 +223,7 @@ void SecurityTest::testCompareByte()
   REQUIRE(!util::security::compare(0, 0xff));
 }
 
-void SecurityTest::testCompareArray()
+TEST_CASE("SecurityTest.testCompareArray")
 {
   REQUIRE(util::security::compare("", "", 0));
   REQUIRE(util::security::compare("a", "a", 1));
@@ -270,7 +252,7 @@ static struct {
              {"sha-384", 3},
              {"sha-512", 4}};
 
-void SecurityTest::testHMAC()
+TEST_CASE("SecurityTest.testHMAC")
 {
   for (const auto& test : hmachashes) {
     for (const auto& hmac : hmacs) {
@@ -300,7 +282,7 @@ void SecurityTest::testHMAC()
   }
 }
 
-void SecurityTest::testHMACRandom()
+TEST_CASE("SecurityTest.testHMACRandom")
 {
   auto h = util::security::HMAC::createRandom();
   REQUIRE(h->getResult("abc") == h->getResult("abc"));
@@ -394,7 +376,7 @@ static struct pbkdf2 {
                  0xd7, 0xf0, 0x34, 0x25, 0xe0, 0xc3},
                 16}};
 
-void SecurityTest::testPBKDF2()
+TEST_CASE("SecurityTest.testPBKDF2")
 {
   for (const auto& test : pbkdf2s) {
     auto h = util::security::HMAC::create(test.pass, test.pass_len);

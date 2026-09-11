@@ -11,6 +11,14 @@
  */
 /* copyright --> */
 #include "Ed2kListenCommand.h"
+#include "Command.h"
+#include "ContextAttribute.h"
+#include "a2functional.h"
+#include "a2netcompat.h"
+#include "common.h"
+#include "ed2k_link.h"
+#include <cstdint>
+#include <memory>
 
 #include "DownloadContext.h"
 #include "DownloadEngine.h"
@@ -27,8 +35,7 @@
 
 namespace aria2 {
 
-Ed2kListenCommand::Ed2kListenCommand(cuid_t cuid, DownloadEngine* e,
-                                     int family)
+Ed2kListenCommand::Ed2kListenCommand(cuid_t cuid, DownloadEngine* e, int family)
     : Command(cuid), e_(e), family_(family)
 {
 }
@@ -59,12 +66,12 @@ bool Ed2kListenCommand::bindPort(uint16_t port)
     e_->setEd2kTcpPort(socket_->getAddrInfo().port);
     e_->setEd2kTcpListenActive(true);
     A2_LOG_INFO(fmt(_("IPv%d ED2K: listening on TCP port %u"), ipv,
-                      socket_->getAddrInfo().port));
+                    socket_->getAddrInfo().port));
     return true;
   }
   catch (RecoverableException& ex) {
-    A2_LOG_ERROR_EX(
-        fmt("IPv%d ED2K: failed to bind TCP port %u", ipv, port), ex);
+    A2_LOG_ERROR_EX(fmt("IPv%d ED2K: failed to bind TCP port %u", ipv, port),
+                    ex);
     socket_->closeConnection();
   }
   return false;
@@ -122,8 +129,8 @@ bool Ed2kListenCommand::execute()
         peerSocket->closeConnection();
         continue;
       }
-      e_->addCommand(make_unique<Ed2kCommand>(e_->newCUID(), group, e_, peer,
-                                              peerSocket));
+      e_->addCommand(
+          make_unique<Ed2kCommand>(e_->newCUID(), group, e_, peer, peerSocket));
       A2_LOG_TRACE(fmt("Accepted ED2K peer connection from %s:%u.",
                        peer.host.c_str(), peer.port));
     }

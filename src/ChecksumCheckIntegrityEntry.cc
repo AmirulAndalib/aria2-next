@@ -33,12 +33,15 @@
  */
 /* copyright --> */
 #include "ChecksumCheckIntegrityEntry.h"
+#include "a2functional.h"
+#include "error_code.h"
+#include <memory>
+#include <utility>
+#include <vector>
 #include "RequestGroup.h"
 #include "DownloadContext.h"
-#include "FileEntry.h"
 #include "IteratableChecksumValidator.h"
 #include "DownloadEngine.h"
-#include "PieceStorage.h"
 #include "Command.h"
 #include "FileAllocationEntry.h"
 

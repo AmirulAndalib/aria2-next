@@ -33,6 +33,13 @@
  */
 /* copyright --> */
 #include "WebSocketSessionMan.h"
+#include "GroupId.h"
+#include "ValueBase.h"
+#include "aria2/aria2.h"
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
 
 #include <algorithm>
 #include <cassert>
@@ -40,7 +47,6 @@
 #include "WebSocketSession.h"
 #include "RequestGroup.h"
 #include "json.h"
-#include "util.h"
 #include "WebSocketInteractionCommand.h"
 #include "Log.h"
 

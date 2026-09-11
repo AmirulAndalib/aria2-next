@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "Range.h"
+#include <cstdint>
 
 namespace aria2 {
 

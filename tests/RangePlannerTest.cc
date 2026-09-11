@@ -1,21 +1,12 @@
+#include <chrono>
+#include <cstdint>
 #include "RangePlanner.h"
 
 #include "a2doctest.h"
 
 namespace aria2 {
 
-class RangePlannerTest {
-public:
-  void testRestoreAndScheduleGaps();
-  void testLocalizedRetry();
-  void testReadyRefill();
-};
-
-A2_TEST(RangePlannerTest, testRestoreAndScheduleGaps)
-A2_TEST(RangePlannerTest, testLocalizedRetry)
-A2_TEST(RangePlannerTest, testReadyRefill)
-
-void RangePlannerTest::testRestoreAndScheduleGaps()
+TEST_CASE("RangePlannerTest.testRestoreAndScheduleGaps")
 {
   RangePlanner planner;
   planner.restore({{0, 10}, {20, 30}});
@@ -33,7 +24,7 @@ void RangePlannerTest::testRestoreAndScheduleGaps()
   CHECK(!planner.takeReady({}));
 }
 
-void RangePlannerTest::testLocalizedRetry()
+TEST_CASE("RangePlannerTest.testLocalizedRetry")
 {
   RangePlanner planner;
   planner.configure(100, 100, {});
@@ -59,7 +50,7 @@ void RangePlannerTest::testLocalizedRetry()
   CHECK_EQ(100, planner.completedLength());
 }
 
-void RangePlannerTest::testReadyRefill()
+TEST_CASE("RangePlannerTest.testReadyRefill")
 {
   RangePlanner planner;
   planner.enqueue({0, 80, 0, 1});

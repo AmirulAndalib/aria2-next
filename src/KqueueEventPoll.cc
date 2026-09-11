@@ -41,7 +41,8 @@
 
 #include "Command.h"
 #include "Log.h"
-#include "util.h"
+#include "platform/Process.h"
+#include "a2functional.h"
 #include "fmt.h"
 
 #ifdef KEVENT_UDATA_INTPTR_T

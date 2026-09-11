@@ -32,24 +32,28 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskAdaptor.h"
 #include "IteratableChunkChecksumValidator.h"
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 #include <array>
 #include <cstring>
 #include <cstdlib>
 
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
+#include "fmt.h"
 #include "message.h"
-#include "DiskAdaptor.h"
-#include "FileEntry.h"
+#include "DlAbortEx.h"
 #include "RecoverableException.h"
 #include "DownloadContext.h"
 #include "PieceStorage.h"
 #include "BitfieldMan.h"
 #include "Log.h"
 #include "MessageDigest.h"
-#include "fmt.h"
-#include "DlAbortEx.h"
 
 namespace aria2 {
 

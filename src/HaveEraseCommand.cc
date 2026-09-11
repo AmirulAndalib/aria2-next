@@ -32,10 +32,15 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "PieceStorage.h"
 #include "HaveEraseCommand.h"
+#include "Command.h"
+#include "TimeBasedCommand.h"
+#include "a2functional.h"
+#include <chrono>
+#include <utility>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
-#include "PieceStorage.h"
 #include "RequestGroup.h"
 #include "wallclock.h"
 

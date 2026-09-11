@@ -32,7 +32,12 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "BinaryStream.h"
 #include "message_digest_helper.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 #include <array>
 #include <cstring>
@@ -41,8 +46,7 @@
 #include "MessageDigest.h"
 #include "DlAbortEx.h"
 #include "message.h"
-#include "DefaultDiskWriter.h"
-#include "util.h"
+#include "a2functional.h"
 #include "fmt.h"
 
 namespace aria2 {

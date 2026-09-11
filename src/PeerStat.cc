@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "PeerStat.h"
+#include "Command.h"
+#include "TimerA2.h"
+#include "TransferStat.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include "wallclock.h"
 
 namespace aria2 {

@@ -33,11 +33,18 @@
  */
 /* copyright --> */
 #include "RpcResponse.h"
+#include "ValueBase.h"
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <cassert>
 #include <sstream>
 
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
 #include "json.h"
 #ifdef HAVE_ZLIB
 #  include "GZipEncoder.h"

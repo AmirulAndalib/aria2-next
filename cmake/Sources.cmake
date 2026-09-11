@@ -1,9 +1,63 @@
 # Source inventory for conditional aria2 CMake targets.
 
 set(ARIA2_SOURCES_BASE
+  src/rpc/AddUriMethod.cc
+  src/rpc/Ed2kMethods.cc
+  src/rpc/Ed2kStatus.cc
+  src/rpc/FileStatus.cc
+  src/rpc/OptionMethods.cc
+  src/rpc/RpcRequestHelpers.cc
+  src/rpc/SessionMethods.cc
+  src/rpc/SystemMethods.cc
+  src/rpc/TaskControlMethods.cc
+  src/rpc/TaskStatusMethods.cc
+  src/rpc/TransferStatus.cc
+  src/rpc/UriMethods.cc
+  src/RequestGroupActions.cc
+  src/ed2k/Ed2kPeerHandshake.cc
+  src/ed2k/Ed2kServerHandshake.cc
+  src/ed2k/Ed2kServerRequests.cc
+  src/ed2k/Ed2kPeerRequests.cc
+  src/ed2k/Ed2kCommandTransfer.cc
+  src/ed2k/Ed2kConnectionIo.cc
+  src/ed2k/Ed2kServerPackets.cc
+  src/ed2k/Ed2kCommandSupport.cc
+  src/ed2k/EmulePackets.cc
+  src/ed2k/Ed2kPeerPackets.cc
+  src/options/OptionCatalog.cc
+  src/options/GeneralOptions.cc
+  src/options/RpcOptions.cc
+  src/options/StreamOptions.cc
+  src/options/HttpOptions.cc
+  src/options/SftpOptions.cc
+  src/options/ProxyOptions.cc
+  src/options/SharingOptions.cc
+  src/options/BitTorrentOptions.cc
+  src/options/MetalinkOptions.cc
+  src/options/HelpOptions.cc
+  src/stream/StreamStorage.cc
+  src/stream/StreamScheduling.cc
+  src/stream/StreamRequest.cc
+  src/stream/StreamCompletion.cc
+  src/stream/CurlHandle.cc
+  src/transport/CurlMulti.cc
+  src/transport/CurlOptions.cc
+  src/transport/HttpHeaders.cc
   src/media/MediaDownload.cc
   src/media/MediaSession.cc
+  src/media/DashFileIo.cc
+  src/media/MediaJob.cc
+  src/media/MediaSegments.cc
+  src/media/MediaPublication.cc
+  src/media/MediaSelection.cc
+  src/media/MediaEvents.cc
+  src/media/MediaTransfer.cc
   src/media/MediaTransport.cc
+  src/media/MuxInput.cc
+  src/media/MuxPackets.cc
+  src/media/MuxTimestamps.cc
+  src/media/MuxOutput.cc
+  src/media/MuxTimeline.cc
   src/media/MediaMuxer.cc
   src/media/MediaStore.cc
   src/a2algo.h
@@ -74,8 +128,6 @@ set(ARIA2_SOURCES_BASE
   src/Context.h
   src/ContextAttribute.cc
   src/ContextAttribute.h
-  src/ControlChain.h
-  src/crypto_endian.h
   src/CUIDCounter.cc
   src/CUIDCounter.h
   src/CurlDownload.cc
@@ -128,6 +180,15 @@ set(ARIA2_SOURCES_BASE
   src/download_helper.cc
   src/download_helper.h
   src/Ed2kAttribute.cc
+  src/ed2k/Ed2kSources.cc
+  src/ed2k/Ed2kPeerState.cc
+  src/ed2k/Ed2kSearchState.cc
+  src/ed2k/Ed2kIntegrityState.cc
+  src/ed2k/Ed2kCallbackState.cc
+  src/ed2k/Ed2kRequestedRanges.cc
+  src/ed2k/Ed2kKadStateIntegration.cc
+  src/ed2k/Ed2kServerState.cc
+  src/ed2k/Ed2kScheduling.cc
   src/Ed2kAttribute.h
   src/Ed2kCommand.cc
   src/Ed2kCommand.h
@@ -150,6 +211,18 @@ set(ARIA2_SOURCES_BASE
   src/Ed2kUploadQueue.cc
   src/Ed2kUploadQueue.h
   src/Ed2kKadCommand.cc
+  src/ed2k/KadRoutingPackets.cc
+  src/ed2k/KadSearchPackets.cc
+  src/ed2k/KadFirewallPackets.cc
+  src/ed2k/KadPeerPackets.cc
+  src/ed2k/KadServerPackets.cc
+  src/ed2k/KadDatagrams.cc
+  src/ed2k/KadObfuscation.cc
+  src/ed2k/KadServerRequests.cc
+  src/ed2k/KadMaintenance.cc
+  src/ed2k/KadTraversal.cc
+  src/ed2k/KadPeerRequests.cc
+  src/ed2k/KadCommandSupport.cc
   src/Ed2kKadCommand.h
   src/Ed2kKadState.cc
   src/Ed2kKadState.h
@@ -166,7 +239,6 @@ set(ARIA2_SOURCES_BASE
   src/ed2k_endpoint.h
   src/ed2k_hash.cc
   src/ed2k_hash.h
-  src/ed2k_helper.h
   src/ed2k_kad.cc
   src/ed2k_kad.h
   src/ed2k_link.cc
@@ -254,7 +326,6 @@ set(ARIA2_SOURCES_BASE
   src/JsonParser.h
   src/LegacyInputAdapter.cc
   src/LegacyInputAdapter.h
-  src/Lock.h
   src/Log.cc
   src/Log.h
   src/MemoryBufferPreDownloadHandler.h
@@ -289,8 +360,6 @@ set(ARIA2_SOURCES_BASE
   src/OptionHandler.h
   src/OptionHandlerException.cc
   src/OptionHandlerException.h
-  src/OptionHandlerFactory.cc
-  src/OptionHandlerFactory.h
   src/OptionHandlerImpl.cc
   src/OptionHandlerImpl.h
   src/OptionParser.cc
@@ -332,6 +401,11 @@ set(ARIA2_SOURCES_BASE
   src/Request.cc
   src/Request.h
   src/RequestGroup.cc
+  src/task/Ed2kTask.cc
+  src/task/TaskStorage.cc
+  src/task/TaskProgress.cc
+  src/task/TaskResults.cc
+  src/task/TaskHandlers.cc
   src/RequestGroup.h
   src/RangePlanner.cc
   src/RangePlanner.h
@@ -339,13 +413,18 @@ set(ARIA2_SOURCES_BASE
   src/RequestGroupEntry.cc
   src/RequestGroupEntry.h
   src/RequestGroupMan.cc
+  src/task/TaskManagerQueue.cc
+  src/task/TaskEvents.cc
+  src/task/TaskManagerStop.cc
+  src/task/TaskManagerStorage.cc
+  src/task/TaskManagerResults.cc
+  src/task/TaskManagerOutput.cc
+  src/task/TaskManagerStats.cc
   src/RequestGroupMan.h
   src/RpcMethod.cc
   src/RpcMethod.h
   src/RpcMethodFactory.cc
   src/RpcMethodFactory.h
-  src/RpcMethodImpl.cc
-  src/RpcMethodImpl.h
   src/RpcRequest.cc
   src/RpcRequest.h
   src/RpcResponse.cc
@@ -385,6 +464,12 @@ set(ARIA2_SOURCES_BASE
   src/SocketBuffer.cc
   src/SocketBuffer.h
   src/SocketCore.cc
+  src/platform/SocketOps.cc
+  src/platform/SocketTls.cc
+  src/platform/SocketInterfaces.cc
+  src/platform/SocketOptions.cc
+  src/platform/SocketIo.cc
+  src/platform/SocketAddress.cc
   src/SocketCore.h
   src/SocketRecvBuffer.cc
   src/SocketRecvBuffer.h
@@ -425,8 +510,16 @@ set(ARIA2_SOURCES_BASE
   src/uri_split.c
   src/uri_split.h
   src/usage_text.h
-  src/util.cc
-  src/util.h
+  src/platform/NativeText.cc
+  src/support/Text.cc
+  src/support/Numbers.cc
+  src/support/Encoding.cc
+  src/support/FilePath.cc
+  src/support/Network.cc
+  src/support/Storage.cc
+  src/support/Random.cc
+  src/platform/Process.cc
+  src/support/ContentDisposition.cc
   src/util_security.cc
   src/util_security.h
   src/ValueBase.cc
@@ -553,7 +646,27 @@ set(ARIA2_SOURCES_HAVE_SQLITE3
 )
 
 set(ARIA2_SOURCES_ENABLE_BITTORRENT
+  src/rpc/TorrentControlMethods.cc
+  src/rpc/TorrentMetadataMethods.cc
+  src/rpc/TorrentStatus.cc
+  src/rpc/TorrentStatusMethods.cc
+  src/bittorrent/BtStateIntegration.cc
+  src/bittorrent/BtStatusProjection.cc
+  src/bittorrent/BtSelection.cc
+  src/bittorrent/BtTaskLifecycle.cc
+  src/bittorrent/BtSessionControl.cc
+  src/bittorrent/BtTaskAlerts.cc
+  src/bittorrent/BtResumeAlerts.cc
+  src/bittorrent/BtProgressAlerts.cc
+  src/bittorrent/BtNetworkAlerts.cc
   src/BtDownload.cc
+  src/bittorrent/BtDownloadSupport.cc
+  src/bittorrent/BtMetainfo.cc
+  src/bittorrent/BtResume.cc
+  src/bittorrent/BtTrackers.cc
+  src/bittorrent/BtConfiguration.cc
+  src/bittorrent/BtFileSelection.cc
+  src/bittorrent/BtProgress.cc
   src/BtDownload.h
   src/BtDownloadImpl.h
   src/BtDownloadCommand.cc
@@ -580,6 +693,7 @@ set(ARIA2_SOURCES_ARC4
 )
 
 set(ARIA2_SOURCES_ENABLE_METALINK
+  src/rpc/MetalinkMethods.cc
   src/Metalink2RequestGroup.cc
   src/Metalink2RequestGroup.h
   src/MetalinkEntry.cc

@@ -1,3 +1,21 @@
+extern "C" {
+#include <libavcodec/packet.h>
+#include <libavformat/avformat.h>
+#include <libavutil/intreadwrite.h>
+#include <libavutil/mathematics.h>
+}
+
+#include "media/MediaDownload.h"
+#include <cstddef>
+#include <cstdint>
+#include <gpac/list.h>
+#include <gpac/setup.h>
+#include <gpac/tools.h>
+#include <ios>
+#include <memory>
+#include <string>
+#include <system_error>
+#include <vector>
 #include "a2doctest.h"
 #include "media/MediaMuxer.h"
 #include "media/MediaFiles.h"
@@ -5,10 +23,8 @@
 #include "media/MediaTransport.h"
 
 extern "C" {
-#include <libavformat/avformat.h>
 #include <gpac/mpd.h>
 #include <gpac/isomedia.h>
-#include <libavutil/intreadwrite.h>
 }
 #include <sqlite3.h>
 #include <array>

@@ -11,6 +11,10 @@
  */
 /* copyright --> */
 #include "CurlDownloadCommand.h"
+#include "Command.h"
+#include <exception>
+#include <memory>
+#include <utility>
 
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
@@ -19,8 +23,6 @@
 #include "RequestGroup.h"
 #include "error_code.h"
 #include "media/MediaDownload.h"
-#include "prefs.h"
-#include "Option.h"
 
 namespace aria2 {
 

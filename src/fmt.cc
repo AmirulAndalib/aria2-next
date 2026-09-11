@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "fmt.h"
+#include <cstdarg>
+#include <string>
 
 #include <cstring>
 #include <cstdio>

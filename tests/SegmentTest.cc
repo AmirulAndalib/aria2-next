@@ -1,3 +1,6 @@
+#include "a2functional.h"
+#include <cstdint>
+#include <memory>
 #include "PiecedSegment.h"
 
 #include "a2doctest.h"
@@ -6,25 +9,7 @@
 
 namespace aria2 {
 
-class SegmentTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testUpdateWrittenLength();
-  void testUpdateWrittenLength_lastPiece();
-  void testUpdateWrittenLength_incompleteLastPiece();
-  void testClear();
-};
-
-A2_TEST(SegmentTest, testUpdateWrittenLength)
-A2_TEST(SegmentTest, testUpdateWrittenLength_lastPiece)
-A2_TEST(SegmentTest, testUpdateWrittenLength_incompleteLastPiece)
-A2_TEST(SegmentTest, testClear)
-
-void SegmentTest::testUpdateWrittenLength()
+TEST_CASE("SegmentTest.testUpdateWrittenLength")
 {
   std::shared_ptr<Piece> p(new Piece(0, 160_k));
   PiecedSegment s(160_k, p);
@@ -38,7 +23,7 @@ void SegmentTest::testUpdateWrittenLength()
   REQUIRE(p->pieceComplete());
 }
 
-void SegmentTest::testUpdateWrittenLength_lastPiece()
+TEST_CASE("SegmentTest.testUpdateWrittenLength_lastPiece")
 {
   std::shared_ptr<Piece> p(new Piece(0, 16_k * 9 + 1));
   PiecedSegment s(160_k, p);
@@ -47,7 +32,7 @@ void SegmentTest::testUpdateWrittenLength_lastPiece()
   REQUIRE(p->pieceComplete());
 }
 
-void SegmentTest::testUpdateWrittenLength_incompleteLastPiece()
+TEST_CASE("SegmentTest.testUpdateWrittenLength_incompleteLastPiece")
 {
   std::shared_ptr<Piece> p(new Piece(0, 16_k * 9 + 2));
   PiecedSegment s(160_k, p);
@@ -58,7 +43,7 @@ void SegmentTest::testUpdateWrittenLength_incompleteLastPiece()
   REQUIRE(p->pieceComplete());
 }
 
-void SegmentTest::testClear()
+TEST_CASE("SegmentTest.testClear")
 {
   std::shared_ptr<Piece> p(new Piece(0, 160_k));
   PiecedSegment s(160_k, p);

@@ -33,14 +33,15 @@
  */
 /* copyright --> */
 #include "WebSocketInteractionCommand.h"
+#include "Command.h"
+#include <cinttypes>
+#include <memory>
 #include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "WebSocketSession.h"
 #include "Log.h"
 #include "fmt.h"
-#include "SingletonHolder.h"
-#include "Notifier.h"
 #include "WebSocketSessionMan.h"
 
 namespace aria2 {
@@ -95,8 +96,8 @@ bool WebSocketInteractionCommand::execute()
     }
     else {
       A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - WebSocket session terminated"
-                      " (Possibly due to EOF).",
-                      getCuid()));
+                       " (Possibly due to EOF).",
+                       getCuid()));
     }
     return true;
   }

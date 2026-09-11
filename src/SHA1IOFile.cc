@@ -33,6 +33,10 @@
  */
 /* copyright --> */
 #include "SHA1IOFile.h"
+#include "MessageDigest.h"
+#include <cstdarg>
+#include <cstddef>
+#include <string>
 
 #include <cassert>
 

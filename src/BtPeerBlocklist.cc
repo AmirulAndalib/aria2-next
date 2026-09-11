@@ -11,6 +11,15 @@
  */
 /* copyright --> */
 #include "BtPeerBlocklist.h"
+#include "RecoverableException.h"
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <istream>
+#include <string>
+#include <utility>
+#include <vector>
+#include "platform/SocketAddress.h"
 
 #include <algorithm>
 #include <sstream>
@@ -18,9 +27,9 @@
 #include "BufferedFile.h"
 #include "DlAbortEx.h"
 #include "Log.h"
-#include "SocketCore.h"
 #include "fmt.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
 
 namespace aria2 {
 
@@ -39,8 +48,7 @@ bool lessAddress(const std::array<unsigned char, 16>& lhs,
 }
 
 bool lessOrEqualAddress(const std::array<unsigned char, 16>& lhs,
-                        const std::array<unsigned char, 16>& rhs,
-                        size_t length)
+                        const std::array<unsigned char, 16>& rhs, size_t length)
 {
   return !lessAddress(rhs, lhs, length);
 }
@@ -82,17 +90,17 @@ BtPeerBlocklist::Range createRange(const std::string& rule,
   auto addressText = slash == std::string::npos ? rule : rule.substr(0, slash);
   auto address = parseAddress(addressText);
   addressLength = address.length;
-  auto prefixLength = slash == std::string::npos
-                          ? static_cast<unsigned int>(addressLength * 8)
-                          : parsePrefixLength(rule.substr(slash + 1),
-                                              addressLength);
+  auto prefixLength =
+      slash == std::string::npos
+          ? static_cast<unsigned int>(addressLength * 8)
+          : parsePrefixLength(rule.substr(slash + 1), addressLength);
 
   BtPeerBlocklist::Range range{};
   for (size_t i = 0; i < addressLength; ++i) {
     auto remaining = prefixLength > i * 8 ? prefixLength - i * 8 : 0;
-    unsigned char mask = remaining >= 8
-                             ? 0xff
-                             : static_cast<unsigned char>(0xff << (8 - remaining));
+    unsigned char mask =
+        remaining >= 8 ? 0xff
+                       : static_cast<unsigned char>(0xff << (8 - remaining));
     range.first[i] = address.bytes[i] & mask;
     range.last[i] = address.bytes[i] | static_cast<unsigned char>(~mask);
   }
@@ -127,12 +135,12 @@ void mergeRanges(std::vector<BtPeerBlocklist::Range>& ranges, size_t length)
 bool containsAddress(const std::vector<BtPeerBlocklist::Range>& ranges,
                      const ParsedAddress& address)
 {
-  auto i = std::upper_bound(
-      ranges.begin(), ranges.end(), address.bytes,
-      [&address](const std::array<unsigned char, 16>& value,
-                 const BtPeerBlocklist::Range& range) {
-        return lessAddress(value, range.first, address.length);
-      });
+  auto i =
+      std::upper_bound(ranges.begin(), ranges.end(), address.bytes,
+                       [&address](const std::array<unsigned char, 16>& value,
+                                  const BtPeerBlocklist::Range& range) {
+                         return lessAddress(value, range.first, address.length);
+                       });
   if (i == ranges.begin()) {
     return false;
   }
@@ -145,10 +153,7 @@ bool containsAddress(const std::vector<BtPeerBlocklist::Range>& ranges,
 
 BtPeerBlocklist::BtPeerBlocklist() : ruleCount_(0), revision_(0) {}
 
-void BtPeerBlocklist::clear()
-{
-  replace({}, "clear");
-}
+void BtPeerBlocklist::clear() { replace({}, "clear"); }
 
 void BtPeerBlocklist::load(const std::string& path)
 {

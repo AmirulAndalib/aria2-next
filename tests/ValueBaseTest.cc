@@ -1,47 +1,25 @@
+#include <iterator>
+#include <memory>
+#include <string>
 #include "ValueBase.h"
 
 #include <cstring>
-#include <iostream>
 
 #include "a2doctest.h"
 
-#include "Exception.h"
-#include "util.h"
+#include "support/Encoding.h"
 
 namespace aria2 {
 
-class ValueBaseTest {
-
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testString();
-  void testDict();
-  void testDictIter();
-  void testList();
-  void testListIter();
-  void testDowncast();
-};
-
-A2_TEST(ValueBaseTest, testString)
-A2_TEST(ValueBaseTest, testDict)
-A2_TEST(ValueBaseTest, testDictIter)
-A2_TEST(ValueBaseTest, testList)
-A2_TEST(ValueBaseTest, testListIter)
-A2_TEST(ValueBaseTest, testDowncast)
-
-void ValueBaseTest::testString()
+TEST_CASE("ValueBaseTest.testString")
 {
   String s(std::string("aria2"));
   REQUIRE_EQ(std::string("aria2"), s.s());
 
   unsigned char dataWithNull[] = {0xf0, '\0', 0x0f};
   String sWithNull(dataWithNull, sizeof(dataWithNull));
-  REQUIRE(
-      memcmp(dataWithNull, sWithNull.s().c_str(), sizeof(dataWithNull)) == 0);
+  REQUIRE(memcmp(dataWithNull, sWithNull.s().c_str(), sizeof(dataWithNull)) ==
+          0);
 
   String zero("");
   REQUIRE_EQ(std::string(""), zero.s());
@@ -52,10 +30,10 @@ void ValueBaseTest::testString()
   const unsigned char uc[] = {0x08, 0x19, 0x2a, 0x3b};
   String data(uc, sizeof(uc));
   REQUIRE_EQ(util::toHex(uc, sizeof(uc)),
-                       util::toHex(data.uc(), data.s().size()));
+             util::toHex(data.uc(), data.s().size()));
 }
 
-void ValueBaseTest::testDowncast()
+TEST_CASE("ValueBaseTest.testDowncast")
 {
   Integer integer(100);
   const Integer* x = downcast<Integer>(&integer);
@@ -79,7 +57,7 @@ void ValueBaseTest::testDowncast()
   REQUIRE(x5);
 }
 
-void ValueBaseTest::testDict()
+TEST_CASE("ValueBaseTest.testDict")
 {
   Dict dict;
   REQUIRE(dict.empty());
@@ -90,7 +68,7 @@ void ValueBaseTest::testDict()
   REQUIRE_EQ(static_cast<size_t>(2), dict.size());
   REQUIRE(dict.containsKey("ki"));
   REQUIRE_EQ(static_cast<Integer::ValueType>(7),
-                       downcast<Integer>(dict["ki"])->i());
+             downcast<Integer>(dict["ki"])->i());
   REQUIRE(dict.containsKey("ks"));
   REQUIRE_EQ(std::string("abc"), downcast<String>(dict["ks"])->s());
 
@@ -112,7 +90,7 @@ void ValueBaseTest::testDict()
   REQUIRE(!dict.containsKey("ki"));
 }
 
-void ValueBaseTest::testDictIter()
+TEST_CASE("ValueBaseTest.testDictIter")
 {
   Dict dict;
   dict.put("alpha2", String::g("alpha2"));
@@ -134,7 +112,7 @@ void ValueBaseTest::testDictIter()
   REQUIRE(ref.end() == ci);
 }
 
-void ValueBaseTest::testList()
+TEST_CASE("ValueBaseTest.testList")
 {
   List list;
   REQUIRE(list.empty());
@@ -142,18 +120,18 @@ void ValueBaseTest::testList()
 
   REQUIRE_EQ(static_cast<size_t>(2), list.size());
   REQUIRE_EQ(static_cast<Integer::ValueType>(7),
-                       downcast<Integer>(list[0])->i());
+             downcast<Integer>(list[0])->i());
   REQUIRE_EQ(static_cast<String::ValueType>("aria2"),
-                       downcast<String>(list[1])->s());
+             downcast<String>(list[1])->s());
 
   const List& ref = list;
   REQUIRE_EQ(static_cast<Integer::ValueType>(7),
-                       downcast<Integer>(ref[0])->i());
+             downcast<Integer>(ref[0])->i());
   REQUIRE_EQ(static_cast<String::ValueType>("aria2"),
-                       downcast<String>(ref[1])->s());
+             downcast<String>(ref[1])->s());
 }
 
-void ValueBaseTest::testListIter()
+TEST_CASE("ValueBaseTest.testListIter")
 {
   List list;
   list << String::g("alpha2") << String::g("charlie") << String::g("bravo")
@@ -161,19 +139,19 @@ void ValueBaseTest::testListIter()
 
   List::ValueType::iterator i = list.begin();
   REQUIRE_EQ(static_cast<String::ValueType>("alpha2"),
-                       downcast<String>(*i++)->s());
+             downcast<String>(*i++)->s());
   REQUIRE_EQ(static_cast<String::ValueType>("charlie"),
-                       downcast<String>(*i++)->s());
+             downcast<String>(*i++)->s());
   REQUIRE_EQ(static_cast<String::ValueType>("bravo"),
-                       downcast<String>(*i++)->s());
+             downcast<String>(*i++)->s());
   REQUIRE_EQ(static_cast<String::ValueType>("alpha"),
-                       downcast<String>(*i++)->s());
+             downcast<String>(*i++)->s());
   REQUIRE(list.end() == i);
 
   const List& ref = list;
   List::ValueType::const_iterator ci = ref.begin();
   REQUIRE_EQ(static_cast<String::ValueType>("alpha2"),
-                       downcast<String>(*ci++)->s());
+             downcast<String>(*ci++)->s());
   std::advance(ci, 3);
   REQUIRE(ref.end() == ci);
 }

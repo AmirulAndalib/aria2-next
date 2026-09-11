@@ -69,6 +69,10 @@ trimmed timelines and their end. Timeline selection retains the actual segment
 count and handles a first audio sample just after the Period start. The adapter reports delivery outcomes to GPAC;
 bounded live retries cannot silently skip media, and ordinary HLS reloads respect
 the parsed target duration.
+SegmentTimeline recovery retains the MPD/UTC availability epoch. The upstream
+startup heuristic that moved this epoch based on the selected segment is removed:
+with a negative clock correction and an epoch-based MPD, it underflowed the
+unsigned timestamp and scheduled the next request weeks into the future.
 The native WebVTT parser and its timed-text/import dependencies are enabled for
 ISO WebVTT samples. GPAC supplies cue payloads, identifiers and settings to the
 FFmpeg packet adapter; no separate subtitle parser or media executable is used.

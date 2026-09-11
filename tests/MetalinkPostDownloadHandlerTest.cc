@@ -1,3 +1,11 @@
+#include "DiskAdaptor.h"
+#include "FileEntry.h"
+#include "PieceStorage.h"
+#include "GroupId.h"
+#include "a2functional.h"
+#include <cstddef>
+#include <memory>
+#include <vector>
 #include "MetalinkPostDownloadHandler.h"
 
 #include "a2doctest.h"
@@ -5,34 +13,20 @@
 #include "RequestGroup.h"
 #include "Option.h"
 #include "DownloadContext.h"
-#include "FileEntry.h"
-#include "PieceStorage.h"
-#include "DiskAdaptor.h"
 #include "RequestGroupCriteria.h"
 
 namespace aria2 {
 
 class MetalinkPostDownloadHandlerTest {
-
-
-private:
+protected:
   std::shared_ptr<Option> option_;
 
 public:
-  void setUp() { option_.reset(new Option()); }
-
-  void testCanHandle_extension();
-  void testCanHandle_contentType();
-  void testGetNextRequestGroups();
-  void testGetNextRequestGroups_withBaseUri();
+  MetalinkPostDownloadHandlerTest() { option_.reset(new Option()); }
 };
 
-A2_TEST(MetalinkPostDownloadHandlerTest, testCanHandle_extension)
-A2_TEST(MetalinkPostDownloadHandlerTest, testCanHandle_contentType)
-A2_TEST(MetalinkPostDownloadHandlerTest, testGetNextRequestGroups)
-A2_TEST(MetalinkPostDownloadHandlerTest, testGetNextRequestGroups_withBaseUri)
-
-void MetalinkPostDownloadHandlerTest::testCanHandle_extension()
+TEST_CASE_FIXTURE(MetalinkPostDownloadHandlerTest,
+                  "MetalinkPostDownloadHandlerTest.testCanHandle_extension")
 {
   std::shared_ptr<DownloadContext> dctx(
       new DownloadContext(0, 0, "test.metalink"));
@@ -47,7 +41,8 @@ void MetalinkPostDownloadHandlerTest::testCanHandle_extension()
   REQUIRE(!handler.canHandle(&rg));
 }
 
-void MetalinkPostDownloadHandlerTest::testCanHandle_contentType()
+TEST_CASE_FIXTURE(MetalinkPostDownloadHandlerTest,
+                  "MetalinkPostDownloadHandlerTest.testCanHandle_contentType")
 {
   std::shared_ptr<DownloadContext> dctx(new DownloadContext(0, 0, "test"));
   dctx->getFirstFileEntry()->setContentType("application/metalink+xml");
@@ -62,7 +57,8 @@ void MetalinkPostDownloadHandlerTest::testCanHandle_contentType()
   REQUIRE(!handler.canHandle(&rg));
 }
 
-void MetalinkPostDownloadHandlerTest::testGetNextRequestGroups()
+TEST_CASE_FIXTURE(MetalinkPostDownloadHandlerTest,
+                  "MetalinkPostDownloadHandlerTest.testGetNextRequestGroups")
 {
   std::shared_ptr<DownloadContext> dctx(
       new DownloadContext(1_k, 0, A2_TEST_DIR "/test.xml"));
@@ -81,7 +77,9 @@ void MetalinkPostDownloadHandlerTest::testGetNextRequestGroups()
   }
 }
 
-void MetalinkPostDownloadHandlerTest::testGetNextRequestGroups_withBaseUri()
+TEST_CASE_FIXTURE(
+    MetalinkPostDownloadHandlerTest,
+    "MetalinkPostDownloadHandlerTest.testGetNextRequestGroups_withBaseUri")
 {
   std::shared_ptr<DownloadContext> dctx(
       new DownloadContext(1_k, 0, A2_TEST_DIR "/base_uri.xml"));
@@ -96,10 +94,10 @@ void MetalinkPostDownloadHandlerTest::testGetNextRequestGroups_withBaseUri()
   handler.getNextRequestGroups(groups, &rg);
   REQUIRE_EQ((size_t)1, groups.size());
   REQUIRE_EQ(std::string("http://base/dir/example.ext"),
-                       groups[0]
-                           ->getDownloadContext()
-                           ->getFirstFileEntry()
-                           ->getRemainingUris()[0]);
+             groups[0]
+                 ->getDownloadContext()
+                 ->getFirstFileEntry()
+                 ->getRemainingUris()[0]);
 }
 
 } // namespace aria2

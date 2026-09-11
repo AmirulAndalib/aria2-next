@@ -1,3 +1,7 @@
+#include "a2functional.h"
+#include <memory>
+#include <string>
+#include <utility>
 #include "WrDiskCacheEntry.h"
 
 #include <cstring>
@@ -11,30 +15,21 @@
 namespace aria2 {
 
 class WrDiskCacheEntryTest {
-
-
+protected:
   std::shared_ptr<DirectDiskAdaptor> adaptor_;
   ByteArrayDiskWriter* writer_;
 
 public:
-  void setUp()
+  WrDiskCacheEntryTest()
   {
     adaptor_ = std::make_shared<DirectDiskAdaptor>();
     auto dw = make_unique<ByteArrayDiskWriter>();
     writer_ = dw.get();
     adaptor_->setDiskWriter(std::move(dw));
   }
-
-  void testWriteToDisk();
-  void testAppend();
-  void testClear();
 };
 
-A2_TEST(WrDiskCacheEntryTest, testWriteToDisk)
-A2_TEST(WrDiskCacheEntryTest, testAppend)
-A2_TEST(WrDiskCacheEntryTest, testClear)
-
-void WrDiskCacheEntryTest::testWriteToDisk()
+TEST_CASE_FIXTURE(WrDiskCacheEntryTest, "WrDiskCacheEntryTest.testWriteToDisk")
 {
   WrDiskCacheEntry e(adaptor_);
   e.cacheData(createDataCell(0, "??01234567", 2));
@@ -44,7 +39,7 @@ void WrDiskCacheEntryTest::testWriteToDisk()
   REQUIRE_EQ(std::string("01234567890"), writer_->getString());
 }
 
-void WrDiskCacheEntryTest::testAppend()
+TEST_CASE_FIXTURE(WrDiskCacheEntryTest, "WrDiskCacheEntryTest.testAppend")
 {
   WrDiskCacheEntry e(adaptor_);
   auto cell = new WrDiskCacheEntry::DataCell{};
@@ -57,15 +52,14 @@ void WrDiskCacheEntryTest::testAppend()
   cell->len = 3;
   cell->capacity = capacity;
   e.cacheData(cell);
-  REQUIRE_EQ((size_t)3,
-                       e.append(3, (const unsigned char*)"barbaz", 6));
+  REQUIRE_EQ((size_t)3, e.append(3, (const unsigned char*)"barbaz", 6));
   REQUIRE_EQ((size_t)6, cell->len);
   REQUIRE_EQ((size_t)6, e.getSize());
 
   REQUIRE_EQ((size_t)0, e.append(7, (const unsigned char*)"FOO", 3));
 }
 
-void WrDiskCacheEntryTest::testClear()
+TEST_CASE_FIXTURE(WrDiskCacheEntryTest, "WrDiskCacheEntryTest.testClear")
 {
   WrDiskCacheEntry e(adaptor_);
   e.cacheData(createDataCell(0, "foo"));

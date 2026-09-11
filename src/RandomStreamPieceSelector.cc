@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "RandomStreamPieceSelector.h"
+#include <cstddef>
 #include "BitfieldMan.h"
 #include "SimpleRandomizer.h"
 

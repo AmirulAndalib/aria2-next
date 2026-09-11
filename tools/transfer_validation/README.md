@@ -8,7 +8,7 @@ public media sources provide independent interoperability checks.
 | Module | Native test tools | Distinct coverage |
 | --- | --- | --- |
 | HTTP | Caddy, WireMock, Toxiproxy | Ranges, overload, redirects, credentials, dual-stack scheduling, recovery |
-| SFTP | OpenSSH, Toxiproxy | Authentication, host keys, interruption, recovery |
+| SFTP | OpenSSH or SFTPGo, Toxiproxy | Authentication, host keys, interruption, recovery |
 | BitTorrent | libtorrent | Native torrent creation, metadata, sharing, selection, recovery |
 | ED2K | OpenSSL | Hashing, peer transfer, sharing, recovery |
 | Metalink | WireMock | Mirrors, checksums, selection, failure handling |
@@ -30,6 +30,13 @@ The dependency lock pins Caddy and Toxiproxy for Windows x64 and macOS ARM64.
 WireMock requires Java 17+; Java 21 LTS is suitable. Other modules require their
 listed tools; encryption and ED2K hashing use OpenSSL 3. Unpinned hosts fail
 explicitly. Windows helpers run without opening console windows.
+
+SFTP uses an isolated OpenSSH instance on POSIX and pinned SFTPGo portable mode
+on Windows x64. Both bind to loopback and use fixture keys; SFTPGo creates only
+an in-memory account rooted at the fixture directory. No system service or user
+configuration is changed. The BitTorrent helper uses CMake's generated target
+path, including the platform's executable suffix. Set `CMAKE_TOOLCHAIN_FILE` (or
+`CC`/`CXX`) to match the engine's dependency build when compiling the helper.
 
 Public media validation is opt-in and is excluded from `run.py all`:
 

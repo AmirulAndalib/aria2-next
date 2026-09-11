@@ -33,6 +33,14 @@
  */
 /* copyright --> */
 #include "SessionSerializer.h"
+#include "ContextAttribute.h"
+#include "GroupId.h"
+#include "error_code.h"
+#include "timegm.h"
+#include <cstring>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include <cstdio>
 #include <cassert>
@@ -48,7 +56,8 @@
 #include "DownloadContext.h"
 #include "FileEntry.h"
 #include "prefs.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Encoding.h"
 #include "array_fun.h"
 #include "BufferedFile.h"
 #include "OptionParser.h"

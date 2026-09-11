@@ -1,0 +1,22 @@
+/* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
+#ifndef D_MUX_OUTPUT_H
+#define D_MUX_OUTPUT_H
+
+#include "MuxInput.h"
+#include <map>
+
+namespace aria2::media::muxing {
+struct Output {
+  Output() = default;
+  Output(const Output&) = delete;
+  Output& operator=(const Output&) = delete;
+  AVFormatContext* context = nullptr;
+  std::map<std::pair<int, unsigned>, unsigned> mapping;
+  std::map<int, size_t> written;
+  ~Output();
+};
+void remux(Output&, Inputs&, const std::string& path, const std::string& format,
+           bool video, bool audio, bool subtitles, Control*);
+} // namespace aria2::media::muxing
+
+#endif // D_MUX_OUTPUT_H

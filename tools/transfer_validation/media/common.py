@@ -38,6 +38,18 @@ def probe(ffprobe: str, source: str, *options: str) -> dict:
     return json.loads(command(ffprobe, "-v", "error", *options, "-of", "json", source))
 
 
+def wait_duration(engine, gid: str, milliseconds: int) -> dict:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        status = engine.rpc.call("aria2.tellStatus", [gid])
+        if status["status"] == "error":
+            raise AssertionError(status)
+        if int(status.get("media", {}).get("completedDuration", 0)) >= milliseconds:
+            return status
+        time.sleep(0.1)
+    raise TimeoutError(status)
+
+
 def decoded_hash(
     ffmpeg: str, source: str, kind: str = "v", duration: float | None = None
 ) -> str:

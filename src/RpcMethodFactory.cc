@@ -33,312 +33,128 @@
  */
 /* copyright --> */
 #include "RpcMethodFactory.h"
-#include "RpcMethodImpl.h"
-#include "OptionParser.h"
-#include "OptionHandler.h"
+#include <memory>
+#include <string>
+#include <vector>
+#include "rpc/RpcMethods.h"
 
-namespace aria2 {
+#include <algorithm>
+#include <iterator>
+#include <map>
 
-namespace rpc {
-
+namespace aria2::rpc {
 namespace {
+struct MethodEntry {
+  const char* name;
+  std::unique_ptr<RpcMethod> (*create)();
+};
+
+template <typename T> MethodEntry method()
+{
+  return {T::getMethodName(),
+          []() -> std::unique_ptr<RpcMethod> { return std::make_unique<T>(); }};
+}
+
+// Enumeration and dispatch share this catalogue; order is part of listMethods.
+const MethodEntry methods[] = {
+    method<AddUriRpcMethod>(),
+    method<FinishMediaRpcMethod>(),
+    method<Ed2kSearchRpcMethod>(),
+    method<GetEd2kSearchResultsRpcMethod>(),
+#ifdef ENABLE_BITTORRENT
+    method<AddTorrentRpcMethod>(),
+    method<InspectTorrentRpcMethod>(),
+    method<GetPeersRpcMethod>(),
+    method<GetBtTrackersRpcMethod>(),
+    method<GetBtSessionStatusRpcMethod>(),
+    method<ForceBtRecheckRpcMethod>(),
+    method<ForceBtAnnounceRpcMethod>(),
+    method<ReplaceBtTrackersRpcMethod>(),
+    method<ReplaceBtWebSeedsRpcMethod>(),
+    method<AddBtPeersRpcMethod>(),
+    method<SetBtPeerBlocklistRpcMethod>(),
+#endif // ENABLE_BITTORRENT
+#ifdef ENABLE_METALINK
+    method<AddMetalinkRpcMethod>(),
+#endif // ENABLE_METALINK
+    method<RemoveRpcMethod>(),
+    method<PauseRpcMethod>(),
+    method<ForcePauseRpcMethod>(),
+    method<PauseAllRpcMethod>(),
+    method<ForcePauseAllRpcMethod>(),
+    method<UnpauseRpcMethod>(),
+    method<UnpauseAllRpcMethod>(),
+    method<ForceRemoveRpcMethod>(),
+    method<ChangePositionRpcMethod>(),
+    method<TellStatusRpcMethod>(),
+    method<GetUrisRpcMethod>(),
+    method<GetFilesRpcMethod>(),
+    method<GetServersRpcMethod>(),
+    method<TellActiveRpcMethod>(),
+    method<TellWaitingRpcMethod>(),
+    method<TellStoppedRpcMethod>(),
+    method<GetOptionRpcMethod>(),
+    method<ChangeUriRpcMethod>(),
+    method<ChangeOptionRpcMethod>(),
+    method<GetGlobalOptionRpcMethod>(),
+    method<ChangeGlobalOptionRpcMethod>(),
+    method<PurgeDownloadResultRpcMethod>(),
+    method<RemoveDownloadResultRpcMethod>(),
+    method<GetVersionRpcMethod>(),
+    method<GetSessionInfoRpcMethod>(),
+    method<ShutdownRpcMethod>(),
+    method<ForceShutdownRpcMethod>(),
+    method<GetGlobalStatRpcMethod>(),
+    method<SaveSessionRpcMethod>(),
+    method<SystemMulticallRpcMethod>(),
+    method<SystemListMethodsRpcMethod>(),
+    method<SystemListNotificationsRpcMethod>(),
+};
 std::map<std::string, std::unique_ptr<RpcMethod>> cache;
-} // namespace
-
-namespace {
 std::unique_ptr<RpcMethod> noSuchRpcMethod;
 } // namespace
 
-namespace {
-std::vector<std::string> rpcMethodNames = {
-    "aria2.addUri",
-    "aria2.finishMedia",
-    "aria2.ed2kSearch",
-    "aria2.getEd2kSearchResults",
-#ifdef ENABLE_BITTORRENT
-    "aria2.addTorrent",
-    "aria2.inspectTorrent",
-    "aria2.getPeers",
-    "aria2.getBtTrackers",
-    "aria2.getBtSessionStatus",
-    "aria2.forceBtRecheck",
-    "aria2.forceBtAnnounce",
-    "aria2.replaceBtTrackers",
-    "aria2.replaceBtWebSeeds",
-    "aria2.addBtPeers",
-    "aria2.setBtPeerBlocklist",
-#endif // ENABLE_BITTORRENT
-#ifdef ENABLE_METALINK
-    "aria2.addMetalink",
-#endif // ENABLE_METALINK
-    "aria2.remove",
-    "aria2.pause",
-    "aria2.forcePause",
-    "aria2.pauseAll",
-    "aria2.forcePauseAll",
-    "aria2.unpause",
-    "aria2.unpauseAll",
-    "aria2.forceRemove",
-    "aria2.changePosition",
-    "aria2.tellStatus",
-    "aria2.getUris",
-    "aria2.getFiles",
-    "aria2.getServers",
-    "aria2.tellActive",
-    "aria2.tellWaiting",
-    "aria2.tellStopped",
-    "aria2.getOption",
-    "aria2.changeUri",
-    "aria2.changeOption",
-    "aria2.getGlobalOption",
-    "aria2.changeGlobalOption",
-    "aria2.purgeDownloadResult",
-    "aria2.removeDownloadResult",
-    "aria2.getVersion",
-    "aria2.getSessionInfo",
-    "aria2.shutdown",
-    "aria2.forceShutdown",
-    "aria2.getGlobalStat",
-    "aria2.saveSession",
-    "system.multicall",
-    "system.listMethods",
-    "system.listNotifications",
-};
-} // namespace
-
-const std::vector<std::string>& allMethodNames() { return rpcMethodNames; }
-
-namespace {
-std::vector<std::string> rpcNotificationsNames = {
-    "aria2.onDownloadStart",      "aria2.onDownloadPause",
-    "aria2.onDownloadStop",       "aria2.onDownloadComplete",
-    "aria2.onDownloadError",
-#ifdef ENABLE_BITTORRENT
-    "aria2.onBtDownloadComplete",
-#endif // ENABLE_BITTORRENT
-};
-} // namespace
+const std::vector<std::string>& allMethodNames()
+{
+  static const auto names = [] {
+    std::vector<std::string> result;
+    result.reserve(std::size(methods));
+    for (const auto& method : methods) {
+      result.emplace_back(method.name);
+    }
+    return result;
+  }();
+  return names;
+}
 
 const std::vector<std::string>& allNotificationsNames()
 {
-  return rpcNotificationsNames;
-}
-
-namespace {
-std::unique_ptr<RpcMethod> createMethod(const std::string& methodName)
-{
-  if (methodName == FinishMediaRpcMethod::getMethodName())
-    return make_unique<FinishMediaRpcMethod>();
-  if (methodName == AddUriRpcMethod::getMethodName()) {
-    return make_unique<AddUriRpcMethod>();
-  }
-
-  if (methodName == Ed2kSearchRpcMethod::getMethodName()) {
-    return make_unique<Ed2kSearchRpcMethod>();
-  }
-
-  if (methodName == GetEd2kSearchResultsRpcMethod::getMethodName()) {
-    return make_unique<GetEd2kSearchResultsRpcMethod>();
-  }
-
+  static const std::vector<std::string> names = {
+      "aria2.onDownloadStart",      "aria2.onDownloadPause",
+      "aria2.onDownloadStop",       "aria2.onDownloadComplete",
+      "aria2.onDownloadError",
 #ifdef ENABLE_BITTORRENT
-  if (methodName == AddTorrentRpcMethod::getMethodName()) {
-    return make_unique<AddTorrentRpcMethod>();
-  }
-
-  if (methodName == InspectTorrentRpcMethod::getMethodName()) {
-    return make_unique<InspectTorrentRpcMethod>();
-  }
-
-  if (methodName == GetPeersRpcMethod::getMethodName()) {
-    return make_unique<GetPeersRpcMethod>();
-  }
-  if (methodName == GetBtTrackersRpcMethod::getMethodName()) {
-    return make_unique<GetBtTrackersRpcMethod>();
-  }
-  if (methodName == ForceBtRecheckRpcMethod::getMethodName()) {
-    return make_unique<ForceBtRecheckRpcMethod>();
-  }
-  if (methodName == ForceBtAnnounceRpcMethod::getMethodName()) {
-    return make_unique<ForceBtAnnounceRpcMethod>();
-  }
-  if (methodName == ReplaceBtTrackersRpcMethod::getMethodName()) {
-    return make_unique<ReplaceBtTrackersRpcMethod>();
-  }
-  if (methodName == ReplaceBtWebSeedsRpcMethod::getMethodName()) {
-    return make_unique<ReplaceBtWebSeedsRpcMethod>();
-  }
-  if (methodName == AddBtPeersRpcMethod::getMethodName()) {
-    return make_unique<AddBtPeersRpcMethod>();
-  }
-
-  if (methodName == GetBtSessionStatusRpcMethod::getMethodName()) {
-    return make_unique<GetBtSessionStatusRpcMethod>();
-  }
-
-  if (methodName == SetBtPeerBlocklistRpcMethod::getMethodName()) {
-    return make_unique<SetBtPeerBlocklistRpcMethod>();
-  }
+      "aria2.onBtDownloadComplete",
 #endif // ENABLE_BITTORRENT
-
-#ifdef ENABLE_METALINK
-  if (methodName == AddMetalinkRpcMethod::getMethodName()) {
-    return make_unique<AddMetalinkRpcMethod>();
-  }
-#endif // ENABLE_METALINK
-
-  if (methodName == RemoveRpcMethod::getMethodName()) {
-    return make_unique<RemoveRpcMethod>();
-  }
-
-  if (methodName == PauseRpcMethod::getMethodName()) {
-    return make_unique<PauseRpcMethod>();
-  }
-
-  if (methodName == ForcePauseRpcMethod::getMethodName()) {
-    return make_unique<ForcePauseRpcMethod>();
-  }
-
-  if (methodName == PauseAllRpcMethod::getMethodName()) {
-    return make_unique<PauseAllRpcMethod>();
-  }
-
-  if (methodName == ForcePauseAllRpcMethod::getMethodName()) {
-    return make_unique<ForcePauseAllRpcMethod>();
-  }
-
-  if (methodName == UnpauseRpcMethod::getMethodName()) {
-    return make_unique<UnpauseRpcMethod>();
-  }
-
-  if (methodName == UnpauseAllRpcMethod::getMethodName()) {
-    return make_unique<UnpauseAllRpcMethod>();
-  }
-
-  if (methodName == ForceRemoveRpcMethod::getMethodName()) {
-    return make_unique<ForceRemoveRpcMethod>();
-  }
-
-  if (methodName == ChangePositionRpcMethod::getMethodName()) {
-    return make_unique<ChangePositionRpcMethod>();
-  }
-
-  if (methodName == TellStatusRpcMethod::getMethodName()) {
-    return make_unique<TellStatusRpcMethod>();
-  }
-
-  if (methodName == GetUrisRpcMethod::getMethodName()) {
-    return make_unique<GetUrisRpcMethod>();
-  }
-
-  if (methodName == GetFilesRpcMethod::getMethodName()) {
-    return make_unique<GetFilesRpcMethod>();
-  }
-
-  if (methodName == GetServersRpcMethod::getMethodName()) {
-    return make_unique<GetServersRpcMethod>();
-  }
-
-  if (methodName == TellActiveRpcMethod::getMethodName()) {
-    return make_unique<TellActiveRpcMethod>();
-  }
-
-  if (methodName == TellWaitingRpcMethod::getMethodName()) {
-    return make_unique<TellWaitingRpcMethod>();
-  }
-
-  if (methodName == TellStoppedRpcMethod::getMethodName()) {
-    return make_unique<TellStoppedRpcMethod>();
-  }
-
-  if (methodName == GetOptionRpcMethod::getMethodName()) {
-    return make_unique<GetOptionRpcMethod>();
-  }
-
-  if (methodName == ChangeUriRpcMethod::getMethodName()) {
-    return make_unique<ChangeUriRpcMethod>();
-  }
-
-  if (methodName == ChangeOptionRpcMethod::getMethodName()) {
-    return make_unique<ChangeOptionRpcMethod>();
-  }
-
-  if (methodName == GetGlobalOptionRpcMethod::getMethodName()) {
-    return make_unique<GetGlobalOptionRpcMethod>();
-  }
-
-  if (methodName == ChangeGlobalOptionRpcMethod::getMethodName()) {
-    return make_unique<ChangeGlobalOptionRpcMethod>();
-  }
-
-  if (methodName == PurgeDownloadResultRpcMethod::getMethodName()) {
-    return make_unique<PurgeDownloadResultRpcMethod>();
-  }
-
-  if (methodName == RemoveDownloadResultRpcMethod::getMethodName()) {
-    return make_unique<RemoveDownloadResultRpcMethod>();
-  }
-
-  if (methodName == GetVersionRpcMethod::getMethodName()) {
-    return make_unique<GetVersionRpcMethod>();
-  }
-
-  if (methodName == GetSessionInfoRpcMethod::getMethodName()) {
-    return make_unique<GetSessionInfoRpcMethod>();
-  }
-
-  if (methodName == ShutdownRpcMethod::getMethodName()) {
-    return make_unique<ShutdownRpcMethod>();
-  }
-
-  if (methodName == ForceShutdownRpcMethod::getMethodName()) {
-    return make_unique<ForceShutdownRpcMethod>();
-  }
-
-  if (methodName == GetGlobalStatRpcMethod::getMethodName()) {
-    return make_unique<GetGlobalStatRpcMethod>();
-  }
-
-  if (methodName == SaveSessionRpcMethod::getMethodName()) {
-    return make_unique<SaveSessionRpcMethod>();
-  }
-
-  if (methodName == SystemMulticallRpcMethod::getMethodName()) {
-    return make_unique<SystemMulticallRpcMethod>();
-  }
-
-  if (methodName == SystemListMethodsRpcMethod::getMethodName()) {
-    return make_unique<SystemListMethodsRpcMethod>();
-  }
-
-  if (methodName == SystemListNotificationsRpcMethod::getMethodName()) {
-    return make_unique<SystemListNotificationsRpcMethod>();
-  }
-
-  return nullptr;
+  };
+  return names;
 }
-} // namespace
 
 RpcMethod* getMethod(const std::string& methodName)
 {
-  auto itr = cache.find(methodName);
-  if (itr == std::end(cache)) {
-    auto m = createMethod(methodName);
-    if (m) {
-      auto rv = cache.insert(std::make_pair(methodName, std::move(m)));
-      return (*rv.first).second.get();
-    }
-
-    if (!noSuchRpcMethod) {
-      noSuchRpcMethod = make_unique<NoSuchMethodRpcMethod>();
-    }
-
-    return noSuchRpcMethod.get();
+  const auto cached = cache.find(methodName);
+  if (cached != cache.end()) {
+    return cached->second.get();
   }
-
-  return (*itr).second.get();
+  const auto entry =
+      std::find_if(std::begin(methods), std::end(methods),
+                   [&](const auto& value) { return methodName == value.name; });
+  if (entry != std::end(methods)) {
+    return cache.emplace(methodName, entry->create()).first->second.get();
+  }
+  if (!noSuchRpcMethod) {
+    noSuchRpcMethod = std::make_unique<NoSuchMethodRpcMethod>();
+  }
+  return noSuchRpcMethod.get();
 }
-
-} // namespace rpc
-
-} // namespace aria2
+} // namespace aria2::rpc

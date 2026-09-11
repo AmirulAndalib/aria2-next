@@ -1,3 +1,6 @@
+#include "a2functional.h"
+#include <cstddef>
+#include <memory>
 #include "WebSocketSessionMan.h"
 
 #include "a2doctest.h"
@@ -15,28 +18,22 @@ namespace aria2 {
 namespace rpc {
 
 class WebSocketSessionManTest {
-
-
-private:
+protected:
   std::shared_ptr<Option> option_;
   std::shared_ptr<DownloadEngine> e_;
 
 public:
-  void setUp()
+  WebSocketSessionManTest()
   {
     option_ = std::make_shared<Option>();
     e_ = make_unique<DownloadEngine>(make_unique<SelectEventPoll>());
     e_->setOption(option_.get());
   }
-
-  void testSessionRequiresAuthorizationWhenRpcSecretIsSet();
-  void testNotificationRecipientsExcludeUnauthorizedSessions();
 };
 
-A2_TEST(WebSocketSessionManTest, testSessionRequiresAuthorizationWhenRpcSecretIsSet)
-A2_TEST(WebSocketSessionManTest, testNotificationRecipientsExcludeUnauthorizedSessions)
-
-void WebSocketSessionManTest::testSessionRequiresAuthorizationWhenRpcSecretIsSet()
+TEST_CASE_FIXTURE(WebSocketSessionManTest,
+                  "WebSocketSessionManTest."
+                  "testSessionRequiresAuthorizationWhenRpcSecretIsSet")
 {
   option_->put(PREF_RPC_SECRET, "secret");
 
@@ -46,7 +43,9 @@ void WebSocketSessionManTest::testSessionRequiresAuthorizationWhenRpcSecretIsSet
   REQUIRE(!session->isAuthorized());
 }
 
-void WebSocketSessionManTest::testNotificationRecipientsExcludeUnauthorizedSessions()
+TEST_CASE_FIXTURE(WebSocketSessionManTest,
+                  "WebSocketSessionManTest."
+                  "testNotificationRecipientsExcludeUnauthorizedSessions")
 {
   option_->put(PREF_RPC_SECRET, "secret");
 

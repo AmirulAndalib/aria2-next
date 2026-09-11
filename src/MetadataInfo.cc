@@ -33,6 +33,9 @@
  */
 /* copyright --> */
 #include "MetadataInfo.h"
+#include "GroupId.h"
+#include <memory>
+#include <string>
 
 #include <cassert>
 

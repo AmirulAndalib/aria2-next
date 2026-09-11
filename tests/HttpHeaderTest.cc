@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 #include "HttpHeader.h"
 
 #include "a2doctest.h"
@@ -8,28 +11,9 @@
 
 namespace aria2 {
 
-class HttpHeaderTest {
-
-
-public:
-  void testGetRange();
-  void testGetRangeAcceptsLargeContentLength();
-  void testFindAll();
-  void testClearField();
-  void testFieldContains();
-  void testRemove();
-};
-
-A2_TEST(HttpHeaderTest, testGetRange)
-A2_TEST(HttpHeaderTest, testGetRangeAcceptsLargeContentLength)
-A2_TEST(HttpHeaderTest, testFindAll)
-A2_TEST(HttpHeaderTest, testClearField)
-A2_TEST(HttpHeaderTest, testFieldContains)
-A2_TEST(HttpHeaderTest, testRemove)
-
 static_assert(sizeof(a2_off_t) >= 8, "a2_off_t must support large files");
 
-void HttpHeaderTest::testGetRange()
+TEST_CASE("HttpHeaderTest.testGetRange")
 {
   {
     HttpHeader httpHeader;
@@ -140,7 +124,7 @@ void HttpHeaderTest::testGetRange()
   }
 }
 
-void HttpHeaderTest::testGetRangeAcceptsLargeContentLength()
+TEST_CASE("HttpHeaderTest.testGetRangeAcceptsLargeContentLength")
 {
   HttpHeader httpHeader;
   httpHeader.put(HttpHeader::CONTENT_LENGTH, "6797948928");
@@ -152,7 +136,7 @@ void HttpHeaderTest::testGetRangeAcceptsLargeContentLength()
   REQUIRE_EQ((int64_t)6797948928LL, range.entityLength);
 }
 
-void HttpHeaderTest::testFindAll()
+TEST_CASE("HttpHeaderTest.testFindAll")
 {
   HttpHeader h;
   h.put(HttpHeader::LINK, "100");
@@ -165,7 +149,7 @@ void HttpHeaderTest::testFindAll()
   REQUIRE_EQ(std::string("101"), r[1]);
 }
 
-void HttpHeaderTest::testClearField()
+TEST_CASE("HttpHeaderTest.testClearField")
 {
   HttpHeader h;
   h.setStatusCode(200);
@@ -181,7 +165,7 @@ void HttpHeaderTest::testClearField()
   REQUIRE_EQ(std::string("HTTP/1.1"), h.getVersion());
 }
 
-void HttpHeaderTest::testFieldContains()
+TEST_CASE("HttpHeaderTest.testFieldContains")
 {
   HttpHeader h;
   h.put(HttpHeader::CONNECTION, "Keep-Alive, Upgrade");
@@ -198,7 +182,7 @@ void HttpHeaderTest::testFieldContains()
   REQUIRE(!h.fieldContains(HttpHeader::SEC_WEBSOCKET_VERSION, "6"));
 }
 
-void HttpHeaderTest::testRemove()
+TEST_CASE("HttpHeaderTest.testRemove")
 {
   HttpHeader h;
   h.put(HttpHeader::CONNECTION, "close");

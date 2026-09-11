@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "prefs.h"
+#include <cstddef>
+#include <string>
 
 #include <cassert>
 #include <vector>

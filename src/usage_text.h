@@ -94,7 +94,7 @@
 #define TEXT_LOWEST_SPEED_LIMIT                                         \
   _(" --lowest-speed-limit=SPEED   Close connection if download speed is lower than\n" \
     "                              or equal to this value(bytes per sec).\n" \
-    "                              0 means aria2 does not have a lowest speed limit.\n" \
+    "                              0 means Aria2 Next does not have a lowest speed limit.\n" \
     "                              Decimal values are allowed. You can append K or\n" \
     "                              M(1K = 1024, 1M = 1024K). Fractional bytes are\n" \
     "                              rounded down.\n"                 \
@@ -127,7 +127,7 @@
     "                              Don't use 'falloc' with legacy\n" \
     "                              file systems such as ext3 and FAT32 because it\n" \
     "                              takes almost the same time as 'prealloc' and it\n" \
-    "                              blocks aria2 entirely until allocation finishes.\n" \
+    "                              blocks Aria2 Next entirely until allocation finishes.\n" \
     "                              'trunc' uses ftruncate() system call or\n" \
     "                              platform-specific counterpart to truncate a file\n" \
     "                              to a specified length.")
@@ -137,10 +137,6 @@
     "                              Decimal values are allowed. You can append K or\n" \
     "                              M(1K = 1024, 1M = 1024K). Fractional bytes are\n" \
     "                              rounded down.")
-#define TEXT_ENABLE_DIRECT_IO                                          \
-  _(" --enable-direct-io[=true|false] Enable directI/O, which lowers cpu usage while\n" \
-    "                              allocating files.\n"                 \
-    "                              Turn off if you encounter any error")
 #define TEXT_ALLOW_OVERWRITE                                            \
   _(" --allow-overwrite[=true|false] Replace an existing output file when no valid\n" \
     "                              persisted transfer state is available. See\n" \
@@ -213,7 +209,7 @@
 #define TEXT_OPTIMIZE_CONCURRENT_DOWNLOADS\
   _(" --optimize-concurrent-downloads[=true|false|A:B] Optimizes the number of\n" \
     "                              concurrent downloads according to the bandwidth\n" \
-    "                              available. aria2 uses the download speed observed\n" \
+    "                              available. Aria2 Next uses the download speed observed\n" \
     "                              in the previous downloads to adapt the number of\n" \
     "                              downloads launched in parallel according to the\n" \
     "                              rule N = A + B Log10(speed in Mbps). The\n" \
@@ -252,7 +248,7 @@
 #define TEXT_FOLLOW_TORRENT                                             \
   _(" --follow-torrent=true|false|mem If true or mem is specified, when a file\n" \
     "                              whose suffix is .torrent or content type is\n" \
-    "                              application/x-bittorrent is downloaded, aria2\n" \
+    "                              application/x-bittorrent is downloaded, Aria2 Next\n" \
     "                              parses it as a torrent file and downloads files\n" \
     "                              mentioned in it.\n"                  \
     "                              If mem is specified, a torrent file is not\n" \
@@ -399,15 +395,6 @@
   _(" -M, --metalink-file=METALINK_FILE The file path to the .meta4 and .metalink\n" \
     "                              file. Reads input from stdin when '-' is\n" \
     "                              specified.")
-#define TEXT_METALINK_SERVERS                                           \
-  _(" -C, --metalink-servers=NUM_SERVERS The number of servers to connect to\n" \
-    "                              simultaneously. Some Metalinks regulate the\n" \
-    "                              number of servers to connect. aria2 strictly\n" \
-    "                              respects them. This means that if Metalink defines\n" \
-    "                              the maxconnections attribute lower than\n" \
-    "                              NUM_SERVERS, then aria2 uses the value of\n" \
-    "                              maxconnections attribute instead of NUM_SERVERS.\n" \
-    "                              See also -s and -j options.")
 #define TEXT_METALINK_VERSION                                           \
   _(" --metalink-version=VERSION   The version of the file to download.")
 #define TEXT_METALINK_LANGUAGE                                          \
@@ -425,7 +412,7 @@
   _(" --follow-metalink=true|false|mem If true or mem is specified, when a file\n" \
     "                              whose suffix is .meta4 or .metalink, or content\n" \
     "                              type of application/metalink4+xml or\n" \
-    "                              application/metalink+xml is downloaded, aria2\n" \
+    "                              application/metalink+xml is downloaded, Aria2 Next\n" \
     "                              parses it as a metalink file and downloads files\n" \
     "                              mentioned in it.\n"                  \
     "                              If mem is specified, a metalink file is not\n" \
@@ -437,7 +424,7 @@
 #define TEXT_METALINK_ENABLE_UNIQUE_PROTOCOL                            \
   _(" --metalink-enable-unique-protocol[=true|false] If true is given and several\n" \
     "                              protocols are available for a mirror in a metalink\n" \
-    "                              file, aria2 uses one of them.\n"     \
+    "                              file, Aria2 Next uses one of them.\n"     \
     "                              Use --metalink-preferred-protocol option to\n" \
     "                              specify the preference of protocol.")
 #define TEXT_VERSION                                                    \
@@ -463,7 +450,7 @@
     "                              aria2-next --header=\"X-A: b78\" --header=\"X-B: 9J1\"\n" \
     "                              http://host/file")
 #define TEXT_QUIET                                                      \
-  _(" -q, --quiet[=true|false]     Make aria2 quiet(no console output).")
+  _(" -q, --quiet[=true|false]     Make Aria2 Next quiet(no console output).")
 #define TEXT_SUMMARY_INTERVAL                                           \
   _(" --summary-interval=SEC       Set interval to output download progress summary.\n" \
     "                              Setting 0 suppresses the output.")
@@ -485,7 +472,7 @@
     "                              connection is established, this option makes no\n" \
     "                              effect and --timeout option is used instead.")
 #define TEXT_MAX_FILE_NOT_FOUND                                         \
-  _(" --max-file-not-found=NUM     If aria2 receives `file not found' status from the\n" \
+  _(" --max-file-not-found=NUM     If Aria2 Next receives `file not found' status from the\n" \
     "                              remote HTTP/SFTP servers NUM times without getting\n" \
     "                              a single byte, then force the download to fail.\n" \
     "                              Specify 0 to disable this option.\n" \
@@ -550,7 +537,7 @@
     "                              --dir option. You can use this option multiple\n" \
     "                              times.")
 #define TEXT_DRY_RUN                                                    \
-  _(" --dry-run[=true|false]       If true is given, aria2 just checks whether the\n" \
+  _(" --dry-run[=true|false]       If true is given, Aria2 Next just checks whether the\n" \
     "                              remote file is available and doesn't download\n" \
     "                              data. This option has effect on HTTP downloads.\n" \
     "                              BitTorrent downloads are canceled if true is\n" \
@@ -563,7 +550,7 @@
     "                              See also --on-download-stop option.")
 #define TEXT_ON_DOWNLOAD_START                                          \
   _(" --on-download-start=COMMAND  Set the command to be executed after download\n" \
-    "                              got started. aria2 passes 3 arguments to COMMAND:\n" \
+    "                              got started. Aria2 Next passes 3 arguments to COMMAND:\n" \
     "                              GID, the number of files and file path. See Event\n" \
     "                              Hook in man page for more details.")
 #define TEXT_ON_DOWNLOAD_PAUSE                                          \
@@ -689,7 +676,7 @@
     "                              authorization token using --rpc-secret option.\n" \
     "                              See also --rpc-listen-port option.")
 #define TEXT_RPC_MAX_REQUEST_SIZE                                   \
-  _(" --rpc-max-request-size=SIZE  Set max size of JSON-RPC/XML-RPC request. If aria2\n" \
+  _(" --rpc-max-request-size=SIZE  Set max size of JSON-RPC/XML-RPC request. If Aria2 Next\n" \
     "                              detects the request is more than SIZE bytes, it\n" \
     "                              drops connection. Decimal values are allowed.\n" \
     "                              You can append K or M(1K = 1024, 1M = 1024K).\n" \
@@ -713,22 +700,22 @@
     "                              used in ED2K downloads. Piece means fixed\n" \
     "                              length segment which is downloaded in parallel\n" \
     "                              in segmented download. If 'default' is given,\n" \
-    "                              aria2 selects piece so that it reduces the\n" \
+    "                              Aria2 Next selects piece so that it reduces the\n" \
     "                              number of establishing connection. This is\n" \
     "                              reasonable default behaviour because\n" \
     "                              establishing connection is an expensive\n" \
     "                              operation.\n"                        \
-    "                              If 'inorder' is given, aria2 selects piece which\n" \
+    "                              If 'inorder' is given, Aria2 Next selects piece which\n" \
     "                              has minimum index. Index=0 means first of the\n" \
     "                              file. This will be useful to view movie while\n" \
-    "                              Please note that aria2 honors\n"     \
+    "                              Please note that Aria2 Next honors\n"     \
     "                              --ed2k-min-split-size option, so it will be necessary\n" \
     "                              to specify a reasonable value to\n"  \
     "                              --ed2k-min-split-size option.\n"     \
-    "                              If 'random' is given, aria2 selects piece\n" \
+    "                              If 'random' is given, Aria2 Next selects piece\n" \
     "                              randomly. Like 'inorder', --ed2k-min-split-size\n" \
     "                              option is honored.\n"                \
-    "                              If 'geom' is given, at the beginning aria2\n" \
+    "                              If 'geom' is given, at the beginning Aria2 Next\n" \
     "                              selects piece which has minimum index like\n" \
     "                              'inorder', but it exponentially increasingly\n" \
     "                              keeps space from previously selected piece. This\n" \
@@ -773,25 +760,25 @@
     "                              downloads.")
 #define TEXT_PIECE_LENGTH                       \
   _(" --piece-length=LENGTH        Set a piece length for segmented downloads. This\n" \
-    "                              is the boundary when aria2 splits a file. All\n" \
+    "                              is the boundary when Aria2 Next splits a file. All\n" \
     "                              splits occur at multiple of this length. This\n" \
     "                              option will be ignored in BitTorrent downloads.\n" \
     "                              It will be also ignored if Metalink file\n" \
     "                              contains piece hashes.")
 #define TEXT_STOP_WITH_PROCESS                                          \
   _(" --stop-with-process=PID      Stop application when process PID is not running.\n" \
-    "                              This is useful if aria2 process is forked from a\n" \
-    "                              parent process. The parent process can fork aria2\n" \
+    "                              This is useful if Aria2 Next process is forked from a\n" \
+    "                              parent process. The parent process can fork Aria2 Next\n" \
     "                              with its own pid and when parent process exits\n" \
-    "                              for some reason, aria2 can detect it and shutdown\n" \
+    "                              for some reason, Aria2 Next can detect it and shutdown\n" \
     "                              itself.")
 #define TEXT_DEFERRED_INPUT                     \
-  _(" --deferred-input[=true|false] If true is given, aria2 does not read all URIs\n" \
+  _(" --deferred-input[=true|false] If true is given, Aria2 Next does not read all URIs\n" \
     "                              and options from file specified by -i option at\n" \
     "                              startup, but it reads one by one when it needs\n" \
     "                              later. This may reduce memory usage if input\n" \
     "                              file contains a lot of URIs to download.\n" \
-    "                              If false is given, aria2 reads all URIs and\n" \
+    "                              If false is given, Aria2 Next reads all URIs and\n" \
     "                              options at startup.")
 #define TEXT_ENABLE_MMAP                        \
   _(" --enable-mmap[=true|false]   Map files into memory.")
@@ -832,7 +819,7 @@
   _(" --disk-cache=SIZE            Enable disk cache. If SIZE is 0, the disk cache\n" \
     "                              is disabled. This feature caches the downloaded\n" \
     "                              data in memory, which grows to at most SIZE\n" \
-    "                              bytes. The cache storage is created for aria2\n" \
+    "                              bytes. The cache storage is created for Aria2 Next\n" \
     "                              instance and shared by all downloads. The one\n" \
     "                              advantage of the disk cache is reduce the disk\n" \
     "                              I/O because the data are written in larger unit\n" \
@@ -844,7 +831,7 @@
     "                              (1K = 1024, 1M = 1024K). Fractional bytes are\n" \
     "                              rounded down.")
 #define TEXT_GID                                \
-  _(" --gid=GID                    Set GID manually. aria2 identifies each\n" \
+  _(" --gid=GID                    Set GID manually. Aria2 Next identifies each\n" \
     "                              download by the ID called GID. The GID must be\n" \
     "                              hex string of 16 characters, thus [0-9a-fA-F]\n" \
     "                              are allowed and leading zeros must not be\n" \
@@ -854,14 +841,14 @@
     "                              This option is useful when restoring the\n" \
     "                              sessions saved using --save-session option. If\n" \
     "                              this option is not used, new GID is generated\n" \
-    "                              by aria2.")
+    "                              by Aria2 Next.")
 #define TEXT_CONSOLE_LOG_LEVEL                                          \
   _(" --console-log-level=LEVEL    Set log level to output to console.")
 #define TEXT_SAVE_SESSION_INTERVAL                                      \
   _(" --save-session-interval=SEC  Save error/unfinished downloads to a file\n" \
     "                              specified by --save-session option every SEC\n" \
     "                              seconds. If 0 is given, file will be saved only\n" \
-    "                              when aria2 exits.")
+    "                              when Aria2 Next exits.")
 #define TEXT_ENABLE_COLOR                                               \
   _(" --enable-color[=true|false]  Enable color output for a terminal.")
 #define TEXT_RPC_SECRET                                                 \
