@@ -44,8 +44,10 @@ aria2_import_dependency(aria2::sqlite sqlite3.h
 aria2_import_dependency(aria2::gpac gpac/dash.h
   LIBRARIES gpac_static)
 foreach(component avformat avcodec swresample avutil)
+  # FFmpeg's C headers require integer constant macros for C++ consumers.
   aria2_import_dependency(aria2::${component} lib${component}/version.h
-    LIBRARIES ${component})
+    LIBRARIES ${component}
+    DEFINITIONS "$<$<COMPILE_LANGUAGE:CXX>:__STDC_CONSTANT_MACROS>")
 endforeach()
 unset(OpenSSL_DIR CACHE)
 set(OpenSSL_DIR "${ARIA2_DEPENDENCY_ROOT}/lib/cmake/OpenSSL")
