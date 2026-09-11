@@ -2,7 +2,6 @@
 #include "a2netcompat.h"
 #include "error_code.h"
 #include "stream/CurlHandle.h"
-#include <_timeval.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>

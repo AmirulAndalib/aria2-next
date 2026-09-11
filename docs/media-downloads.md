@@ -125,6 +125,13 @@ before `unpause`. Task options affecting selection or output change while paused
 its completed media. Pause retains the task; remove cancels it and discards its
 recovery state. Finishing and deleting are separate operations.
 
+`aria2.retryMedia(gid[, options])` requeues a failed media task with the same GID and
+retained native recovery data. It does not delete the stopped result until queue
+insertion succeeds. Invalid or non-media results are rejected without mutation.
+Optional changes use the native paused-task option validator.
+Use this method instead of removing the result and submitting a new GID:
+`removeDownloadResult` intentionally discards media recovery data.
+
 ## Recovery and storage
 
 State is created on demand under `state-dir/media/state.db`. Task-owned cache
@@ -161,8 +168,8 @@ Files are synchronized before their publication record is committed. Recovery
 verifies the staged or already-published file before completing an interrupted
 publication. Selection and output format cannot change while publication is
 pending. Completion/removal clears task-owned recovery data; cleanup failure
-does not invalidate a successfully published file. Existing output is protected
-unless overwriting was explicitly enabled.
+does not invalidate a successfully published file. Existing output uses the native auto-file-renaming policy; the resolved name
+is retained for recovery. Overwriting requires explicit permission.
 
 Media state schema 4 stores stable DASH presentation positions and HLS media clocks. It
 discards incompatible earlier checkpoints and task caches. Existing downloaded

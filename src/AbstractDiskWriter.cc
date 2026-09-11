@@ -42,12 +42,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <errhandlingapi.h>
-#include <ioapiset.h>
 #include <limits>
-#include <memoryapi.h>
 #include <string>
-#include <winerror.h>
 #ifdef _WIN32
 #  include <windows.h>
 #endif

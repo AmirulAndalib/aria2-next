@@ -57,6 +57,7 @@
 #include "DownloadContext.h"
 #include "Ed2kSession.h"
 #include "media/MediaDownload.h"
+#include "Option.h"
 #ifdef ENABLE_BITTORRENT
 #  include "BtDownload.h"
 #  include "BtSession.h"
@@ -308,6 +309,16 @@ std::unique_ptr<ValueBase> FinishMediaRpcMethod::process(const RpcRequest& req,
     e->getRequestGroupMan()->requestQueueCheck();
     e->setRefreshInterval(std::chrono::milliseconds(0));
   }
+  return createGIDResponse(gid);
+}
+
+std::unique_ptr<ValueBase> RetryMediaRpcMethod::process(const RpcRequest& req,
+                                                      DownloadEngine* e)
+{
+  const auto gid = str2Gid(checkRequiredParam<String>(req, 0));
+  Option changes;
+  gatherChangeableOptionForReserved(&changes, checkParam<Dict>(req, 1));
+  e->getRequestGroupMan()->retryMedia(gid, &changes);
   return createGIDResponse(gid);
 }
 

@@ -58,7 +58,6 @@
 #include "TimeBasedCommand.h"
 #include "a2functional.h"
 #include <cinttypes>
-#include <winerror.h>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "Log.h"

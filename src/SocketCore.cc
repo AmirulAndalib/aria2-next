@@ -34,10 +34,8 @@
 /* copyright --> */
 #include "SocketCore.h"
 #include "a2netcompat.h"
-#include "gai_strerror.h"
 #include <cstdint>
 #include <memory>
-#include <psdk_inc/_ip_types.h>
 #include <vector>
 #include "platform/SocketOps.h"
 #include "platform/SocketAddress.h"

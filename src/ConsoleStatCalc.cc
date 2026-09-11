@@ -36,10 +36,8 @@
 #include "GroupId.h"
 #include "TransferStat.h"
 #include <chrono>
-#include <consoleapi2.h>
 #include <cstdint>
 #include <memory>
-#include <processenv.h>
 #include <string>
 #include <utility>
 #include <vector>

@@ -39,7 +39,6 @@
 #include <memory>
 #include <random>
 #include <stdlib.h>
-#include <wincrypt.h>
 
 #include <sys/types.h>
 #include <unistd.h>

@@ -36,8 +36,6 @@
 #include <iterator>
 #include <stdlib.h>
 #include <string>
-#include <stringapiset.h>
-#include <winnls.h>
 #include "common.h" // IWYU pragma: keep
 #include "a2functional.h"
 #include <cstdlib>

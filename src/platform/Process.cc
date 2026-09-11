@@ -38,11 +38,8 @@
 #include "platform/Process.h"
 #include "GroupId.h"
 #include "prefs.h"
-#include <consoleapi.h>
 #include <csignal>
-#include <errhandlingapi.h>
 #include <memory>
-#include <securitybaseapi.h>
 #ifdef _WIN32
 #  include <windows.h>
 #endif

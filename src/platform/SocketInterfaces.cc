@@ -34,7 +34,6 @@
 /* copyright --> */
 #include "RecoverableException.h"
 #include "a2netcompat.h"
-#include "gai_strerror.h"
 #include <iterator>
 #include <memory>
 #include <vector>

@@ -35,8 +35,6 @@
 #include "RecoverableException.h"
 #include "a2netcompat.h"
 #include <cstdint>
-#include <inaddr.h>
-#include <psdk_inc/_ip_mreq1.h>
 #include "SocketCore.h"
 #include "platform/SocketOps.h"
 #include "platform/SocketAddress.h"

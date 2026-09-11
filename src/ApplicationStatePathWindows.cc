@@ -14,7 +14,6 @@
 #  include <windows.h>
 #endif
 #include <string>
-#include <winerror.h>
 #include "ApplicationStatePath.h"
 
 #include <shlobj.h>

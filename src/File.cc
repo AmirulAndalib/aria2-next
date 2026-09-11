@@ -42,7 +42,6 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <errhandlingapi.h>
 #include <iterator>
 #include <string>
 #include <sys/stat.h>

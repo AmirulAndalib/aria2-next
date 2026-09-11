@@ -38,7 +38,6 @@
 #include "Platform.h"
 #include <cstdio>
 #include <cstring>
-#include <psdk_inc/_wsadata.h>
 #include <stdio.h>
 #ifdef _WIN32
 #  include <io.h>

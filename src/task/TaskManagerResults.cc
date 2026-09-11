@@ -40,6 +40,9 @@
 #include "ApplicationStatePath.h"
 #include "media/MediaStore.h"
 #include "Option.h"
+#include "DownloadContext.h"
+#include "FileEntry.h"
+#include "media/MediaDownload.h"
 #include "DlAbortEx.h"
 #include "Log.h"
 #include "prefs.h"
@@ -115,6 +118,30 @@ bool RequestGroupMan::removeDownloadResult(a2_gid_t gid)
   }
 #endif
   return removed;
+}
+
+void RequestGroupMan::retryMedia(a2_gid_t gid, const Option* changes)
+{
+  const auto result = downloadResults_.get(gid);
+  if (!result || result->mediaSnapshot.state != "error" ||
+      result->fileEntries.empty())
+    throw DL_ABORT_EX("Only failed media tasks can be retried");
+  const auto uris = result->fileEntries.front()->getUris();
+  if (uris.empty())
+    throw DL_ABORT_EX("The media source is unavailable");
+  auto options = std::make_shared<Option>(*result->option);
+  if (changes)
+    options->merge(*changes);
+  auto group = std::make_shared<RequestGroup>(result->gid, options);
+  auto context = std::make_shared<DownloadContext>(
+      options->getAsInt(PREF_PIECE_LENGTH), 0, result->mediaSnapshot.path);
+  context->getFirstFileEntry()->setUris(uris);
+  group->setDownloadContext(context);
+  group->setMediaDownload(std::make_shared<media::Download>(uris.front()));
+  // Queue insertion may fail. Keep the stopped result and cache until it succeeds.
+  addReservedGroup(group);
+  downloadResults_.remove(gid);
+  requestQueueCheck();
 }
 
 void RequestGroupMan::addDownloadResult(

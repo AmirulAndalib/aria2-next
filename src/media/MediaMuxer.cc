@@ -11,7 +11,6 @@ extern "C" {
 #include "media/MediaDownload.h"
 #include "media/MediaStore.h"
 #include <cstdint>
-#include <errhandlingapi.h>
 #include <memory>
 #include <optional>
 #include <stdexcept>

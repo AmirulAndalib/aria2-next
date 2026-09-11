@@ -34,7 +34,6 @@
 /* copyright --> */
 #include "RpcRequest.h"
 #include "ValueBase.h"
-#include "gai_strerror.h"
 #include <memory>
 #include <utility>
 #include "common.h" // IWYU pragma: keep

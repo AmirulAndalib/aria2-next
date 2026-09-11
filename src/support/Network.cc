@@ -35,9 +35,7 @@
 #include "support/Network.h"
 #include "TLSContext.h"
 #include "a2netcompat.h"
-#include "gai_strerror.h"
 #include <cstdint>
-#include <psdk_inc/_ip_types.h>
 #include <string>
 #include "common.h" // IWYU pragma: keep
 #include "platform/SocketAddress.h"

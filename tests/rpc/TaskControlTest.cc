@@ -1,3 +1,5 @@
+#include "DownloadResult.h"
+#include "media/MediaDownload.h"
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "GroupId.h"
 #include "ValueBase.h"
@@ -284,6 +286,31 @@ TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testPause")
   for (size_t i = 0; i < groups.size(); ++i) {
     REQUIRE(groups[i]->isPauseRequested());
   }
+}
+
+TEST_CASE_FIXTURE(RpcMethodTest, "Media retry preserves task identity and rejects invalid results")
+{
+  auto result = std::make_shared<DownloadResult>();
+  result->gid = GroupId::create();
+  result->option = std::make_shared<Option>(*option_);
+  result->mediaSnapshot.state = "error";
+  result->mediaSnapshot.protocol = "hls";
+  result->result = error_code::NETWORK_PROBLEM;
+  const auto gid = result->gid->getNumericId();
+  auto manager = e_->getRequestGroupMan().get();
+  manager->addDownloadResult(result);
+  REQUIRE_THROWS(manager->retryMedia(gid));
+  REQUIRE(manager->findDownloadResult(gid) == result);
+  auto file = std::make_shared<FileEntry>();
+  file->setUris({"https://example.org/media.m3u8"});
+  result->fileEntries.push_back(file);
+  manager->retryMedia(gid);
+  REQUIRE_FALSE(manager->findDownloadResult(gid));
+  const auto group = getReservedGroup(manager, 0);
+  REQUIRE(group->getGroupId() == result->gid);
+  REQUIRE(group->getMediaDownload());
+  REQUIRE(group->getDownloadContext()->getFirstFileEntry()->getUris() == file->getUris());
+  REQUIRE_THROWS(manager->retryMedia(gid));
 }
 
 } // namespace aria2::rpc

@@ -1,10 +1,7 @@
 #include "a2netcompat.h"
 #include <algorithm>
 #include <cstddef>
-#include <in6addr.h>
-#include <inaddr.h>
 #include <memory>
-#include <psdk_inc/_ip_types.h>
 #include <string>
 #include "SocketCore.h"
 #include "platform/SocketAddress.h"

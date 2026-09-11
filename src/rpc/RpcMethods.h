@@ -225,6 +225,14 @@ public:
   static const char* getMethodName() { return "aria2.finishMedia"; }
 };
 
+class RetryMediaRpcMethod : public RpcMethod {
+protected:
+  std::unique_ptr<ValueBase> process(const RpcRequest& req,
+                                    DownloadEngine* e) override;
+public:
+  static const char* getMethodName() { return "aria2.retryMedia"; }
+};
+
 class UnpauseAllRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,

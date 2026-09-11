@@ -146,7 +146,8 @@ void Download::restore(RequestGroup* group)
       snapshot_.error = failureMessage(error);
     }
   }
-  snapshot_.state = "paused";
+  if (snapshot_.state != "awaiting-selection")
+    snapshot_.state = "paused";
   if (!snapshot_.path.empty())
     group->getDownloadContext()->getFirstFileEntry()->setPath(snapshot_.path);
 }
@@ -155,6 +156,10 @@ std::unique_ptr<Command> Download::start(RequestGroup* group,
 try {
   restore(group);
   const auto& option = group->getOption();
+  const auto sources = group->getDownloadContext()->getFirstFileEntry()->getUris();
+  if (std::any_of(sources.begin(), sources.end(),
+                  [&](const auto& source) { return source != uri_; }))
+    throw std::runtime_error("Media presentations require one source URI");
   if (snapshot_.protocol.empty()) {
     const auto path = urlPath(uri_);
     snapshot_.protocol =
@@ -201,9 +206,13 @@ try {
       !option->getAsBool(PREF_ALLOW_OVERWRITE)) {
     Store store(directory_, gid_);
     const auto publication = store.publication();
-    if (!publication || publication->output != snapshot_.path)
-      throw std::runtime_error("Media output already exists; choose another "
-                               "path or allow-overwrite");
+    if (!publication || publication->output != snapshot_.path) {
+      group->getDownloadContext()->getFirstFileEntry()->setPath(snapshot_.path);
+      group->tryAutoFileRenaming();
+      snapshot_.path = group->getFirstFilePath();
+      // Persist the resolved name so recovery reuses this destination.
+      option->put(PREF_OUT, nativePath(snapshot_.path).filename().u8string());
+    }
   }
   std::filesystem::create_directories(nativePath(snapshot_.path).parent_path());
   group->getDownloadContext()->getFirstFileEntry()->setPath(snapshot_.path);
@@ -249,6 +258,9 @@ void Download::poll(RequestGroup* group)
     std::lock_guard<std::mutex> lock(control_->mutex);
     snapshot_ = control_->snapshot;
   }
+  // MIME-discovered presentations must restore as media without another request.
+  if (!snapshot_.tracks.empty())
+    group->getOption()->put(PREF_MEDIA, snapshot_.protocol);
   snapshot_.received = control_->received.load();
   snapshot_.connections = control_->connections.load();
   size_t mediaCount = 0;

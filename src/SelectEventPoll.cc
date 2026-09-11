@@ -36,11 +36,9 @@
 #include "EventPoll.h"
 #include "a2netcompat.h"
 #include "common.h"
-#include <_timeval.h>
 #include <cerrno>
 #include <functional>
 #include <iterator>
-#include <psdk_inc/_fd_types.h>
 #include <utility>
 
 #ifdef __MINGW32__

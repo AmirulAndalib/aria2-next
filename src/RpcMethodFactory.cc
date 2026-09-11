@@ -59,6 +59,7 @@ template <typename T> MethodEntry method()
 const MethodEntry methods[] = {
     method<AddUriRpcMethod>(),
     method<FinishMediaRpcMethod>(),
+    method<RetryMediaRpcMethod>(),
     method<Ed2kSearchRpcMethod>(),
     method<GetEd2kSearchResultsRpcMethod>(),
 #ifdef ENABLE_BITTORRENT

@@ -36,13 +36,10 @@
 #  include <windows.h>
 #endif
 #include "a2netcompat.h"
-#include "gai_strerror.h"
-#include <_timeval.h>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <memory>
-#include <psdk_inc/_fd_types.h>
 #include "SocketCore.h"
 #include "platform/SocketOps.h"
 #include "platform/SocketAddress.h"

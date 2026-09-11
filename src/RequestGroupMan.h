@@ -280,6 +280,9 @@ public:
   // result was removed. Otherwise returns false.
   bool removeDownloadResult(a2_gid_t gid);
 
+  // Requeue a failed presentation without relinquishing its recovery identity.
+  void retryMedia(a2_gid_t gid, const Option* changes = nullptr);
+
   void addDownloadResult(const std::shared_ptr<DownloadResult>& downloadResult);
 
 #ifdef ENABLE_BITTORRENT

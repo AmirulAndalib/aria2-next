@@ -40,7 +40,6 @@
 #include "a2netcompat.h"
 #include "a2time.h"
 #include "common.h"
-#include <_timeval.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>

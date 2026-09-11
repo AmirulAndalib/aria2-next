@@ -38,13 +38,12 @@
 #include "platform/SocketAddress.h"
 #include "a2netcompat.h"
 #include <cstdint>
-#include <in6addr.h>
-#include <inaddr.h>
-#include <ipifcons.h>
-#include <iptypes.h>
+#ifdef __MINGW32__
+#  include <ipifcons.h>
+#  include <iptypes.h>
+#endif
 #include <memory>
 #include <vector>
-#include <winerror.h>
 #include "SocketCore.h"
 #include "platform/SocketOps.h"
 #include "Log.h"
