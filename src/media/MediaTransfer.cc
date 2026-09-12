@@ -101,15 +101,15 @@ void MediaJob::run()
     return;
   auto result = control->finish ? GF_OK : gf_dash_open(dash, uri.c_str());
   if (result < 0)
-    throw std::runtime_error(failure.empty() ? gf_error_to_string(result)
-                                             : failure);
+    throw Failure(failureKind,
+                  failure.empty() ? gf_error_to_string(result) : failure);
   resumeLive();
   while (!control->cancel && !control->finish && !completed && !awaiting) {
     result = gf_dash_process(dash);
     if (awaiting)
       return;
     if (!failure.empty())
-      throw std::runtime_error(failure);
+      throw Failure(failureKind, failure);
     if (result < 0 && result != GF_IP_NETWORK_EMPTY && result != GF_NOT_READY)
       throw std::runtime_error(gf_error_to_string(result));
     if (result == GF_EOS) {

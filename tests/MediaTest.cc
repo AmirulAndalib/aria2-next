@@ -21,6 +21,7 @@ extern "C" {
 #include "media/MediaFiles.h"
 #include "media/MediaStore.h"
 #include "media/MediaTransport.h"
+#include "media/MediaRequestContext.h"
 
 extern "C" {
 #include <gpac/mpd.h>
@@ -98,6 +99,28 @@ std::vector<int64_t> timestamps(const std::string& path)
   return result;
 }
 } // namespace
+
+TEST_CASE("Media request contexts preserve origin-scoped credentials")
+{
+  const auto contexts = media::parseRequestContexts(R"([
+    {"url":"https://media.example/master.m3u8?signature=a%2Fb", "headers":[
+      {"name":"Cookie","value":"session=source"},
+      {"name":"X-Playback-Token","value":"opaque"}]}])");
+  REQUIRE(contexts.size() == 1);
+  REQUIRE(contexts[0].url ==
+          "https://media.example/master.m3u8?signature=a%2Fb");
+  REQUIRE(contexts[0].headers.at("cookie") == "session=source");
+  REQUIRE(contexts[0].headers.at("x-playback-token") == "opaque");
+  for (
+      const auto* invalid :
+      {R"([{"url":"file:///private", "headers":[]}])",
+       R"([{"url":"https://user:password@example.com", "headers":[]}])",
+       R"([{"url":"https://example.com", "headers":[{"name":"Host","value":"other"}]}])",
+       R"([{"url":"https://example.com", "headers":[{"name":"X-Token","value":"a\r\nInjected: b"}]}])",
+       R"([{"url":"https://example.com/a", "headers":[]},{"url":"https://example.com:443/b", "headers":[]}])"}) {
+    REQUIRE_THROWS_AS(media::parseRequestContexts(invalid), media::Failure);
+  }
+}
 
 TEST_CASE("Media preserves HLS subtitle timestamp maps")
 {

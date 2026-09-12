@@ -41,7 +41,8 @@ void MediaJob::createPlayback()
     bin128 iv{};
     auto key = gf_dash_group_get_segment_init_keys(dash, group, &crypto, &iv);
     if (crypto > 1)
-      throw std::runtime_error("Encrypted sample media is not supported");
+      throw Failure(FailureCode::ProtectedMedia,
+                    "Encrypted sample media is not supported");
     auto path =
         localResource(init, first, last ? static_cast<int64_t>(last) : -1);
     if (crypto == 1 && key)

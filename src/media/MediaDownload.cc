@@ -156,7 +156,8 @@ std::unique_ptr<Command> Download::start(RequestGroup* group,
 try {
   restore(group);
   const auto& option = group->getOption();
-  const auto sources = group->getDownloadContext()->getFirstFileEntry()->getUris();
+  const auto sources =
+      group->getDownloadContext()->getFirstFileEntry()->getUris();
   if (std::any_of(sources.begin(), sources.end(),
                   [&](const auto& source) { return source != uri_; }))
     throw std::runtime_error("Media presentations require one source URI");
@@ -221,6 +222,7 @@ try {
     throw std::runtime_error("Another task is writing the media output path");
   snapshot_.state = "probing";
   snapshot_.error.clear();
+  snapshot_.errorCode = FailureCode::None;
   snapshot_.received = 0;
   control_ = std::make_shared<Control>();
   control_->snapshot = snapshot_;
@@ -248,6 +250,7 @@ catch (const std::exception& error) {
   }
   snapshot_.state = "error";
   snapshot_.error = failureMessage(error);
+  snapshot_.errorCode = failureCode(error);
   throw std::runtime_error(snapshot_.error);
 }
 void Download::poll(RequestGroup* group)
@@ -258,7 +261,8 @@ void Download::poll(RequestGroup* group)
     std::lock_guard<std::mutex> lock(control_->mutex);
     snapshot_ = control_->snapshot;
   }
-  // MIME-discovered presentations must restore as media without another request.
+  // MIME-discovered presentations must restore as media without another
+  // request.
   if (!snapshot_.tracks.empty())
     group->getOption()->put(PREF_MEDIA, snapshot_.protocol);
   snapshot_.received = control_->received.load();

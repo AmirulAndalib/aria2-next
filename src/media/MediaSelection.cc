@@ -54,6 +54,7 @@ std::string trackType(const GF_DASHQualityInfo& info, bool hls)
 std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
 {
   std::map<std::string, Track> chosen;
+  trackLocations.clear();
   for (u32 group = 0; group < gf_dash_get_group_count(dash); ++group) {
     gf_dash_group_select(dash, group, GF_FALSE);
     if (!gf_dash_is_group_selectable(dash, group))
@@ -68,14 +69,34 @@ std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
         continue;
       const std::string mime = info.mime ? info.mime : "";
       const auto type = trackType(info, gf_dash_is_m3u8(dash));
-      Track track{std::to_string(group) + ":" + std::to_string(quality),
-                  type,
-                  language ? language : "",
-                  info.codec ? info.codec : "",
-                  static_cast<int>(info.width),
-                  static_cast<int>(info.height),
-                  info.bandwidth,
-                  false};
+      // Native representation metadata survives group/quality reordering.
+      // HLS variant URLs identify renditions independently of generated IDs.
+      const bool hls = gf_dash_is_m3u8(dash);
+      const std::string representation =
+          hls ? (info.hls_variant_url ? info.hls_variant_url : uri)
+              : std::to_string(gf_dash_group_get_as_id(dash, group)) + ":" +
+                    (info.ID ? info.ID : "");
+      const auto identity =
+          representation + "\n" + type + "\n" + (language ? language : "") +
+          "\n" + (info.codec ? info.codec : "") + "\n" +
+          std::to_string(info.width) + "x" + std::to_string(info.height) +
+          "\n" + std::to_string(info.bandwidth) + "\n" +
+          std::to_string(info.sample_rate) + ":" +
+          std::to_string(info.nb_channels);
+      const auto id = "track-" + Transport::fingerprint(identity);
+      if (!trackLocations.emplace(id, std::make_pair(group, quality)).second)
+        throw Failure(FailureCode::UnsupportedSource,
+                      "Media representations have ambiguous identities");
+      Track track{
+          id,
+          type,
+          language ? language : "",
+          info.codec ? info.codec : "",
+          static_cast<int>(info.width),
+          static_cast<int>(info.height),
+          info.bandwidth,
+          false,
+          info.fps_den ? static_cast<double>(info.fps_num) / info.fps_den : 0};
       value.tracks.push_back(track);
       A2_LOG_DEBUG(fmt("component=media event=representation id=%s type=%s "
                        "language=%s mime=%s codec=%s",
@@ -108,33 +129,43 @@ std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
                                muxed->second.id == selection;
     if (selection != "best" && selection != "none" && !chosen.count(type) &&
         !selectedMuxed)
-      throw std::runtime_error(
-          "Requested media track or language is unavailable: " + selection);
+      throw Failure(FailureCode::UnsupportedSelection,
+                    "Requested media track or language is unavailable: " +
+                        selection);
+  }
+  if (chosen.count("video") && chosen.count("muxed"))
+    chosen.erase(chosen.at("video").bandwidth >= chosen.at("muxed").bandwidth
+                     ? "muxed"
+                     : "video");
+  if (chosen.count("muxed") && chosen.count("audio")) {
+    if (option->get(PREF_MEDIA_VIDEO) == "none" &&
+        chosen.at("audio").bandwidth >= chosen.at("muxed").bandwidth)
+      chosen.erase("muxed");
+    else if (option->get(PREF_MEDIA_AUDIO) == "best" ||
+             option->get(PREF_MEDIA_AUDIO) == chosen.at("muxed").id)
+      chosen.erase("audio");
+    else
+      throw Failure(FailureCode::UnsupportedSelection,
+                    "A multiplexed representation cannot be combined with "
+                    "another audio track");
   }
   return chosen;
 }
 
 void MediaJob::selectTrack(const Track& track)
 {
-  auto separator = track.id.find(':');
-  auto group = std::stoi(track.id.substr(0, separator));
-  auto quality = std::stoi(track.id.substr(separator + 1));
+  const auto [group, quality] = trackLocations.at(track.id);
   const char* descriptor = nullptr;
   if (gf_dash_group_enum_descriptor(dash, group, GF_MPD_DESC_CONTENT_PROTECTION,
                                     0, nullptr, &descriptor, nullptr))
-    throw std::runtime_error("DRM-protected media is not supported");
+    throw Failure(FailureCode::ProtectedMedia,
+                  "DRM-protected media is not supported");
   gf_dash_group_select(dash, group, GF_TRUE);
   if (gf_dash_group_select_quality(dash, group, nullptr, quality) != GF_OK)
-    throw std::runtime_error("Cannot select the requested media quality");
+    throw Failure(FailureCode::UnsupportedSelection,
+                  "Cannot select the requested media quality");
   selected.push_back(group);
-  GF_DASHQualityInfo info{};
-  if (gf_dash_group_get_quality_info(dash, group, quality, &info) != GF_OK)
-    throw std::runtime_error("Cannot inspect the selected representation");
-  const std::string representation = info.ID ? info.ID : "";
-  auto identity = Transport::fingerprint(
-      track.type + "\n" + track.language + "\n" + representation + "\n" +
-      track.codec + "\n" + std::to_string(track.width) + "x" +
-      std::to_string(track.height) + "\n" + std::to_string(track.bandwidth));
+  const auto& identity = track.id;
   u64 offset = 0;
   u32 timescale = 0;
   if (gf_dash_group_get_presentation_time_offset(dash, group, &offset,
@@ -182,8 +213,10 @@ GF_Err MediaJob::selectGroups()
       continue;
     selectTrack(track);
   }
-  if (selected.empty())
-    throw std::runtime_error("No media track matches the requested selection");
+  if (!chosen.count("video") && !chosen.count("audio") &&
+      !chosen.count("muxed"))
+    throw Failure(FailureCode::UnsupportedSelection,
+                  "Select at least one audio or video track");
   store.saveTracks(value.tracks);
   if (option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE)) {
     for (int group : selected)

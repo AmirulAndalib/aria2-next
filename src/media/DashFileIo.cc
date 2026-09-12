@@ -91,6 +91,7 @@ DashFileIo::DashFileIo(MediaJob& job)
         return h.result;
       }
       h.job->failure = failureMessage(e);
+      h.job->failureKind = failureCode(e);
       h.result = GF_IO_ERR;
     }
     return h.result;
@@ -125,6 +126,7 @@ DashFileIo::DashFileIo(MediaJob& job)
     }
     catch (const std::exception& error) {
       job.failure = failureMessage(error);
+      job.failureKind = failureCode(error);
     }
   };
   native_.get_utc_start_time = [](GF_DASHFileIO*, void* handle) -> u64 {
@@ -144,6 +146,7 @@ DashFileIo::DashFileIo(MediaJob& job)
     }
     catch (const std::exception& e) {
       job.failure = failureMessage(e);
+      job.failureKind = failureCode(e);
       return GF_IO_ERR;
     }
     catch (...) {

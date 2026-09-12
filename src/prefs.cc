@@ -307,6 +307,7 @@ PrefPtr PREF_MEDIA_AUDIO = makePref("media-audio");
 PrefPtr PREF_MEDIA_SUBTITLES = makePref("media-subtitles");
 PrefPtr PREF_MEDIA_PAUSE_AFTER_PROBE = makePref("media-pause-after-probe");
 PrefPtr PREF_MEDIA_RECORD_TIME = makePref("media-record-time");
+PrefPtr PREF_MEDIA_REQUEST_CONTEXTS = makePref("media-request-contexts");
 // value: true | false
 PrefPtr PREF_SHOW_CONSOLE_READOUT = makePref("show-console-readout");
 // value: default | inorder

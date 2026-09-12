@@ -66,6 +66,7 @@ Session::Session(std::shared_ptr<Option> option, std::string uri,
       std::lock_guard<std::mutex> lock(control->mutex);
       if (!control->cancel && control->snapshot.state != "awaiting-selection") {
         control->snapshot.error = failureMessage(error);
+        control->snapshot.errorCode = failureCode(error);
         control->snapshot.state = "error";
       }
     }

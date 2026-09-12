@@ -19,14 +19,16 @@ aria2-next --media-record-time=3600 'https://example.org/live/index.m3u8'
 | --- | --- | --- |
 | `media` | `auto` | `auto`, `file`, `hls`, or `dash`. Auto recognizes manifest URL suffixes and HTTP content types; explicit HLS/DASH also supports extensionless endpoints. File saves the resource unchanged. |
 | `media-format` | `mp4` | Output container: `mp4` or `mkv`. |
-| `media-video` | `best` | Highest bandwidth video source, `none`, or a `group:quality` ID. |
-| `media-audio` | `best` | Audio source: `best`, `none`, a language, or a `group:quality` ID. |
-| `media-subtitles` | `none` | Subtitle source: `none`, `best`, a language, or a `group:quality` ID. |
+| `media-video` | `best` | Highest bandwidth video source, `none`, or an opaque track ID. |
+| `media-audio` | `best` | Audio source: `best`, `none`, a language, or an opaque track ID. |
+| `media-subtitles` | `none` | Subtitle source: `none`, `best`, a language, or an opaque track ID. |
 | `media-pause-after-probe` | `false` | Publish the available representations and pause before fetching payload segments. |
+| `media-request-contexts` | Empty | JSON array of HTTP request contexts, each containing a source `url` and `headers` name/value pairs. |
 | `media-record-time` | `0` | Live media duration limit in seconds; zero records until stopped or the source ends. Stops at a complete segment boundary. |
 
 Only representations supported by the native client can be selected. Multiplexed
-HLS sources can contain both video and audio; packet filtering applies the
+HLS sources can contain both video and audio; at least one audio/video source
+is required, and a multiplexed source cannot be combined with another rendition; packet filtering applies the
 requested output track types. Download quality is fixed, not dynamically reduced
 to follow network speed. DRM and unsupported encryption modes fail explicitly.
 Standard HLS AES-128 uses OpenSSL's native cipher implementation. MP4 cannot
@@ -62,8 +64,26 @@ terminal failures remain visible at error level.
 
 Existing HTTP options configure authentication, request headers, timeouts,
 proxying, certificate validation, and per-task rate limits. Browser-supplied
-Cookie and Authorization headers retain their original origin boundary. Remote
-manifests cannot request arbitrary local files or executable protocols.
+request contexts retain their exact origin boundary, including scheme and port.
+Each redirect, child playlist, segment and key request selects its own context.
+libcurl resolves redirect destinations and supplies native HTTP, TLS and cookie
+behavior. Custom headers never inherit another origin's context. Existing `header`
+and HTTP user/password options apply only to the source origin for media requests.
+Remote manifests cannot request arbitrary local files or executable protocols.
+
+`media-request-contexts` accepts at most eight distinct origins, 32 headers and
+16 KiB of header names/values per origin. Transport and conditional headers are
+rejected. Use explicit `media=hls|dash` for an extensionless authenticated source:
+scoped media headers apply after the task enters the native media path.
+
+```json
+[{"url":"https://media.example/master.m3u8","headers":[{"name":"referer","value":"https://example.com/watch"}]}]
+```
+
+Inspection reads manifests and required indexes; it does not start payload
+recording. Each inspection metadata response is limited to 16 MiB.
+Browser credentials are sensitive task options. The native session retains them
+for restart, so protect the session file. Do not copy them into application history.
 
 ## RPC
 
@@ -91,6 +111,7 @@ source URI.
     "progress": "0.333333",
     "lengthKnown": "false",
     "error": "",
+    "errorCode": "",
     "tracks": []
   }
 }
@@ -116,6 +137,16 @@ Media phases are `waiting`, `probing`, `awaiting-selection`, `downloading`,
 `recording`, `finalizing`, `paused`, `complete`, `error`, and `removed`. Standard
 RPC status retains the ordinary task lifecycle. Only successful muxing and
 publishing the output file produce a completed task.
+
+Track IDs derive from native representation identity and media attributes, not
+manifest positions. Reordering does not select a different rendition. A missing
+or ambiguous identity fails explicitly. Treat IDs as opaque and do not parse them.
+Track `frameRate` uses a decimal string; zero means unknown.
+
+`getVersion.mediaFeatures` advertises `request-contexts`, `stable-track-ids` and
+`structured-errors`. `media.errorCode` is empty outside failures; failures identify
+`unsupported_source`, `authentication_required`, `protected_media`,
+`unsupported_selection` or `probe_failed` independently of diagnostic text.
 
 To choose tracks, add with `media-pause-after-probe=true`, inspect `media.tracks`,
 then use `changeOption` to set the selection and `media-pause-after-probe=false`

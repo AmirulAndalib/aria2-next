@@ -53,6 +53,8 @@ set(ARIA2_SOURCES_BASE
   src/media/MediaEvents.cc
   src/media/MediaTransfer.cc
   src/media/MediaTransport.cc
+  src/media/MediaRequest.cc
+  src/media/MediaRequestContext.cc
   src/media/MuxInput.cc
   src/media/MuxPackets.cc
   src/media/MuxTimestamps.cc

@@ -39,6 +39,7 @@ private:
   GF_DashClient* dash = nullptr;
   std::vector<int> selected;
   std::map<int, Group> groups;
+  std::map<std::string, std::pair<int, int>> trackLocations;
   std::map<SegmentKey, Segment> retained;
   std::map<int64_t, std::map<std::string, int64_t>> coverage;
   std::map<std::pair<int64_t, std::string>, Segment> lastSegments;
@@ -48,6 +49,7 @@ private:
   bool completed = false, awaiting = false;
   bool live = false;
   std::string failure;
+  FailureCode failureKind = FailureCode::ProbeFailed;
 
   Snapshot snapshot();
   void publish(Snapshot);

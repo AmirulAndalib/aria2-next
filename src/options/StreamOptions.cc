@@ -205,10 +205,22 @@ void addStreamOptions(OptionHandlers& handlers)
     op->setChangeOptionForReserved(true);
     handlers.push_back(std::move(op));
   }
+  {
+    auto op = std::make_unique<DefaultOptionHandler>(
+        PREF_MEDIA_REQUEST_CONTEXTS,
+        " --media-request-contexts=JSON  HTTP request headers scoped by "
+        "origin.",
+        "");
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
+    op->setEraseAfterParse(true);
+    handlers.push_back(std::move(op));
+  }
   for (auto pref : {PREF_MEDIA_VIDEO, PREF_MEDIA_AUDIO, PREF_MEDIA_SUBTITLES}) {
     auto op = std::unique_ptr<DefaultOptionHandler>(new DefaultOptionHandler(
         pref,
-        " Select best, none, a language, or the group:quality ID from "
+        " Select best, none, a language, or an opaque track ID from "
         "media.tracks.",
         pref == PREF_MEDIA_SUBTITLES ? "none" : "best"));
     op->addTag(TAG_HTTP);

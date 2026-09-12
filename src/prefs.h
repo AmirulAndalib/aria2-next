@@ -258,6 +258,7 @@ extern PrefPtr PREF_MEDIA_AUDIO;
 extern PrefPtr PREF_MEDIA_SUBTITLES;
 extern PrefPtr PREF_MEDIA_PAUSE_AFTER_PROBE;
 extern PrefPtr PREF_MEDIA_RECORD_TIME;
+extern PrefPtr PREF_MEDIA_REQUEST_CONTEXTS;
 // value: true | false
 extern PrefPtr PREF_SHOW_CONSOLE_READOUT;
 // value: default | inorder | geom

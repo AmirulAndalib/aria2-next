@@ -91,6 +91,7 @@ void gatherMedia(Dict* entry, const media::Snapshot& snapshot)
     info->put("progress", fmt("%.6f", snapshot.progress()));
   info->put("lengthKnown", snapshot.totalLength > 0 ? VLB_TRUE : VLB_FALSE);
   info->put("error", snapshot.error);
+  info->put("errorCode", media::failureCodeName(snapshot.errorCode));
   auto tracks = List::g();
   for (const auto& track : snapshot.tracks) {
     auto item = Dict::g();
@@ -101,6 +102,7 @@ void gatherMedia(Dict* entry, const media::Snapshot& snapshot)
     item->put("width", util::itos(track.width));
     item->put("height", util::itos(track.height));
     item->put("bandwidth", util::itos(track.bandwidth));
+    item->put("frameRate", fmt("%.6f", track.frameRate));
     item->put("selected", track.selected ? VLB_TRUE : VLB_FALSE);
     tracks->append(std::move(item));
   }

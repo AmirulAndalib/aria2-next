@@ -37,7 +37,10 @@ MediaJob::MediaJob(std::shared_ptr<Option> op, std::string source,
   auto identity = Transport::fingerprint(
       uri + "\n" + option->get(PREF_MEDIA_VIDEO) + "\n" +
       option->get(PREF_MEDIA_AUDIO) + "\n" + option->get(PREF_MEDIA_SUBTITLES) +
-      "\n" + option->get(PREF_MEDIA_FORMAT));
+      "\n" + option->get(PREF_MEDIA_FORMAT) + "\n" +
+      option->get(PREF_MEDIA_REQUEST_CONTEXTS) + "\n" +
+      option->get(PREF_HEADER) + "\n" + option->get(PREF_HTTP_USER) + "\n" +
+      option->get(PREF_HTTP_PASSWD));
   if (store.identity(identity)) {
     std::lock_guard<std::mutex> lock(control->mutex);
     control->snapshot.downloadedLength = 0;

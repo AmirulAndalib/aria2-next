@@ -75,6 +75,11 @@ std::unique_ptr<ValueBase> GetVersionRpcMethod::process(const RpcRequest& req,
     }
   }
   result->put(KEY_ENABLED_FEATURES, std::move(featureList));
+  auto mediaFeatures = List::g();
+  mediaFeatures->append("request-contexts");
+  mediaFeatures->append("stable-track-ids");
+  mediaFeatures->append("structured-errors");
+  result->put("mediaFeatures", std::move(mediaFeatures));
   return std::move(result);
 }
 

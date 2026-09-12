@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include "MediaError.h"
 
 namespace aria2 {
 class Command;
@@ -23,11 +24,13 @@ struct Track {
   int width = 0, height = 0;
   int64_t bandwidth = 0;
   bool selected = false;
+  double frameRate = 0;
 };
 
 struct Snapshot {
   std::string state = "waiting";
   std::string protocol, path, error;
+  FailureCode errorCode = FailureCode::None;
   std::vector<Track> tracks;
   int64_t duration = 0;
   int64_t completedDuration = 0;

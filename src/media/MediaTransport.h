@@ -2,6 +2,7 @@
 #ifndef D_MEDIA_TRANSPORT_H
 #define D_MEDIA_TRANSPORT_H
 #include "MediaDownload.h"
+#include "MediaRequestContext.h"
 #include <curl/curl.h>
 #include <memory>
 #include <string>
@@ -11,12 +12,11 @@
 namespace aria2 {
 class Option;
 namespace media {
-struct HttpError : std::runtime_error {
-  HttpError(long status, const std::string& message)
-      : std::runtime_error(message), status(status)
-  {
-  }
+struct HttpError : Failure {
+  HttpError(long status, CURLcode result, curl_off_t retryAfter);
   long status;
+  bool retryable;
+  curl_off_t retryAfter;
 };
 struct Resource {
   std::string path, url, mime;
@@ -47,6 +47,9 @@ private:
   CURLM* multi_ = nullptr;
   CURLSH* share_ = nullptr;
   std::map<std::string, std::string> retained_;
+  std::vector<RequestContext> contexts_;
+  Resource request(const std::string& url, int64_t begin, int64_t end,
+                   const std::string& temporary);
 };
 } // namespace media
 } // namespace aria2
