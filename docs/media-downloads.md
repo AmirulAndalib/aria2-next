@@ -7,6 +7,12 @@ FFmpeg's libraries demux and remux the downloaded media without transcoding.
 There are no child download tools, player, Python runtime, or .NET runtime in
 the engine. Webpage extraction and browser resource discovery are not provided.
 
+The engine owns output naming. Send a page title as `filename-hint` with
+`filename-hint-source=title`; dots in the title are preserved and the selected
+container extension is appended. A filename hint or explicit `out` uses the
+selected container extension. Hints are already decoded text; neither the desktop
+nor extension should guess the final path or decode the name again.
+
 ## CLI
 
 ```sh

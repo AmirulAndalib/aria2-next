@@ -58,6 +58,27 @@ framework or catch-all utility header. Share functions only where both the
 behavior and ownership requirements match. In particular, media and ordinary
 range downloads intentionally have different request and retry policies.
 
+## Output naming
+
+`support/OutputName` owns untrusted name decoding and filename suggestions.
+`stream/StreamStorage` binds the chosen name to the real output and native recovery
+state. New implicit HTTP names wait for the final payload headers; redirects and
+rejected responses never create provisional files. libcurl's native header and
+URL information provide the accepted response metadata. Existing outputs re-enter
+the normal conflict/resume decision before any response body can be written.
+
+Precedence is explicit `out` or persisted path, browser-resolved hint, final
+Content-Disposition, suggested hint, final URL basename, then the default.
+Content-Disposition uses the existing aria2 parser. Browser names and persisted
+paths are already text and are never URL decoded. Final names are persisted in
+native task options so restart does not choose another path.
+
+Media titles append the selected container extension; filename hints replace their
+extension. The media worker retains ownership of collision handling and publication.
+`aria2.getVersion` advertises `downloadFeatures: ["filename-hints"]` so consumers
+can require this contract before handing off a task. The public aria2 adapter and
+its option/link mappings remain intact.
+
 ## Verification boundaries
 
 CTest runs the native doctest suite. Keep regressions for parsing, state

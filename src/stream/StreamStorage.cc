@@ -33,6 +33,7 @@
 #include <curl/curl.h>
 #include <curl/system.h>
 #include <exception>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <string>
@@ -63,6 +64,7 @@
 #include "support/Text.h"
 #include "support/Encoding.h"
 #include "support/FilePath.h"
+#include "support/OutputName.h"
 #include "wallclock.h"
 
 namespace aria2 {
@@ -77,36 +79,13 @@ std::string outputPath(RequestGroup* group, const std::string& uriValue)
     if (!configured.empty()) {
       return configured;
     }
-    uri::UriStruct parsed;
-    if (uri::parse(parsed, uriValue)) {
-      name = parsed.file;
-      if (name.size() <= static_cast<size_t>(std::numeric_limits<int>::max())) {
-        int length = 0;
-        const auto decoded = std::unique_ptr<char, decltype(&curl_free)>(
-            curl_easy_unescape(nullptr, name.c_str(),
-                               static_cast<int>(name.size()), &length),
-            curl_free);
-        if (decoded) {
-          std::string candidate(decoded.get(), static_cast<size_t>(length));
-          // Decode only the URL basename, never a configured or restored path.
-          if (util::isUtf8(candidate) && candidate != "." &&
-              candidate != "..") {
-            name = std::move(candidate);
-          }
-        }
-      }
-      name = util::createSafePath(name);
-    }
-    if (name.empty()) {
-      name = Request::DEFAULT_FILE;
-    }
+    name = output::suggestedName(*option, uriValue);
   }
   return util::applyDir(option->get(PREF_DIR), name);
 }
 } // namespace
 
-bool CurlSession::openOutput(const std::shared_ptr<CurlDownload>& download,
-                             bool preserveExisting)
+bool CurlSession::openOutput(CurlDownload* download, bool preserveExisting)
 {
   auto& impl = *download->impl_;
   impl.createdOutput = !File(impl.path).exists();
@@ -122,7 +101,7 @@ bool CurlSession::openOutput(const std::shared_ptr<CurlDownload>& download,
       impl.writer = DefaultDiskWriterFactory().newDiskWriter(impl.path);
     }
     if (!impl.writer) {
-      CurlHandle::fail(download.get(), fallbackError,
+      CurlHandle::fail(download, fallbackError,
                        "Unable to create the output writer");
       return false;
     }
@@ -136,18 +115,62 @@ bool CurlSession::openOutput(const std::shared_ptr<CurlDownload>& download,
   }
   catch (const Exception& error) {
     impl.writer.reset();
-    CurlHandle::fail(download.get(), error.getErrorCode(), error.what());
+    CurlHandle::fail(download, error.getErrorCode(), error.what());
   }
   catch (const std::exception& error) {
     impl.writer.reset();
-    CurlHandle::fail(download.get(), fallbackError, error.what());
+    CurlHandle::fail(download, fallbackError, error.what());
   }
   catch (...) {
     impl.writer.reset();
-    CurlHandle::fail(download.get(), fallbackError,
+    CurlHandle::fail(download, fallbackError,
                      "Unable to open the output file");
   }
   return false;
+}
+
+// Called on the engine thread after the final payload headers, before any bytes
+// are written. Binding out makes the selected path part of native recovery.
+bool CurlSession::resolveOutput(CurlDownload* download, CURL* easy)
+{
+  auto& impl = *download->impl_;
+  if (!impl.filenamePending) {
+    return true;
+  }
+  char* effective = nullptr;
+  curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &effective);
+  auto option = impl.group->getOption();
+  const auto name = output::suggestedName(
+      *option, effective ? effective : impl.currentUri,
+      http::responseHeader(easy, "Content-Disposition"));
+  impl.path = util::applyDir(option->get(PREF_DIR), name);
+  auto context = impl.group->getDownloadContext();
+  context->getFirstFileEntry()->setPath(impl.path);
+  if (!impl.dryRun && File(impl.path).exists() &&
+      !option->getAsBool(PREF_CONTINUE)) {
+    impl.group->shouldCancelDownloadForSafety();
+    impl.path = impl.group->getFirstFilePath();
+  }
+  context->setBasePath(impl.path);
+  option->put(PREF_OUT, std::filesystem::u8path(impl.path).filename().u8string());
+  impl.filenamePending = false;
+  if (impl.dryRun) {
+    return true;
+  }
+  if (auto* manager = impl.group->getRequestGroupMan();
+      manager && manager->isSameFileBeingDownloaded(impl.group)) {
+    CurlHandle::fail(download, error_code::FILE_ALREADY_EXISTS,
+                     "Another task is writing the output path");
+    return false;
+  }
+  if (File(impl.path).isFile() && option->getAsBool(PREF_CONTINUE) &&
+      !option->getAsBool(PREF_ALLOW_OVERWRITE)) {
+    // Re-enter the existing native inspection/recovery path. Never append a
+    // response that started at zero to a file discovered by response naming.
+    impl.restartForOutput = true;
+    return false;
+  }
+  return openOutput(download, false);
 }
 
 void CurlSession::closeOutput(CurlDownload* download) noexcept
@@ -211,7 +234,10 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.preferredUriIndex %= impl.uris.size();
   const auto& uriValue = impl.uris[impl.preferredUriIndex];
   impl.currentUri = uriValue;
+  const auto& configured = group->getFirstFilePath();
+  const bool namedByCaller = !configured.empty() && configured != impl.path;
   impl.path = outputPath(group, uriValue);
+  impl.restartForOutput = false;
 
   auto context = group->getDownloadContext();
   context->setBasePath(impl.path);
@@ -233,6 +259,13 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.http = uri::parse(parsed, impl.currentUri) &&
               (util::strieq(parsed.protocol, "http") ||
                util::strieq(parsed.protocol, "https"));
+  impl.filenamePending = impl.http && !hasState && !namedByCaller &&
+                         group->getOption()->blank(PREF_OUT);
+  if (impl.filenamePending) {
+    impl.allowFullRestart = true;
+    download->snapshot_.state = CurlSnapshot::State::Active;
+    return true;
+  }
   File output(impl.path);
   auto existingLength = output.isFile() ? output.size() : 0;
   if (!hasState && existingLength > 0 &&
@@ -288,7 +321,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
 
   const bool preserveExisting =
       restoreState || impl.planner.completedLength() > 0;
-  if (!openOutput(download, preserveExisting)) {
+  if (!openOutput(download.get(), preserveExisting)) {
     return false;
   }
   download->snapshot_.completedLength = impl.planner.completedLength();
@@ -343,7 +376,7 @@ void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
                              bool force)
 {
   auto& impl = *download->impl_;
-  if (!impl.group || impl.dryRun ||
+  if (!impl.group || impl.dryRun || impl.filenamePending ||
       (!force && !impl.lastCheckpoint.isZero() &&
        impl.lastCheckpoint.difference(global::wallclock()) <
            std::chrono::seconds(1))) {

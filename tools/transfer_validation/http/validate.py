@@ -275,6 +275,20 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             "response": {"status": 403},
         })
 
+        wiremock.stub({
+            "request": {"method": "GET", "url": "/named-download"},
+            "response": {"status": 200, "base64Body": base64.b64encode(block).decode(),
+                         "headers": {"Content-Disposition": "attachment; filename=fallback.bin; filename*=UTF-8''report-%E4%B8%AD%E6%96%87%2520.bin"}},
+        })
+        wiremock.stub({
+            "request": {"method": "GET", "url": "/name-redirect"},
+            "response": {"status": 302, "headers": {"Location": wiremock.base_url + "/named-download"}},
+        })
+        wiremock.stub({
+            "priority": 1,
+            "request": {"method": "GET", "url": "/payload.bin?case=naming-resume"},
+            "response": {"proxyBaseUrl": caddy.base_url, "headers": {"Content-Disposition": "attachment; filename=resume%20.bin"}},
+        })
         engine = EngineProcess(run, "engine", engine_path)
         session = run.state / "download.session"
         engine.start([f"--save-session={session}"])
@@ -303,6 +317,33 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             return gid
 
         try:
+            for label, overrides, expected_name in [
+                ("response", {}, "report-中文%20.bin"),
+                ("hint", {"filename-hint": "README"}, "report-中文%20.bin"),
+                ("browser", {"filename-hint": "browser%20.bin", "filename-hint-source": "browser"}, "browser%20.bin"),
+                ("explicit", {"out": "chosen%20.bin", "filename-hint": "ignored.bin"}, "chosen%20.bin"),
+            ]:
+                directory = engine.download_dir / ("naming-" + label)
+                gid = engine.add_uri(wiremock.base_url + "/name-redirect", {
+                    **options, "dir": str(directory), "stream-max-connections": "1", **overrides,
+                })
+                task = engine.rpc.wait_complete(gid, 30)
+                output = directory / expected_name
+                if Path(task["files"][0]["path"]) != output or sha256(output) != hashlib.sha256(block).hexdigest():
+                    raise RuntimeError(f"Response filename or payload mismatch: {label}")
+                if (directory / "name-redirect").exists():
+                    raise RuntimeError("A provisional filename was written before response naming")
+                results["filename-" + label] = "passed"
+            resume_dir = engine.download_dir / "naming-resume"
+            resume_dir.mkdir()
+            shutil.copyfile(payload, resume_dir / "resume%20.bin")
+            gid = engine.add_uri(wiremock.base_url + "/payload.bin?case=naming-resume", {
+                **options, "dir": str(resume_dir), "continue": "true",
+            })
+            task = engine.rpc.wait_complete(gid, 30)
+            if sha256(resume_dir / "resume%20.bin") != expected or Path(task["files"][0]["path"]).name != "resume%20.bin":
+                raise RuntimeError("Response naming did not retain the existing download")
+            results["filename-existing-output"] = "passed"
             original = f"{caddy.base_url}/replaced-before-start.bin"
             replacement = f"{caddy.base_url}/payload.bin"
             gid = engine.add_uri(original, {
@@ -408,7 +449,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
                     raise RuntimeError("Address-family-bound destination corrupted the payload")
                 results["familyBoundEndpoint"] = round(time.monotonic() - started, 3)
             if not re.search(r"event=range_finished .*http=403 ",
-                             bound.engine_log.read_text()):
+                             bound.engine_log.read_text(encoding="utf-8")):
                 raise RuntimeError("The unavailable address family was not exercised")
             for connections in (1, 64):
                 check(f"redirect-{connections}.bin",
@@ -613,7 +654,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
 
         # The logger buffers debug output. Check the flushed pre-restart log,
         # rather than racing the logger immediately after RPC completion.
-        retry_log = (run.logs / "before-restart.engine.log").read_text()
+        retry_log = (run.logs / "before-restart.engine.log").read_text(encoding="utf-8")
         if not re.search(rf"event=route_payload gid={dual_gid} "
                          r"family=ipv6 bytes=[1-9][0-9]*", retry_log):
             raise RuntimeError("The slow IPv6 body path was not exercised")

@@ -260,6 +260,24 @@ HTTP/SFTP Options
 
       $ aria2-next -o myfile.zip "http://mirror1/file.zip" "http://mirror2/file.zip"
 
+.. option:: --filename-hint=<NAME>
+
+  Suggest a decoded filename for an ordinary URI or media task. This is a hint,
+  not an output path. An explicit :option:`--out <-o>` or restored output path
+  takes precedence. For HTTP, the engine resolves the name from the accepted
+  payload response before creating the output; no separate naming request is
+  made. Content-Disposition takes precedence over a suggested hint, and a hint
+  takes precedence over the final URL basename. Default: empty.
+
+.. option:: --filename-hint-source=<SOURCE>
+
+  Identify the hint as ``suggested`` (default), ``browser``, or ``title``.
+  A browser-resolved name takes precedence over Content-Disposition. A media
+  title preserves dots and appends the selected container extension; a filename
+  hint replaces its extension. Browser names and restored paths are literal text,
+  including percent signs. URL basenames and extended header parameters are
+  decoded only at their respective protocol boundaries.
+
 .. option:: -R, --remote-time [true|false]
 
   Retrieve timestamp of the remote file from the remote HTTP/SFTP

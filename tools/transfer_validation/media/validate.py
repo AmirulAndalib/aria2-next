@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from contextlib import contextmanager
 import sqlite3
 import xml.etree.ElementTree as ET
@@ -17,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.engine import EngineProcess
 from core.report import run_validation
 from core.runtime import RunDirectory, process_options
-from core.services import CaddyService, WireMockService
+from core.services import CaddyService, WireMockService, post_json
 from media.common import command, control_action, decoded_hash, native_env, probe, wait_duration
 from media.timeline import validate_epoch_timeline
 
@@ -160,7 +161,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
         command(*args)
     hls_manifest = run.fixtures / "hls/index.m3u8"
     hls_manifest.write_text(
-        hls_manifest.read_text().replace(
+        hls_manifest.read_text(encoding="utf-8").replace(
             "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-MEDIA-SEQUENCE:3456"
         )
     )
@@ -576,6 +577,18 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
             "en",
             "fr",
         }, tracks
+        quality_manifest = run.fixtures / "quality.m3u8"
+        original_quality = quality_manifest.read_text(encoding="utf-8")
+        lines = original_quality.splitlines()
+        quality_manifest.write_text("\n".join([lines[index] for index in [0, 2, 1, 5, 6, 3, 4]]) + "\n", encoding="utf-8")
+        reordered_gid = engine.add_uri(f"{server.base_url}/quality.m3u8", {
+            "out": "reordered.mp4", "media-pause-after-probe": "true",
+        })
+        reordered_tracks = wait(engine, reordered_gid, "paused")["media"]["tracks"]
+        assert {track["id"] for track in tracks} == {track["id"] for track in reordered_tracks}, reordered_tracks
+        quality_manifest.write_text(original_quality, encoding="utf-8")
+        control_action(engine, reordered_gid, "remove-force")
+        results["trackIdentity"] = "HLS rendition and quality reordering preserves track IDs"
         low = next(t["id"] for t in tracks if t["height"] == "90")
         engine.rpc.call(
             "aria2.changeOption",
@@ -833,6 +846,42 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                 "credentials reach the origin and are stripped from a foreign origin"
             )
 
+            for foreign_context in (False, True):
+                prefix = "/scoped-" + ("two" if foreign_context else "one")
+                origin = faults.base_url
+                foreign = f"http://localhost:{faults.port}"
+                source_headers = {"X-Media-Token": {"equalTo": "source"}}
+                foreign_headers = {"X-Media-Token": {"equalTo": "foreign"} if foreign_context else {"absent": True}}
+                faults.stub({"request": {"method":"GET", "urlPath":prefix + "/start", "headers":source_headers},
+                             "response": {"status":302, "headers":{"Location":foreign + prefix + "/master.m3u8"}}})
+                faults.stub({"request": {"method":"GET", "urlPath":prefix + "/master.m3u8", "headers":foreign_headers},
+                             "response": {"status":200, "body":'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=160x90,CODECS="avc1.42c00b,mp4a.40.2"\n' + origin + prefix + '/child.m3u8\n'}})
+                media_lines = ["#EXTM3U", "#EXT-X-TARGETDURATION:2"]
+                for index in range(3):
+                    route = prefix + f"/segment{index}.ts"
+                    faults.file(f"scoped{index}.ts", run.fixtures / f"hls/index{index}.ts")
+                    faults.stub({"request": {"method":"GET", "urlPath":route, "headers":foreign_headers if index == 1 else source_headers},
+                                 "response": {"status":200, "bodyFileName":f"scoped{index}.ts"}})
+                    media_lines.extend(["#EXTINF:2,", (foreign if index == 1 else origin) + route])
+                faults.stub({"request": {"method":"GET", "urlPath":prefix + "/child.m3u8", "headers":source_headers},
+                             "response": {"status":200, "body":"\n".join(media_lines + ["#EXT-X-ENDLIST", ""])}})
+                contexts = [{"url":origin, "headers":[{"name":"X-Media-Token","value":"source"}]}]
+                if foreign_context:
+                    contexts.append({"url":foreign,"headers":[{"name":"X-Media-Token","value":"foreign"}]})
+                gid = engine.add_uri(origin + prefix + "/start", {
+                    "media":"hls", "filename-hint":"Scoped title 1.5" + prefix,
+                    "filename-hint-source":"title", "media-pause-after-probe":"true",
+                    "media-request-contexts":json.dumps(contexts), "disable-ipv6":"true",
+                })
+                wait(engine, gid, "paused")
+                assert post_json(faults.base_url + "/__admin/requests/count", {"urlPathPattern":prefix + "/segment.*"})["count"] == 0
+                engine.rpc.call("aria2.changeOption", [gid, {"media-pause-after-probe":"false"}])
+                engine.rpc.call("aria2.unpause", [gid])
+                output = wait(engine, gid)["files"][0]["path"]
+                assert decoded_hash(ffmpeg, output) == expected, output
+                assert "1.5" in Path(output).name, output
+            results["scopedRequestContexts"] = "Redirects, child manifests and segments obey exact-origin custom headers; probes transfer no payload"
+
             for mode in ("late", "missing"):
                 route = f"/{mode}/manifest"
                 prefix = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n"
@@ -915,7 +964,7 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict:
                     },
                 }
             )
-            playlist = (run.fixtures / "hls/index.m3u8").read_text()
+            playlist = (run.fixtures / "hls/index.m3u8").read_text(encoding="utf-8")
             playlist = "\n".join(
                 f"{server.base_url}/hls/{line}" if line.endswith(".ts") else line
                 for line in playlist.splitlines()

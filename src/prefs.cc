@@ -177,6 +177,8 @@ PrefPtr PREF_LOG_MAX_FILES = makePref("log-max-files");
 PrefPtr PREF_DIR = makePref("dir");
 // values: a string that your file system recognizes as a file name.
 PrefPtr PREF_OUT = makePref("out");
+PrefPtr PREF_FILENAME_HINT = makePref("filename-hint");
+PrefPtr PREF_FILENAME_HINT_SOURCE = makePref("filename-hint-source");
 // values: 1*digit
 // value: true | false
 PrefPtr PREF_DAEMON = makePref("daemon");

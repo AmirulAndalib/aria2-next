@@ -109,6 +109,8 @@ struct CurlDownloadImpl {
   bool kickPending = false;
   bool stopRequested = false;
   bool createdOutput = false;
+  bool filenamePending = false;
+  bool restartForOutput = false;
   Timer lastCheckpoint = Timer::zero();
 };
 

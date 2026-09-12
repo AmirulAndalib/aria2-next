@@ -111,9 +111,7 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
 {
   engine_ = engine;
   transport_.bind(engine);
-  constexpr int64_t probeSize = 4_m;
   if (prepare(download, group)) {
-    auto& impl = *download->impl_;
     tasks_[download.get()] = download;
     if (!refreshConnectionPoolLimits()) {
       failTask(download, error_code::NETWORK_PROBLEM,
@@ -121,45 +119,7 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
       return std::unique_ptr<Command>(new CurlDownloadCommand(
           engine->newCUID(), download, this, group, engine));
     }
-    if (impl.startMode == CurlStartMode::InspectExisting) {
-      if (!startProbe(download, CurlHandlePurpose::RangeProbe)) {
-        failTask(download, error_code::NETWORK_PROBLEM,
-                 "Unable to inspect the existing output file", false);
-      }
-      return std::unique_ptr<Command>(new CurlDownloadCommand(
-          engine->newCUID(), download, this, group, engine));
-    }
-    if (impl.planner.complete()) {
-      finalize(download, -1);
-      return std::unique_ptr<Command>(new CurlDownloadCommand(
-          engine->newCUID(), download, this, group, engine));
-    }
-    const auto rangeStart = impl.planner.contiguousLength();
-    const bool ranged =
-        impl.http && (impl.maxConnections > 1 || rangeStart > 0);
-    auto rangeEnd =
-        ranged ? rangeStart +
-                     (impl.maxConnections > 1
-                          ? probeSize
-                          : std::numeric_limits<int64_t>::max() - rangeStart)
-               : std::numeric_limits<int64_t>::max();
-    if (download->snapshot_.totalLength > 0) {
-      rangeEnd = std::min(rangeEnd, download->snapshot_.totalLength);
-    }
-    rangeEnd = impl.planner.gapEnd(rangeStart, rangeEnd);
-    const RangeLease lease{rangeStart, rangeEnd, 0, impl.preferredUriIndex};
-    if (!createHandle(download, lease, true, ranged,
-                      CurlHandlePurpose::Payload)) {
-      CurlHandle::fail(download.get(), error_code::NETWORK_PROBLEM,
-                       "Unable to start the curl transfer");
-      eraseTask(download.get());
-      return std::unique_ptr<Command>(new CurlDownloadCommand(
-          engine->newCUID(), download, this, group, engine));
-    }
-    auto* handle = download->impl_->handles.back().get();
-    downloads_[handle->value] = std::make_pair(download, handle);
-    rebalanceLimits();
-    transport_.socketAction(CURL_SOCKET_TIMEOUT, 0);
+    activate(download);
   }
   else if (!download->failed()) {
     CurlHandle::fail(download.get(), error_code::NETWORK_PROBLEM,
@@ -167,6 +127,48 @@ CurlSession::start(const std::shared_ptr<CurlDownload>& download,
   }
   return std::unique_ptr<Command>(new CurlDownloadCommand(
       engine->newCUID(), download, this, group, engine));
+}
+
+void CurlSession::activate(const std::shared_ptr<CurlDownload>& download)
+{
+  constexpr int64_t probeSize = 4_m;
+  auto& impl = *download->impl_;
+  if (impl.startMode == CurlStartMode::InspectExisting) {
+    if (!startProbe(download, CurlHandlePurpose::RangeProbe)) {
+      failTask(download, error_code::NETWORK_PROBLEM,
+               "Unable to inspect the existing output file", false);
+    }
+    return;
+  }
+  if (impl.planner.complete()) {
+    finalize(download, -1);
+    return;
+  }
+  const auto rangeStart = impl.planner.contiguousLength();
+  const bool ranged =
+      impl.http && (impl.maxConnections > 1 || rangeStart > 0);
+  auto rangeEnd =
+      ranged ? rangeStart +
+                   (impl.maxConnections > 1
+                        ? probeSize
+                        : std::numeric_limits<int64_t>::max() - rangeStart)
+             : std::numeric_limits<int64_t>::max();
+  if (download->snapshot_.totalLength > 0) {
+    rangeEnd = std::min(rangeEnd, download->snapshot_.totalLength);
+  }
+  rangeEnd = impl.planner.gapEnd(rangeStart, rangeEnd);
+  const RangeLease lease{rangeStart, rangeEnd, 0, impl.preferredUriIndex};
+  if (!createHandle(download, lease, true, ranged,
+                    CurlHandlePurpose::Payload)) {
+    CurlHandle::fail(download.get(), error_code::NETWORK_PROBLEM,
+                     "Unable to start the curl transfer");
+    eraseTask(download.get());
+    return;
+  }
+  auto* handle = download->impl_->handles.back().get();
+  downloads_[handle->value] = std::make_pair(download, handle);
+  rebalanceLimits();
+  transport_.socketAction(CURL_SOCKET_TIMEOUT, 0);
 }
 
 void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
@@ -214,7 +216,7 @@ void CurlSession::restartFullDownload(
   impl.rangeValidated = false;
   impl.fullDownload = true;
   download->snapshot_.completedLength = 0;
-  if (!openOutput(download, false)) {
+  if (!openOutput(download.get(), false)) {
     failTask(download, download->snapshot_.errorCode, download->snapshot_.error,
              false);
     return;

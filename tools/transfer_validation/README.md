@@ -7,12 +7,12 @@ public media sources provide independent interoperability checks.
 
 | Module | Native test tools | Distinct coverage |
 | --- | --- | --- |
-| HTTP | Caddy, WireMock, Toxiproxy | Ranges, overload, redirects, credentials, dual-stack scheduling, recovery |
+| HTTP | Caddy, WireMock, Toxiproxy | Ranges, response filenames, redirects, conflicts, credentials, overload, recovery |
 | SFTP | OpenSSH or SFTPGo, Toxiproxy | Authentication, host keys, interruption, recovery |
 | BitTorrent | libtorrent | Native torrent creation, metadata, sharing, selection, recovery |
 | ED2K | OpenSSL | Hashing, peer transfer, sharing, recovery |
 | Metalink | WireMock | Mirrors, checksums, selection, failure handling |
-| Media | FFmpeg, ffprobe, OpenSSL, Caddy, WireMock | HLS/DASH, encryption, track selection, clocks, boundaries, recording, recovery |
+| Media | FFmpeg, ffprobe, OpenSSL, Caddy, WireMock | HLS/DASH, origin-scoped headers, stable track IDs, encryption, clocks, recording, recovery |
 
 Run local modules independently or sequentially:
 

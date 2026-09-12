@@ -132,6 +132,8 @@ extern PrefPtr PREF_LOG_MAX_FILES;
 extern PrefPtr PREF_DIR;
 // values: a string that your file system recognizes as a file name.
 extern PrefPtr PREF_OUT;
+extern PrefPtr PREF_FILENAME_HINT;
+extern PrefPtr PREF_FILENAME_HINT_SOURCE;
 // values: 1*digit
 // value: true | false
 extern PrefPtr PREF_DAEMON;

@@ -230,7 +230,7 @@ void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
     finalize(download, reportedFileTime);
     return;
   case ExistingFileDecision::Resume:
-    if (!openOutput(download, true)) {
+    if (!openOutput(download.get(), true)) {
       failTask(download, download->snapshot_.errorCode,
                download->snapshot_.error, false);
       return;
@@ -262,6 +262,13 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
                          CurlHandle* handle, CURLcode result)
 {
   auto& impl = *download->impl_;
+  if (impl.restartForOutput) {
+    cancelHandles(download);
+    if (prepare(download, impl.group)) {
+      activate(download);
+    }
+    return;
+  }
   long responseCode = handle->responseCode;
   if (download->snapshot_.mediaManifest) {
     cancelHandles(download);

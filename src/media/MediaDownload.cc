@@ -26,6 +26,7 @@
 #include "error_code.h"
 #include "prefs.h"
 #include "support/FilePath.h"
+#include "support/OutputName.h"
 #include <curl/curl.h>
 #include <filesystem>
 #include <algorithm>
@@ -178,26 +179,7 @@ try {
         "A source checksum cannot validate a remuxed presentation; use "
         "media=file to download the source unchanged");
   {
-    auto name = option->get(PREF_OUT);
-    if (name.empty()) {
-      auto path = urlPath(uri_);
-      auto slash = path.find_last_of('/');
-      name = path.substr(slash == std::string::npos ? 0 : slash + 1);
-      int length = 0;
-      auto decoded = curl_easy_unescape(nullptr, name.c_str(),
-                                        static_cast<int>(name.size()), &length);
-      if (decoded) {
-        name.assign(decoded, length);
-        curl_free(decoded);
-      }
-      name = util::createSafePath(name);
-      auto dot = name.find_last_of('.');
-      if (dot != std::string::npos)
-        name.resize(dot);
-      if (name.empty() || name == "." || name == "..")
-        name = "media-" + gid_;
-      name += "." + option->get(PREF_MEDIA_FORMAT);
-    }
+    const auto name = output::mediaName(*option, uri_);
     snapshot_.path = std::filesystem::absolute(
                          std::filesystem::u8path(option->get(PREF_DIR)) /
                          std::filesystem::u8path(name))

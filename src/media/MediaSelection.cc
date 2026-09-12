@@ -49,11 +49,29 @@ std::string trackType(const GF_DASHQualityInfo& info, bool hls)
     return hls && (!info.codec || !*info.codec) ? "muxed" : "video";
   return "subtitle";
 }
+
+bool hasAudioRendition(GF_DashClient* dash)
+{
+  for (u32 group = 0; group < gf_dash_get_group_count(dash); ++group) {
+    if (!gf_dash_is_group_selectable(dash, group))
+      continue;
+    for (u32 quality = 0; quality < gf_dash_group_get_num_qualities(dash, group);
+         ++quality) {
+      GF_DASHQualityInfo info{};
+      if (gf_dash_group_get_quality_info(dash, group, quality, &info) == GF_OK &&
+          !info.disabled && trackType(info, true) == "audio")
+        return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
 {
   std::map<std::string, Track> chosen;
+  const bool hls = gf_dash_is_m3u8(dash);
+  const bool separateAudio = hls && hasAudioRendition(dash);
   trackLocations.clear();
   for (u32 group = 0; group < gf_dash_get_group_count(dash); ++group) {
     gf_dash_group_select(dash, group, GF_FALSE);
@@ -68,10 +86,14 @@ std::map<std::string, Track> MediaJob::chooseTracks(Snapshot& value)
           info.disabled)
         continue;
       const std::string mime = info.mime ? info.mime : "";
-      const auto type = trackType(info, gf_dash_is_m3u8(dash));
+      auto type = trackType(info, hls);
+      // HLS CODECS covers the playable rendition set, including external audio.
+      // When GPAC exposes that audio separately, take only video from this
+      // playlist; the selected audio rendition supplies the soundtrack.
+      if (type == "muxed" && separateAudio)
+        type = "video";
       // Native representation metadata survives group/quality reordering.
       // HLS variant URLs identify renditions independently of generated IDs.
-      const bool hls = gf_dash_is_m3u8(dash);
       const std::string representation =
           hls ? (info.hls_variant_url ? info.hls_variant_url : uri)
               : std::to_string(gf_dash_group_get_as_id(dash, group)) + ":" +

@@ -522,6 +522,7 @@ set(ARIA2_SOURCES_BASE
   src/support/Random.cc
   src/platform/Process.cc
   src/support/ContentDisposition.cc
+  src/support/OutputName.cc
   src/util_security.cc
   src/util_security.h
   src/ValueBase.cc

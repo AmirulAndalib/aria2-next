@@ -21,6 +21,7 @@
 #include <memory>
 
 #include "CurlDownload.h"
+#include "CurlSession.h"
 #include "CurlDownloadImpl.h"
 #include "DownloadContext.h"
 #include "DlAbortEx.h"
@@ -517,9 +518,19 @@ size_t CurlHandle::receiveHeader(char* data, size_t size, size_t count,
       }
       validateResponse(*handle,
                        http::responseHeader(handle->value, "Content-Range"));
+      if (!download->snapshot_.mediaManifest &&
+          handle->responseCode >= 200 && handle->responseCode < 300 &&
+          handle->purpose == CurlHandlePurpose::Payload &&
+          handle->responseFailure == CurlResponseFailure::None &&
+          !CurlSession::resolveOutput(download, handle->value)) {
+        return CURL_WRITEFUNC_ERROR;
+      }
       rememberEndpoint(*handle);
     }
     return length;
+  }
+  catch (const Exception& error) {
+    fail(download, error.getErrorCode(), error.what());
   }
   catch (const std::exception& error) {
     fail(download, error_code::UNKNOWN_ERROR, error.what());

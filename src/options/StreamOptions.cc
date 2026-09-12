@@ -45,12 +45,32 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace aria2::option {
 
 void addStreamOptions(OptionHandlers& handlers)
 {
-  // Stream transfer options
+  {
+    auto op = std::make_unique<DefaultOptionHandler>(
+        PREF_FILENAME_HINT,
+        " --filename-hint=NAME        Suggest a decoded Unicode basename.", "");
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(std::move(op));
+  }
+  {
+    auto op = std::make_unique<ParameterOptionHandler>(
+        PREF_FILENAME_HINT_SOURCE,
+        " --filename-hint-source=browser|title|suggested  Browser names precede "
+        "response headers; other hints follow them.",
+        "suggested", std::vector<std::string>{"browser", "title", "suggested"});
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(std::move(op));
+  }
   {
     std::unique_ptr<OptionHandler> op(
         new ChecksumOptionHandler(PREF_CHECKSUM, TEXT_CHECKSUM));

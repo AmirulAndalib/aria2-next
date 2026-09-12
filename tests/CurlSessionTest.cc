@@ -14,6 +14,7 @@
 #include <vector>
 #include "CurlSession.h"
 #include "transport/CurlOptions.h"
+#include "support/OutputName.h"
 
 #include <algorithm>
 
@@ -35,6 +36,40 @@
 #include "wallclock.h"
 
 namespace aria2 {
+
+TEST_CASE("Output names preserve text and follow source precedence")
+{
+  Option option;
+  CHECK_EQ(std::string(236, 'a') + ".zip",
+           output::safeName(std::string(300, 'a') + ".zip"));
+  const std::string url = "https://example.test/a%2520b.zip";
+  CHECK_EQ("a%20b.zip", output::suggestedName(option, url));
+  CHECK_EQ("report%20.zip", output::suggestedName(
+      option, url, "attachment; filename=\"report%20.zip\""));
+  CHECK_EQ("report%20.zip", output::suggestedName(
+      option, url, "attachment; filename=plain.zip; filename*=UTF-8''report%2520.zip"));
+  CHECK_EQ("résumé.pdf", output::suggestedName(
+      option, url, "attachment; filename=\"=?UTF-8?Q?r=C3=A9sum=C3=A9.pdf?=\""));
+  CHECK_EQ("Итоги_2026.docx", output::suggestedName(
+      option, url, "attachment; filename=\"=?UTF-8?B?0JjRgtC+0LPQuF8yMDI2LmRvY3g=?=\""));
+  CHECK_EQ("%3D%3FUTF-8%3FQ%3Freport.pdf%3F%3D", output::suggestedName(
+      option, url,
+      "attachment; filename*=UTF-8''%253D%253FUTF-8%253FQ%253Freport.pdf%253F%253D"));
+  option.put(PREF_FILENAME_HINT, "browser%20.zip");
+  CHECK_EQ("server.zip", output::suggestedName(
+      option, url, "attachment; filename=server.zip"));
+  option.put(PREF_FILENAME_HINT_SOURCE, "browser");
+  CHECK_EQ("browser%20.zip", output::suggestedName(
+      option, url, "attachment; filename=server.zip"));
+  option.put(PREF_MEDIA_FORMAT, "mkv");
+  CHECK_EQ("browser%20.mkv", output::mediaName(option, url));
+  option.put(PREF_OUT, "chosen.mp4");
+  CHECK_EQ("chosen.mkv", output::mediaName(option, url));
+  option.remove(PREF_OUT);
+  option.put(PREF_FILENAME_HINT, "Episode 1.5");
+  option.put(PREF_FILENAME_HINT_SOURCE, "title");
+  CHECK_EQ("Episode 1.5.mkv", output::mediaName(option, url));
+}
 
 namespace {
 

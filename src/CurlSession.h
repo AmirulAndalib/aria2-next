@@ -75,6 +75,7 @@ private:
   static int effectiveStreamMaxConnections(const Option* option);
   bool prepare(const std::shared_ptr<CurlDownload>& download,
                RequestGroup* group);
+  void activate(const std::shared_ptr<CurlDownload>& download);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
                     const RangeLease& lease, bool primary, bool ranged,
                     CurlHandlePurpose purpose,
@@ -107,8 +108,8 @@ private:
                 bool retainState = true);
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
   void restartFullDownload(const std::shared_ptr<CurlDownload>& download);
-  bool openOutput(const std::shared_ptr<CurlDownload>& download,
-                  bool preserveExisting);
+  static bool openOutput(CurlDownload* download, bool preserveExisting);
+  static bool resolveOutput(CurlDownload* download, CURL* easy);
   void closeOutput(CurlDownload* download) noexcept;
   static bool retryableFailure(CURLcode result, long responseCode,
                                int fileNotFoundCount, int maxFileNotFound,
@@ -126,6 +127,7 @@ private:
                                   curlsocktype purpose) noexcept;
 
   friend class CurlSessionTest;
+  friend struct CurlHandle;
 };
 
 } // namespace aria2
