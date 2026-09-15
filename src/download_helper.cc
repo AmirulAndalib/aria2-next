@@ -33,12 +33,22 @@
  */
 /* copyright --> */
 #include "download_helper.h"
+#include "ContextAttribute.h"
+#include "Ed2kKadState.h"
+#include "GroupId.h"
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 #include <sstream>
 
 #include "RequestGroup.h"
 #include "CurlDownload.h"
+#include "media/MediaDownload.h"
 #include "Option.h"
 #include "prefs.h"
 #include "Metalink2RequestGroup.h"
@@ -54,11 +64,15 @@
 #include "FileEntry.h"
 #include "Log.h"
 #include "File.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "support/Encoding.h"
+#include "support/FilePath.h"
+#include "a2functional.h"
+#include "a2iterator.h"
 #include "array_fun.h"
 #include "OptionHandler.h"
 #include "ByteArrayDiskWriter.h"
-#include "a2functional.h"
 #include "ByteArrayDiskWriterFactory.h"
 #include "BufferedFile.h"
 #include "MetadataInfo.h"
@@ -127,11 +141,10 @@ void addUniqueEndpoint(std::vector<ed2k::Endpoint>& endpoints,
   if (endpoint.host.empty() || endpoint.port == 0) {
     return;
   }
-  auto i = std::find_if(endpoints.begin(), endpoints.end(),
-                        [&](const ed2k::Endpoint& item) {
-                          return item.host == endpoint.host &&
-                                 item.port == endpoint.port;
-                        });
+  auto i = std::find_if(
+      endpoints.begin(), endpoints.end(), [&](const ed2k::Endpoint& item) {
+        return item.host == endpoint.host && item.port == endpoint.port;
+      });
   if (i == endpoints.end()) {
     endpoints.push_back(endpoint);
   }
@@ -141,12 +154,10 @@ void addEndpointList(std::vector<ed2k::Endpoint>& endpoints,
                      const std::string& value)
 {
   std::vector<Scip> entries;
-  util::splitIter(value.begin(), value.end(), std::back_inserter(entries),
-                  ',');
+  util::splitIter(value.begin(), value.end(), std::back_inserter(entries), ',');
   for (const auto& entry : entries) {
     addUniqueEndpoint(
-        endpoints,
-        ed2k::parseEndpoint(std::string(entry.first, entry.second)));
+        endpoints, ed2k::parseEndpoint(std::string(entry.first, entry.second)));
   }
 }
 
@@ -265,8 +276,7 @@ std::string defaultEd2kMacNodeListPath()
 
 std::shared_ptr<ed2k::KadRoutingTable>
 createEd2kKadRoutingTableFromNodesDat(const std::string& path,
-                                      const std::string& selfId,
-                                      bool required)
+                                      const std::string& selfId, bool required)
 {
   if (!required && !File(path).isFile()) {
     return nullptr;
@@ -278,25 +288,24 @@ createEd2kKadRoutingTableFromNodesDat(const std::string& path,
     }
     return nullptr;
   }
-  auto table = std::make_shared<ed2k::KadRoutingTable>(
-      ed2k::ed2kHashToKadId(selfId));
+  auto table =
+      std::make_shared<ed2k::KadRoutingTable>(ed2k::ed2kHashToKadId(selfId));
   for (const auto& contact : nodes.contacts) {
     table->addRouterNode(contact);
   }
   return table;
 }
 
-std::shared_ptr<ed2k::KadRoutingTable> createEd2kKadRoutingTable(
-    const std::shared_ptr<Option>& option, const std::string& selfId,
-    bool createEmpty = false)
+std::shared_ptr<ed2k::KadRoutingTable>
+createEd2kKadRoutingTable(const std::shared_ptr<Option>& option,
+                          const std::string& selfId, bool createEmpty = false)
 {
   if (!option->blank(PREF_ED2K_NODE_LIST)) {
     return createEd2kKadRoutingTableFromNodesDat(
         option->get(PREF_ED2K_NODE_LIST), selfId, true);
   }
-  auto table =
-      createEd2kKadRoutingTableFromNodesDat(defaultEd2kNodeListPath(), selfId,
-                                            false);
+  auto table = createEd2kKadRoutingTableFromNodesDat(defaultEd2kNodeListPath(),
+                                                     selfId, false);
   if (table) {
     return table;
   }
@@ -323,11 +332,11 @@ createEd2kRequestGroup(const std::string& ed2kUri,
     throw DL_ABORT_EX("Only ED2K file links can create downloads.");
   }
 
-  auto option = util::copy(optionTemplate);
+  auto option = std::make_shared<Option>(*optionTemplate);
   auto gid = getGID(option);
   auto rg = std::make_shared<RequestGroup>(gid, option);
-  const auto outputName =
-      option->blank(PREF_OUT) ? util::fixTaintedBasename(link.name)
+  const auto outputName = option->blank(PREF_OUT)
+                              ? util::fixTaintedBasename(link.name)
                               : option->get(PREF_OUT);
   auto dctx = std::make_shared<DownloadContext>(
       ed2k::PIECE_LENGTH, link.size,
@@ -366,7 +375,7 @@ createRequestGroup(const std::shared_ptr<Option>& optionTemplate,
                    const std::vector<std::string>& uris,
                    bool useOutOption = false)
 {
-  auto option = util::copy(optionTemplate);
+  auto option = std::make_shared<Option>(*optionTemplate);
   auto rg = std::make_shared<RequestGroup>(getGID(option), option);
   auto dctx = std::make_shared<DownloadContext>(
       option->getAsInt(PREF_PIECE_LENGTH), 0,
@@ -384,7 +393,12 @@ createRequestGroup(const std::shared_ptr<Option>& optionTemplate,
                     util::fromHex(std::begin(hexDigest), std::end(hexDigest)));
   }
   rg->setDownloadContext(dctx);
-  rg->setCurlDownload(std::make_shared<CurlDownload>(uris));
+  if (!uris.empty() && media::Download::handles(uris.front(), option.get())) {
+    rg->setMediaDownload(std::make_shared<media::Download>(uris.front()));
+  }
+  else {
+    rg->setCurlDownload(std::make_shared<CurlDownload>(uris));
+  }
 
   if (option->getAsBool(PREF_ENABLE_RPC)) {
     rg->setPauseRequested(option->getAsBool(PREF_PAUSE));
@@ -399,7 +413,7 @@ std::shared_ptr<RequestGroup>
 createEd2kSearchRequestGroup(const ed2k::SearchQuery& query,
                              const std::shared_ptr<Option>& optionTemplate)
 {
-  auto option = util::copy(optionTemplate);
+  auto option = std::make_shared<Option>(*optionTemplate);
   auto gid = getGID(option);
   auto rg = std::make_shared<RequestGroup>(gid, option);
   auto dctx = std::make_shared<DownloadContext>(
@@ -422,7 +436,8 @@ createEd2kSearchRequestGroup(const ed2k::SearchQuery& query,
   if (attrs->servers.empty()) {
     if (!attrs->kadRoutingTable ||
         attrs->kadRoutingTable->getRouterNodes().empty()) {
-      throw DL_ABORT_EX("ED2K search requires at least one server or Kad node.");
+      throw DL_ABORT_EX(
+          "ED2K search requires at least one server or Kad node.");
     }
   }
   dctx->setAttribute(CTX_ATTR_ED2K, std::move(attrs));
@@ -461,7 +476,7 @@ createBtRequestGroup(std::shared_ptr<BtDownload> download,
                      const std::string& source,
                      const std::shared_ptr<Option>& optionTemplate)
 {
-  auto option = util::copy(optionTemplate);
+  auto option = std::make_shared<Option>(*optionTemplate);
   auto gid = getGID(option);
   auto group = std::make_shared<RequestGroup>(gid, option);
   auto context = std::make_shared<DownloadContext>(16_k, 0);
@@ -490,7 +505,7 @@ createBtRequestGroup(std::shared_ptr<BtDownload> download,
   removeOneshotOption(option);
   return group;
 }
-}
+} // namespace
 
 namespace {
 std::shared_ptr<RequestGroup>
@@ -500,7 +515,7 @@ createBtMagnetRequestGroup(const std::string& magnetLink,
   return createBtRequestGroup(BtDownload::fromMagnet(magnetLink), magnetLink,
                               option);
 }
-}
+} // namespace
 
 void createRequestGroupForBitTorrent(
     std::vector<std::shared_ptr<RequestGroup>>& result,
@@ -517,8 +532,7 @@ void createRequestGroupForBitTorrent(
 void createRequestGroupForBitTorrent(
     std::vector<std::shared_ptr<RequestGroup>>& result,
     const std::shared_ptr<Option>& option,
-    const std::shared_ptr<BtDownload>& download,
-    const std::string& metaInfoUri)
+    const std::shared_ptr<BtDownload>& download, const std::string& metaInfoUri)
 {
   result.push_back(createBtRequestGroup(download, metaInfoUri, option));
 }
@@ -650,7 +664,8 @@ public:
     }
 #ifdef ENABLE_BITTORRENT
     else if (detector_.guessTorrentMagnet(normalizedUri)) {
-      requestGroups_.push_back(createBtMagnetRequestGroup(normalizedUri, option_));
+      requestGroups_.push_back(
+          createBtMagnetRequestGroup(normalizedUri, option_));
     }
     else if (!ignoreLocalPath_ && detector_.guessTorrentFile(normalizedUri)) {
       try {
@@ -671,7 +686,8 @@ public:
 #endif // ENABLE_BITTORRENT
     else if (detector_.guessEd2kLink(normalizedUri)) {
       try {
-        requestGroups_.push_back(createEd2kRequestGroup(normalizedUri, option_));
+        requestGroups_.push_back(
+            createEd2kRequestGroup(normalizedUri, option_));
       }
       catch (RecoverableException& e) {
         if (throwOnError_) {
@@ -777,13 +793,15 @@ void createRequestGroupForUri(
     // Process stream protocols first.
     if (std::begin(nargs) != strmProtoEnd) {
       std::vector<std::string> normalizedStreamUris;
-      normalizedStreamUris.reserve(std::distance(std::begin(nargs), strmProtoEnd));
+      normalizedStreamUris.reserve(
+          std::distance(std::begin(nargs), strmProtoEnd));
       if (!normalizeStreamUris(normalizedStreamUris, std::begin(nargs),
                                strmProtoEnd, throwOnError)) {
         return;
       }
       try {
-        result.push_back(createRequestGroup(option, normalizedStreamUris, true));
+        result.push_back(
+            createRequestGroup(option, normalizedStreamUris, true));
       }
       catch (RecoverableException& e) {
         if (throwOnError) {

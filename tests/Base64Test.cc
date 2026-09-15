@@ -1,37 +1,22 @@
+#include <string>
 #include "base64.h"
 #include "a2doctest.h"
 
 namespace aria2 {
 
-class Base64Test {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testEncode();
-  void testDecode();
-  void testLongString();
-};
-
-A2_TEST(Base64Test, testEncode)
-A2_TEST(Base64Test, testDecode)
-A2_TEST(Base64Test, testLongString)
-
-void Base64Test::testEncode()
+TEST_CASE("Base64Test.testEncode")
 {
   std::string s = "Hello World!";
   REQUIRE_EQ(std::string("SGVsbG8gV29ybGQh"),
-                       base64::encode(s.begin(), s.end()));
+             base64::encode(s.begin(), s.end()));
 
   s = "Hello World";
   REQUIRE_EQ(std::string("SGVsbG8gV29ybGQ="),
-                       base64::encode(s.begin(), s.end()));
+             base64::encode(s.begin(), s.end()));
 
   s = "Hello Worl";
   REQUIRE_EQ(std::string("SGVsbG8gV29ybA=="),
-                       base64::encode(s.begin(), s.end()));
+             base64::encode(s.begin(), s.end()));
 
   s = "Man";
   REQUIRE_EQ(std::string("TWFu"), base64::encode(s.begin(), s.end()));
@@ -55,19 +40,16 @@ void Base64Test::testEncode()
   REQUIRE_EQ(std::string("////"), base64::encode(s.begin(), s.end()));
 }
 
-void Base64Test::testDecode()
+TEST_CASE("Base64Test.testDecode")
 {
   std::string s = "SGVsbG8gV29ybGQh";
-  REQUIRE_EQ(std::string("Hello World!"),
-                       base64::decode(s.begin(), s.end()));
+  REQUIRE_EQ(std::string("Hello World!"), base64::decode(s.begin(), s.end()));
 
   s = "SGVsbG8gV29ybGQ=";
-  REQUIRE_EQ(std::string("Hello World"),
-                       base64::decode(s.begin(), s.end()));
+  REQUIRE_EQ(std::string("Hello World"), base64::decode(s.begin(), s.end()));
 
   s = "SGVsbG8gV29ybA==";
-  REQUIRE_EQ(std::string("Hello Worl"),
-                       base64::decode(s.begin(), s.end()));
+  REQUIRE_EQ(std::string("Hello Worl"), base64::decode(s.begin(), s.end()));
 
   s = "TWFu";
   REQUIRE_EQ(std::string("Man"), base64::decode(s.begin(), s.end()));
@@ -82,8 +64,7 @@ void Base64Test::testDecode()
   REQUIRE_EQ(std::string(""), base64::decode(s.begin(), s.end()));
 
   s = "SGVsbG8\ngV2*9ybGQ=";
-  REQUIRE_EQ(std::string("Hello World"),
-                       base64::decode(s.begin(), s.end()));
+  REQUIRE_EQ(std::string("Hello World"), base64::decode(s.begin(), s.end()));
 
   s = "SGVsbG8\ngV2*9ybGQ";
   REQUIRE_EQ(std::string(""), base64::decode(s.begin(), s.end()));
@@ -92,7 +73,7 @@ void Base64Test::testDecode()
   REQUIRE_EQ(std::string(1, -1), base64::decode(s.begin(), s.end()));
 }
 
-void Base64Test::testLongString()
+TEST_CASE("Base64Test.testLongString")
 {
   std::string s = "LyogPCEtLSBjb3B5cmlnaHQgKi8KLyoKICogYXJpYTIgLSBUaGUgaGlnaCBz"
                   "cGVlZCBkb3dubG9h"

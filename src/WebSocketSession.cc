@@ -33,6 +33,17 @@
  */
 /* copyright --> */
 #include "WebSocketSession.h"
+#include "Command.h"
+#include "ValueBase.h"
+#include "a2functional.h"
+#include "spdlog/common.h"
+#include "wslay/wslay.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+#include "fmt.h"
 
 #include <cerrno>
 #include <cstring>
@@ -41,14 +52,12 @@
 #include "SocketCore.h"
 #include "Log.h"
 #include "RecoverableException.h"
-#include "message.h"
 #include "DownloadEngine.h"
 #include "DelayedCommand.h"
 #include "DlAbortEx.h"
 #include "WebSocketInteractionCommand.h"
 #include "rpc_helper.h"
 #include "RpcResponse.h"
-#include "json.h"
 #include "prefs.h"
 #include "Option.h"
 
@@ -168,8 +177,8 @@ void addResponse(WebSocketSession* wsSession,
 } // namespace
 
 namespace {
-void onFrameRecvStart(
-    const struct wslay_event_on_frame_recv_start_arg* arg, void* userData)
+void onFrameRecvStart(const struct wslay_event_on_frame_recv_start_arg* arg,
+                      void* userData)
 {
   auto* wsSession = reinterpret_cast<WebSocketSession*>(userData);
   wsSession->setIgnorePayload(wslay_is_ctrl_frame(arg->opcode));
@@ -192,8 +201,8 @@ void onFrameRecvStartCallback(
 } // namespace
 
 namespace {
-void onFrameRecvChunk(
-    const struct wslay_event_on_frame_recv_chunk_arg* arg, void* userData)
+void onFrameRecvChunk(const struct wslay_event_on_frame_recv_chunk_arg* arg,
+                      void* userData)
 {
   auto* wsSession = reinterpret_cast<WebSocketSession*>(userData);
   if (!wsSession->getIgnorePayload()) {

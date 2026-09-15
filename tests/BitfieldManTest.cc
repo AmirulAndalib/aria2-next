@@ -1,3 +1,5 @@
+#include "a2functional.h"
+#include <cstdint>
 #include "BitfieldMan.h"
 
 #include <cstring>
@@ -10,71 +12,7 @@
 
 namespace aria2 {
 
-class BitfieldManTest {
-
-
-public:
-  void testGetBlockSize();
-  void testGetFirstMissingUnusedIndex();
-  void testGetFirstMissingIndex();
-  void testGetAllMissingIndexes();
-  void testGetAllMissingIndexes_noarg();
-  void testGetAllMissingIndexes_checkLastByte();
-  void testGetAllMissingUnusedIndexes();
-
-  void testIsAllBitSet();
-  void testFilter();
-  void testIsFilterBitSet();
-  void testAddFilter_zeroLength();
-  void testAddNotFilter();
-  void testAddNotFilter_zeroLength();
-  void testAddNotFilter_overflow();
-  void testGetSparseMissingUnusedIndex();
-  void testGetSparseMissingUnusedIndex_setBit();
-  void testGetSparseMissingUnusedIndex_withMinSplitSize();
-  void testIsBitSetOffsetRange();
-  void testGetOffsetCompletedLength();
-  void testGetOffsetCompletedLength_largeFile();
-  void testGetMissingUnusedLength();
-  void testSetBitRange();
-  void testCountFilteredBlock();
-  void testCountMissingBlock();
-  void testZeroLengthFilter();
-  void testGetFirstNMissingUnusedIndex();
-  void testGetInorderMissingUnusedIndex();
-  void testGetGeomMissingUnusedIndex();
-};
-
-A2_TEST(BitfieldManTest, testGetBlockSize)
-A2_TEST(BitfieldManTest, testGetFirstMissingUnusedIndex)
-A2_TEST(BitfieldManTest, testGetFirstMissingIndex)
-A2_TEST(BitfieldManTest, testIsAllBitSet)
-A2_TEST(BitfieldManTest, testFilter)
-A2_TEST(BitfieldManTest, testIsFilterBitSet)
-A2_TEST(BitfieldManTest, testAddFilter_zeroLength)
-A2_TEST(BitfieldManTest, testAddNotFilter)
-A2_TEST(BitfieldManTest, testAddNotFilter_zeroLength)
-A2_TEST(BitfieldManTest, testAddNotFilter_overflow)
-A2_TEST(BitfieldManTest, testGetSparseMissingUnusedIndex)
-A2_TEST(BitfieldManTest, testGetSparseMissingUnusedIndex_setBit)
-A2_TEST(BitfieldManTest, testGetSparseMissingUnusedIndex_withMinSplitSize)
-A2_TEST(BitfieldManTest, testIsBitSetOffsetRange)
-A2_TEST(BitfieldManTest, testGetOffsetCompletedLength)
-A2_TEST(BitfieldManTest, testGetOffsetCompletedLength_largeFile)
-A2_TEST(BitfieldManTest, testGetMissingUnusedLength)
-A2_TEST(BitfieldManTest, testSetBitRange)
-A2_TEST(BitfieldManTest, testGetAllMissingIndexes)
-A2_TEST(BitfieldManTest, testGetAllMissingIndexes_noarg)
-A2_TEST(BitfieldManTest, testGetAllMissingIndexes_checkLastByte)
-A2_TEST(BitfieldManTest, testGetAllMissingUnusedIndexes)
-A2_TEST(BitfieldManTest, testCountFilteredBlock)
-A2_TEST(BitfieldManTest, testCountMissingBlock)
-A2_TEST(BitfieldManTest, testZeroLengthFilter)
-A2_TEST(BitfieldManTest, testGetFirstNMissingUnusedIndex)
-A2_TEST(BitfieldManTest, testGetInorderMissingUnusedIndex)
-A2_TEST(BitfieldManTest, testGetGeomMissingUnusedIndex)
-
-void BitfieldManTest::testGetBlockSize()
+TEST_CASE("BitfieldManTest.testGetBlockSize")
 {
   BitfieldMan bt1(1_k, 10_k);
   REQUIRE_EQ((int32_t)1_k, bt1.getBlockLength(9));
@@ -85,7 +23,7 @@ void BitfieldManTest::testGetBlockSize()
   REQUIRE_EQ((int32_t)0, bt2.getBlockLength(11));
 }
 
-void BitfieldManTest::testGetFirstMissingUnusedIndex()
+TEST_CASE("BitfieldManTest.testGetFirstMissingUnusedIndex")
 {
   {
     BitfieldMan bt1(1_k, 10_k);
@@ -138,7 +76,7 @@ void BitfieldManTest::testGetFirstMissingUnusedIndex()
   }
 }
 
-void BitfieldManTest::testGetFirstMissingIndex()
+TEST_CASE("BitfieldManTest.testGetFirstMissingIndex")
 {
   {
     BitfieldMan bt1(1_k, 10_k);
@@ -191,7 +129,7 @@ void BitfieldManTest::testGetFirstMissingIndex()
   }
 }
 
-void BitfieldManTest::testIsAllBitSet()
+TEST_CASE("BitfieldManTest.testIsAllBitSet")
 {
   BitfieldMan bt1(1_k, 10_k);
   REQUIRE(!bt1.isAllBitSet());
@@ -212,7 +150,7 @@ void BitfieldManTest::testIsAllBitSet()
   REQUIRE(btzero.isAllBitSet());
 }
 
-void BitfieldManTest::testFilter()
+TEST_CASE("BitfieldManTest.testFilter")
 {
   BitfieldMan btman(2, 32);
   // test offset=4, length=12
@@ -247,7 +185,7 @@ void BitfieldManTest::testFilter()
   REQUIRE_EQ((int64_t)31ULL, btman2.getFilteredTotalLength());
 }
 
-void BitfieldManTest::testIsFilterBitSet()
+TEST_CASE("BitfieldManTest.testIsFilterBitSet")
 {
   BitfieldMan btman(2, 32);
   REQUIRE(!btman.isFilterBitSet(0));
@@ -258,7 +196,7 @@ void BitfieldManTest::testIsFilterBitSet()
   REQUIRE(btman.isFilterBitSet(1));
 }
 
-void BitfieldManTest::testAddFilter_zeroLength()
+TEST_CASE("BitfieldManTest.testAddFilter_zeroLength")
 {
   BitfieldMan bits(1_k, 1_m);
   bits.addFilter(2_k, 0);
@@ -267,7 +205,7 @@ void BitfieldManTest::testAddFilter_zeroLength()
   REQUIRE(bits.isFilteredAllBitSet());
 }
 
-void BitfieldManTest::testAddNotFilter()
+TEST_CASE("BitfieldManTest.testAddNotFilter")
 {
   BitfieldMan btman(2, 32);
 
@@ -281,7 +219,7 @@ void BitfieldManTest::testAddNotFilter()
   }
 }
 
-void BitfieldManTest::testAddNotFilter_zeroLength()
+TEST_CASE("BitfieldManTest.testAddNotFilter_zeroLength")
 {
   BitfieldMan btman(2, 6);
   btman.addNotFilter(2, 0);
@@ -290,7 +228,7 @@ void BitfieldManTest::testAddNotFilter_zeroLength()
   REQUIRE(!bitfield::test(btman.getFilterBitfield(), 3, 2));
 }
 
-void BitfieldManTest::testAddNotFilter_overflow()
+TEST_CASE("BitfieldManTest.testAddNotFilter_overflow")
 {
   BitfieldMan btman(2, 6);
   btman.addNotFilter(6, 100);
@@ -300,7 +238,7 @@ void BitfieldManTest::testAddNotFilter_overflow()
 }
 
 // TODO1.5 add test using ignoreBitfield
-void BitfieldManTest::testGetSparseMissingUnusedIndex()
+TEST_CASE("BitfieldManTest.testGetSparseMissingUnusedIndex")
 {
   BitfieldMan bitfield(1_m, 10_m);
   const size_t length = 2;
@@ -309,50 +247,50 @@ void BitfieldManTest::testGetSparseMissingUnusedIndex()
   size_t minSplitSize = 1_m;
   size_t index;
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)0, index);
   bitfield.setUseBit(0);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)5, index);
   bitfield.setUseBit(5);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)3, index);
   bitfield.setUseBit(3);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)8, index);
   bitfield.setUseBit(8);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)2, index);
   bitfield.setUseBit(2);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)1, index);
   bitfield.setUseBit(1);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)4, index);
   bitfield.setUseBit(4);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)7, index);
   bitfield.setUseBit(7);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)6, index);
   bitfield.setUseBit(6);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)9, index);
   bitfield.setUseBit(9);
   REQUIRE(!bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                       ignoreBitfield, length));
+                                                ignoreBitfield, length));
 }
 
-void BitfieldManTest::testGetSparseMissingUnusedIndex_setBit()
+TEST_CASE("BitfieldManTest.testGetSparseMissingUnusedIndex_setBit")
 {
   BitfieldMan bitfield(1_m, 10_m);
   const size_t length = 2;
@@ -361,50 +299,50 @@ void BitfieldManTest::testGetSparseMissingUnusedIndex_setBit()
   size_t minSplitSize = 1_m;
   size_t index;
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)0, index);
   bitfield.setBit(0);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)1, index);
   bitfield.setBit(1);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)2, index);
   bitfield.setBit(2);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)3, index);
   bitfield.setBit(3);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)4, index);
   bitfield.setBit(4);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)5, index);
   bitfield.setBit(5);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)6, index);
   bitfield.setBit(6);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)7, index);
   bitfield.setBit(7);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)8, index);
   bitfield.setBit(8);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)9, index);
   bitfield.setBit(9);
   REQUIRE(!bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                       ignoreBitfield, length));
+                                                ignoreBitfield, length));
 }
 
-void BitfieldManTest::testGetSparseMissingUnusedIndex_withMinSplitSize()
+TEST_CASE("BitfieldManTest.testGetSparseMissingUnusedIndex_withMinSplitSize")
 {
   BitfieldMan bitfield(1_m, 10_m);
   const size_t length = 2;
@@ -414,30 +352,30 @@ void BitfieldManTest::testGetSparseMissingUnusedIndex_withMinSplitSize()
   size_t index;
   bitfield.setUseBit(1);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)6, index);
   bitfield.setBit(6);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)7, index);
   bitfield.setUseBit(7);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)4, index);
   bitfield.setBit(4);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)0, index);
   bitfield.setBit(0);
   REQUIRE(bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                      ignoreBitfield, length));
+                                               ignoreBitfield, length));
   REQUIRE_EQ((size_t)5, index);
   bitfield.setBit(5);
   REQUIRE(!bitfield.getSparseMissingUnusedIndex(index, minSplitSize,
-                                                       ignoreBitfield, length));
+                                                ignoreBitfield, length));
 }
 
-void BitfieldManTest::testIsBitSetOffsetRange()
+TEST_CASE("BitfieldManTest.testIsBitSetOffsetRange")
 {
   int64_t totalLength = 4_g;
   int32_t pieceLength = 4_m;
@@ -456,8 +394,7 @@ void BitfieldManTest::testIsBitSetOffsetRange()
   bitfield.setBit(100);
   bitfield.setBit(101);
 
-  REQUIRE(
-      bitfield.isBitSetOffsetRange(pieceLength * 100, pieceLength * 2));
+  REQUIRE(bitfield.isBitSetOffsetRange(pieceLength * 100, pieceLength * 2));
   REQUIRE(
       !bitfield.isBitSetOffsetRange(pieceLength * 100 - 10, pieceLength * 2));
   REQUIRE(
@@ -468,11 +405,10 @@ void BitfieldManTest::testIsBitSetOffsetRange()
   bitfield.setBit(100);
   bitfield.setBit(102);
 
-  REQUIRE(
-      !bitfield.isBitSetOffsetRange(pieceLength * 100, pieceLength * 3));
+  REQUIRE(!bitfield.isBitSetOffsetRange(pieceLength * 100, pieceLength * 3));
 }
 
-void BitfieldManTest::testGetOffsetCompletedLength()
+TEST_CASE("BitfieldManTest.testGetOffsetCompletedLength")
 {
   BitfieldMan bt(1_k, 20_k);
   // 00000|00000|00000|00000
@@ -489,12 +425,11 @@ void BitfieldManTest::testGetOffsetCompletedLength()
   REQUIRE_EQ((int64_t)1, bt.getOffsetCompletedLength(2048, 1));
   REQUIRE_EQ((int64_t)0, bt.getOffsetCompletedLength(2047, 1));
   REQUIRE_EQ((int64_t)3072, bt.getOffsetCompletedLength(0, 20_k));
-  REQUIRE_EQ((int64_t)3072,
-                       bt.getOffsetCompletedLength(0, 20_k + 10));
+  REQUIRE_EQ((int64_t)3072, bt.getOffsetCompletedLength(0, 20_k + 10));
   REQUIRE_EQ((int64_t)0, bt.getOffsetCompletedLength(20_k, 1));
 }
 
-void BitfieldManTest::testGetOffsetCompletedLength_largeFile()
+TEST_CASE("BitfieldManTest.testGetOffsetCompletedLength_largeFile")
 {
   // Test for overflow on 32-bit systems.
 
@@ -506,7 +441,7 @@ void BitfieldManTest::testGetOffsetCompletedLength_largeFile()
 
   // The last piece is missing:
   REQUIRE_EQ((int64_t)bt.getBlockLength() * 3,
-                       bt.getOffsetCompletedLength(1LL << 33, 1 << 24));
+             bt.getOffsetCompletedLength(1LL << 33, 1 << 24));
 
   // The first piece is missing:
   REQUIRE_EQ(
@@ -514,7 +449,7 @@ void BitfieldManTest::testGetOffsetCompletedLength_largeFile()
       bt.getOffsetCompletedLength((1LL << 33) - bt.getBlockLength(), 1 << 24));
 }
 
-void BitfieldManTest::testGetMissingUnusedLength()
+TEST_CASE("BitfieldManTest.testGetMissingUnusedLength")
 {
   int64_t totalLength = 10_k + 10;
   size_t blockLength = 1_k;
@@ -535,20 +470,17 @@ void BitfieldManTest::testGetMissingUnusedLength()
 
   // from index 0 and 5th block is used.
   bf.setUseBit(5);
-  REQUIRE_EQ((int64_t)(5LL * blockLength),
-                       bf.getMissingUnusedLength(0));
+  REQUIRE_EQ((int64_t)(5LL * blockLength), bf.getMissingUnusedLength(0));
 
   // from index 0 and 4th block is acquired.
   bf.setBit(4);
-  REQUIRE_EQ((int64_t)(4LL * blockLength),
-                       bf.getMissingUnusedLength(0));
+  REQUIRE_EQ((int64_t)(4LL * blockLength), bf.getMissingUnusedLength(0));
 
   // from index 1
-  REQUIRE_EQ((int64_t)(3LL * blockLength),
-                       bf.getMissingUnusedLength(1));
+  REQUIRE_EQ((int64_t)(3LL * blockLength), bf.getMissingUnusedLength(1));
 }
 
-void BitfieldManTest::testSetBitRange()
+TEST_CASE("BitfieldManTest.testSetBitRange")
 {
   size_t blockLength = 1_m;
   int64_t totalLength = 10 * blockLength;
@@ -566,7 +498,7 @@ void BitfieldManTest::testSetBitRange()
   REQUIRE_EQ((int64_t)(5LL * blockLength), bf.getCompletedLength());
 }
 
-void BitfieldManTest::testGetAllMissingIndexes_noarg()
+TEST_CASE("BitfieldManTest.testGetAllMissingIndexes_noarg")
 {
   size_t blockLength = 16_k;
   int64_t totalLength = 1_m;
@@ -585,7 +517,7 @@ void BitfieldManTest::testGetAllMissingIndexes_noarg()
 }
 
 // See garbage bits of last byte are 0
-void BitfieldManTest::testGetAllMissingIndexes_checkLastByte()
+TEST_CASE("BitfieldManTest.testGetAllMissingIndexes_checkLastByte")
 {
   size_t blockLength = 16_k;
   int64_t totalLength = blockLength * 2;
@@ -598,7 +530,7 @@ void BitfieldManTest::testGetAllMissingIndexes_checkLastByte()
   REQUIRE(bitfield::test(misbitfield, nbits, 1));
 }
 
-void BitfieldManTest::testGetAllMissingIndexes()
+TEST_CASE("BitfieldManTest.testGetAllMissingIndexes")
 {
   size_t blockLength = 16_k;
   int64_t totalLength = 1_m;
@@ -609,8 +541,8 @@ void BitfieldManTest::testGetAllMissingIndexes()
   unsigned char misbitfield[8];
 
   REQUIRE(bf.getAllMissingIndexes(misbitfield, sizeof(misbitfield),
-                                         peerBf.getBitfield(),
-                                         peerBf.getBitfieldLength()));
+                                  peerBf.getBitfield(),
+                                  peerBf.getBitfieldLength()));
   REQUIRE_EQ((size_t)64, bitfield::countSetBit(misbitfield, nbits));
   for (size_t i = 0; i < 62; ++i) {
     bf.setBit(i);
@@ -618,13 +550,13 @@ void BitfieldManTest::testGetAllMissingIndexes()
   peerBf.unsetBit(62);
 
   REQUIRE(bf.getAllMissingIndexes(misbitfield, sizeof(misbitfield),
-                                         peerBf.getBitfield(),
-                                         peerBf.getBitfieldLength()));
+                                  peerBf.getBitfield(),
+                                  peerBf.getBitfieldLength()));
   REQUIRE_EQ((size_t)1, bitfield::countSetBit(misbitfield, nbits));
   REQUIRE(bitfield::test(misbitfield, nbits, 63));
 }
 
-void BitfieldManTest::testGetAllMissingUnusedIndexes()
+TEST_CASE("BitfieldManTest.testGetAllMissingUnusedIndexes")
 {
   size_t blockLength = 16_k;
   int64_t totalLength = 1_m;
@@ -635,8 +567,8 @@ void BitfieldManTest::testGetAllMissingUnusedIndexes()
   unsigned char misbitfield[8];
 
   REQUIRE(bf.getAllMissingUnusedIndexes(misbitfield, sizeof(misbitfield),
-                                               peerBf.getBitfield(),
-                                               peerBf.getBitfieldLength()));
+                                        peerBf.getBitfield(),
+                                        peerBf.getBitfieldLength()));
   REQUIRE_EQ((size_t)64, bitfield::countSetBit(misbitfield, nbits));
 
   for (size_t i = 0; i < 61; ++i) {
@@ -645,13 +577,13 @@ void BitfieldManTest::testGetAllMissingUnusedIndexes()
   bf.setUseBit(61);
   peerBf.unsetBit(62);
   REQUIRE(bf.getAllMissingUnusedIndexes(misbitfield, sizeof(misbitfield),
-                                               peerBf.getBitfield(),
-                                               peerBf.getBitfieldLength()));
+                                        peerBf.getBitfield(),
+                                        peerBf.getBitfieldLength()));
   REQUIRE_EQ((size_t)1, bitfield::countSetBit(misbitfield, nbits));
   REQUIRE(bitfield::test(misbitfield, nbits, 63));
 }
 
-void BitfieldManTest::testCountFilteredBlock()
+TEST_CASE("BitfieldManTest.testCountFilteredBlock")
 {
   BitfieldMan bt(1_k, 256_k);
   REQUIRE_EQ((size_t)256, bt.countBlock());
@@ -665,7 +597,7 @@ void BitfieldManTest::testCountFilteredBlock()
   REQUIRE_EQ((size_t)0, bt.countFilteredBlock());
 }
 
-void BitfieldManTest::testCountMissingBlock()
+TEST_CASE("BitfieldManTest.testCountMissingBlock")
 {
   BitfieldMan bt(1_k, 10_k);
   REQUIRE_EQ((size_t)10, bt.countMissingBlock());
@@ -675,14 +607,14 @@ void BitfieldManTest::testCountMissingBlock()
   REQUIRE_EQ((size_t)0, bt.countMissingBlock());
 }
 
-void BitfieldManTest::testZeroLengthFilter()
+TEST_CASE("BitfieldManTest.testZeroLengthFilter")
 {
   BitfieldMan bt(1_k, 10_k);
   bt.enableFilter();
   REQUIRE_EQ((size_t)0, bt.countMissingBlock());
 }
 
-void BitfieldManTest::testGetFirstNMissingUnusedIndex()
+TEST_CASE("BitfieldManTest.testGetFirstNMissingUnusedIndex")
 {
   BitfieldMan bt(1_k, 10_k);
   bt.setUseBit(1);
@@ -712,7 +644,7 @@ void BitfieldManTest::testGetFirstNMissingUnusedIndex()
   REQUIRE_EQ((size_t)9, out[0]);
 }
 
-void BitfieldManTest::testGetInorderMissingUnusedIndex()
+TEST_CASE("BitfieldManTest.testGetInorderMissingUnusedIndex")
 {
   BitfieldMan bt(1_k, 20_k);
   const size_t length = 3;
@@ -721,53 +653,53 @@ void BitfieldManTest::testGetInorderMissingUnusedIndex()
   size_t minSplitSize = 1_k;
   size_t index;
   // 00000|00000|00000|00000
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)0, index);
   bt.setUseBit(0);
   // 10000|00000|00000|00000
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)1, index);
   minSplitSize = 2_k;
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)2, index);
   bt.unsetUseBit(0);
   bt.setBit(0);
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)1, index);
   bt.setAllBit();
   bt.unsetBit(10);
   // 11111|11111|01111|11111
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)10, index);
   bt.setUseBit(10);
-  REQUIRE(!bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                  ignoreBitfield, length));
+  REQUIRE(!bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                           length));
   bt.unsetUseBit(10);
   bt.setAllBit();
   // 11111|11111|11111|11111
-  REQUIRE(!bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                  ignoreBitfield, length));
+  REQUIRE(!bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                           length));
   bt.clearAllBit();
   // 00000|00000|00000|00000
   for (int i = 0; i <= 1; ++i) {
     ignoreBitfield[i / 8] ^= static_cast<unsigned char>(128u >> (i % 8));
   }
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)2, index);
   bt.addFilter(3_k, 3_k);
   bt.enableFilter();
-  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize,
-                                                 ignoreBitfield, length));
+  REQUIRE(bt.getInorderMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                          length));
   REQUIRE_EQ((size_t)3, index);
 }
 
-void BitfieldManTest::testGetGeomMissingUnusedIndex()
+TEST_CASE("BitfieldManTest.testGetGeomMissingUnusedIndex")
 {
   BitfieldMan bt(1_k, 20_k);
   const size_t length = 3;
@@ -776,38 +708,38 @@ void BitfieldManTest::testGetGeomMissingUnusedIndex()
   size_t minSplitSize = 1_k;
   size_t index;
   // 00000|00000|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)0, index);
   bt.setUseBit(0);
   // 10000|00000|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)1, index);
   bt.setUseBit(1);
   // 11000|00000|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)2, index);
   bt.setUseBit(2);
   // 11100|00000|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)4, index);
   bt.setUseBit(4);
   // 11110|00000|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)8, index);
   bt.setUseBit(8);
   // 11110|00010|00000|00000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)16, index);
   bt.setUseBit(16);
   // 11110|00010|00000|01000
-  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize,
-                                              ignoreBitfield, length, 2, 0));
+  REQUIRE(bt.getGeomMissingUnusedIndex(index, minSplitSize, ignoreBitfield,
+                                       length, 2, 0));
   REQUIRE_EQ((size_t)12, index);
   bt.setUseBit(12);
 }

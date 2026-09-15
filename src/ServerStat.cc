@@ -33,15 +33,14 @@
  */
 /* copyright --> */
 #include "ServerStat.h"
+#include "TimeA2.h"
+#include <cinttypes>
+#include <cstdint>
+#include <cstring>
+#include <string>
 
-#include <ostream>
-#include <algorithm>
-
-#include "array_fun.h"
 #include "Log.h"
 #include "fmt.h"
-#include "a2functional.h"
-#include "util.h"
 
 namespace aria2 {
 

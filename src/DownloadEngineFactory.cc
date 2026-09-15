@@ -33,6 +33,15 @@
  */
 /* copyright --> */
 #include "DownloadEngineFactory.h"
+#include "a2functional.h"
+#include "a2netcompat.h"
+#include <cassert>
+#include <chrono>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 

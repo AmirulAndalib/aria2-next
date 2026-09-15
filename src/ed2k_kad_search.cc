@@ -11,6 +11,12 @@
  */
 /* copyright --> */
 #include "ed2k_kad_search.h"
+#include "ed2k_packet.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <limits>
 
@@ -18,7 +24,8 @@
 #include "ed2k_endpoint.h"
 #include "ed2k_hash.h"
 #include "ed2k_kad.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Encoding.h"
 
 namespace aria2 {
 
@@ -156,9 +163,10 @@ bool parseKadSearchResultPayload(KadSearchResult& result,
   }
 }
 
-std::string createKadSearchResultPayload(
-    const std::string& sourceId, const std::string& targetId,
-    const std::vector<KadSearchEntry>& entries)
+std::string
+createKadSearchResultPayload(const std::string& sourceId,
+                             const std::string& targetId,
+                             const std::vector<KadSearchEntry>& entries)
 {
   validateHashLength(sourceId);
   validateHashLength(targetId);
@@ -232,8 +240,7 @@ bool extractKadSourceEndpoint(KadSourceEndpoint& source,
       cryptOptions = static_cast<uint16_t>(tag.intValue);
     }
   }
-  if (!hasIp || !hasPort || port == 0 ||
-      !isSupportedSourceType(sourceType)) {
+  if (!hasIp || !hasPort || port == 0 || !isSupportedSourceType(sourceType)) {
     return false;
   }
   source.endpoint.host = ipv4FromEndpoint(reverseUInt32Bytes(ip));
@@ -288,8 +295,7 @@ std::string createKadPublishSourceRequestPayload(const std::string& fileId,
   Tag sourceType;
   sourceType.id = 0xff;
   sourceType.valueType = TagValueType::UINT;
-  sourceType.intValue =
-      size > std::numeric_limits<uint32_t>::max() ? 4 : 1;
+  sourceType.intValue = size > std::numeric_limits<uint32_t>::max() ? 4 : 1;
   entry.tags.push_back(sourceType);
 
   Tag sourceIp;

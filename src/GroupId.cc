@@ -33,10 +33,17 @@
  */
 /* copyright --> */
 #include "GroupId.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <set>
+#include <string>
 
 #include <cassert>
 
-#include "util.h"
+#include "support/Encoding.h"
+#include "support/Random.h"
+#include "support/ByteOrder.h"
 
 namespace aria2 {
 

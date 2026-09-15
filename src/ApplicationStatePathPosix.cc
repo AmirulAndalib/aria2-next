@@ -13,7 +13,7 @@
 #include "ApplicationStatePath.h"
 
 #include "DlAbortEx.h"
-#include "util.h"
+#include "support/FilePath.h"
 
 namespace aria2 {
 

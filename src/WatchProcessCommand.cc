@@ -50,7 +50,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
  */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "WatchProcessCommand.h"
+#include "Command.h"
+#include "TimeBasedCommand.h"
+#include "a2functional.h"
+#include <cinttypes>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "Log.h"
@@ -111,8 +118,8 @@ void WatchProcessCommand::process()
 #endif
   if (!waiting) {
     A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                    " - Process %u is not running. Commencing shutdown.",
-                    getCuid(), pid_));
+                     " - Process %u is not running. Commencing shutdown.",
+                     getCuid(), pid_));
     if (forceHalt_) {
       getDownloadEngine()->requestForceHalt();
     }

@@ -33,18 +33,34 @@
  */
 /* copyright --> */
 #include "FileEntry.h"
+#include "Request.h"
+#include "TimerA2.h"
+#include "error_code.h"
+#include "uri_split.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <deque>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <ostream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <cassert>
 #include <algorithm>
 
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
+#include "fmt.h"
 #include "URISelector.h"
 #include "Log.h"
 #include "wallclock.h"
 #include "a2algo.h"
 #include "uri.h"
 #include "PeerStat.h"
-#include "fmt.h"
 #include "ServerStatMan.h"
 #include "ServerStat.h"
 
@@ -319,8 +335,8 @@ std::shared_ptr<Request> FileEntry::findFasterRequest(
     std::sort(fastCands.begin(), fastCands.end(), ServerStatFaster());
     auto fastestRequest = std::make_shared<Request>();
     const std::string& uri = fastCands.front().second;
-    A2_LOG_TRACE(fmt("Selected %s from fastCands",
-                     logging::sanitizeUri(uri).c_str()));
+    A2_LOG_TRACE(
+        fmt("Selected %s from fastCands", logging::sanitizeUri(uri).c_str()));
     // Candidate URIs where already parsed when populating fastCands.
     (void)fastestRequest->setUri(uri);
     fastestRequest->setReferer(base->getReferer());

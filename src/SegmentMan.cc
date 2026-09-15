@@ -33,25 +33,28 @@
  */
 /* copyright --> */
 #include "SegmentMan.h"
+#include "Command.h"
+#include "NetStat.h"
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include <cassert>
 #include <algorithm>
-#include <numeric>
 
-#include "util.h"
-#include "message.h"
-#include "prefs.h"
+#include "fmt.h"
 #include "PiecedSegment.h"
 #include "GrowSegment.h"
 #include "Log.h"
 #include "PieceStorage.h"
 #include "PeerStat.h"
-#include "Option.h"
 #include "DownloadContext.h"
 #include "Piece.h"
 #include "FileEntry.h"
 #include "wallclock.h"
-#include "fmt.h"
 #include "WrDiskCacheEntry.h"
 #include "DownloadFailureException.h"
 

@@ -33,8 +33,8 @@
  */
 /* copyright --> */
 #include "UnionSeedCriteria.h"
-
-#include <algorithm>
+#include <memory>
+#include <utility>
 
 namespace aria2 {
 

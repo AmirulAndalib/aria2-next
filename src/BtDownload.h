@@ -29,6 +29,8 @@ class DownloadContext;
 class Option;
 class RequestGroup;
 class BtSession;
+class BtStateStore;
+struct BtTrackerSpec;
 
 class BtMetainfoError : public RecoverableException {
 private:
@@ -94,6 +96,10 @@ private:
 
   std::string fileSelectionError(const Option* option) const;
   void restoreResumeProgress();
+  void loadResume(BtStateStore& stateStore);
+  void restoreMetadataFromResume();
+  void configureTrackers(const Option* option);
+  void applyTrackers(std::vector<BtTrackerSpec> trackers);
   void refreshLogicalProgress();
   BtDownload(std::unique_ptr<Impl> impl, Source source);
 

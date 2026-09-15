@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "SaveSessionCommand.h"
+#include "Command.h"
+#include "TimeBasedCommand.h"
+#include "common.h"
+#include <chrono>
+#include <string>
+#include <utility>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "SessionSerializer.h"
@@ -71,7 +77,7 @@ void SaveSessionCommand::process()
     auto sessionHash = sessionSerializer.calculateHash();
     if (rgman->getLastSessionHash() == sessionHash) {
       A2_LOG_DEBUG("No change since last serialization or startup. "
-                  "No serialization is necessary this time.");
+                   "No serialization is necessary this time.");
       return;
     }
 

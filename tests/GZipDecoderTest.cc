@@ -1,3 +1,4 @@
+#include <string>
 #include "GZipDecoder.h"
 
 #include <iostream>
@@ -6,26 +7,12 @@
 #include "a2doctest.h"
 
 #include "TestUtil.h"
-#include "Exception.h"
-#include "util.h"
+#include "a2functional.h"
 #include "MessageDigest.h"
 
 namespace aria2 {
 
-class GZipDecoderTest {
-
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testDecode();
-};
-
-A2_TEST(GZipDecoderTest, testDecode)
-
-void GZipDecoderTest::testDecode()
+TEST_CASE("GZipDecoderTest.testDecode")
 {
   GZipDecoder decoder;
   decoder.init();
@@ -49,7 +36,7 @@ void GZipDecoderTest::testDecode()
   out.close();
 
   REQUIRE_EQ(std::string("8b577b33c0411b2be9d4fa74c7402d54a8d21f96"),
-                       fileHexDigest(MessageDigest::sha1().get(), outfile));
+             fileHexDigest(MessageDigest::sha1().get(), outfile));
 }
 
 } // namespace aria2

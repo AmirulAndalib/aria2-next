@@ -33,11 +33,15 @@
  */
 /* copyright --> */
 #include "FileAllocationDispatcherCommand.h"
+#include "Command.h"
+#include "FileAllocationMan.h"
+#include "SequentialDispatcherCommand.h"
+#include <memory>
 #include "FileAllocationEntry.h"
 #include "FileAllocationCommand.h"
 #include "message.h"
 #include "Log.h"
-#include "util.h"
+#include "a2functional.h"
 #include "fmt.h"
 
 namespace aria2 {

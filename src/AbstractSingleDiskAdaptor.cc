@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "AbstractSingleDiskAdaptor.h"
+#include "a2functional.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
 #include "File.h"
 #include "AdaptiveFileAllocationIterator.h"
 #include "DiskWriter.h"

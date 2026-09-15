@@ -33,6 +33,11 @@
  */
 /* copyright --> */
 #include "XmlRpcRequestParserStateMachine.h"
+#include "ParserStateMachine.h"
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include "XmlRpcRequestParserController.h"
 #include "XmlRpcRequestParserStateImpl.h"
 

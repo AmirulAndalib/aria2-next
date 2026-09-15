@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 BUILD_ROOT = ROOT.parents[1] / "build" / "transfer-validation"
-PROTOCOLS = ("http", "sftp", "bittorrent", "ed2k", "metalink")
+PROTOCOLS = ("http", "sftp", "bittorrent", "ed2k", "metalink", "media")
 
 
 def run_protocol(protocol: str, forwarded: list[str]) -> dict[str, object]:
@@ -23,7 +23,7 @@ def run_protocol(protocol: str, forwarded: list[str]) -> dict[str, object]:
         "exitCode": completed.returncode,
     }
     candidates = sorted(
-        (BUILD_ROOT / "runs").glob(f"*-{protocol}/result.json"),
+        (BUILD_ROOT / "runs").glob(f"*Z-{protocol}/result.json"),
         key=lambda path: path.stat().st_mtime,
     )
     if candidates:

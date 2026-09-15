@@ -11,6 +11,14 @@
  */
 /* copyright --> */
 #include "BtSettings.h"
+#include "spdlog/common.h"
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <libtorrent/download_priority.hpp>
+#include <libtorrent/settings_pack.hpp>
+#include <utility>
+#include "platform/SocketAddress.h"
 
 #include <algorithm>
 #include <array>
@@ -27,10 +35,11 @@
 #include "DlAbortEx.h"
 #include "Log.h"
 #include "Option.h"
-#include "SocketCore.h"
 #include "prefs.h"
 #include "uri.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "a2functional.h"
 
 namespace aria2 {
 
@@ -277,47 +286,43 @@ BtConfig makeBtConfig(const Option* option)
                    option->getAsInt(PREF_BT_PEER_TURNOVER_CUTOFF));
   settings.set_int(lt::settings_pack::peer_turnover_interval,
                    option->getAsInt(PREF_BT_PEER_TURNOVER_INTERVAL));
-  settings.set_int(
-      lt::settings_pack::choking_algorithm,
-      option->get(PREF_BT_UPLOAD_SLOT_ALGORITHM) == "rate-based"
-          ? lt::settings_pack::rate_based_choker
-          : lt::settings_pack::fixed_slots_choker);
+  settings.set_int(lt::settings_pack::choking_algorithm,
+                   option->get(PREF_BT_UPLOAD_SLOT_ALGORITHM) == "rate-based"
+                       ? lt::settings_pack::rate_based_choker
+                       : lt::settings_pack::fixed_slots_choker);
   const auto& seedChoking = option->get(PREF_BT_SEED_CHOKING_ALGORITHM);
-  settings.set_int(
-      lt::settings_pack::seed_choking_algorithm,
-      seedChoking == "round-robin"
-          ? lt::settings_pack::round_robin
-          : seedChoking == "anti-leech" ? lt::settings_pack::anti_leech
-                                         : lt::settings_pack::fastest_upload);
+  settings.set_int(lt::settings_pack::seed_choking_algorithm,
+                   seedChoking == "round-robin" ? lt::settings_pack::round_robin
+                   : seedChoking == "anti-leech"
+                       ? lt::settings_pack::anti_leech
+                       : lt::settings_pack::fastest_upload);
   settings.set_int(lt::settings_pack::send_buffer_low_watermark,
                    option->getAsInt(PREF_BT_SEND_BUFFER_LOW_WATERMARK));
   settings.set_int(lt::settings_pack::send_buffer_watermark,
                    option->getAsInt(PREF_BT_SEND_BUFFER_WATERMARK));
   settings.set_int(lt::settings_pack::send_buffer_watermark_factor,
                    option->getAsInt(PREF_BT_SEND_BUFFER_WATERMARK_FACTOR));
-  settings.set_bool(
-      lt::settings_pack::seeding_outgoing_connections,
-      option->getAsBool(PREF_BT_SEEDING_OUTGOING_CONNECTIONS));
+  settings.set_bool(lt::settings_pack::seeding_outgoing_connections,
+                    option->getAsBool(PREF_BT_SEEDING_OUTGOING_CONNECTIONS));
   settings.set_bool(lt::settings_pack::rate_limit_ip_overhead,
                     option->getAsBool(PREF_BT_RATE_LIMIT_OVERHEAD));
   settings.set_int(lt::settings_pack::stop_tracker_timeout,
                    option->getAsInt(PREF_BT_STOP_TRACKER_TIMEOUT));
-  settings.set_int(
-      lt::settings_pack::suggest_mode,
-      option->getAsBool(PREF_BT_UPLOAD_SUGGESTIONS)
-          ? lt::settings_pack::suggest_read_cache
-          : lt::settings_pack::no_piece_suggestions);
+  settings.set_int(lt::settings_pack::suggest_mode,
+                   option->getAsBool(PREF_BT_UPLOAD_SUGGESTIONS)
+                       ? lt::settings_pack::suggest_read_cache
+                       : lt::settings_pack::no_piece_suggestions);
   const auto& readCache = option->get(PREF_BT_DISK_READ_CACHE);
   settings.set_int(lt::settings_pack::disk_io_read_mode,
-                   readCache == "disabled" ? lt::settings_pack::disable_os_cache
-                                             : lt::settings_pack::enable_os_cache);
+                   readCache == "disabled"
+                       ? lt::settings_pack::disable_os_cache
+                       : lt::settings_pack::enable_os_cache);
   const auto& writeCache = option->get(PREF_BT_DISK_WRITE_CACHE);
   settings.set_int(
       lt::settings_pack::disk_io_write_mode,
-      writeCache == "disabled"
-          ? lt::settings_pack::disable_os_cache
-          : writeCache == "write-through" ? lt::settings_pack::write_through
-                                            : lt::settings_pack::enable_os_cache);
+      writeCache == "disabled"        ? lt::settings_pack::disable_os_cache
+      : writeCache == "write-through" ? lt::settings_pack::write_through
+                                      : lt::settings_pack::enable_os_cache);
   const auto& blocklistScope = option->get(PREF_BT_BLOCKLIST_SCOPE);
   settings.set_bool(lt::settings_pack::apply_ip_filter_to_trackers,
                     blocklistScope != "peers");
@@ -398,9 +403,8 @@ void configureBtDiskIo(lt::session_params& params, const Option* option)
   }
 }
 
-void applyBtFilePrioritySpec(
-    std::vector<lt::download_priority_t>& priorities,
-    const std::string& specification)
+void applyBtFilePrioritySpec(std::vector<lt::download_priority_t>& priorities,
+                             const std::string& specification)
 {
   if (specification.empty()) {
     return;
@@ -413,8 +417,8 @@ void applyBtFilePrioritySpec(
     const auto separator = entry.find('=');
     int32_t index = 0;
     if (separator == std::string::npos ||
-        !util::parseIntNoThrow(index, entry.substr(0, separator)) || index < 1 ||
-        static_cast<size_t>(index) > priorities.size()) {
+        !util::parseIntNoThrow(index, entry.substr(0, separator)) ||
+        index < 1 || static_cast<size_t>(index) > priorities.size()) {
       throw DL_ABORT_EX("Invalid BitTorrent file priority entry: " + entry);
     }
     const auto value = util::strip(entry.substr(separator + 1));

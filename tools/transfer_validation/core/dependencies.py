@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import platform
@@ -10,7 +9,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from .runtime import BUILD_ROOT
+from .runtime import BUILD_ROOT, sha256
 
 
 LOCK_PATH = Path(__file__).resolve().parents[1] / "dependencies.lock"
@@ -32,15 +31,16 @@ def _lock() -> dict[str, object]:
 
 def _download(url: str, destination: Path, expected_sha256: str) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists() and _sha256(destination) == expected_sha256:
+    if destination.exists() and sha256(destination) == expected_sha256:
         return destination
     temporary = destination.with_suffix(destination.suffix + ".download")
-    with urllib.request.urlopen(url, timeout=60) as response, temporary.open(
-        "wb"
-    ) as output:
+    with (
+        urllib.request.urlopen(url, timeout=60) as response,
+        temporary.open("wb") as output,
+    ):
         while block := response.read(1024 * 1024):
             output.write(block)
-    actual = _sha256(temporary)
+    actual = sha256(temporary)
     if actual != expected_sha256:
         temporary.unlink(missing_ok=True)
         raise RuntimeError(
@@ -48,14 +48,6 @@ def _download(url: str, destination: Path, expected_sha256: str) -> Path:
         )
     temporary.replace(destination)
     return destination
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def wiremock_jar() -> Path:
@@ -118,4 +110,24 @@ def caddy_server() -> Path:
                 with source, binary.open("wb") as output:
                     shutil.copyfileobj(source, output)
     os.chmod(binary, 0o755)
+    return binary
+
+
+def sftpgo_server() -> Path:
+    metadata = _lock()["sftpgo"]
+    entry = metadata["platforms"].get(platform_key())
+    if entry is None:
+        raise RuntimeError(f"SFTPGo is not pinned for {platform_key()}")
+    archive = _download(
+        entry["url"], BUILD_ROOT / "dependencies" / entry["filename"],
+        entry["sha256"],
+    )
+    directory = BUILD_ROOT / "dependencies" / f"sftpgo-{metadata['version']}"
+    directory.mkdir(parents=True, exist_ok=True)
+    binary = directory / "sftpgo.exe"
+    if not binary.exists():
+        with zipfile.ZipFile(archive) as package:
+            # The archive root is x86-64; x86 and ARM64 live in subdirectories.
+            with package.open(binary.name) as source, binary.open("wb") as output:
+                shutil.copyfileobj(source, output)
     return binary

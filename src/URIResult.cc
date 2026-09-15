@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "URIResult.h"
+#include "error_code.h"
+#include <string>
 
 namespace aria2 {
 

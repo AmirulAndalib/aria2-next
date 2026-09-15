@@ -10,16 +10,7 @@ namespace aria2 {
 
 void showVersion();
 
-class VersionUsageTest {
-
-
-public:
-  void testShowVersionDisplaysMaintainedForkIdentity();
-};
-
-A2_TEST(VersionUsageTest, testShowVersionDisplaysMaintainedForkIdentity)
-
-void VersionUsageTest::testShowVersionDisplaysMaintainedForkIdentity()
+TEST_CASE("VersionUsageTest.testShowVersionDisplaysMaintainedForkIdentity")
 {
   std::ostringstream out;
   auto* old = std::cout.rdbuf(out.rdbuf());

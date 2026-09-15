@@ -1,3 +1,7 @@
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "metalink_helper.h"
 
 #include "a2doctest.h"
@@ -10,28 +14,14 @@
 
 namespace aria2 {
 
-class MetalinkHelperTest {
-
-
-private:
-public:
-  void testParseAndQuery();
-  void testParseAndQuery_version();
-  void testGroupEntryByMetaurlName();
-};
-
-A2_TEST(MetalinkHelperTest, testParseAndQuery)
-A2_TEST(MetalinkHelperTest, testParseAndQuery_version)
-A2_TEST(MetalinkHelperTest, testGroupEntryByMetaurlName)
-
-void MetalinkHelperTest::testParseAndQuery()
+TEST_CASE("MetalinkHelperTest.testParseAndQuery")
 {
   Option option;
   auto result = metalink::parseAndQuery(A2_TEST_DIR "/test.xml", &option);
   REQUIRE_EQ((size_t)5, result.size());
 }
 
-void MetalinkHelperTest::testParseAndQuery_version()
+TEST_CASE("MetalinkHelperTest.testParseAndQuery_version")
 {
   Option option;
   option.put(PREF_METALINK_VERSION, "0.5.1");
@@ -41,7 +31,7 @@ void MetalinkHelperTest::testParseAndQuery_version()
   REQUIRE_EQ(std::string("aria2-0.5.1.tar.bz2"), entry->getPath());
 }
 
-void MetalinkHelperTest::testGroupEntryByMetaurlName()
+TEST_CASE("MetalinkHelperTest.testGroupEntryByMetaurlName")
 {
   std::vector<std::unique_ptr<MetalinkEntry>> entries;
 

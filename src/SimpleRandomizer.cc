@@ -32,7 +32,13 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include "SimpleRandomizer.h"
+#include <memory>
+#include <random>
+#include <stdlib.h>
 
 #include <sys/types.h>
 #include <unistd.h>

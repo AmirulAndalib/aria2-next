@@ -33,12 +33,15 @@
  */
 /* copyright --> */
 #include "WrDiskCacheEntry.h"
+#include "error_code.h"
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 
 #include <cstring>
 
 #include "DiskAdaptor.h"
 #include "RecoverableException.h"
-#include "DownloadFailureException.h"
 #include "Log.h"
 #include "fmt.h"
 

@@ -1,3 +1,7 @@
+#include "spdlog/common.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include "Log.h"
 
 #include <sstream>
@@ -10,19 +14,11 @@
 namespace aria2 {
 
 class LogTest {
-
 public:
-  void setUp();
-  void tearDown();
+  LogTest();
+  ~LogTest();
 
-  void testRotationKeepsStrictBounds();
-  void testStartupEnforcesNativeBounds();
-  void testOversizedRecordIsBounded();
-  void testSanitizersProtectLogIntegrity();
-  void testSourceLocationIsPortable();
-  void testLevelFilteringAndReconfiguration();
-
-private:
+protected:
   std::string path_;
   logging::Settings originalSettings_;
 
@@ -32,14 +28,7 @@ private:
   std::string readFile(const std::string& path);
 };
 
-A2_TEST(LogTest, testRotationKeepsStrictBounds)
-A2_TEST(LogTest, testStartupEnforcesNativeBounds)
-A2_TEST(LogTest, testOversizedRecordIsBounded)
-A2_TEST(LogTest, testSanitizersProtectLogIntegrity)
-A2_TEST(LogTest, testSourceLocationIsPortable)
-A2_TEST(LogTest, testLevelFilteringAndReconfiguration)
-
-void LogTest::setUp()
+LogTest::LogTest()
 {
   path_ = A2_TEST_OUT_DIR "/aria2_LogTest.log";
   originalSettings_ = logging::getSettings();
@@ -47,7 +36,7 @@ void LogTest::setUp()
   removeLogs();
 }
 
-void LogTest::tearDown()
+LogTest::~LogTest()
 {
   logging::shutdown();
   removeLogs();
@@ -92,7 +81,7 @@ std::string LogTest::readFile(const std::string& path)
   return output.str();
 }
 
-void LogTest::testRotationKeepsStrictBounds()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testRotationKeepsStrictBounds")
 {
   logging::configure(settings(128, 2));
   for (size_t i = 0; i < 12; ++i) {
@@ -109,10 +98,9 @@ void LogTest::testRotationKeepsStrictBounds()
   REQUIRE(File(path_).size() + File(history).size() <= 256);
 }
 
-void LogTest::testStartupEnforcesNativeBounds()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testStartupEnforcesNativeBounds")
 {
-  const std::string nativeHistory =
-      A2_TEST_OUT_DIR "/aria2_LogTest.1.log";
+  const std::string nativeHistory = A2_TEST_OUT_DIR "/aria2_LogTest.1.log";
   writeFile(path_, 256);
   writeFile(nativeHistory, 256);
   writeFile(A2_TEST_OUT_DIR "/aria2_LogTest.2.log", 8);
@@ -126,7 +114,7 @@ void LogTest::testStartupEnforcesNativeBounds()
   REQUIRE(!File(A2_TEST_OUT_DIR "/aria2_LogTest.2.log").exists());
 }
 
-void LogTest::testOversizedRecordIsBounded()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testOversizedRecordIsBounded")
 {
   logging::configure(settings(96, 1));
   A2_LOG_ERROR(std::string(4096, 'x'));
@@ -137,7 +125,7 @@ void LogTest::testOversizedRecordIsBounded()
   REQUIRE(!File(A2_TEST_OUT_DIR "/aria2_LogTest.1.log").exists());
 }
 
-void LogTest::testSanitizersProtectLogIntegrity()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testSanitizersProtectLogIntegrity")
 {
   REQUIRE_EQ(std::string("line1\\nline2\\t?"),
              logging::sanitizeText("line1\nline2\t\x01"));
@@ -145,18 +133,19 @@ void LogTest::testSanitizersProtectLogIntegrity()
              logging::sanitizeUri(
                  "https://user:password@example.com/file?token=secret#part"));
 
-  const auto summary = logging::summarizeHttpMessage(
-      "GET /jsonrpc?token=secret HTTP/1.1\r\n"
-      "Authorization: Basic secret\r\n"
-      "X-Private-Token: secret\r\n"
-      "If-Range: \"revision\"\r\n"
-      "Date: Tue, 08 Sep 2026 12:00:00 GMT\r\n"
-      "Content-Length: 12\r\n");
+  const auto summary =
+      logging::summarizeHttpMessage("GET /jsonrpc?token=secret HTTP/1.1\r\n"
+                                    "Authorization: Basic secret\r\n"
+                                    "X-Private-Token: secret\r\n"
+                                    "If-Range: \"revision\"\r\n"
+                                    "Date: Tue, 08 Sep 2026 12:00:00 GMT\r\n"
+                                    "Content-Length: 12\r\n");
   REQUIRE(summary.find("GET /jsonrpc?<redacted> HTTP/1.1") !=
           std::string::npos);
   REQUIRE(summary.find("Content-Length=12") != std::string::npos);
   REQUIRE(summary.find("If-Range=\"revision\"") != std::string::npos);
-  REQUIRE(summary.find("Date=Tue, 08 Sep 2026 12:00:00 GMT") != std::string::npos);
+  REQUIRE(summary.find("Date=Tue, 08 Sep 2026 12:00:00 GMT") !=
+          std::string::npos);
   REQUIRE(summary.find("secret") == std::string::npos);
   REQUIRE(summary.find("Authorization") == std::string::npos);
   REQUIRE(summary.find("X-Private-Token") == std::string::npos);
@@ -166,7 +155,7 @@ void LogTest::testSanitizersProtectLogIntegrity()
   REQUIRE(logging::summarizeHttpMessage("X-Request-Token: secret\r\n").empty());
 }
 
-void LogTest::testSourceLocationIsPortable()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testSourceLocationIsPortable")
 {
   logging::configure(settings(4096, 1));
   A2_LOG_INFO("first line\nsecond line");
@@ -178,7 +167,7 @@ void LogTest::testSourceLocationIsPortable()
   REQUIRE(output.find("first line\\nsecond line") != std::string::npos);
 }
 
-void LogTest::testLevelFilteringAndReconfiguration()
+TEST_CASE_FIXTURE(LogTest, "LogTest.testLevelFilteringAndReconfiguration")
 {
   const auto initialRevision = logging::revision();
   auto infoSettings = settings(4096, 1);

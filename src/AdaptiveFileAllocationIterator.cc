@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "AdaptiveFileAllocationIterator.h"
+#include <cstdint>
+#include <utility>
 #include "BinaryStream.h"
 #include "SingleFileAllocationIterator.h"
 #include "RecoverableException.h"

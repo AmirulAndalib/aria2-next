@@ -11,6 +11,10 @@
  */
 /* copyright --> */
 #include "CurlDownloadCommand.h"
+#include "Command.h"
+#include <exception>
+#include <memory>
+#include <utility>
 
 #include "CurlDownload.h"
 #include "CurlDownloadImpl.h"
@@ -18,6 +22,7 @@
 #include "DownloadEngine.h"
 #include "RequestGroup.h"
 #include "error_code.h"
+#include "media/MediaDownload.h"
 
 namespace aria2 {
 
@@ -54,6 +59,18 @@ bool CurlDownloadCommand::execute()
                              snapshot.error.c_str());
   }
   if (download_->stopped()) {
+    if (download_->snapshot().mediaManifest && !group_->isHaltRequested()) {
+      auto mediaDownload =
+          std::make_shared<media::Download>(download_->snapshot().currentUri);
+      group_->setMediaDownload(mediaDownload);
+      group_->setCurlDownload(nullptr);
+      try {
+        engine_->addCommand(mediaDownload->start(group_, engine_));
+      }
+      catch (const std::exception& error) {
+        group_->setLastErrorCode(error_code::NETWORK_PROBLEM, error.what());
+      }
+    }
     return true;
   }
   engine_->addCommand(std::unique_ptr<Command>(this));

@@ -39,7 +39,8 @@
 
 #include <string>
 
-#include "util.h"
+#include "support/ByteOrder.h"
+#include "a2functional.h"
 
 namespace aria2 {
 

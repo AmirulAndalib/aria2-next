@@ -33,15 +33,25 @@
  */
 /* copyright --> */
 #include "DownloadContext.h"
+#include "ContextAttribute.h"
+#include "SegList.h"
+#include "TimerA2.h"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 
 #include "FileEntry.h"
 #include "fmt.h"
-#include "util.h"
-#include "wallclock.h"
-#include "DlAbortEx.h"
 #include "a2functional.h"
+#include "DlAbortEx.h"
+#include "wallclock.h"
 #include "Signature.h"
 #include "RequestGroupMan.h"
 

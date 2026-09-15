@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "ValueBaseStructParserStateImpl.h"
+#include "StructParserStateMachine.h"
 
 #include <cassert>
 

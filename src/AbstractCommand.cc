@@ -32,15 +32,22 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "ServerStat.h"
 #include "AbstractCommand.h"
+#include "Command.h"
+#include <cassert>
+#include <chrono>
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <ctime>
+#include <memory>
 
 #include "Request.h"
 #include "DownloadEngine.h"
 #include "Option.h"
-#include "PeerStat.h"
 #include "SegmentMan.h"
 #include "Log.h"
-#include "Segment.h"
 #include "DlAbortEx.h"
 #include "DlRetryEx.h"
 #include "DownloadFailureException.h"
@@ -49,17 +56,12 @@
 #include "message.h"
 #include "prefs.h"
 #include "fmt.h"
-#include "ServerStat.h"
 #include "RequestGroupMan.h"
-#include "util.h"
-#include "Log.h"
 #include "DownloadContext.h"
 #include "wallclock.h"
-#include "uri.h"
 #include "FileEntry.h"
 #include "error_code.h"
 #include "SocketRecvBuffer.h"
-#include "ChecksumCheckIntegrityEntry.h"
 
 namespace aria2 {
 

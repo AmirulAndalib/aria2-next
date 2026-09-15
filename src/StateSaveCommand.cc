@@ -33,6 +33,10 @@
  */
 /* copyright --> */
 #include "StateSaveCommand.h"
+#include "Command.h"
+#include "TimeBasedCommand.h"
+#include <chrono>
+#include <utility>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 

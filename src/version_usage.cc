@@ -32,13 +32,14 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "console.h"
+#include <memory>
+#include <string>
+#include <vector>
 #include "common.h"
 
 #include <iostream>
-#include <iterator>
-#include <algorithm>
 
-#include "a2io.h"
 #include "FeatureConfig.h"
 #include "MessageDigest.h"
 #include "help_tags.h"
@@ -46,7 +47,6 @@
 #include "fmt.h"
 #include "OptionParser.h"
 #include "OptionHandler.h"
-#include "util.h"
 
 namespace aria2 {
 

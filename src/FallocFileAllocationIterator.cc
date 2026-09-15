@@ -33,9 +33,8 @@
  */
 /* copyright --> */
 #include "FallocFileAllocationIterator.h"
-#include "DlAbortEx.h"
-#include "util.h"
-#include "Log.h"
+#include "BinaryStream.h"
+#include <cstdint>
 
 namespace aria2 {
 

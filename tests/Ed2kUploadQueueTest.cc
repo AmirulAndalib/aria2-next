@@ -1,3 +1,6 @@
+#include "ed2k_link.h"
+#include <cstddef>
+#include <cstdint>
 #include "Ed2kUploadQueue.h"
 
 #include "a2doctest.h"
@@ -8,19 +11,7 @@ namespace aria2 {
 
 namespace ed2k {
 
-class Ed2kUploadQueueTest {
-
-public:
-  void testRejectsDuplicateUserHash();
-  void testCreditsSortWaitingPeers();
-  void testMaintenanceExpiresWaitersAndRotatesSlots();
-};
-
-A2_TEST(Ed2kUploadQueueTest, testRejectsDuplicateUserHash)
-A2_TEST(Ed2kUploadQueueTest, testCreditsSortWaitingPeers)
-A2_TEST(Ed2kUploadQueueTest, testMaintenanceExpiresWaitersAndRotatesSlots)
-
-void Ed2kUploadQueueTest::testRejectsDuplicateUserHash()
+TEST_CASE("Ed2kUploadQueueTest.testRejectsDuplicateUserHash")
 {
   UploadQueue queue(1);
   Endpoint first;
@@ -37,18 +28,16 @@ void Ed2kUploadQueueTest::testRejectsDuplicateUserHash()
   const std::string fileHash(HASH_LENGTH, '\x66');
 
   REQUIRE(queue.requestUpload(first, userHash, fileHash, 1000, nullptr));
-  REQUIRE(!queue.requestUpload(duplicate, userHash, fileHash, 1001,
-                                      nullptr));
+  REQUIRE(!queue.requestUpload(duplicate, userHash, fileHash, 1001, nullptr));
   REQUIRE_EQ((size_t)1, queue.peers().size());
   REQUIRE(queue.isUploading(first));
 
-  REQUIRE(!queue.requestUpload(other, otherUserHash, fileHash, 1002,
-                                      nullptr));
+  REQUIRE(!queue.requestUpload(other, otherUserHash, fileHash, 1002, nullptr));
   REQUIRE_EQ((size_t)2, queue.peers().size());
   REQUIRE_EQ((uint16_t)1, queue.queueRank(other));
 }
 
-void Ed2kUploadQueueTest::testCreditsSortWaitingPeers()
+TEST_CASE("Ed2kUploadQueueTest.testCreditsSortWaitingPeers")
 {
   UploadQueue queue(1);
   Endpoint active;
@@ -65,19 +54,17 @@ void Ed2kUploadQueueTest::testCreditsSortWaitingPeers()
   const std::string creditedHash(HASH_LENGTH, '\x42');
   const std::string fileHash(HASH_LENGTH, '\x66');
 
-  REQUIRE(queue.requestUpload(active, activeHash, fileHash, 1000,
-                                     nullptr));
-  REQUIRE(!queue.requestUpload(older, olderHash, fileHash, 1001,
-                                      nullptr));
+  REQUIRE(queue.requestUpload(active, activeHash, fileHash, 1000, nullptr));
+  REQUIRE(!queue.requestUpload(older, olderHash, fileHash, 1001, nullptr));
   queue.credits().addDownloaded(creditedHash, 4 * 1024 * 1024);
-  REQUIRE(!queue.requestUpload(credited, creditedHash, fileHash, 1002,
-                                      nullptr));
+  REQUIRE(
+      !queue.requestUpload(credited, creditedHash, fileHash, 1002, nullptr));
 
   REQUIRE_EQ((uint16_t)2, queue.queueRank(older));
   REQUIRE_EQ((uint16_t)1, queue.queueRank(credited));
 }
 
-void Ed2kUploadQueueTest::testMaintenanceExpiresWaitersAndRotatesSlots()
+TEST_CASE("Ed2kUploadQueueTest.testMaintenanceExpiresWaitersAndRotatesSlots")
 {
   UploadQueue queue(1);
   Endpoint active{"203.0.113.10", 4662};

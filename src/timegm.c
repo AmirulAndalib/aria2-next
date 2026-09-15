@@ -32,6 +32,7 @@
  */
 /* copyright --> */
 #include "timegm.h"
+#include <time.h>
 
 #include <stdint.h>
 

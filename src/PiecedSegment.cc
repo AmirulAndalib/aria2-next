@@ -33,6 +33,10 @@
  */
 /* copyright --> */
 #include "PiecedSegment.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 #include "Piece.h"
 #include <cassert>
 

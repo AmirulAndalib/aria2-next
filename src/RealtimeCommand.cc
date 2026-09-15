@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "RealtimeCommand.h"
+#include "Command.h"
 #include "DownloadEngine.h"
 #include "RecoverableException.h"
 #include "RequestGroup.h"

@@ -11,6 +11,17 @@
  */
 /* copyright --> */
 #include "Ed2kSession.h"
+#include "Ed2kStore.h"
+#include "a2functional.h"
+#include "ed2k_hash.h"
+#include "ed2k_kad.h"
+#include "ed2k_link.h"
+#include "ed2k_peer.h"
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 #include <limits>

@@ -33,6 +33,14 @@
  */
 /* copyright --> */
 #include "MetalinkParserController.h"
+#include "uri_split.h"
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 
@@ -44,7 +52,8 @@
 #include "a2functional.h"
 #include "uri.h"
 #include "Signature.h"
-#include "util.h"
+#include "support/Encoding.h"
+#include "support/FilePath.h"
 #include "Checksum.h"
 #include "ChunkChecksum.h"
 #include "MessageDigest.h"

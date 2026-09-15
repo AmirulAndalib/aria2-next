@@ -34,6 +34,7 @@
 /* copyright --> */
 
 #include "TimerA2.h"
+#include "a2functional.h"
 
 namespace aria2 {
 

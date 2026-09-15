@@ -32,7 +32,15 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "Signature.h"
 #include "Metalink2RequestGroup.h"
+#include "a2io.h"
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 
@@ -40,7 +48,10 @@
 #include "Option.h"
 #include "Log.h"
 #include "prefs.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "support/FilePath.h"
+#include "fmt.h"
 #include "message.h"
 #include "DownloadContext.h"
 #include "metalink_helper.h"
@@ -50,9 +61,6 @@
 #include "MetalinkMetaurl.h"
 #include "FileEntry.h"
 #include "download_helper.h"
-#include "fmt.h"
-#include "DownloadFailureException.h"
-#include "Signature.h"
 #include "Checksum.h"
 #include "ChunkChecksum.h"
 #include "CurlDownload.h"
@@ -173,7 +181,7 @@ void Metalink2RequestGroup::createRequestGroup(
   }
   for (auto& ownedEntry : entries) {
     auto* entry = ownedEntry.get();
-    auto option = util::copy(optionTemplate);
+    auto option = std::make_shared<Option>(*optionTemplate);
     auto rg = std::make_shared<RequestGroup>(GroupId::create(), option);
     A2_LOG_DEBUG(fmt(MSG_METALINK_QUEUEING, entry->getPath().c_str()));
     entry->reorderResourcesByPriority();

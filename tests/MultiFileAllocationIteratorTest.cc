@@ -1,7 +1,11 @@
+#include "a2functional.h"
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <vector>
 #include "MultiFileAllocationIterator.h"
-
-#include <algorithm>
-#include <iostream>
 
 #include "a2doctest.h"
 
@@ -9,27 +13,11 @@
 #include "MultiDiskAdaptor.h"
 #include "FileEntry.h"
 #include "Exception.h"
-#include "array_fun.h"
 #include "TestUtil.h"
-#include "DiskWriter.h"
 
 namespace aria2 {
 
-class MultiFileAllocationIteratorTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testAllocate();
-  void testMakeDiskWriterEntries();
-};
-
-A2_TEST(MultiFileAllocationIteratorTest, testAllocate)
-A2_TEST(MultiFileAllocationIteratorTest, testMakeDiskWriterEntries)
-
-void MultiFileAllocationIteratorTest::testMakeDiskWriterEntries()
+TEST_CASE("MultiFileAllocationIteratorTest.testMakeDiskWriterEntries")
 {
   std::string storeDir =
       A2_TEST_OUT_DIR "/aria2_MultiFileAllocationIteratorTest"
@@ -74,63 +62,52 @@ void MultiFileAllocationIteratorTest::testMakeDiskWriterEntries()
   REQUIRE_EQ((size_t)11, entries.size());
 
   // file1
-  REQUIRE_EQ(storeDir + std::string("/file1"),
-                       entries[0]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file1"), entries[0]->getFilePath());
   REQUIRE(entries[0]->needsFileAllocation());
   REQUIRE(entries[0]->getDiskWriter());
   // file2
-  REQUIRE_EQ(storeDir + std::string("/file2"),
-                       entries[1]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file2"), entries[1]->getFilePath());
   REQUIRE(entries[1]->needsFileAllocation());
   REQUIRE(entries[1]->getDiskWriter());
   // file3
-  REQUIRE_EQ(storeDir + std::string("/file3"),
-                       entries[2]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file3"), entries[2]->getFilePath());
   REQUIRE(entries[2]->needsFileAllocation());
   REQUIRE(entries[2]->getDiskWriter());
   // file4, diskWriter is not null, because file exists.
-  REQUIRE_EQ(storeDir + std::string("/file4"),
-                       entries[3]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file4"), entries[3]->getFilePath());
   REQUIRE(!entries[3]->needsFileAllocation());
   REQUIRE(entries[3]->getDiskWriter());
   // file5
-  REQUIRE_EQ(storeDir + std::string("/file5"),
-                       entries[4]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file5"), entries[4]->getFilePath());
   REQUIRE(!entries[4]->needsFileAllocation());
   REQUIRE(!entries[4]->getDiskWriter());
   // file6
-  REQUIRE_EQ(storeDir + std::string("/file6"),
-                       entries[5]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file6"), entries[5]->getFilePath());
   REQUIRE(entries[5]->needsFileAllocation());
   REQUIRE(entries[5]->getDiskWriter());
   // file7
-  REQUIRE_EQ(storeDir + std::string("/file7"),
-                       entries[6]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file7"), entries[6]->getFilePath());
   REQUIRE(entries[6]->needsFileAllocation());
   REQUIRE(entries[6]->getDiskWriter());
   // file8
-  REQUIRE_EQ(storeDir + std::string("/file8"),
-                       entries[7]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file8"), entries[7]->getFilePath());
   REQUIRE(entries[7]->needsFileAllocation());
   REQUIRE(entries[7]->getDiskWriter());
   // file9
-  REQUIRE_EQ(storeDir + std::string("/file9"),
-                       entries[8]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/file9"), entries[8]->getFilePath());
   REQUIRE(!entries[8]->needsFileAllocation());
   REQUIRE(entries[8]->getDiskWriter());
   // fileA
-  REQUIRE_EQ(storeDir + std::string("/fileA"),
-                       entries[9]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/fileA"), entries[9]->getFilePath());
   REQUIRE(!entries[9]->needsFileAllocation());
   REQUIRE(!entries[9]->getDiskWriter());
   // fileB
-  REQUIRE_EQ(storeDir + std::string("/fileB"),
-                       entries[10]->getFilePath());
+  REQUIRE_EQ(storeDir + std::string("/fileB"), entries[10]->getFilePath());
   REQUIRE(entries[10]->needsFileAllocation());
   REQUIRE(entries[10]->getDiskWriter());
 }
 
-void MultiFileAllocationIteratorTest::testAllocate()
+TEST_CASE("MultiFileAllocationIteratorTest.testAllocate")
 {
   std::string storeDir =
       A2_TEST_OUT_DIR "/aria2_MultiFileAllocationIteratorTest_testAllocate";

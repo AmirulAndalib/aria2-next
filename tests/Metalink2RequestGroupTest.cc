@@ -1,3 +1,8 @@
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
+#include "support/Encoding.h"
 #include "Metalink2RequestGroup.h"
 
 #include <algorithm>
@@ -15,33 +20,15 @@
 namespace aria2 {
 
 class Metalink2RequestGroupTest {
-
-
-private:
+protected:
   std::shared_ptr<Option> option_;
 
 public:
-  void setUp()
-  {
-    option_.reset(new Option());
-  }
-
-  void testGenerate();
-  void testGenerate_with_local_metaurl();
-#ifdef ENABLE_BITTORRENT
-  void testGenerate_groupByMetaurl();
-#endif // ENABLE_BITTORRENT
-  void testGenerate_dosDirTraversal();
+  Metalink2RequestGroupTest() { option_.reset(new Option()); }
 };
 
-A2_TEST(Metalink2RequestGroupTest, testGenerate)
-A2_TEST(Metalink2RequestGroupTest, testGenerate_with_local_metaurl)
-#ifdef ENABLE_BITTORRENT
-A2_TEST(Metalink2RequestGroupTest, testGenerate_groupByMetaurl)
-#endif // ENABLE_BITTORRENT
-A2_TEST(Metalink2RequestGroupTest, testGenerate_dosDirTraversal)
-
-void Metalink2RequestGroupTest::testGenerate()
+TEST_CASE_FIXTURE(Metalink2RequestGroupTest,
+                  "Metalink2RequestGroupTest.testGenerate")
 {
   std::vector<std::shared_ptr<RequestGroup>> groups;
   option_->put(PREF_DIR, "/tmp");
@@ -52,10 +39,8 @@ void Metalink2RequestGroupTest::testGenerate()
     auto uris = rg->getDownloadContext()->getFirstFileEntry()->getUris();
     std::sort(uris.begin(), uris.end());
     REQUIRE_EQ((size_t)2, uris.size());
-    REQUIRE_EQ(std::string("http://httphost/aria2-0.5.2.tar.bz2"),
-               uris[0]);
-    REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"),
-               uris[1]);
+    REQUIRE_EQ(std::string("http://httphost/aria2-0.5.2.tar.bz2"), uris[0]);
+    REQUIRE_EQ(std::string("sftp://ftphost/aria2-0.5.2.tar.bz2"), uris[1]);
     REQUIRE(rg->getCurlDownload());
 
     const std::shared_ptr<DownloadContext>& dctx = rg->getDownloadContext();
@@ -63,9 +48,8 @@ void Metalink2RequestGroupTest::testGenerate()
     REQUIRE(dctx);
     REQUIRE_EQ((int64_t)0LL, dctx->getTotalLength());
     REQUIRE_EQ(std::string("sha-1"), dctx->getHashType());
-    REQUIRE_EQ(
-        std::string("a96cf3f0266b91d87d5124cf94326422800b627d"),
-        util::toHex(dctx->getDigest()));
+    REQUIRE_EQ(std::string("a96cf3f0266b91d87d5124cf94326422800b627d"),
+               util::toHex(dctx->getDigest()));
     REQUIRE(dctx->getSignature());
     REQUIRE_EQ(std::string("pgp"), dctx->getSignature()->getType());
   }
@@ -82,9 +66,8 @@ void Metalink2RequestGroupTest::testGenerate()
     REQUIRE_EQ((size_t)2, dctx->getPieceHashes().size());
     REQUIRE_EQ(262144, dctx->getPieceLength());
     REQUIRE_EQ(std::string("sha-1"), dctx->getHashType());
-    REQUIRE_EQ(
-        std::string("4c255b0ed130f5ea880f0aa061c3da0487e251cc"),
-        util::toHex(dctx->getDigest()));
+    REQUIRE_EQ(std::string("4c255b0ed130f5ea880f0aa061c3da0487e251cc"),
+               util::toHex(dctx->getDigest()));
     REQUIRE(!dctx->getSignature());
   }
 
@@ -93,8 +76,7 @@ void Metalink2RequestGroupTest::testGenerate()
     std::shared_ptr<RequestGroup> rg = groups[4];
     auto uris = rg->getDownloadContext()->getFirstFileEntry()->getUris();
     REQUIRE_EQ((size_t)1, uris.size());
-    REQUIRE_EQ(std::string("http://host/torrent-http.integrated"),
-                         uris[0]);
+    REQUIRE_EQ(std::string("http://host/torrent-http.integrated"), uris[0]);
 
     const std::shared_ptr<DownloadContext>& dctx = rg->getDownloadContext();
 
@@ -102,7 +84,8 @@ void Metalink2RequestGroupTest::testGenerate()
   }
 }
 
-void Metalink2RequestGroupTest::testGenerate_with_local_metaurl()
+TEST_CASE_FIXTURE(Metalink2RequestGroupTest,
+                  "Metalink2RequestGroupTest.testGenerate_with_local_metaurl")
 {
   std::vector<std::shared_ptr<RequestGroup>> groups;
   option_->put(PREF_DIR, "/tmp");
@@ -112,14 +95,15 @@ void Metalink2RequestGroupTest::testGenerate_with_local_metaurl()
                                    option_);
   REQUIRE_EQ((size_t)1, groups.size());
   REQUIRE_EQ(std::string("http://example.org/README"),
-                       groups[0]
-                           ->getDownloadContext()
-                           ->getFirstFileEntry()
-                           ->getRemainingUris()[0]);
+             groups[0]
+                 ->getDownloadContext()
+                 ->getFirstFileEntry()
+                 ->getRemainingUris()[0]);
 }
 
 #ifdef ENABLE_BITTORRENT
-void Metalink2RequestGroupTest::testGenerate_groupByMetaurl()
+TEST_CASE_FIXTURE(Metalink2RequestGroupTest,
+                  "Metalink2RequestGroupTest.testGenerate_groupByMetaurl")
 {
   std::vector<std::shared_ptr<RequestGroup>> groups;
   Metalink2RequestGroup().generate(
@@ -149,7 +133,8 @@ void Metalink2RequestGroupTest::testGenerate_groupByMetaurl()
 }
 #endif // ENABLE_BITTORRENT
 
-void Metalink2RequestGroupTest::testGenerate_dosDirTraversal()
+TEST_CASE_FIXTURE(Metalink2RequestGroupTest,
+                  "Metalink2RequestGroupTest.testGenerate_dosDirTraversal")
 {
 #ifdef __MINGW32__
   std::vector<std::shared_ptr<RequestGroup>> groups;

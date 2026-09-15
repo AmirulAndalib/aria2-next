@@ -46,6 +46,7 @@
 #include "error_code.h"
 #include "RequestGroup.h"
 #include "ContextAttribute.h"
+#include "media/MediaDownload.h"
 #ifdef ENABLE_BITTORRENT
 #  include "BtSnapshot.h"
 #  include "BtStateStore.h"
@@ -58,6 +59,7 @@ class FileEntry;
 class MetadataInfo;
 
 struct DownloadResult {
+  media::Snapshot mediaSnapshot;
   // This field contains GID. See comment in
   // RequestGroup.cc::belongsToGID_.
   a2_gid_t belongsTo;

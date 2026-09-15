@@ -45,7 +45,6 @@
 
 #include "a2netcompat.h"
 #include "a2io.h"
-#include "a2netcompat.h"
 #include "a2time.h"
 
 namespace aria2 {
@@ -55,6 +54,9 @@ class TLSContext;
 class TLSSession;
 #endif // ENABLE_SSL
 
+// Owns one socket descriptor and its optional server TLS session. Event-loop
+// commands borrow this object through shared ownership; copying a descriptor
+// owner would close the same native resource twice.
 class SocketCore {
   friend bool operator==(const SocketCore& s1, const SocketCore& s2);
   friend bool operator!=(const SocketCore& s1, const SocketCore& s2);
@@ -76,7 +78,8 @@ private:
   static int socketRecvBufferSize_;
 
   bool blocking_;
-  int secure_;
+  enum class TlsState { None, Handshaking, Connected };
+  TlsState secure_;
 
   bool wantRead_;
   bool wantWrite_;
@@ -103,11 +106,13 @@ private:
 public:
   SocketCore(int sockType = SOCK_STREAM);
 
-  // Formally, private constructor, but made public to use with
-  // std::make_shared.
+  // Takes ownership of an already-open descriptor.
   SocketCore(sock_t sockfd, int sockType);
 
   ~SocketCore();
+
+  SocketCore(const SocketCore&) = delete;
+  SocketCore& operator=(const SocketCore&) = delete;
 
   sock_t getSockfd() const { return sockfd_; }
 
@@ -138,7 +143,7 @@ public:
   void bindWithFamily(uint16_t port, int family, int flags = AI_PASSIVE);
 
   /**
-   * Creates a socket and bind it with locahost's address and port.
+   * Creates a socket and bind it with localhost's address and port.
    * flags is set to struct addrinfo's ai_flags.
    * @param port port to listen. If 0 is specified, os automatically
    * choose available port.
@@ -149,7 +154,7 @@ public:
             int flags = AI_PASSIVE);
 
   /**
-   * Listens form connection on it.
+   * Starts accepting connections.
    * Call bind(uint16_t) before calling this function.
    */
   void beginListen();
@@ -169,7 +174,7 @@ public:
 
   /**
    * Returns address family of this socket.
-   * The socket must be connected or bounded to address.
+   * The socket must be connected or bound to address.
    */
   int getAddressFamily() const;
 
@@ -211,8 +216,7 @@ public:
 
   /**
    * Checks whether this socket is available for writing.
-   * @param timeout the amount of time elapsed before the checking are timed
-   * out.
+   * @param timeout maximum wait in seconds
    * @return true if the socket is available for writing,
    * otherwise returns false.
    */
@@ -220,8 +224,7 @@ public:
 
   /**
    * Checks whether this socket is available for reading.
-   * @param timeout the amount of time elapsed before the checking are timed
-   * out.
+   * @param timeout maximum wait in seconds
    * @return true if the socket is available for reading,
    * otherwise returns false.
    */
@@ -268,7 +271,7 @@ public:
    */
   void readData(void* data, size_t& len);
 
-  // sender.addr will be numerihost assigned.
+  // On success, sender.addr contains the numeric source address.
   ssize_t readDataFrom(void* data, size_t len, Endpoint& sender);
 
 #ifdef ENABLE_SSL
@@ -337,47 +340,6 @@ public:
                                                    int family = AF_UNSPEC,
                                                    int aiFlags = 0);
 };
-
-// Set default ai_flags. hints.ai_flags is initialized with this
-// value.
-void setDefaultAIFlags(int flags);
-
-// Wrapper function for getaddrinfo(). The value
-// flags|DEFAULT_AI_FLAGS is used as ai_flags.  You can override
-// DEFAULT_AI_FLAGS value by calling setDefaultAIFlags() with new
-// flags.
-int callGetaddrinfo(struct addrinfo** resPtr, const char* host,
-                    const char* service, int family, int sockType, int flags,
-                    int protocol);
-
-// Provides functionality of inet_ntop using getnameinfo.  The return
-// value is the exact value of getnameinfo returns. You can get error
-// message using gai_strerror(3).
-int inetNtop(int af, const void* src, char* dst, socklen_t size);
-
-// Provides functionality of inet_pton using getBinAddr.  If af is
-// AF_INET, dst is assumed to be the pointer to struct in_addr.  If af
-// is AF_INET6, dst is assumed to be the pointer to struct in6_addr.
-//
-// This function returns 0 if it succeeds, or -1.
-int inetPton(int af, const char* src, void* dst);
-
-namespace net {
-
-// Stores the binary representation of a numeric IPv4 or IPv6 address.
-// Parsing is independent of locally configured network interfaces. dest must
-// provide at least 4 bytes for IPv4 or 16 bytes for IPv6. Returns the number
-// of bytes written, or 0 if ip is not a numeric address.
-size_t getBinAddr(void* dest, const std::string& ip);
-
-// Checks public IP address are configured for each family: IPv4 and
-// IPv6. The result can be obtained using getIpv4AddrConfigured() and
-// getIpv6AddrConfigured() respectively.
-void checkAddrconfig();
-bool getIPv4AddrConfigured();
-bool getIPv6AddrConfigured();
-
-} // namespace net
 
 } // namespace aria2
 

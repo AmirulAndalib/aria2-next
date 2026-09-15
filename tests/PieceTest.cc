@@ -1,10 +1,16 @@
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <utility>
 #include "Piece.h"
 
 #include <string>
 
 #include "a2doctest.h"
 
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
 #include "DirectDiskAdaptor.h"
 #include "ByteArrayDiskWriter.h"
 #include "WrDiskCache.h"
@@ -12,40 +18,21 @@
 namespace aria2 {
 
 class PieceTest {
-
-
-private:
+protected:
   std::shared_ptr<DirectDiskAdaptor> adaptor_;
   ByteArrayDiskWriter* writer_;
 
 public:
-  void setUp()
+  PieceTest()
   {
     adaptor_ = std::make_shared<DirectDiskAdaptor>();
     auto dw = make_unique<ByteArrayDiskWriter>();
     writer_ = dw.get();
     adaptor_->setDiskWriter(std::move(dw));
   }
-
-  void testCompleteBlock();
-  void testGetCompletedLength();
-  void testFlushWrCache();
-  void testAppendWrCache();
-  void testUpdateWrCacheRestoresMissingCacheEntry();
-
-  void testGetDigestWithWrCache();
-  void testUpdateHash();
 };
 
-A2_TEST(PieceTest, testCompleteBlock)
-A2_TEST(PieceTest, testGetCompletedLength)
-A2_TEST(PieceTest, testFlushWrCache)
-A2_TEST(PieceTest, testAppendWrCache)
-A2_TEST(PieceTest, testUpdateWrCacheRestoresMissingCacheEntry)
-A2_TEST(PieceTest, testGetDigestWithWrCache)
-A2_TEST(PieceTest, testUpdateHash)
-
-void PieceTest::testCompleteBlock()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testCompleteBlock")
 {
   size_t blockLength = 32_k;
   Piece p(0, blockLength * 10, blockLength);
@@ -55,7 +42,7 @@ void PieceTest::testCompleteBlock()
   REQUIRE(p.hasBlock(5));
 }
 
-void PieceTest::testGetCompletedLength()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testGetCompletedLength")
 {
   int32_t blockLength = 16_k;
   Piece p(0, blockLength * 10 + 100, blockLength);
@@ -65,11 +52,10 @@ void PieceTest::testGetCompletedLength()
   p.completeBlock(9);
   p.completeBlock(10); // <-- 100 bytes
 
-  REQUIRE_EQ((int64_t)(blockLength * 3 + 100),
-                       p.getCompletedLength());
+  REQUIRE_EQ((int64_t)(blockLength * 3 + 100), p.getCompletedLength());
 }
 
-void PieceTest::testFlushWrCache()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testFlushWrCache")
 {
   unsigned char* data;
   Piece p(0, 1_k);
@@ -95,7 +81,7 @@ void PieceTest::testFlushWrCache()
   REQUIRE(!p.getWrDiskCacheEntry());
 }
 
-void PieceTest::testAppendWrCache()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testAppendWrCache")
 {
   unsigned char* data;
   Piece p(0, 1_k);
@@ -112,7 +98,8 @@ void PieceTest::testAppendWrCache()
   REQUIRE_EQ(std::string("foobar"), writer_->getString());
 }
 
-void PieceTest::testUpdateWrCacheRestoresMissingCacheEntry()
+TEST_CASE_FIXTURE(PieceTest,
+                  "PieceTest.testUpdateWrCacheRestoresMissingCacheEntry")
 {
   unsigned char* data;
   Piece p(0, 1_k);
@@ -135,7 +122,7 @@ void PieceTest::testUpdateWrCacheRestoresMissingCacheEntry()
   REQUIRE_EQ(std::string("foobar"), writer_->getString());
 }
 
-void PieceTest::testGetDigestWithWrCache()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testGetDigestWithWrCache")
 {
   unsigned char* data;
   Piece p(0, 26);
@@ -154,29 +141,28 @@ void PieceTest::testGetDigestWithWrCache()
   memcpy(data, "y", 1);
   p.updateWrCache(&dc, data, 0, 1, 24);
 
-  REQUIRE_EQ(
-      std::string("32d10c7b8cf96570ca04ce37f2a19d84240d3a89"),
-      util::toHex(p.getDigestWithWrCache(p.getLength(), adaptor_)));
+  REQUIRE_EQ(std::string("32d10c7b8cf96570ca04ce37f2a19d84240d3a89"),
+             util::toHex(p.getDigestWithWrCache(p.getLength(), adaptor_)));
 }
 
-void PieceTest::testUpdateHash()
+TEST_CASE_FIXTURE(PieceTest, "PieceTest.testUpdateHash")
 {
   Piece p(0, 16, 2_m);
   p.setHashType("sha-1");
 
   std::string spam("SPAM!");
-  REQUIRE(p.updateHash(
-      0, reinterpret_cast<const unsigned char*>(spam.c_str()), spam.size()));
+  REQUIRE(p.updateHash(0, reinterpret_cast<const unsigned char*>(spam.c_str()),
+                       spam.size()));
   REQUIRE(!p.isHashCalculated());
 
   std::string spamspam("SPAM!SPAM!!");
-  REQUIRE(p.updateHash(
-      spam.size(), reinterpret_cast<const unsigned char*>(spamspam.c_str()),
-      spamspam.size()));
+  REQUIRE(p.updateHash(spam.size(),
+                       reinterpret_cast<const unsigned char*>(spamspam.c_str()),
+                       spamspam.size()));
   REQUIRE(p.isHashCalculated());
 
   REQUIRE_EQ(std::string("d9189aff79e075a2e60271b9556a710dc1bc7de7"),
-                       util::toHex(p.getDigest()));
+             util::toHex(p.getDigest()));
 }
 
 } // namespace aria2

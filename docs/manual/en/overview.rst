@@ -1,5 +1,5 @@
-aria2 - The ultra fast download utility
-=======================================
+Aria2 Next - The ultra fast download utility
+============================================
 
 Aria2 Next maintenance note
 ---------------------------
@@ -31,7 +31,7 @@ It retains the maintained command-line, configuration, session, JSON-RPC, and
 libaria2 surfaces without emulating removed BitTorrent internals.
 
 See the upstream `aria2 Online Manual
-<https://aria2.github.io/manual/en/html/>`_ to learn how to use aria2.
+<https://aria2.github.io/manual/en/html/>`_ to learn how to use Aria2 Next.
 
 Features
 --------
@@ -65,7 +65,7 @@ Here is a list of features:
 * BitTorrent extensions: Fast extension, DHT, PEX, MSE/PSE,
   Multi-Tracker, UDP tracker
 * BitTorrent `WEB-Seeding <http://getright.com/seedtorrent.html>`_.
-  aria2 requests chunk more than piece size to reduce the request
+  Aria2 Next requests chunk more than piece size to reduce the request
   overhead. It also supports pipelined requests with piece size.
 * BitTorrent Local Peer Discovery
 * Rename/change the directory structure of BitTorrent downloads
@@ -191,7 +191,7 @@ Cross-compiling Windows binary
 In this section, we describe how to build a Windows binary using a
 mingw-w64 (http://mingw-w64.org/doku.php) cross-compiler on Debian
 Linux. The MinGW (http://www.mingw.org/) may not be able to build
-aria2.
+Aria2 Next.
 
 After compiling and installing dependency libraries, cross-compile with a CMake
 toolchain file or explicit ``CMAKE_SYSTEM_NAME``, compiler, prefix, and
@@ -242,7 +242,7 @@ cross-compilation:
 * libssh2
 
 Build the dependency libraries as static libraries and install them under a
-single Android prefix. Then configure aria2 with CMake using the Android NDK
+single Android prefix. Then configure Aria2 Next with CMake using the Android NDK
 toolchain variables. The maintained release workflow reads the NDK baseline
 from ``packaging/dependencies.env`` and passes
 ``CMAKE_SYSTEM_NAME=Android``, ``CMAKE_ANDROID_NDK``,
@@ -260,11 +260,11 @@ Install the documentation dependencies first::
 
     $ python3 -m pip install 'sphinx>=8.2,<9' 'sphinx-rtd-theme>=3.0,<4'
 
-aria2 man pages will be built when you run ``make`` if they are not
-up-to-date.  You can also build an HTML version of the aria2 man page by
-``make html`` from the relevant ``docs/manual/<language>`` directory.
-The HTML version manual is also available
-`online <https://aria2.github.io/manual/en/html/>`_.
+Manual sources and the Sphinx configuration template are in
+``docs/manual/en``. Documentation generation is separate from the default
+CMake executable build. The `upstream manual
+<https://aria2.github.io/manual/en/html/>`_ describes historical aria2
+behavior; use this repository's manual for maintained options and extensions.
 
 BitTorrent
 -----------
@@ -287,7 +287,7 @@ multi-file mode
     downloaded files can be specified by -d option.
 
 Before download starts, a complete directory structure is created if
-needed. By default, aria2 opens at most 100 files mentioned in
+needed. By default, Aria2 Next opens at most 100 files mentioned in
 .torrent file, and directly writes to and reads from these files.
 The number of files to open simultaneously can be controlled by
 ``--bt-max-open-files`` option.
@@ -323,45 +323,45 @@ Other protocols in Metalink documents are ignored. Both Metalink4 (RFC 5854) and
 Metalink version 3.0 documents are supported.
 
 For checksum verification, md5, sha-1, sha-224, sha-256, sha-384, and
-sha-512 are supported. If multiple hash algorithms are provided, aria2
-uses a stronger one. If whole file checksum verification fails, aria2
+sha-512 are supported. If multiple hash algorithms are provided, Aria2 Next
+uses a stronger one. If whole file checksum verification fails, Aria2 Next
 doesn't retry the download and just exits with a non-zero return code.
 
 The supported user preferences are version, language, location,
 protocol, and os.
 
-If chunk checksums are provided in the Metalink file, aria2 automatically
+If chunk checksums are provided in the Metalink file, Aria2 Next automatically
 validates chunks of data during download. This behavior can be turned
 off by a command-line option.
 
-If a signature is included in a Metalink file, aria2 saves it as a file
+If a signature is included in a Metalink file, Aria2 Next saves it as a file
 after the completion of the download.  The file name is download
 file name + ".sig". If the same file already exists, the signature file is
 not saved.
 
 In Metalink4, a multi-file torrent could appear in metalink:metaurl
-element.  Since aria2 cannot download 2 same torrents at the same
-time, aria2 groups files in metalink:file element which has the same
+element.  Since Aria2 Next cannot download 2 same torrents at the same
+time, Aria2 Next groups files in metalink:file element which has the same
 BitTorrent metaurl, and downloads them from a single BitTorrent swarm.
 This is a basically multi-file torrent download with file selection, so
 the adjacent files which are not in Metalink document but share the same
 piece with the selected file are also created.
 
 If relative URI is specified in metalink:url or metalink:metaurl
-element, aria2 uses the URI of Metalink file as base URI to resolve
+element, Aria2 Next uses the URI of Metalink file as base URI to resolve
 the relative URI. If relative URI is found in the Metalink file which is
-read from the local disk, aria2 uses the value of ``--metalink-base-uri``
+read from the local disk, Aria2 Next uses the value of ``--metalink-base-uri``
 option as base URI. If this option is not specified, the relative URI
 will be ignored.
 
 Metalink/HTTP
 -------------
 
-The current implementation only uses rel=duplicate links.  aria2
+The current implementation only uses rel=duplicate links.  Aria2 Next
 understands Digest header fields and check whether it matches the
 digest value from other sources. If it differs, drop the connection.
-aria2 also uses this digest value to perform checksum verification
-after the download is finished. aria2 recognizes geo value. To tell aria2
+Aria2 Next also uses this digest value to perform checksum verification
+after the download is finished. Aria2 Next recognizes geo value. To tell Aria2 Next
 which location you prefer, you can use ``--metalink-location`` option.
 
 netrc
@@ -374,13 +374,13 @@ should have correct permissions(600).
 WebSocket
 ---------
 
-The WebSocket server embedded in aria2 implements the specification
+The WebSocket server embedded in Aria2 Next implements the specification
 defined in RFC 6455. The supported protocol version is 13.
 
 libaria2
 --------
 
-The libaria2 is a C++ library that offers aria2 functionality to the
+The libaria2 is a C++ library that offers Aria2 Next functionality to the
 client code. Currently, libaria2 is not built by default. To enable
 libaria2, use the ``-DARIA2_ENABLE_LIBARIA2=ON`` CMake option. See libaria2
 documentation to know how to use API.

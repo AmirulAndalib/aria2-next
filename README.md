@@ -54,6 +54,14 @@ The BitTorrent session persists native IPv4 and IPv6 DHT routing state, restores
 
 Advanced native controls cover request and disk queues, disk I/O policy, peer turnover, TCP/uTP balancing, upload scheduling, file priorities, web seeds, manual peers, and resume checkpoints. Runtime diagnostics report peer discovery, tracker, DHT, transport, disk queue, protocol overhead, and aggregated performance-warning state through JSON-RPC.
 
+## Native HLS and DASH Downloads
+
+HLS (`.m3u8`) and MPEG-DASH (`.mpd`) use native GPAC, libcurl, and FFmpeg
+libraries inside the same engine. Media tasks support representation selection,
+live recording, paused restart, and MP4/Matroska output without transcoding.
+Media progress uses presentation duration rather than an invented output size.
+See [media downloads](docs/media-downloads.md) for CLI/RPC contracts and scope.
+
 ## Native ED2K/eMule Support
 
 Aria2 Next includes native ED2K/eMule support aligned with aMule's network behavior. ED2K works through the normal aria2 CLI, session, and JSON-RPC flows, including server and Kad discovery, peer transfer, search, sharing, upload queues, protocol obfuscation, persistent runtime identity, and restart source seeds. The maintained architecture and verification scope are documented in [`docs/maintenance/ed2k-runtime.md`](docs/maintenance/ed2k-runtime.md).
@@ -142,7 +150,9 @@ ctest --test-dir build/default --output-on-failure
 Common options include `ARIA2_ENABLE_BITTORRENT`, `ARIA2_ENABLE_METALINK`, `ARIA2_ENABLE_WEBSOCKET`, `ARIA2_ENABLE_LIBARIA2`, `ARIA2_RELEASE_SIZE_OPTIMIZED`, and `ARIA2_RELEASE_LTO`.
 
 The default superbuild compiles every library dependency from `third_party`.
-Only CMake, Ninja, Make, Perl, and a C11/C++17 platform toolchain are required.
+Only CMake, Ninja, a POSIX shell, Make, Perl, and a C11/C++17 platform toolchain
+are required. On Windows, MSYS2 supplies the shell, Make, and Perl; compilation
+uses the native target toolchain.
 
 ## Downloads
 
@@ -225,7 +235,7 @@ The corresponding source is stored under [`third_party/`](third_party/), so libr
 | `CMakeLists.txt` | Project declaration and module entry point |
 | `CMakePresets.json` | Standard configure, build, and test presets |
 | `cmake/` | CMake modules, source inventories, and generated config templates |
-| `src/` | aria2 command-line client and core implementation |
+| `src/` | Aria2 Next command-line client and core implementation; see the [ownership map](docs/architecture.md) |
 | `src/includes/aria2/` | public libaria2 headers |
 | `tests/` | doctest unit test suite registered through CTest |
 | `docs/` | manual sources, completion tooling, and maintenance records |

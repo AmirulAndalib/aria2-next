@@ -33,10 +33,24 @@
  */
 /* copyright --> */
 #include "HttpHeader.h"
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <limits>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+#include "a2io.h"
 #include "Range.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "fmt.h"
+#include "message.h"
+#include "DlAbortEx.h"
+#include "a2iterator.h"
 #include "DownloadFailureException.h"
-#include "array_fun.h"
 
 namespace aria2 {
 

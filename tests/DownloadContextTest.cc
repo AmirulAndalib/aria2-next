@@ -1,30 +1,18 @@
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <utility>
+#include <vector>
+#include "support/Numbers.h"
 #include "DownloadContext.h"
 
 #include "a2doctest.h"
 
 #include "FileEntry.h"
-#include "array_fun.h"
 
 namespace aria2 {
 
-class DownloadContextTest {
-
-
-public:
-  void testFindFileEntryByOffset();
-  void testGetPieceHash();
-  void testGetNumPieces();
-  void testGetBasePath();
-  void testSetFileFilter();
-};
-
-A2_TEST(DownloadContextTest, testFindFileEntryByOffset)
-A2_TEST(DownloadContextTest, testGetPieceHash)
-A2_TEST(DownloadContextTest, testGetNumPieces)
-A2_TEST(DownloadContextTest, testGetBasePath)
-A2_TEST(DownloadContextTest, testSetFileFilter)
-
-void DownloadContextTest::testFindFileEntryByOffset()
+TEST_CASE("DownloadContextTest.testFindFileEntryByOffset")
 {
   DownloadContext ctx;
 
@@ -39,16 +27,13 @@ void DownloadContextTest::testFindFileEntryByOffset()
       std::shared_ptr<FileEntry>(new FileEntry("file6", 0, 6000))};
   ctx.setFileEntries(std::begin(fileEntries), std::end(fileEntries));
 
-  REQUIRE_EQ(std::string("file1"),
-                       ctx.findFileEntryByOffset(0)->getPath());
-  REQUIRE_EQ(std::string("file4"),
-                       ctx.findFileEntryByOffset(1500)->getPath());
-  REQUIRE_EQ(std::string("file5"),
-                       ctx.findFileEntryByOffset(5999)->getPath());
+  REQUIRE_EQ(std::string("file1"), ctx.findFileEntryByOffset(0)->getPath());
+  REQUIRE_EQ(std::string("file4"), ctx.findFileEntryByOffset(1500)->getPath());
+  REQUIRE_EQ(std::string("file5"), ctx.findFileEntryByOffset(5999)->getPath());
   REQUIRE(!ctx.findFileEntryByOffset(6000));
 }
 
-void DownloadContextTest::testGetPieceHash()
+TEST_CASE("DownloadContextTest.testGetPieceHash")
 {
   DownloadContext ctx;
   const std::string pieceHashes[] = {"hash1", "hash2", "shash3"};
@@ -57,13 +42,13 @@ void DownloadContextTest::testGetPieceHash()
   REQUIRE_EQ(std::string(""), ctx.getPieceHash(3));
 }
 
-void DownloadContextTest::testGetNumPieces()
+TEST_CASE("DownloadContextTest.testGetNumPieces")
 {
   DownloadContext ctx(345, 9889, "");
   REQUIRE_EQ((size_t)29, ctx.getNumPieces());
 }
 
-void DownloadContextTest::testGetBasePath()
+TEST_CASE("DownloadContextTest.testGetBasePath")
 {
   DownloadContext ctx(0, 0, "");
   REQUIRE_EQ(std::string(""), ctx.getBasePath());
@@ -71,7 +56,7 @@ void DownloadContextTest::testGetBasePath()
   REQUIRE_EQ(std::string("aria2.tar.bz2"), ctx.getBasePath());
 }
 
-void DownloadContextTest::testSetFileFilter()
+TEST_CASE("DownloadContextTest.testSetFileFilter")
 {
   DownloadContext ctx;
   std::vector<std::shared_ptr<FileEntry>> files;

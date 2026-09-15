@@ -32,25 +32,35 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskWriter.h"
+#include "OpenedFileCounter.h"
 #include "MultiDiskAdaptor.h"
+#include "TimeA2.h"
+#include <cinttypes>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <string>
+#include <utility>
 
 #include <cassert>
 #include <algorithm>
 #include <map>
 
-#include "DefaultDiskWriter.h"
 #include "message.h"
-#include "util.h"
+#include "a2functional.h"
+#include "fmt.h"
+#include "DlAbortEx.h"
 #include "FileEntry.h"
 #include "MultiFileAllocationIterator.h"
 #include "DefaultDiskWriterFactory.h"
-#include "DlAbortEx.h"
 #include "File.h"
-#include "fmt.h"
 #include "Log.h"
 #include "SimpleRandomizer.h"
 #include "WrDiskCacheEntry.h"
-#include "OpenedFileCounter.h"
 #include "DiskAdaptor.h"
 
 namespace aria2 {
@@ -218,7 +228,7 @@ size_t MultiDiskAdaptor::tryCloseFile(size_t numClose)
 }
 
 void MultiDiskAdaptor::openIfNot(DiskWriterEntry* entry,
-  void (DiskWriterEntry::*open)())
+                                 void (DiskWriterEntry::*open)())
 {
   if (!entry->isOpen()) {
     auto& openedFileCounter = getOpenedFileCounter();

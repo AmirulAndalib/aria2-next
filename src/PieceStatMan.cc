@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "PieceStatMan.h"
+#include <cstddef>
 
 #include <limits>
 #include <algorithm>

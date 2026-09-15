@@ -1,6 +1,5 @@
+#include <cstddef>
 #include "GZipFile.h"
-
-#include <iostream>
 
 #include "a2doctest.h"
 
@@ -8,16 +7,7 @@
 
 namespace aria2 {
 
-class GZipFileTest {
-
-
-public:
-  void testOpen();
-};
-
-A2_TEST(GZipFileTest, testOpen)
-
-void GZipFileTest::testOpen()
+TEST_CASE("GZipFileTest.testOpen")
 {
   File f(A2_TEST_OUT_DIR "/aria2_GZipFileTest_testOpen");
   f.remove();

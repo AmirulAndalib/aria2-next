@@ -1,34 +1,19 @@
+#include "a2functional.h"
+#include <chrono>
 #include "SpeedCalc.h"
-#include <string>
 #include "a2doctest.h"
 #include "wallclock.h"
 
 namespace aria2 {
 
-class SpeedCalcTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testUpdate();
-  void testFixedWindow();
-  void testRefreshCadence();
-};
-
-A2_TEST(SpeedCalcTest, testUpdate)
-A2_TEST(SpeedCalcTest, testFixedWindow)
-A2_TEST(SpeedCalcTest, testRefreshCadence)
-
-void SpeedCalcTest::testUpdate()
+TEST_CASE("SpeedCalcTest.testUpdate")
 {
   global::wallclock().reset(24_h);
   SpeedCalc calc;
   calc.update(1000);
 }
 
-void SpeedCalcTest::testFixedWindow()
+TEST_CASE("SpeedCalcTest.testFixedWindow")
 {
   global::wallclock().reset(24_h);
   SpeedCalc calc;
@@ -51,7 +36,7 @@ void SpeedCalcTest::testFixedWindow()
   REQUIRE_EQ(0, calc.calculateSpeed());
 }
 
-void SpeedCalcTest::testRefreshCadence()
+TEST_CASE("SpeedCalcTest.testRefreshCadence")
 {
   global::wallclock().reset(24_h);
   SpeedCalc calc;

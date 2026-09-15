@@ -1,19 +1,25 @@
 #include "TestUtil.h"
+#include "DiskWriter.h"
+#include "GroupId.h"
+#include "WrDiskCacheEntry.h"
+#include "error_code.h"
+#include <cassert>
+#include <cstdint>
+#include <ios>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <vector>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <cerrno>
 #include <cstring>
 #include <sstream>
 #include <fstream>
 
-#include "a2io.h"
 #include "File.h"
-#include "FatalException.h"
 #include "DefaultDiskWriter.h"
-#include "fmt.h"
-#include "util.h"
+#include "support/Encoding.h"
+#include "a2functional.h"
 #include "RequestGroupMan.h"
 #include "RequestGroup.h"
 #include "DownloadContext.h"

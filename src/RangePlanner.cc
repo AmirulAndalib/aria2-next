@@ -11,6 +11,11 @@
  */
 /* copyright --> */
 #include "RangePlanner.h"
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 #include <iterator>

@@ -132,6 +132,8 @@ extern PrefPtr PREF_LOG_MAX_FILES;
 extern PrefPtr PREF_DIR;
 // values: a string that your file system recognizes as a file name.
 extern PrefPtr PREF_OUT;
+extern PrefPtr PREF_FILENAME_HINT;
+extern PrefPtr PREF_FILENAME_HINT_SOURCE;
 // values: 1*digit
 // value: true | false
 extern PrefPtr PREF_DAEMON;
@@ -251,6 +253,14 @@ extern PrefPtr PREF_MAX_DOWNLOAD_RESULT;
 // value: 1*digit
 extern PrefPtr PREF_RETRY_WAIT;
 extern PrefPtr PREF_STREAM_MAX_CONNECTIONS;
+extern PrefPtr PREF_MEDIA;
+extern PrefPtr PREF_MEDIA_FORMAT;
+extern PrefPtr PREF_MEDIA_VIDEO;
+extern PrefPtr PREF_MEDIA_AUDIO;
+extern PrefPtr PREF_MEDIA_SUBTITLES;
+extern PrefPtr PREF_MEDIA_PAUSE_AFTER_PROBE;
+extern PrefPtr PREF_MEDIA_RECORD_TIME;
+extern PrefPtr PREF_MEDIA_REQUEST_CONTEXTS;
 // value: true | false
 extern PrefPtr PREF_SHOW_CONSOLE_READOUT;
 // value: default | inorder | geom

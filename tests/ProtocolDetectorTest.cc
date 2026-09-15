@@ -3,31 +3,11 @@
 #include "a2doctest.h"
 
 #include "Exception.h"
-#include "util.h"
+#include "common.h"
 
 namespace aria2 {
 
-class ProtocolDetectorTest {
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testIsStreamProtocol();
-  void testGuessEd2kLink();
-  void testGuessTorrentFile();
-  void testGuessTorrentMagnet();
-  void testGuessMetalinkFile();
-};
-
-A2_TEST(ProtocolDetectorTest, testIsStreamProtocol)
-A2_TEST(ProtocolDetectorTest, testGuessEd2kLink)
-A2_TEST(ProtocolDetectorTest, testGuessTorrentFile)
-A2_TEST(ProtocolDetectorTest, testGuessTorrentMagnet)
-A2_TEST(ProtocolDetectorTest, testGuessMetalinkFile)
-
-void ProtocolDetectorTest::testIsStreamProtocol()
+TEST_CASE("ProtocolDetectorTest.testIsStreamProtocol")
 {
   ProtocolDetector detector;
   REQUIRE(detector.isStreamProtocol("http://localhost/index.html"));
@@ -39,7 +19,7 @@ void ProtocolDetectorTest::testIsStreamProtocol()
   REQUIRE(!detector.isStreamProtocol("/home/web/localhost/index.html"));
 }
 
-void ProtocolDetectorTest::testGuessEd2kLink()
+TEST_CASE("ProtocolDetectorTest.testGuessEd2kLink")
 {
   ProtocolDetector detector;
   REQUIRE(detector.guessEd2kLink(
@@ -50,7 +30,7 @@ void ProtocolDetectorTest::testGuessEd2kLink()
   REQUIRE(!detector.guessEd2kLink("magnet:?xt=urn:btih:abc"));
 }
 
-void ProtocolDetectorTest::testGuessTorrentFile()
+TEST_CASE("ProtocolDetectorTest.testGuessTorrentFile")
 {
   ProtocolDetector detector;
   REQUIRE(detector.guessTorrentFile(A2_TEST_DIR "/test.torrent"));
@@ -58,7 +38,7 @@ void ProtocolDetectorTest::testGuessTorrentFile()
   REQUIRE(!detector.guessTorrentFile(A2_TEST_DIR "/test.xml"));
 }
 
-void ProtocolDetectorTest::testGuessTorrentMagnet()
+TEST_CASE("ProtocolDetectorTest.testGuessTorrentMagnet")
 {
   ProtocolDetector detector;
 #ifdef ENABLE_BITTORRENT
@@ -71,7 +51,7 @@ void ProtocolDetectorTest::testGuessTorrentMagnet()
 #endif // !ENABLE_BITTORRENT
 }
 
-void ProtocolDetectorTest::testGuessMetalinkFile()
+TEST_CASE("ProtocolDetectorTest.testGuessMetalinkFile")
 {
   ProtocolDetector detector;
   REQUIRE(detector.guessMetalinkFile(A2_TEST_DIR "/test.xml"));

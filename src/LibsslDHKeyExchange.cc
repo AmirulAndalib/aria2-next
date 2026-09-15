@@ -33,9 +33,9 @@
  */
 /* copyright --> */
 #include "LibsslDHKeyExchange.h"
-
-#include <openssl/err.h>
-#include <openssl/rand.h>
+#include "MSEDHKeyExchange.h"
+#include <openssl/bn.h>
+#include <string>
 
 #include "DlAbortEx.h"
 #include "OpenSslDiagnostics.h"
@@ -67,8 +67,7 @@ LibsslDHKeyExchange::LibsslDHKeyExchange()
   }
 }
 
-LibsslDHKeyExchange::LibsslDHKeyExchange(
-    const MSEDHPrivateKey& privateKey)
+LibsslDHKeyExchange::LibsslDHKeyExchange(const MSEDHPrivateKey& privateKey)
     : bnCtx_(nullptr),
       prime_(nullptr),
       generator_(nullptr),
@@ -84,8 +83,8 @@ LibsslDHKeyExchange::LibsslDHKeyExchange(
   }
 }
 
-LibsslDHKeyExchange::LibsslDHKeyExchange(
-    const MSEDHPrivateKey& privateKey, const char* primeHex)
+LibsslDHKeyExchange::LibsslDHKeyExchange(const MSEDHPrivateKey& privateKey,
+                                         const char* primeHex)
     : bnCtx_(nullptr),
       prime_(nullptr),
       generator_(nullptr),
@@ -101,10 +100,7 @@ LibsslDHKeyExchange::LibsslDHKeyExchange(
   }
 }
 
-LibsslDHKeyExchange::~LibsslDHKeyExchange()
-{
-  clear();
-}
+LibsslDHKeyExchange::~LibsslDHKeyExchange() { clear(); }
 
 void LibsslDHKeyExchange::clear() noexcept
 {
@@ -137,17 +133,15 @@ void LibsslDHKeyExchange::initialize(const MSEDHPrivateKey* privateKey,
   }
 
   if (privateKey) {
-    privateKey_ =
-        BN_bin2bn(privateKey->data(), privateKey->size(), nullptr);
+    privateKey_ = BN_bin2bn(privateKey->data(), privateKey->size(), nullptr);
     if (!privateKey_ || BN_is_zero(privateKey_)) {
       throw DL_ABORT_EX("MSE DH private key must be nonzero");
     }
   }
   else {
     privateKey_ = BN_new();
-    if (!privateKey_ ||
-        BN_rand(privateKey_, MSE_DH_PRIVATE_KEY_LENGTH * 8,
-                BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY) != 1) {
+    if (!privateKey_ || BN_rand(privateKey_, MSE_DH_PRIVATE_KEY_LENGTH * 8,
+                                BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY) != 1) {
       handleError("BN_rand");
     }
   }
@@ -170,8 +164,8 @@ MSEDHPublicKey LibsslDHKeyExchange::exportNumber(const BIGNUM* number) const
   return result;
 }
 
-MSEDHPublicKey LibsslDHKeyExchange::computeSecret(
-    const MSEDHPublicKey& peerPublicKey) const
+MSEDHPublicKey
+LibsslDHKeyExchange::computeSecret(const MSEDHPublicKey& peerPublicKey) const
 {
   BIGNUM* peerNumber =
       BN_bin2bn(peerPublicKey.data(), peerPublicKey.size(), nullptr);

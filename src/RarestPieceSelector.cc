@@ -33,9 +33,11 @@
  */
 /* copyright --> */
 #include "RarestPieceSelector.h"
+#include <cstddef>
+#include <memory>
+#include <vector>
 
 #include <limits>
-#include <algorithm>
 
 #include "PieceStatMan.h"
 #include "bitfield.h"

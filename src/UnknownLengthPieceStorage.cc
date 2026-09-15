@@ -32,18 +32,22 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskWriter.h"
 #include "UnknownLengthPieceStorage.h"
+#include "Command.h"
+#include "a2functional.h"
+#include <cstdint>
+#include <memory>
+#include <stdlib.h>
+#include <utility>
 
 #include <algorithm>
 #include <cstdlib>
 
-#include "DefaultDiskWriter.h"
 #include "DirectDiskAdaptor.h"
-#include "prefs.h"
 #include "DefaultDiskWriterFactory.h"
 #include "DownloadContext.h"
 #include "Piece.h"
-#include "FileEntry.h"
 #include "BitfieldMan.h"
 
 namespace aria2 {
@@ -71,7 +75,6 @@ void UnknownLengthPieceStorage::initStorage()
 
   diskAdaptor_ = std::move(directDiskAdaptor);
 }
-
 
 bool UnknownLengthPieceStorage::hasMissingUnusedPiece() { abort(); }
 

@@ -33,8 +33,9 @@
  */
 /* copyright --> */
 #include "Signature.h"
-#include "File.h"
-#include "util.h"
+#include <string>
+#include <utility>
+#include "support/FilePath.h"
 
 namespace aria2 {
 

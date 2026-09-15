@@ -32,23 +32,22 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "Option.h"
+#include "PieceStorage.h"
 #include "BtPostDownloadHandler.h"
+#include <iterator>
+#include <memory>
+#include <vector>
 #include "prefs.h"
 #include "RequestGroup.h"
-#include "Option.h"
 #include "Log.h"
 #include "DownloadHandlerConstants.h"
-#include "File.h"
-#include "PieceStorage.h"
-#include "DiskAdaptor.h"
-#include "util.h"
+#include "a2functional.h"
+#include "fmt.h"
 #include "ContentTypeRequestGroupCriteria.h"
-#include "Exception.h"
 #include "DownloadContext.h"
 #include "download_helper.h"
-#include "fmt.h"
 #include "ByteArrayDiskWriter.h"
-#include "DiskWriter.h"
 #include "AbstractSingleDiskAdaptor.h"
 #include "RequestGroupMan.h"
 
@@ -65,7 +64,7 @@ void BtPostDownloadHandler::getNextRequestGroups(
     RequestGroup* requestGroup) const
 {
   A2_LOG_DEBUG(fmt("Generating RequestGroups for Torrent file %s",
-                  requestGroup->getFirstFilePath().c_str()));
+                   requestGroup->getFirstFilePath().c_str()));
   std::string torrentData;
   if (requestGroup->inMemoryDownload()) {
     auto& dw = static_cast<AbstractSingleDiskAdaptor*>(
@@ -77,8 +76,7 @@ void BtPostDownloadHandler::getNextRequestGroups(
   std::vector<std::shared_ptr<RequestGroup>> newRgs;
   createRequestGroupForBitTorrent(
       newRgs, requestGroup->getOption(), {},
-      requestGroup->inMemoryDownload() ? ""
-                                       : requestGroup->getFirstFilePath(),
+      requestGroup->inMemoryDownload() ? "" : requestGroup->getFirstFilePath(),
       torrentData);
   requestGroup->followedBy(std::begin(newRgs), std::end(newRgs));
   for (auto& rg : newRgs) {

@@ -30,6 +30,7 @@
 namespace aria2 {
 
 class SocketCore;
+struct Ed2kAttribute;
 class ARC4Encryptor;
 class PeerStat;
 
@@ -156,8 +157,8 @@ private:
   void decryptData(char* data, size_t length);
   void resetCompressedPartInflaters();
   CompressedPartState* findCompressedPartState(int64_t begin);
-  CompressedPartState* getOrCreateCompressedPartState(
-      const ed2k::PartRange& block);
+  CompressedPartState*
+  getOrCreateCompressedPartState(const ed2k::PartRange& block);
   void releaseCompletedCompressedPartState(const ed2k::PartRange& block);
   void startResolve();
   void startConnect();
@@ -166,8 +167,45 @@ private:
   bool readBody();
   void handlePacket();
   void handleServerPacket();
+  // Packet decoders keep wire validation separate from connection I/O.
   void handlePeerPacket();
-  void queuePacket(uint8_t protocol, uint8_t opcode, const std::string& payload);
+  void handleEmulePacket(Ed2kAttribute* attrs);
+  void handleEdonkeyPacket(Ed2kAttribute* attrs);
+  void receiveEmuleInfo(Ed2kAttribute* attrs);
+  void receiveEmuleInfoAnswer(Ed2kAttribute* attrs);
+  void receiveSourceExchangeV2(Ed2kAttribute* attrs);
+  void receiveSourceExchange(Ed2kAttribute* attrs);
+  void answerSourceExchange(Ed2kAttribute* attrs);
+  void answerSourceExchangeV2(Ed2kAttribute* attrs);
+  void answerAichRoot();
+  void receiveAichRoot(Ed2kAttribute* attrs);
+  void receiveMultipacket(Ed2kAttribute* attrs);
+  void answerMultipacket();
+  void receiveAichRecovery(Ed2kAttribute* attrs);
+  void receiveBuddyCallback(Ed2kAttribute* attrs);
+  void answerAichRecovery();
+  void receiveFirewallCheck();
+  void receivePeerHello(Ed2kAttribute* attrs);
+  void receivePeerHelloAnswer(Ed2kAttribute* attrs);
+  void receiveFileName(Ed2kAttribute* attrs);
+  void answerFileName();
+  void answerFileStatus();
+  void receiveFileStatus(Ed2kAttribute* attrs);
+  void receiveHashSet(Ed2kAttribute* attrs);
+  void answerHashSet();
+  void receiveUploadRequest();
+  void receiveUploadAcceptance(Ed2kAttribute* attrs);
+  void receiveOutOfParts(Ed2kAttribute* attrs);
+  void receiveMissingFile(Ed2kAttribute* attrs);
+  void receiveCancellation(Ed2kAttribute* attrs);
+  void receiveQueueRank(Ed2kAttribute* attrs);
+  void receivePart(Ed2kAttribute* attrs);
+  void answerParts();
+  void answerLargeParts();
+  void receiveCompressedPart(Ed2kAttribute* attrs);
+
+  void queuePacket(uint8_t protocol, uint8_t opcode,
+                   const std::string& payload);
   void queueServerLogin();
   void queueServerOfferFiles();
   bool queueGetSources(RequestGroup* group = nullptr);
@@ -210,8 +248,7 @@ protected:
 public:
   Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup, DownloadEngine* e,
               ed2k::Endpoint endpoint, bool serverMode,
-              bool countAsDownloadCommand = true,
-              bool firewallCheck = false);
+              bool countAsDownloadCommand = true, bool firewallCheck = false);
   Ed2kCommand(cuid_t cuid, RequestGroup* requestGroup, DownloadEngine* e,
               ed2k::Endpoint endpoint,
               const std::shared_ptr<SocketCore>& socket);

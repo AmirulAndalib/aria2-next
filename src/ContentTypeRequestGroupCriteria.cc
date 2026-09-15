@@ -32,11 +32,12 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "FileEntry.h"
 #include "ContentTypeRequestGroupCriteria.h"
+#include <cstddef>
 
 #include "RequestGroup.h"
-#include "util.h"
-#include "FileEntry.h"
+#include "support/Text.h"
 #include "DownloadContext.h"
 
 namespace aria2 {

@@ -32,22 +32,24 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "Exception.h"
 #include "FileAllocationCommand.h"
+#include "Command.h"
+#include "RealtimeCommand.h"
+#include <chrono>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "FileAllocationMan.h"
 #include "FileAllocationEntry.h"
 #include "DownloadEngine.h"
 #include "RequestGroup.h"
 #include "Log.h"
 #include "message.h"
-#include "prefs.h"
-#include "util.h"
-#include "DownloadEngine.h"
+#include "fmt.h"
 #include "DownloadContext.h"
-#include "a2functional.h"
-#include "RecoverableException.h"
 #include "wallclock.h"
 #include "RequestGroupMan.h"
-#include "fmt.h"
 
 namespace aria2 {
 

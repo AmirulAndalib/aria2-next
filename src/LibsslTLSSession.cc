@@ -33,6 +33,16 @@
  */
 /* copyright --> */
 #include "LibsslTLSSession.h"
+#include "LibsslTLSContext.h"
+#include "TLSContext.h"
+#include "TLSSession.h"
+#include "a2netcompat.h"
+#include <cstddef>
+#include <openssl/crypto.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
+#include <string>
 #include "OpenSslDiagnostics.h"
 
 #include <openssl/err.h>

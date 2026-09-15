@@ -33,6 +33,15 @@
  */
 /* copyright --> */
 #include "HttpServerBodyCommand.h"
+#include "Command.h"
+#include "ValueBase.h"
+#include <algorithm>
+#include <cinttypes>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "HttpServer.h"
@@ -46,7 +55,7 @@
 #include "OptionParser.h"
 #include "OptionHandler.h"
 #include "wallclock.h"
-#include "util.h"
+#include "a2functional.h"
 #include "fmt.h"
 #include "SocketRecvBuffer.h"
 #include "json.h"
@@ -231,8 +240,8 @@ bool HttpServerBodyCommand::execute()
           dw->reset();
           if (error < 0) {
             A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                            " - Failed to parse XML-RPC request",
-                            getCuid()));
+                             " - Failed to parse XML-RPC request",
+                             getCuid()));
             httpServer_->feedResponse(400);
             addHttpServerResponseCommand(false);
             return true;
@@ -273,8 +282,8 @@ bool HttpServerBodyCommand::execute()
           }
           if (error < 0) {
             A2_LOG_DEBUG(fmt("CUID#%" PRId64
-                            " - Failed to parse JSON-RPC request",
-                            getCuid()));
+                             " - Failed to parse JSON-RPC request",
+                             getCuid()));
             rpc::RpcResponse res(rpc::createJsonRpcErrorResponse(
                 -32700, "Parse error.", Null::g()));
             sendJsonRpcResponse(res, callback);
@@ -334,9 +343,9 @@ bool HttpServerBodyCommand::execute()
   }
   catch (RecoverableException& e) {
     A2_LOG_DEBUG_EX(fmt("CUID#%" PRId64
-                       " - Error occurred while reading HTTP request body",
-                       getCuid()),
-                   e);
+                        " - Error occurred while reading HTTP request body",
+                        getCuid()),
+                    e);
     return true;
   }
 }

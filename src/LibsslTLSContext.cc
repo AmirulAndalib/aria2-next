@@ -33,6 +33,15 @@
  */
 /* copyright --> */
 #include "LibsslTLSContext.h"
+#include "TLSContext.h"
+#include <memory>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/prov_ssl.h>
+#include <openssl/safestack.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <stdlib.h>
 
 #include <cassert>
 #include <cstdlib>
@@ -173,7 +182,7 @@ bool OpenSSLTLSContext::addCredentialFile(const std::string& certfile,
     return false;
   }
   A2_LOG_DEBUG(fmt("Credential files(cert=%s, key=%s) were successfully added.",
-                  certfile.c_str(), keyfile.c_str()));
+                   certfile.c_str(), keyfile.c_str()));
   return true;
 }
 bool OpenSSLTLSContext::addP12CredentialFile(const std::string& p12file)

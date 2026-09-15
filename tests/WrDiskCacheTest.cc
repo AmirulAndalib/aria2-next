@@ -1,3 +1,7 @@
+#include "a2functional.h"
+#include <memory>
+#include <string>
+#include <utility>
 #include "WrDiskCache.h"
 
 #include <cstring>
@@ -11,26 +15,21 @@
 namespace aria2 {
 
 class WrDiskCacheTest {
-
-
+protected:
   std::shared_ptr<DirectDiskAdaptor> adaptor_;
   ByteArrayDiskWriter* writer_;
 
 public:
-  void setUp()
+  WrDiskCacheTest()
   {
     adaptor_ = std::make_shared<DirectDiskAdaptor>();
     auto dw = make_unique<ByteArrayDiskWriter>();
     writer_ = dw.get();
     adaptor_->setDiskWriter(std::move(dw));
   }
-
-  void testAdd();
 };
 
-A2_TEST(WrDiskCacheTest, testAdd)
-
-void WrDiskCacheTest::testAdd()
+TEST_CASE_FIXTURE(WrDiskCacheTest, "WrDiskCacheTest.testAdd")
 {
   WrDiskCache dc(20);
   REQUIRE_EQ((size_t)0, dc.getSize());
@@ -56,17 +55,15 @@ void WrDiskCacheTest::testAdd()
   REQUIRE(dc.update(&e3, 6));
 
   // e3 is flushed to the disk
-  REQUIRE_EQ(std::string("who knows?hello world"),
-                       writer_->getString());
+  REQUIRE_EQ(std::string("who knows?hello world"), writer_->getString());
   REQUIRE_EQ((size_t)0, e3.getSize());
   REQUIRE_EQ((size_t)10, dc.getSize());
 
   e2.cacheData(createDataCell(31, "01234567890"));
   REQUIRE(dc.update(&e2, 11));
   // e2 is flushed to the disk
-  REQUIRE_EQ(
-      std::string("who knows?hello worldseconddata01234567890"),
-      writer_->getString());
+  REQUIRE_EQ(std::string("who knows?hello worldseconddata01234567890"),
+             writer_->getString());
   REQUIRE_EQ((size_t)0, e2.getSize());
   REQUIRE_EQ((size_t)0, dc.getSize());
 }

@@ -11,6 +11,10 @@
  */
 /* copyright --> */
 #include "StreamStore.h"
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <string>
 
 #include <sqlite3.h>
 
@@ -71,8 +75,7 @@ bool bindInt64(sqlite3_stmt* statement, int index, int64_t value)
   const auto result = sqlite3_bind_int64(statement, index, value);
   if (result != SQLITE_OK) {
     A2_LOG_ERROR(fmt(
-        "component=storage store=stream event=sqlite_failed index=%d %s",
-        index,
+        "component=storage store=stream event=sqlite_failed index=%d %s", index,
         sqlite::diagnostic(sqlite3_db_handle(statement), result, "bind_int64")
             .c_str()));
   }
@@ -100,8 +103,7 @@ std::string textColumn(sqlite3_stmt* statement, int index)
                            : std::string();
 }
 
-std::string encodeRanges(
-    const std::vector<std::pair<int64_t, int64_t>>& ranges)
+std::string encodeRanges(const std::vector<std::pair<int64_t, int64_t>>& ranges)
 {
   std::string result;
   for (const auto& range : ranges) {
@@ -128,8 +130,8 @@ bool decodeRanges(std::vector<std::pair<int64_t, int64_t>>& ranges,
     }
     try {
       const auto first = std::stoll(value.substr(offset, separator - offset));
-      const auto last = std::stoll(
-          value.substr(separator + 1, end - separator - 1));
+      const auto last =
+          std::stoll(value.substr(separator + 1, end - separator - 1));
       if (first < 0 || last <= first ||
           (!ranges.empty() && ranges.back().second > first)) {
         return false;
@@ -179,9 +181,9 @@ bool StreamStore::open()
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
       nullptr);
   if (openResult != SQLITE_OK) {
-    A2_LOG_ERROR(
-        fmt("component=storage store=stream event=sqlite_failed path=%s %s",
-            path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
+    A2_LOG_ERROR(fmt(
+        "component=storage store=stream event=sqlite_failed path=%s %s",
+        path_.c_str(), sqlite::diagnostic(db_, openResult, "open").c_str()));
     if (db_) {
       sqlite3_close_v2(db_);
       db_ = nullptr;

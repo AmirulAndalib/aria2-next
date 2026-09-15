@@ -33,6 +33,17 @@
  */
 /* copyright --> */
 #include "ConsoleStatCalc.h"
+#include "GroupId.h"
+#include "TransferStat.h"
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 
 #ifdef HAVE_TERMIOS_H
 #  include <termios.h>
@@ -56,11 +67,14 @@
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "RequestGroup.h"
+#include "media/MediaDownload.h"
 #include "FileAllocationMan.h"
 #include "FileAllocationEntry.h"
 #include "CheckIntegrityMan.h"
 #include "CheckIntegrityEntry.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "a2functional.h"
 #include "DownloadContext.h"
 #include "wallclock.h"
 #include "FileEntry.h"
@@ -134,9 +148,14 @@ void appendProgressBar(ColorizedStream& o, int64_t completed, int64_t total,
   if (utf8Console()) {
     // U+2588 FULL BLOCK, U+2589..U+258F partial left blocks, U+2591 LIGHT
     // SHADE for the unfilled remainder.
-    static const char* const partial[] = {
-        "",             "\xE2\x96\x8F", "\xE2\x96\x8E", "\xE2\x96\x8D",
-        "\xE2\x96\x8C", "\xE2\x96\x8B", "\xE2\x96\x8A", "\xE2\x96\x89"};
+    static const char* const partial[] = {"",
+                                          "\xE2\x96\x8F",
+                                          "\xE2\x96\x8E",
+                                          "\xE2\x96\x8D",
+                                          "\xE2\x96\x8C",
+                                          "\xE2\x96\x8B",
+                                          "\xE2\x96\x8A",
+                                          "\xE2\x96\x89"};
     const double cells = frac * width;
     size_t full = static_cast<size_t>(cells);
     const int eighth =
@@ -180,6 +199,17 @@ void printSizeProgress(ColorizedStream& o,
                        const TransferStat& stat,
                        const SizeFormatter& sizeFormatter, bool withPercent)
 {
+  if (rg->getMediaDownload()) {
+    const auto& media = rg->getMediaDownload()->snapshot();
+    o << media.state << " " << media.completedDuration / 1000 << "s";
+    if (!media.live && media.duration > 0) {
+      o << "/" << media.duration / 1000 << "s";
+      if (withPercent)
+        o << "(" << static_cast<int>(100 * media.progress()) << "%)";
+    }
+    o << " " << sizeFormatter(media.downloadedLength) << "B";
+    return;
+  }
 #ifdef ENABLE_BITTORRENT
   if (rg->isSeeder()) {
     o << "SEED(";
@@ -255,13 +285,16 @@ void printProgress(ColorizedStream& o, const std::shared_ptr<RequestGroup>& rg,
   }
   o << colors::magenta << "[" << colors::clear << "#"
     << GroupId::toAbbrevHex(rg->getGID()) << " ";
-  const bool showBar =
-      barWidth > 0 && rg->getTotalLength() > 0 && !rg->isSeeder();
+  const auto* media =
+      rg->getMediaDownload() ? &rg->getMediaDownload()->snapshot() : nullptr;
+  const auto total =
+      media ? (media->live ? 0 : media->duration) : rg->getTotalLength();
+  const auto completed = media ? static_cast<int64_t>(media->progress() * total)
+                               : rg->getCompletedLength();
+  const bool showBar = barWidth > 0 && total > 0 && !rg->isSeeder();
   if (showBar) {
-    appendProgressBar(o, rg->getCompletedLength(), rg->getTotalLength(),
-                      barWidth);
-    std::string pct =
-        util::itos(100 * rg->getCompletedLength() / rg->getTotalLength());
+    appendProgressBar(o, completed, total, barWidth);
+    std::string pct = util::itos(100 * completed / total);
     if (pct.size() < 3) {
       pct.insert(0, 3 - pct.size(), ' ');
     }

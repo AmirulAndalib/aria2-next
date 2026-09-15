@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import random
 import shutil
 import socket
 import subprocess
@@ -68,25 +69,19 @@ def wait_for_port(port: int, timeout: float = 15.0) -> None:
 
 
 def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
     with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 def create_payload(path: Path, size: int) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
-    seed = hashlib.sha256(b"aria2-next-transfer-validation").digest()
+    generator = random.Random("aria2-next-transfer-validation")
     remaining = size
-    counter = 0
     with path.open("wb") as output:
         while remaining:
-            block = hashlib.sha256(seed + counter.to_bytes(8, "big")).digest()
-            count = min(remaining, len(block))
-            output.write(block[:count])
+            count = min(remaining, 1024 * 1024)
+            output.write(generator.randbytes(count))
             remaining -= count
-            counter += 1
     return sha256(path)
 
 

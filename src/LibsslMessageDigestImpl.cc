@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 
+#include "a2functional.h"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <memory>
 #include "MessageDigestImpl.h"
 
 #include <openssl/evp.h>

@@ -11,6 +11,13 @@
  */
 /* copyright --> */
 #include "ed2k_search.h"
+#include "ed2k_kad_search.h"
+#include "ed2k_packet.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 #include <limits>
@@ -19,7 +26,8 @@
 #include "ed2k_endpoint.h"
 #include "ed2k_hash.h"
 #include "ed2k_link.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
 
 namespace aria2 {
 
@@ -169,10 +177,8 @@ bool parseSearchResultPayload(SearchResult& result, const std::string& payload,
     }
     SearchResultEntry entry;
     entry.hash = readBytes(payload, offset, HASH_LENGTH);
-    const auto clientId =
-        readUInt32(readBytes(payload, offset, 4).data());
-    const auto clientPort =
-        readUInt16(readBytes(payload, offset, 2).data());
+    const auto clientId = readUInt32(readBytes(payload, offset, 4).data());
+    const auto clientPort = readUInt16(readBytes(payload, offset, 2).data());
     if (clientId > 0x00ffffffu && clientPort != 0) {
       Endpoint source;
       source.host = ipv4FromEndpoint(clientId);
@@ -328,9 +334,9 @@ std::string createSearchRequestPayload(const SearchQuery& query,
   return payload;
 }
 
-std::vector<SearchResultEntry> kadSearchEntriesToSearchResults(
-    const std::vector<KadSearchEntry>& entries,
-    const std::string& sourceNetwork)
+std::vector<SearchResultEntry>
+kadSearchEntriesToSearchResults(const std::vector<KadSearchEntry>& entries,
+                                const std::string& sourceNetwork)
 {
   std::vector<SearchResultEntry> results;
   results.reserve(entries.size());

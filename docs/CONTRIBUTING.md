@@ -36,7 +36,25 @@ Keep changes focused. Avoid unrelated refactors, formatting churn, or compatibil
 
 The maintained build system is CMake. Do not restore Autotools files or add another maintained build system. Keep top-level `CMakeLists.txt` small and put build logic in focused modules under `cmake/modules/`.
 
-Follow the existing C and C++ style. Keep C++ at the repository's C++11 baseline unless the project intentionally raises it. Use existing helpers and config-header patterns before adding new abstractions.
+Follow the existing C and C++ style. Keep C++ at the repository's C++17 baseline unless the project intentionally raises it. Use existing helpers and config-header patterns before adding new abstractions.
+
+Use the [ownership map](architecture.md) when placing new behavior. A function
+should perform one logical operation; a file should have a coherent reason to
+change. Length is a review signal, not a quota: split mixed responsibilities,
+but keep related declarations, option tables and protocol cases together when
+that makes them easier to inspect. Do not add indirection merely to shorten a
+file.
+
+Prefer native library APIs and RAII for resource ownership. Include the headers
+that declare the types and functions a translation unit uses. Remove obsolete
+wrappers and declarations when their last caller disappears.
+
+Write comments in English. Explain units, ownership, pointer lifetimes, thread
+boundaries and the reason for a non-obvious constraint. Document contracts at
+their declarations; keep protocol rationale next to the implementation. Avoid
+comments that merely repeat the next statement or retain abandoned designs.
+These principles follow the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
+and [Google's function guidance](https://google.github.io/styleguide/cppguide.html#Write_Short_Functions).
 
 Files under `third_party/` keep their upstream ownership. Edit them only for build integration, security fixes, or compatibility fixes that cannot reasonably wait for upstream.
 

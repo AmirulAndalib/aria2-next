@@ -73,6 +73,9 @@ typedef IndexedList<a2_gid_t, std::shared_ptr<RequestGroup>> RequestGroupList;
 typedef IndexedList<a2_gid_t, std::shared_ptr<DownloadResult>>
     DownloadResultList;
 
+// Owns active/waiting tasks, retained results and shared protocol state on the
+// engine thread. Stop processing persists payload/state before releasing a
+// task's runtime resources or publishing its completion event.
 class RequestGroupMan {
 private:
   RequestGroupList requestGroups_;
@@ -153,11 +156,14 @@ private:
       const char* status,
       const std::shared_ptr<DownloadResult>& downloadResult) const;
 
-  void addRequestGroupIndex(const std::shared_ptr<RequestGroup>& group);
-  void addRequestGroupIndex(
-      const std::vector<std::shared_ptr<RequestGroup>>& groups);
-
   int optimizeConcurrentDownloads();
+  void appendReservedGroups(
+      const std::vector<std::shared_ptr<RequestGroup>>& groups);
+  bool activateGroup(const std::shared_ptr<RequestGroup>& group,
+                     DownloadEngine* engine);
+  bool processStoppedGroup(const std::shared_ptr<RequestGroup>& group,
+                           DownloadEngine* engine);
+  void finishStoppedFiles(const std::shared_ptr<RequestGroup>& group);
 
 public:
   RequestGroupMan(std::vector<std::shared_ptr<RequestGroup>> requestGroups,
@@ -181,9 +187,6 @@ public:
 
   void reduceActiveDownloadsToLimit(DownloadEngine* e);
 
-  // Note that this method does not call addRequestGroupIndex(). This
-  // method should be considered as private, but exposed for unit
-  // testing purpose.
   void addRequestGroup(const std::shared_ptr<RequestGroup>& group);
 
   void
@@ -276,6 +279,9 @@ public:
   // Removes download result of given gid. Returns true if download
   // result was removed. Otherwise returns false.
   bool removeDownloadResult(a2_gid_t gid);
+
+  // Requeue a failed presentation without relinquishing its recovery identity.
+  void retryMedia(a2_gid_t gid, const Option* changes = nullptr);
 
   void addDownloadResult(const std::shared_ptr<DownloadResult>& downloadResult);
 

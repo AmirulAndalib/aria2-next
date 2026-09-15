@@ -1,4 +1,14 @@
 {
+  "sftpgo": {
+    "version": "2.7.5",
+    "platforms": {
+      "windows-amd64": {
+        "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.5/sftpgo_v2.7.5_windows_portable.zip",
+        "sha256": "75d803598d2c714e3262847ee87a1ea48e4dcddbbd5690b0ef88adea84478838",
+        "filename": "sftpgo_v2.7.5_windows_portable.zip"
+      }
+    }
+  },
   "wiremock": {
     "version": "3.13.2",
     "url": "https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.13.2/wiremock-standalone-3.13.2.jar",

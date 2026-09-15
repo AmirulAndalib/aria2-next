@@ -1,18 +1,17 @@
 .. default-domain:: cpp
 .. highlight:: cpp
 
-libaria2: C++ library interface to aria2
-========================================
+libaria2: C++ library interface to Aria2 Next
+=============================================
 
 .. Warning::
 
   The API has not been frozen yet. It will be changed on the course of
   the development.
 
-The libaria2 is a C++ library and offers the core functionality of
-aria2. The library takes care of all networking and downloading stuff,
-so its usage is very straight forward right now. See the following
-Tutorial section to see how to use API.
+libaria2 exposes the core functionality of Aria2 Next through a C++ API.
+The library owns networking and download processing. The tutorial below
+shows session initialization, event handling and cleanup.
 
 Tutorial
 --------
@@ -28,11 +27,10 @@ them in parallel. The usage is::
 
       Download given URIs in parallel in the current directory.
 
-The source code uses C++11 features, so C++11 enabled compiler is
-required. GCC 4.7 works well here.
+The maintained engine builds with C++17. Compile the example with the same
+toolchain and C++ runtime as the library.
 
-OK, let's look into the source code. First, include aria2.h header
-file::
+First, include the public header::
 
     #include <aria2/aria2.h>
 
@@ -41,7 +39,7 @@ arguments, we initialize libaria2::
 
     aria2::libraryInit();
 
-And create aria2 session object::
+And create Aria2 Next session object::
 
     aria2::Session* session;
     // Create default configuration. The libaria2 takes care of signal
@@ -51,10 +49,10 @@ And create aria2 session object::
     config.downloadEventCallback = downloadEventCallback;
     session = aria2::sessionNew(aria2::KeyVals(), config);
 
-:type:`Session` ``session`` is an aria2 session object. You need this
+:type:`Session` ``session`` is an Aria2 Next session object. You need this
 object through out the download process. Please keep in mind that only
 one :type:`Session` object can be allowed per process due to the heavy
-use of static objects in aria2 code base.  :type:`Session` object is
+use of static objects in Aria2 Next code base.  :type:`Session` object is
 not safe for concurrent accesses from multiple threads.  It must be
 used from one thread at a time.  In general, libaria2 is not entirely
 thread-safe.  :type:`SessionConfig` ``config`` holds configuration for
@@ -94,7 +92,7 @@ it, so it is ``nullptr``.
 
 The first argument to :func:`sessionNew()` is ``aria2::KeyVals()``.
 This type is used in API to specify vector of key/value pairs, mostly
-representing aria2 options. For example, specify an option
+representing Aria2 Next options. For example, specify an option
 ``file-allocation`` to ``none``::
 
     aria2::KeyVals options;

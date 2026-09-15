@@ -11,6 +11,11 @@
  */
 /* copyright --> */
 #include "Ed2kUploadQueue.h"
+#include "ed2k_link.h"
+#include <cstdint>
+#include <iterator>
+#include <string>
+#include <vector>
 
 #include <algorithm>
 #include <cerrno>
@@ -18,7 +23,9 @@
 #include <cstdlib>
 #include "RequestGroupMan.h"
 #include "ed2k_hash.h"
-#include "util.h"
+#include "support/Text.h"
+#include "support/Numbers.h"
+#include "support/Encoding.h"
 
 namespace aria2 {
 
@@ -50,10 +57,9 @@ PeerCreditState* PeerCreditStore::getOrCreate(const std::string& userHash)
   if (userHash.size() != HASH_LENGTH) {
     return nullptr;
   }
-  auto i = std::find_if(credits_.begin(), credits_.end(),
-                        [&](const PeerCreditState& state) {
-                          return state.userHash == userHash;
-                        });
+  auto i = std::find_if(
+      credits_.begin(), credits_.end(),
+      [&](const PeerCreditState& state) { return state.userHash == userHash; });
   if (i != credits_.end()) {
     return &*i;
   }
@@ -125,23 +131,23 @@ UploadQueue::UploadQueue(size_t maxSlots)
 
 UploadPeer* UploadQueue::findPeer(const Endpoint& endpoint)
 {
-  auto i = std::find_if(peers_.begin(), peers_.end(),
-                        [&](const UploadPeer& peer) {
-                          return sameEndpoint(peer.endpoint, endpoint);
-                        });
+  auto i =
+      std::find_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return sameEndpoint(peer.endpoint, endpoint);
+      });
   return i == peers_.end() ? nullptr : &*i;
 }
 
-const UploadPeer* UploadQueue::findPeerByUserHash(
-    const std::string& userHash) const
+const UploadPeer*
+UploadQueue::findPeerByUserHash(const std::string& userHash) const
 {
   if (userHash.size() != HASH_LENGTH) {
     return nullptr;
   }
-  auto i = std::find_if(peers_.begin(), peers_.end(),
-                        [&](const UploadPeer& peer) {
-                          return peer.userHash == userHash;
-                        });
+  auto i =
+      std::find_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return peer.userHash == userHash;
+      });
   return i == peers_.end() ? nullptr : &*i;
 }
 
@@ -204,28 +210,28 @@ bool UploadQueue::requestUpload(const Endpoint& endpoint,
 
 bool UploadQueue::isUploading(const Endpoint& endpoint) const
 {
-  auto i = std::find_if(peers_.begin(), peers_.end(),
-                        [&](const UploadPeer& peer) {
-                          return sameEndpoint(peer.endpoint, endpoint);
-                        });
+  auto i =
+      std::find_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return sameEndpoint(peer.endpoint, endpoint);
+      });
   return i != peers_.end() && i->uploading;
 }
 
 uint16_t UploadQueue::queueRank(const Endpoint& endpoint) const
 {
-  auto i = std::find_if(peers_.begin(), peers_.end(),
-                        [&](const UploadPeer& peer) {
-                          return sameEndpoint(peer.endpoint, endpoint);
-                        });
+  auto i =
+      std::find_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return sameEndpoint(peer.endpoint, endpoint);
+      });
   return i == peers_.end() ? 0 : i->rank;
 }
 
 bool UploadQueue::remove(const Endpoint& endpoint)
 {
-  auto i = std::find_if(peers_.begin(), peers_.end(),
-                        [&](const UploadPeer& peer) {
-                          return sameEndpoint(peer.endpoint, endpoint);
-                        });
+  auto i =
+      std::find_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
+        return sameEndpoint(peer.endpoint, endpoint);
+      });
   if (i == peers_.end()) {
     return false;
   }
@@ -284,12 +290,14 @@ size_t UploadQueue::maintain(int64_t now, RequestGroupMan* rgman)
     ++changed;
   }
   const auto oldSize = peers_.size();
-  peers_.erase(
-      std::remove_if(peers_.begin(), peers_.end(), [&](const UploadPeer& peer) {
-        return !peer.uploading && !peer.connected && peer.lastRequestTime != 0 &&
-               now - peer.lastRequestTime >= WAITING_PEER_RETENTION_SECONDS;
-      }),
-      peers_.end());
+  peers_.erase(std::remove_if(peers_.begin(), peers_.end(),
+                              [&](const UploadPeer& peer) {
+                                return !peer.uploading && !peer.connected &&
+                                       peer.lastRequestTime != 0 &&
+                                       now - peer.lastRequestTime >=
+                                           WAITING_PEER_RETENTION_SECONDS;
+                              }),
+               peers_.end());
   changed += oldSize - peers_.size();
   sortWaiting();
   for (auto& peer : peers_) {
@@ -310,16 +318,16 @@ size_t UploadQueue::maintain(int64_t now, RequestGroupMan* rgman)
 
 size_t UploadQueue::uploadingCount() const
 {
-  return static_cast<size_t>(std::count_if(
-      peers_.begin(), peers_.end(),
-      [](const UploadPeer& peer) { return peer.uploading; }));
+  return static_cast<size_t>(
+      std::count_if(peers_.begin(), peers_.end(),
+                    [](const UploadPeer& peer) { return peer.uploading; }));
 }
 
 size_t UploadQueue::waitingCount() const
 {
-  return static_cast<size_t>(std::count_if(
-      peers_.begin(), peers_.end(),
-      [](const UploadPeer& peer) { return !peer.uploading; }));
+  return static_cast<size_t>(
+      std::count_if(peers_.begin(), peers_.end(),
+                    [](const UploadPeer& peer) { return !peer.uploading; }));
 }
 
 void UploadQueue::sortWaiting()

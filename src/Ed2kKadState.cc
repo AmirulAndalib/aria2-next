@@ -11,12 +11,19 @@
  */
 /* copyright --> */
 #include "Ed2kKadState.h"
+#include "ed2k_hash.h"
+#include "ed2k_kad.h"
+#include "ed2k_kad_search.h"
+#include "ed2k_link.h"
+#include "ed2k_packet.h"
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
-#include <limits>
 
 #include "DlAbortEx.h"
-#include "fmt.h"
 
 namespace aria2 {
 
@@ -75,10 +82,8 @@ int distanceCompare(const std::string& lhs, const std::string& rhs,
   validateId(rhs);
   validateId(target);
   for (size_t i = 0; i < HASH_LENGTH; i += 4) {
-    const auto ld = readUInt32(lhs.data() + i) ^
-                    readUInt32(target.data() + i);
-    const auto rd = readUInt32(rhs.data() + i) ^
-                    readUInt32(target.data() + i);
+    const auto ld = readUInt32(lhs.data() + i) ^ readUInt32(target.data() + i);
+    const auto rd = readUInt32(rhs.data() + i) ^ readUInt32(target.data() + i);
     if (ld < rd) {
       return -1;
     }
@@ -89,8 +94,8 @@ int distanceCompare(const std::string& lhs, const std::string& rhs,
   return 0;
 }
 
-std::vector<KadRoutingNode>::iterator findNode(
-    std::vector<KadRoutingNode>& nodes, const KadContact& contact)
+std::vector<KadRoutingNode>::iterator
+findNode(std::vector<KadRoutingNode>& nodes, const KadContact& contact)
 {
   return std::find_if(nodes.begin(), nodes.end(),
                       [&](const KadRoutingNode& node) {
@@ -98,8 +103,8 @@ std::vector<KadRoutingNode>::iterator findNode(
                       });
 }
 
-std::vector<KadRoutingNode>::const_iterator findNode(
-    const std::vector<KadRoutingNode>& nodes, const KadContact& contact)
+std::vector<KadRoutingNode>::const_iterator
+findNode(const std::vector<KadRoutingNode>& nodes, const KadContact& contact)
 {
   return std::find_if(nodes.begin(), nodes.end(),
                       [&](const KadRoutingNode& node) {
@@ -218,8 +223,9 @@ void KadRoutingTable::nodeFailed(const KadContact& contact)
   }
 }
 
-std::vector<KadContact> KadRoutingTable::findClosest(
-    const std::string& targetId, size_t limit, bool includeUnconfirmed) const
+std::vector<KadContact>
+KadRoutingTable::findClosest(const std::string& targetId, size_t limit,
+                             bool includeUnconfirmed) const
 {
   return findClosestExcluding(targetId, std::string(), limit,
                               includeUnconfirmed);
@@ -244,8 +250,8 @@ std::vector<KadContact> KadRoutingTable::findClosestExcluding(
   }
   std::sort(nodes.begin(), nodes.end(),
             [&](const KadRoutingNode& lhs, const KadRoutingNode& rhs) {
-              return distanceCompare(lhs.contact.id, rhs.contact.id,
-                                     targetId) < 0;
+              return distanceCompare(lhs.contact.id, rhs.contact.id, targetId) <
+                     0;
             });
   if (limit > 0 && nodes.size() > limit) {
     nodes.resize(limit);
@@ -298,8 +304,8 @@ bool KadRoutingTable::needRefresh(std::string& targetId, int64_t now)
   const auto chunkIndex = index / 32;
   const auto bitIndex = index % 32;
   const auto offset = chunkIndex * 4;
-  const auto value = readUInt32(targetId.data() + offset) ^
-                     (0x80000000u >> bitIndex);
+  const auto value =
+      readUInt32(targetId.data() + offset) ^ (0x80000000u >> bitIndex);
   targetId.replace(offset, 4, packUInt32(value));
   return true;
 }
@@ -326,12 +332,11 @@ void KadRoutingTable::addRouterNode(const KadContact& contact)
   endpoint.host = contact.host;
   endpoint.port = contact.udpPort;
   addRouterNode(endpoint);
-  auto existing =
-      std::find_if(routerContacts_.begin(), routerContacts_.end(),
-                   [&](const KadContact& item) {
-                     return sameContact(item, contact) ||
-                            sameEndpoint(item, contact);
-                   });
+  auto existing = std::find_if(routerContacts_.begin(), routerContacts_.end(),
+                               [&](const KadContact& item) {
+                                 return sameContact(item, contact) ||
+                                        sameEndpoint(item, contact);
+                               });
   if (existing == routerContacts_.end()) {
     routerContacts_.push_back(contact);
     return;
@@ -368,12 +373,11 @@ bool KadRoutingTable::findByEndpoint(KadContact& contact,
       }
     }
   }
-  auto router =
-      std::find_if(routerContacts_.begin(), routerContacts_.end(),
-                   [&](const KadContact& item) {
-                     return item.host == endpoint.host &&
-                            item.udpPort == endpoint.port;
-                   });
+  auto router = std::find_if(routerContacts_.begin(), routerContacts_.end(),
+                             [&](const KadContact& item) {
+                               return item.host == endpoint.host &&
+                                      item.udpPort == endpoint.port;
+                             });
   if (router == routerContacts_.end()) {
     return false;
   }
@@ -446,8 +450,8 @@ size_t KadRoutingTable::bucketIndex(const std::string& id) const
   validateId(id);
   for (size_t chunk = 0; chunk < HASH_LENGTH / 4; ++chunk) {
     const auto offset = chunk * 4;
-    const auto x = readUInt32(selfId_.data() + offset) ^
-                   readUInt32(id.data() + offset);
+    const auto x =
+        readUInt32(selfId_.data() + offset) ^ readUInt32(id.data() + offset);
     if (x == 0) {
       continue;
     }
@@ -475,8 +479,8 @@ KadTraversal::KadTraversal(KadTraversalKind kind, std::string targetId,
   validateId(targetId_);
 }
 
-std::vector<KadTraversalAction> KadTraversal::start(
-    const std::vector<KadContact>& seeds)
+std::vector<KadTraversalAction>
+KadTraversal::start(const std::vector<KadContact>& seeds)
 {
   for (const auto& seed : seeds) {
     addContact(seed);
@@ -484,8 +488,9 @@ std::vector<KadTraversalAction> KadTraversal::start(
   return nextActions();
 }
 
-std::vector<KadTraversalAction> KadTraversal::onResponse(
-    const KadContact& contact, const std::vector<KadContact>& closer)
+std::vector<KadTraversalAction>
+KadTraversal::onResponse(const KadContact& contact,
+                         const std::vector<KadContact>& closer)
 {
   for (auto& observer : observers_) {
     if (sameContact(observer.contact, contact) ||
@@ -505,8 +510,8 @@ std::vector<KadTraversalAction> KadTraversal::onResponse(
   return nextActions();
 }
 
-std::vector<KadTraversalAction> KadTraversal::onFailure(
-    const KadContact& contact)
+std::vector<KadTraversalAction>
+KadTraversal::onFailure(const KadContact& contact)
 {
   for (auto& observer : observers_) {
     if (sameContact(observer.contact, contact) ||
@@ -723,10 +728,9 @@ void KadSourceIndex::store(const std::string& fileId,
 {
   validateId(fileId);
   validateId(source.id);
-  auto bucket = std::find_if(buckets_.begin(), buckets_.end(),
-                             [&](const Bucket& item) {
-                               return item.fileId == fileId;
-                             });
+  auto bucket =
+      std::find_if(buckets_.begin(), buckets_.end(),
+                   [&](const Bucket& item) { return item.fileId == fileId; });
   if (bucket == buckets_.end()) {
     Bucket item;
     item.fileId = fileId;
@@ -751,16 +755,15 @@ std::vector<KadSearchEntry> KadSourceIndex::find(const std::string& fileId,
                                                  size_t limit) const
 {
   validateId(fileId);
-  auto bucket = std::find_if(buckets_.begin(), buckets_.end(),
-                             [&](const Bucket& item) {
-                               return item.fileId == fileId;
-                             });
+  auto bucket =
+      std::find_if(buckets_.begin(), buckets_.end(),
+                   [&](const Bucket& item) { return item.fileId == fileId; });
   if (bucket == buckets_.end() || startPosition >= bucket->sources.size()) {
     return std::vector<KadSearchEntry>();
   }
-  const auto end = limit == 0
-                       ? bucket->sources.size()
-                       : std::min(bucket->sources.size(), startPosition + limit);
+  const auto end =
+      limit == 0 ? bucket->sources.size()
+                 : std::min(bucket->sources.size(), startPosition + limit);
   return std::vector<KadSearchEntry>(bucket->sources.begin() + startPosition,
                                      bucket->sources.begin() + end);
 }

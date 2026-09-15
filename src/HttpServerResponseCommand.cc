@@ -33,6 +33,10 @@
  */
 /* copyright --> */
 #include "HttpServerResponseCommand.h"
+#include "AbstractHttpServerResponseCommand.h"
+#include "Command.h"
+#include "a2functional.h"
+#include <memory>
 #include "DownloadEngine.h"
 #include "HttpServer.h"
 #include "HttpServerCommand.h"

@@ -34,12 +34,23 @@
 /* copyright --> */
 
 #include "GZipFile.h"
+#include <cstdarg>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <stdio.h>
+#include <zlib.h>
+#ifdef _WIN32
+#  include <io.h>
+#endif
 
 #include <algorithm>
 #include <limits>
 
 #include "a2io.h"
-#include "util.h"
+#include "platform/NativeText.h"
+#include "a2functional.h"
 
 namespace aria2 {
 

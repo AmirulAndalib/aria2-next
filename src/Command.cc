@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "Command.h"
-#include "Log.h"
 
 namespace aria2 {
 

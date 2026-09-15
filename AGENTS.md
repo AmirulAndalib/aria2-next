@@ -181,11 +181,24 @@ tools/build_test.sh
 
 Do not hide new test failures with `|| true`. Existing tolerated diagnostics must stay limited to non-gating inspection commands unless the maintainer explicitly accepts the risk.
 
+Keep tests for public contracts, protocol boundaries, ownership, data integrity, and recovery. Organize them by behavior using native doctest fixtures; remove redundant or obsolete helpers without weakening coverage. Never delete assertions to make a failure disappear. See [tests/README.md](tests/README.md).
+
+Run affected `tools/transfer_validation` modules when transfer behavior changes. Report the actual validation scope and unresolved failures; a successful rerun alone does not establish a root-cause fix.
+
 ## Source Conventions
 
 Follow the existing C and C++ style. Keep C++ at the repository's C++17 baseline unless the project intentionally raises the baseline. Avoid drive-by rewrites and broad formatting churn.
 
 Prefer accurate CMake detection and existing config-header patterns over scattered compatibility macros. Add helpers only when they remove real duplication or contain platform-specific behavior cleanly.
+
+- **Readable responsibilities:** A function performs one logical operation; a file groups related behavior. Follow the [ownership map](docs/architecture.md). Split mixed responsibilities, not cohesive code merely to reduce line counts.
+- **Review signals:** Consider reviewing functions above roughly 40 lines, files above 800 lines, or nesting beyond three levels. These are project heuristics, not limits. Tables, protocol dispatch, and related test cases may reasonably be longer; do not add indirection to meet a metric.
+- **Native APIs first:** Prefer the standard library, OS APIs, and the existing libcurl, libtorrent, GPAC, FFmpeg, and SQLite integrations. Add abstractions only for demonstrated reuse or clearer ownership; avoid speculative frameworks and provider-specific workarounds for general protocol behavior.
+- **Explicit ownership and dependencies:** Use RAII and make resource lifetimes, thread boundaries, and persistence ordering clear. Include required headers directly. Review analyzer suggestions and preserve feature guards, complete-type requirements, and native C linkage.
+- **Complete cleanup:** When replacing an implementation, remove confirmed unused code, declarations, includes, and test helpers. Update CMake source inventories and relevant documentation in the same change; preserve public contracts unless explicitly authorized otherwise.
+- **English comments:** Explain non-obvious reasons, invariants, units, ownership, and lifetime constraints. Keep contracts near declarations and protocol rationale near implementation. Remove stale commentary; do not narrate obvious statements.
+
+Further guidance: [Contributing](docs/CONTRIBUTING.md), [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines), and [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html). Adapt their principles to this repository rather than importing unrelated policies.
 
 Changes under `third_party/` must preserve third-party ownership. Limit edits there to build integration, security fixes, or compatibility fixes that cannot reasonably wait for upstream.
 

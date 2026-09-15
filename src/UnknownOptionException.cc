@@ -33,6 +33,12 @@
  */
 /* copyright --> */
 #include "UnknownOptionException.h"
+#include "Exception.h"
+#include "RecoverableException.h"
+#include "common.h"
+#include "error_code.h"
+#include <memory>
+#include <string>
 #include "fmt.h"
 
 namespace aria2 {

@@ -33,11 +33,16 @@
  */
 /* copyright --> */
 #include "DownloadHandler.h"
+#include <memory>
+#include <utility>
 #include "RequestGroup.h"
 #include "RequestGroupCriteria.h"
 #include "DownloadContext.h"
 
 namespace aria2 {
+
+DownloadHandler::DownloadHandler() = default;
+DownloadHandler::~DownloadHandler() = default;
 
 bool DownloadHandler::canHandle(const RequestGroup* requestGroup) const
 {

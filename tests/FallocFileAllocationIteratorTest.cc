@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <ios>
+#include <string>
 #include "FallocFileAllocationIterator.h"
 
 #include <fstream>
@@ -9,19 +12,7 @@
 
 namespace aria2 {
 
-class FallocFileAllocationIteratorTest {
-
-
-private:
-public:
-  void setUp() {}
-
-  void testAllocate();
-};
-
-A2_TEST(FallocFileAllocationIteratorTest, testAllocate)
-
-void FallocFileAllocationIteratorTest::testAllocate()
+TEST_CASE("FallocFileAllocationIteratorTest.testAllocate")
 {
 // When fallocate is used, test fails if file system does not
 // support it. So skip it.

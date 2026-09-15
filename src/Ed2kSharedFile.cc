@@ -11,6 +11,10 @@
  */
 /* copyright --> */
 #include "Ed2kSharedFile.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include <algorithm>
 #include <limits>
@@ -55,9 +59,8 @@ bool appendAichHashForRange(std::string& recovery, const SharedSource& source,
 }
 
 bool appendAichLowestLevel(std::string& recovery, const SharedSource& source,
-                           int64_t nodeBegin, size_t nodeSize,
-                           size_t nodeBase, bool leftBranch,
-                           uint32_t ident, bool use32BitIdent)
+                           int64_t nodeBegin, size_t nodeSize, size_t nodeBase,
+                           bool leftBranch, uint32_t ident, bool use32BitIdent)
 {
   const auto nextIdent = (ident << 1) | (leftBranch ? 1 : 0);
   if (nodeSize <= nodeBase) {
@@ -69,12 +72,12 @@ bool appendAichLowestLevel(std::string& recovery, const SharedSource& source,
   const auto leftBlocks = (leftBranch ? nodeBlocks + 1 : nodeBlocks) / 2;
   const auto leftSize = std::min(nodeSize, leftBlocks * nodeBase);
   const auto rightSize = nodeSize - leftSize;
-  const auto leftBase =
-      leftSize <= static_cast<size_t>(PIECE_LENGTH) ? EMBLOCK_LENGTH
-                                                    : PIECE_LENGTH;
-  const auto rightBase =
-      rightSize <= static_cast<size_t>(PIECE_LENGTH) ? EMBLOCK_LENGTH
-                                                     : PIECE_LENGTH;
+  const auto leftBase = leftSize <= static_cast<size_t>(PIECE_LENGTH)
+                            ? EMBLOCK_LENGTH
+                            : PIECE_LENGTH;
+  const auto rightBase = rightSize <= static_cast<size_t>(PIECE_LENGTH)
+                             ? EMBLOCK_LENGTH
+                             : PIECE_LENGTH;
   return appendAichLowestLevel(recovery, source, nodeBegin, leftSize, leftBase,
                                true, nextIdent, use32BitIdent) &&
          appendAichLowestLevel(recovery, source, nodeBegin + leftSize,
@@ -83,10 +86,10 @@ bool appendAichLowestLevel(std::string& recovery, const SharedSource& source,
 }
 
 bool appendAichPartRecovery(std::string& recovery, const SharedSource& source,
-                            int64_t nodeBegin, size_t nodeSize,
-                            size_t nodeBase, bool leftBranch,
-                            int64_t targetBegin, size_t targetSize,
-                            uint32_t ident, bool use32BitIdent)
+                            int64_t nodeBegin, size_t nodeSize, size_t nodeBase,
+                            bool leftBranch, int64_t targetBegin,
+                            size_t targetSize, uint32_t ident,
+                            bool use32BitIdent)
 {
   if (targetBegin == nodeBegin && targetSize == nodeSize) {
     return appendAichLowestLevel(recovery, source, nodeBegin, nodeSize,
@@ -101,12 +104,12 @@ bool appendAichPartRecovery(std::string& recovery, const SharedSource& source,
   const auto leftBlocks = (leftBranch ? nodeBlocks + 1 : nodeBlocks) / 2;
   const auto leftSize = std::min(nodeSize, leftBlocks * nodeBase);
   const auto rightSize = nodeSize - leftSize;
-  const auto leftBase =
-      leftSize <= static_cast<size_t>(PIECE_LENGTH) ? EMBLOCK_LENGTH
-                                                    : PIECE_LENGTH;
-  const auto rightBase =
-      rightSize <= static_cast<size_t>(PIECE_LENGTH) ? EMBLOCK_LENGTH
-                                                     : PIECE_LENGTH;
+  const auto leftBase = leftSize <= static_cast<size_t>(PIECE_LENGTH)
+                            ? EMBLOCK_LENGTH
+                            : PIECE_LENGTH;
+  const auto rightBase = rightSize <= static_cast<size_t>(PIECE_LENGTH)
+                             ? EMBLOCK_LENGTH
+                             : PIECE_LENGTH;
   if (targetBegin < nodeBegin + static_cast<int64_t>(leftSize)) {
     if (targetBegin + static_cast<int64_t>(targetSize) >
         nodeBegin + static_cast<int64_t>(leftSize)) {
@@ -121,13 +124,13 @@ bool appendAichPartRecovery(std::string& recovery, const SharedSource& source,
                                   leftBase, true, targetBegin, targetSize,
                                   nextIdent, use32BitIdent);
   }
-  if (!appendAichHashForRange(recovery, source, (nextIdent << 1) | 1,
-                              nodeBegin, leftSize, use32BitIdent)) {
+  if (!appendAichHashForRange(recovery, source, (nextIdent << 1) | 1, nodeBegin,
+                              leftSize, use32BitIdent)) {
     return false;
   }
-  return appendAichPartRecovery(
-      recovery, source, nodeBegin + leftSize, rightSize, rightBase, false,
-      targetBegin, targetSize, nextIdent, use32BitIdent);
+  return appendAichPartRecovery(recovery, source, nodeBegin + leftSize,
+                                rightSize, rightBase, false, targetBegin,
+                                targetSize, nextIdent, use32BitIdent);
 }
 
 } // namespace
@@ -147,8 +150,8 @@ bool createSharedFileHashSetPayload(std::string& payload,
 {
   const auto expectedHashCount = hashSetPartCount(source.size());
   if (expectedHashCount == 0) {
-    payload = createHashSetAnswerPayload(source.hash(),
-                                         std::vector<std::string>());
+    payload =
+        createHashSetAnswerPayload(source.hash(), std::vector<std::string>());
     return true;
   }
   if (source.pieceHashes().size() != expectedHashCount) {
@@ -160,8 +163,7 @@ bool createSharedFileHashSetPayload(std::string& payload,
 
 bool createSharedFilePartPayload(std::string& payload,
                                  const SharedSource& source,
-                                 const PartRange& range,
-                                 bool use64BitOffsets)
+                                 const PartRange& range, bool use64BitOffsets)
 {
   std::string data;
   if (!source.readRange(data, range.begin, range.end)) {
@@ -203,13 +205,14 @@ bool createSharedFileAichAnswerPayload(std::string& payload,
   if (partSize <= EMBLOCK_LENGTH) {
     return false;
   }
-  const auto use32BitIdent = source.size() > std::numeric_limits<uint32_t>::max();
+  const auto use32BitIdent =
+      source.size() > std::numeric_limits<uint32_t>::max();
   const auto fileBase =
       source.size() <= PIECE_LENGTH ? EMBLOCK_LENGTH : PIECE_LENGTH;
   std::string recoveryHashes;
-  if (!appendAichPartRecovery(
-          recoveryHashes, source, 0, static_cast<size_t>(source.size()),
-          fileBase, true, partBegin, partSize, 0, use32BitIdent)) {
+  if (!appendAichPartRecovery(recoveryHashes, source, 0,
+                              static_cast<size_t>(source.size()), fileBase,
+                              true, partBegin, partSize, 0, use32BitIdent)) {
     return false;
   }
   const auto entrySize = AICH_HASH_LENGTH + (use32BitIdent ? 4 : 2);
@@ -232,18 +235,16 @@ bool createSharedFileAichAnswerPayload(std::string& payload,
   AichRecoveryData parsed;
   if (!parseAichRecoveryData(parsed, recovery, partSize, use32BitIdent) ||
       !verifyAichRecoveryData(parsed, rootHash,
-                              static_cast<size_t>(source.size()),
-                              partIndex)) {
+                              static_cast<size_t>(source.size()), partIndex)) {
     return false;
   }
-  payload = createAichAnswerPayload(source.hash(), partIndex, rootHash,
-                                    recovery);
+  payload =
+      createAichAnswerPayload(source.hash(), partIndex, rootHash, recovery);
   return true;
 }
 
 bool parsePartRequestPayload(std::vector<PartRange>& ranges,
-                             std::string& fileHash,
-                             const std::string& payload,
+                             std::string& fileHash, const std::string& payload,
                              bool use64BitOffsets)
 {
   const auto offsetSize = use64BitOffsets ? 8 : 4;

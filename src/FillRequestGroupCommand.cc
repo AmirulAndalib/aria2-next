@@ -33,14 +33,16 @@
  */
 /* copyright --> */
 #include "FillRequestGroupCommand.h"
+#include "Command.h"
+#include "a2functional.h"
+#include <chrono>
+#include <memory>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
 #include "RequestGroup.h"
 #include "RecoverableException.h"
 #include "message.h"
 #include "Log.h"
-#include "DownloadContext.h"
-#include "fmt.h"
 #include "wallclock.h"
 
 namespace aria2 {

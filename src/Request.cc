@@ -33,12 +33,15 @@
  */
 /* copyright --> */
 #include "Request.h"
+#include "uri_split.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 #include <cassert>
-#include <utility>
 
-#include "util.h"
-#include "fmt.h"
+#include "support/Text.h"
 #include "uri.h"
 #include "PeerStat.h"
 #include "wallclock.h"

@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "download_handlers.h"
+#include <memory>
 #include "DownloadHandlerConstants.h"
 #include "ContentTypeRequestGroupCriteria.h"
 #include "MemoryBufferPreDownloadHandler.h"

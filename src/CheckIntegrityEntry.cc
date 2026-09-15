@@ -32,15 +32,18 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
+#include "DiskAdaptor.h"
+#include "PieceStorage.h"
 #include "CheckIntegrityEntry.h"
+#include "RequestGroupEntry.h"
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 #include "IteratableValidator.h"
 #include "RequestGroup.h"
-#include "PieceStorage.h"
-#include "DiskAdaptor.h"
-#include "prefs.h"
 #include "FileAllocationEntry.h"
 #include "DownloadEngine.h"
-#include "Option.h"
 
 namespace aria2 {
 

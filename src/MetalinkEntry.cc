@@ -33,13 +33,18 @@
  */
 /* copyright --> */
 #include "MetalinkEntry.h"
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 
 #include "MetalinkResource.h"
 #include "MetalinkMetaurl.h"
 #include "FileEntry.h"
-#include "util.h"
 #include "a2functional.h"
 #include "Checksum.h"
 #include "ChunkChecksum.h"

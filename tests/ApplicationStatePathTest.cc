@@ -4,27 +4,18 @@
 
 #include "Option.h"
 #include "prefs.h"
-#include "util.h"
+#include "support/Text.h"
 
 namespace aria2 {
 
-class ApplicationStatePathTest {
-public:
-  void testDefaultDirectory();
-  void testProtocolPaths();
-};
-
-A2_TEST(ApplicationStatePathTest, testDefaultDirectory)
-A2_TEST(ApplicationStatePathTest, testProtocolPaths)
-
-void ApplicationStatePathTest::testDefaultDirectory()
+TEST_CASE("ApplicationStatePathTest.testDefaultDirectory")
 {
   const auto path = state::defaultDirectory();
   REQUIRE(!path.empty());
   REQUIRE(util::endsWith(path, "/aria2-next"));
 }
 
-void ApplicationStatePathTest::testProtocolPaths()
+TEST_CASE("ApplicationStatePathTest.testProtocolPaths")
 {
   Option option;
   option.put(PREF_STATE_DIR, "/var/lib/aria2-next");

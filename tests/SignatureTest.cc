@@ -1,28 +1,15 @@
+#include <ios>
 #include "Signature.h"
 
 #include <fstream>
 
 #include "a2doctest.h"
 
-#include "Exception.h"
 #include "File.h"
 
 namespace aria2 {
 
-class SignatureTest {
-
-
-public:
-  void setUp() {}
-
-  void tearDown() {}
-
-  void testSave();
-};
-
-A2_TEST(SignatureTest, testSave)
-
-void SignatureTest::testSave()
+TEST_CASE("SignatureTest.testSave")
 {
   Signature sig;
   sig.setBody("SIGNATURE");
