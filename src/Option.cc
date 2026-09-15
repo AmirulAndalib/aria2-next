@@ -33,11 +33,6 @@
  */
 /* copyright --> */
 #include "Option.h"
-#include "prefs.h"
-#include <algorithm>
-#include <cstdint>
-#include <memory>
-#include <string>
 
 #include <cstdlib>
 #include <cstring>

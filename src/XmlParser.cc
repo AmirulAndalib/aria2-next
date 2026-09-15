@@ -33,21 +33,11 @@
  */
 /* copyright --> */
 #include "XmlParser.h"
-#include "ExpatXmlParser.h"
-#include <cerrno>
-#include <cstddef>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string>
-#ifdef _WIN32
-#  include <io.h>
-#endif
 
 #include <array>
 
 #include "a2io.h"
-#include "platform/NativeText.h"
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 

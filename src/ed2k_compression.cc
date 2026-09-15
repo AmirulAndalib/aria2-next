@@ -11,8 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_compression.h"
-#include <cstdint>
-#include <string>
 
 #include <cstring>
 #include <limits>
@@ -38,12 +36,18 @@ void validateHashLength(const std::string& hash)
 } // namespace
 
 CompressedPartInflater::CompressedPartInflater()
-    : stream_(), streamInitialized_(false), blockBegin_(0), inflatedLength_(0)
+    : stream_(),
+      streamInitialized_(false),
+      blockBegin_(0),
+      inflatedLength_(0)
 {
   std::memset(&stream_, 0, sizeof(stream_));
 }
 
-CompressedPartInflater::~CompressedPartInflater() { reset(); }
+CompressedPartInflater::~CompressedPartInflater()
+{
+  reset();
+}
 
 void CompressedPartInflater::reset()
 {
@@ -98,9 +102,15 @@ bool CompressedPartInflater::inflateChunk(std::string& data,
   return true;
 }
 
-bool CompressedPartInflater::active() const { return streamInitialized_; }
+bool CompressedPartInflater::active() const
+{
+  return streamInitialized_;
+}
 
-int64_t CompressedPartInflater::blockBegin() const { return blockBegin_; }
+int64_t CompressedPartInflater::blockBegin() const
+{
+  return blockBegin_;
+}
 
 int64_t CompressedPartInflater::inflatedLength() const
 {

@@ -33,13 +33,6 @@
  */
 /* copyright --> */
 #include "SelectEventPoll.h"
-#include "EventPoll.h"
-#include "a2netcompat.h"
-#include "common.h"
-#include <cerrno>
-#include <functional>
-#include <iterator>
-#include <utility>
 
 #ifdef __MINGW32__
 #  include <cassert>
@@ -52,7 +45,7 @@
 #include "Log.h"
 #include "a2functional.h"
 #include "fmt.h"
-#include "platform/Process.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -188,8 +181,8 @@ void SelectEventPoll::poll(const struct timeval& tv)
   else if (retval == -1) {
     int errNum = errno;
     A2_LOG_DEBUG(fmt("select error: %s, fdmax: %llu",
-                     util::safeStrerror(errNum).c_str(),
-                     static_cast<unsigned long long>(fdmax_)));
+                    util::safeStrerror(errNum).c_str(),
+                    static_cast<unsigned long long>(fdmax_)));
   }
 }
 

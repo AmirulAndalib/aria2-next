@@ -33,11 +33,8 @@
  */
 /* copyright --> */
 #include "XmlRpcDiskWriter.h"
-#include "RpcRequest.h"
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <utility>
+#include "DlAbortEx.h"
+#include "message.h"
 #include "ValueBase.h"
 
 namespace aria2 {

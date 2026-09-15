@@ -33,13 +33,8 @@
  */
 /* copyright --> */
 #include "uri.h"
-#include "uri_split.h"
-#include <algorithm>
-#include <cstdint>
-#include <vector>
 #include "FeatureConfig.h"
-#include "support/Encoding.h"
-#include "fmt.h"
+#include "util.h"
 
 namespace aria2 {
 

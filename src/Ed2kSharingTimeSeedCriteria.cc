@@ -11,7 +11,6 @@
  */
 /* copyright --> */
 #include "Ed2kSharingTimeSeedCriteria.h"
-#include <chrono>
 
 #include "RequestGroup.h"
 

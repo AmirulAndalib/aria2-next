@@ -33,9 +33,6 @@
  */
 /* copyright --> */
 #include "Exception.h"
-#include "error_code.h"
-#include <memory>
-#include <string>
 
 #include <cstring>
 #include <sstream>

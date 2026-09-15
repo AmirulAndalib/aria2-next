@@ -35,7 +35,6 @@ struct CurlSnapshot {
   int64_t completedLength = 0;
   int64_t sessionDownloadLength = 0;
   int connections = 0;
-  bool mediaManifest = false;
   error_code::Value errorCode = error_code::UNDEFINED;
   std::string currentUri;
   std::string error;
@@ -59,7 +58,6 @@ public:
 
 private:
   friend class CurlSession;
-  friend struct CurlHandle;
   friend class CurlDownloadCommand;
   friend class CurlSessionTest;
 

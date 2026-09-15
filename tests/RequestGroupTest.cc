@@ -1,32 +1,35 @@
-#include "FileEntry.h"
-#include "PieceStorage.h"
-#include "GroupId.h"
-#include "a2functional.h"
-#include "error_code.h"
-#include "prefs.h"
-#include <cstdint>
-#include <memory>
 #include "RequestGroup.h"
-#include "Exception.h"
 
 #include "a2doctest.h"
 
 #include "Option.h"
 #include "DownloadContext.h"
+#include "FileEntry.h"
+#include "PieceStorage.h"
+#include "File.h"
 #include "TestUtil.h"
 #include "DownloadResult.h"
 
 namespace aria2 {
 
 class RequestGroupTest {
-protected:
+
+private:
   std::shared_ptr<Option> option_;
 
 public:
-  RequestGroupTest() { option_.reset(new Option()); }
+  void setUp() { option_.reset(new Option()); }
+
+  void testGetFirstFilePath();
+  void testTryAutoFileRenaming();
+  void testCreateDownloadResult();
 };
 
-TEST_CASE_FIXTURE(RequestGroupTest, "RequestGroupTest.testGetFirstFilePath")
+A2_TEST(RequestGroupTest, testGetFirstFilePath)
+A2_TEST(RequestGroupTest, testTryAutoFileRenaming)
+A2_TEST(RequestGroupTest, testCreateDownloadResult)
+
+void RequestGroupTest::testGetFirstFilePath()
 {
   std::shared_ptr<DownloadContext> ctx(
       new DownloadContext(1_k, 1_k, "/tmp/myfile"));
@@ -41,7 +44,7 @@ TEST_CASE_FIXTURE(RequestGroupTest, "RequestGroupTest.testGetFirstFilePath")
   REQUIRE_EQ(std::string("[MEMORY]myfile"), group.getFirstFilePath());
 }
 
-TEST_CASE_FIXTURE(RequestGroupTest, "RequestGroupTest.testTryAutoFileRenaming")
+void RequestGroupTest::testTryAutoFileRenaming()
 {
   std::shared_ptr<DownloadContext> ctx(
       new DownloadContext(1_k, 1_k, "/tmp/myfile"));
@@ -90,7 +93,7 @@ TEST_CASE_FIXTURE(RequestGroupTest, "RequestGroupTest.testTryAutoFileRenaming")
   REQUIRE_EQ(std::string("/tmp.txt/.bashrc.1.txt"), group.getFirstFilePath());
 }
 
-TEST_CASE_FIXTURE(RequestGroupTest, "RequestGroupTest.testCreateDownloadResult")
+void RequestGroupTest::testCreateDownloadResult()
 {
   std::shared_ptr<DownloadContext> ctx(
       new DownloadContext(1_k, 1_m, "/tmp/myfile"));

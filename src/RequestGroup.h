@@ -66,9 +66,6 @@ class Option;
 class RequestGroup;
 class CheckIntegrityEntry;
 class CurlDownload;
-namespace media {
-class Download;
-}
 struct DownloadResult;
 class URIResult;
 class RequestGroupMan;
@@ -88,10 +85,6 @@ public:
   };
 
 private:
-  void restoreEd2kFile(DownloadEngine* engine);
-  void createEd2kCommands(std::vector<std::unique_ptr<Command>>& commands,
-                          DownloadEngine* engine);
-
   // If this download is a part of another download(for example,
   // downloading torrent file described in Metalink file), this field
   // has the GID of parent RequestGroup. 0 means this is a parent
@@ -120,7 +113,6 @@ private:
   RequestGroupMan* requestGroupMan_;
 
   std::shared_ptr<CurlDownload> curlDownload_;
-  std::shared_ptr<media::Download> mediaDownload_;
 
 #ifdef ENABLE_BITTORRENT
   std::shared_ptr<BtDownload> btDownload_;
@@ -222,9 +214,19 @@ public:
     return segmentMan_;
   }
 
+  // Returns first bootstrap commands to initiate a download.
   // Create the first command for the selected native transport backend.
   void createInitialCommand(std::vector<std::unique_ptr<Command>>& commands,
                             DownloadEngine* e);
+
+  void createNextCommandWithAdj(std::vector<std::unique_ptr<Command>>& commands,
+                                DownloadEngine* e, int numAdj);
+
+  void createNextCommand(std::vector<std::unique_ptr<Command>>& commands,
+                         DownloadEngine* e, int numCommand);
+
+  void createNextCommand(std::vector<std::unique_ptr<Command>>& commands,
+                         DownloadEngine* e);
 
   bool downloadFinished() const;
 
@@ -270,15 +272,6 @@ public:
   const std::shared_ptr<CurlDownload>& getCurlDownload() const
   {
     return curlDownload_;
-  }
-
-  const std::shared_ptr<media::Download>& getMediaDownload() const
-  {
-    return mediaDownload_;
-  }
-  void setMediaDownload(std::shared_ptr<media::Download> download)
-  {
-    mediaDownload_ = std::move(download);
   }
 
   void setCurlDownload(std::shared_ptr<CurlDownload> download)

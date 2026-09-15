@@ -32,16 +32,7 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#ifdef _WIN32
-#  include <windows.h>
-#endif
 #include "Platform.h"
-#include <cstdio>
-#include <cstring>
-#include <stdio.h>
-#ifdef _WIN32
-#  include <io.h>
-#endif
 
 #include <stdlib.h> /* _fmode */
 #include <fcntl.h>  /*  _O_BINARY */
@@ -53,6 +44,7 @@
 #  include <openssl/ssl.h>
 #endif // HAVE_OPENSSL
 
+
 #include "a2netcompat.h"
 #include "DlAbortEx.h"
 #include "message.h"
@@ -61,7 +53,7 @@
 #include "OptionParser.h"
 #include "prefs.h"
 #include "Log.h"
-#include "a2functional.h"
+#include "util.h"
 #include "SocketCore.h"
 
 namespace aria2 {

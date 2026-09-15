@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "RpcRequest.h"
-#include "ValueBase.h"
-#include <memory>
-#include <string>
-#include <utility>
 
 namespace aria2 {
 

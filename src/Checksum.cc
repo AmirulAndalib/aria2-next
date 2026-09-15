@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "Checksum.h"
-#include <string>
-#include <utility>
 #include "MessageDigest.h"
 
 namespace aria2 {

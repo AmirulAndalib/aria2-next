@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "DNSCache.h"
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace aria2 {
 

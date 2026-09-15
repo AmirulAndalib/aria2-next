@@ -33,12 +33,6 @@
  */
 /* copyright --> */
 #include "RpcMethod.h"
-#include "ValueBase.h"
-#include "aria2/aria2.h"
-#include "error_code.h"
-#include <functional>
-#include <memory>
-#include <utility>
 #include "DownloadEngine.h"
 #include "Log.h"
 #include "RecoverableException.h"
@@ -47,13 +41,15 @@
 #include "LegacyInputAdapter.h"
 #include "OptionHandler.h"
 #include "Option.h"
+#include "array_fun.h"
 #include "download_helper.h"
 #include "RpcRequest.h"
 #include "RpcResponse.h"
 #include "prefs.h"
+#include "fmt.h"
 #include "DlAbortEx.h"
-#include "support/Text.h"
-#include "support/Numbers.h"
+#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 

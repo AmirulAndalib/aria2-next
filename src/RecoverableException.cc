@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "RecoverableException.h"
-#include "Exception.h"
-#include "error_code.h"
-#include <memory>
-#include <string>
 
 namespace aria2 {
 

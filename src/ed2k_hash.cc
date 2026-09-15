@@ -11,9 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_hash.h"
-#include <cstdint>
-#include <string>
-#include <vector>
 
 #include <algorithm>
 #include <array>
@@ -168,9 +165,9 @@ std::string aichRootHashForRange(const char* data, size_t length,
       leftLength <= PIECE_LENGTH ? EMBLOCK_LENGTH : PIECE_LENGTH;
   const auto rightBase =
       rightLength <= PIECE_LENGTH ? EMBLOCK_LENGTH : PIECE_LENGTH;
-  return aichHash(
-      aichRootHashForRange(data, leftLength, leftBase, true) +
-      aichRootHashForRange(data + leftLength, rightLength, rightBase, false));
+  return aichHash(aichRootHashForRange(data, leftLength, leftBase, true) +
+                  aichRootHashForRange(data + leftLength, rightLength,
+                                       rightBase, false));
 }
 
 } // namespace

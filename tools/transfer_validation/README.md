@@ -1,51 +1,53 @@
-# Transfer validation
+# Aria2 Next Transfer Validation Suite
 
-Manual integration tests exercise the executable through its CLI and JSON-RPC.
-They are separate from CTest and never enter the engine runtime. Python 3.11+
-is required. Local servers and controlled faults provide reproducible coverage;
-public media sources provide independent interoperability checks.
+This directory contains a manually invoked validation suite for the maintained transfer engines. It is independent from CTest and is never built into the aria2-next executable.
 
-| Module | Native test tools | Distinct coverage |
-| --- | --- | --- |
-| HTTP | Caddy, WireMock, Toxiproxy | Ranges, response filenames, redirects, conflicts, credentials, overload, recovery |
-| SFTP | OpenSSH or SFTPGo, Toxiproxy | Authentication, host keys, interruption, recovery |
-| BitTorrent | libtorrent | Native torrent creation, metadata, sharing, selection, recovery |
-| ED2K | OpenSSL | Hashing, peer transfer, sharing, recovery |
-| Metalink | WireMock | Mirrors, checksums, selection, failure handling |
-| Media | FFmpeg, ffprobe, OpenSSL, Caddy, WireMock | HLS/DASH, origin-scoped headers, stable track IDs, encryption, clocks, recording, recovery |
+Each protocol module can run on its own:
 
-Run local modules independently or sequentially:
-
-```sh
-python3 tools/transfer_validation/run.py media
-python3 tools/transfer_validation/run.py all
+```bash
+python3 tools/transfer_validation/http/validate.py
+python3 tools/transfer_validation/sftp/validate.py
+python3 tools/transfer_validation/bittorrent/validate.py
+python3 tools/transfer_validation/ed2k/validate.py
+python3 tools/transfer_validation/metalink/validate.py
 ```
 
-Use `--engine PATH` to select a binary and `--keep-artifacts` to retain successful
-local payloads. Failed runs always retain their state. Results, logs and payloads
-live under `build/transfer-validation`. Shared helpers own process control,
-hashing and native media inspection; protocol-specific scenarios remain separate.
+Run every module sequentially with:
 
-The dependency lock pins Caddy and Toxiproxy for Windows x64 and macOS ARM64.
-WireMock requires Java 17+; Java 21 LTS is suitable. Other modules require their
-listed tools; encryption and ED2K hashing use OpenSSL 3. Unpinned hosts fail
-explicitly. Windows helpers run without opening console windows.
-
-SFTP uses an isolated OpenSSH instance on POSIX and pinned SFTPGo portable mode
-on Windows x64. Both bind to loopback and use fixture keys; SFTPGo creates only
-an in-memory account rooted at the fixture directory. No system service or user
-configuration is changed. The BitTorrent helper uses CMake's generated target
-path, including the platform's executable suffix. Set `CMAKE_TOOLCHAIN_FILE` (or
-`CC`/`CXX`) to match the engine's dependency build when compiling the helper.
-
-Public media validation is opt-in and is excluded from `run.py all`:
-
-```sh
-python3 tools/transfer_validation/media/public.py
-python3 tools/transfer_validation/media/public.py --case dash-live
-python3 tools/transfer_validation/media/public.py --suite all
+```bash
+tools/transfer_validation/run all
 ```
 
-The public runner requires curl, FFmpeg and ffprobe. It snapshots the executable,
-selects modest representations, fully decodes outputs, checks source content,
-and retains every artifact. See the [sources and acceptance plan](../../docs/media-e2e.md).
+The suite uses the public CLI and JSON-RPC interfaces. It does not include engine internals or protocol implementations. HTTP behavior is provided by WireMock, transport interruption by Toxiproxy, SFTP by OpenSSH, torrent creation by the bundled libtorrent API, and ED2K hashing by OpenSSL.
+
+Generated state and payloads live under `build/transfer-validation`. Successful payloads are removed automatically. Reports and compact logs remain available for inspection. Pass `--keep-artifacts` to a protocol module when payload inspection is required.
+
+Failed runs retain their payloads and state. HTTP validation checks single and
+64-connection downloads, a throttled 320 MiB workload configured for 256
+connections, HTTPS, empty files, short ranges, delayed headers, slow tails,
+429/503 retries, tiny-gap recovery with an explicit retry wait, progress-gated
+tail assistance, interrupted connections, Unicode paths, paused restart, and
+batch removal. Conditional requests cover ETag and date validators, unquoted
+ETags with inconsistent CDN modification dates, per-request timestamps,
+cookie-authenticated redirects with conditional ranges, ignored
+ranges, changed resources, and protected existing files. Compact request evidence verifies that faults were exercised and
+short responses retrieve only their missing suffix. Successful transfers require
+completed RPC state, nondecreasing sampled progress, and matching SHA-256 hashes.
+Redirect validation also covers single-use entry points, serialized endpoint
+refresh after expiration and overload, and cross-origin credential boundaries.
+A dual-stack fixture uses Toxiproxy to slow the IPv6 body without preventing
+connection establishment; validation requires evidence that the slow path was
+actually exercised before IPv4 completed the download. A second fixture delays
+the IPv4 response by 2.5 seconds while keeping its payload fast, guarding against
+selecting an address family before both paths have supplied a useful sample.
+Another fixture reduces the incumbent path's bandwidth after initial progress
+and checks that a healthy alternate remains available to finish the download.
+BitTorrent and ED2K checks separately wait for content completion because sharing
+tasks can remain active. These are bounded regression scenarios, not a guarantee
+against every network or server behavior. No public download service is used.
+
+The dependency lock contains verified macOS ARM64 and Windows x64 Caddy and
+Toxiproxy artifacts. HTTP validation also requires Java 17 or newer for
+WireMock; Java 21 LTS is suitable. Windows uses native executables and hides
+service console windows. Other protocol modules still require their own
+platform dependencies. Unpinned hosts fail explicitly.

@@ -11,12 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_kad.h"
-#include "ed2k_packet.h"
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <algorithm>
 #include <array>
@@ -30,7 +24,7 @@
 #include "ed2k_endpoint.h"
 #include "ed2k_hash.h"
 #include "message_digest_helper.h"
-#include "fmt.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -123,7 +117,8 @@ std::string kadVerifyKeyObfuscationKey(uint32_t receiverVerifyKey,
                      digest.size());
 }
 
-void rc4Crypt(std::string& out, const std::string& data, const std::string& key)
+void rc4Crypt(std::string& out, const std::string& data,
+              const std::string& key)
 {
   ARC4Encryptor rc4;
   rc4.init(reinterpret_cast<const unsigned char*>(key.data()), key.size());
@@ -373,10 +368,9 @@ bool parseKadHelloAckPayload(std::string& id, const std::string& payload)
   return true;
 }
 
-std::string
-createKadBootstrapResponsePayload(const std::string& id, uint16_t tcpPort,
-                                  uint8_t version,
-                                  const std::vector<KadContact>& contacts)
+std::string createKadBootstrapResponsePayload(
+    const std::string& id, uint16_t tcpPort, uint8_t version,
+    const std::vector<KadContact>& contacts)
 {
   validateHashLength(id);
   if (contacts.size() > std::numeric_limits<uint16_t>::max()) {
@@ -454,7 +448,8 @@ std::string createKadResponsePayload(const std::string& targetId,
   return payload;
 }
 
-bool parseKadResponsePayload(KadResponse& response, const std::string& payload)
+bool parseKadResponsePayload(KadResponse& response,
+                             const std::string& payload)
 {
   if (payload.size() < HASH_LENGTH + 1) {
     return false;
@@ -533,7 +528,8 @@ bool parseKadFirewalledResponsePayload(KadFirewalledResponse& response,
   return true;
 }
 
-std::string createKadFirewalledUdpPayload(uint8_t errorCode, uint16_t tcpPort)
+std::string createKadFirewalledUdpPayload(uint8_t errorCode,
+                                          uint16_t tcpPort)
 {
   std::string payload;
   payload.push_back(static_cast<char>(errorCode));
@@ -642,9 +638,12 @@ std::string createKadObfuscatedDatagram(const std::string& datagram,
                                         uint32_t senderVerifyKey)
 {
   validateHashLength(targetId);
-  return createKadObfuscatedDatagram(
-      datagram, KadObfuscationKey{kadObfuscationKey(targetId, randomKeyPart)},
-      randomKeyPart, false, receiverVerifyKey, senderVerifyKey);
+  return createKadObfuscatedDatagram(datagram,
+                                     KadObfuscationKey{
+                                         kadObfuscationKey(targetId,
+                                                           randomKeyPart)},
+                                     randomKeyPart, false, receiverVerifyKey,
+                                     senderVerifyKey);
 }
 
 std::string createKadObfuscatedDatagram(const std::string& datagram,
@@ -782,7 +781,8 @@ std::string createKadRoutingStatePayload(const KadRoutingSnapshot& snapshot)
   validateHashLength(snapshot.selfId);
   if (snapshot.buckets.size() > std::numeric_limits<uint16_t>::max() ||
       snapshot.routerNodes.size() > std::numeric_limits<uint16_t>::max() ||
-      snapshot.routerContacts.size() > std::numeric_limits<uint16_t>::max() ||
+      snapshot.routerContacts.size() >
+          std::numeric_limits<uint16_t>::max() ||
       snapshot.observedAddresses.size() >
           std::numeric_limits<uint16_t>::max()) {
     throw DL_ABORT_EX("ED2K Kad routing state is too large.");
@@ -800,8 +800,8 @@ std::string createKadRoutingStatePayload(const KadRoutingSnapshot& snapshot)
   payload += packUInt32(snapshot.sourceSearchCount);
   payload += packUInt32(snapshot.udpVerifyKey);
   appendByte(payload, snapshot.firewalled ? 1 : 0);
-  payload +=
-      packUInt16(static_cast<uint16_t>(snapshot.observedAddresses.size()));
+  payload += packUInt16(
+      static_cast<uint16_t>(snapshot.observedAddresses.size()));
   for (const auto& address : snapshot.observedAddresses) {
     appendString(payload, address);
   }
@@ -851,7 +851,8 @@ bool parseKadRoutingStatePayload(KadRoutingSnapshot& snapshot,
             readUInt32(readBytes(payload, offset, 4).data());
       }
       if (version >= 6) {
-        parsed.udpVerifyKey = readUInt32(readBytes(payload, offset, 4).data());
+        parsed.udpVerifyKey =
+            readUInt32(readBytes(payload, offset, 4).data());
       }
       parsed.firewalled = readByte(payload, offset) != 0;
       const auto observedCount =

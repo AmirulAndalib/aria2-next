@@ -33,11 +33,6 @@
  */
 /* copyright --> */
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
-#include "localtime_r.h"
-#include <string.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -47,6 +42,8 @@
 #  endif
 #  include <windows.h>
 #endif // __MINGW32__
+
+#include "localtime_r.h"
 
 #ifdef __MINGW32__
 

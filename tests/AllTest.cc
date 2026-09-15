@@ -1,7 +1,5 @@
 #define DOCTEST_CONFIG_IMPLEMENT
-#include "a2netcompat.h"
 #include <doctest/doctest.h>
-#include "platform/SocketAddress.h"
 
 #include "common.h"
 
@@ -9,8 +7,7 @@
 
 #include "Platform.h"
 #include "SocketCore.h"
-#include "support/FilePath.h"
-#include "platform/Process.h"
+#include "util.h"
 #include "console.h"
 #include "Log.h"
 
@@ -20,7 +17,7 @@ int main(int argc, char* argv[])
   aria2::Platform platform;
 
 #ifdef SIGPIPE
-  aria2::util::SignalMask signalMask;
+  sigset_t signalMask;
 #  ifdef HAVE_SIGACTION
   sigemptyset(&signalMask);
 #  else  // !HAVE_SIGACTION

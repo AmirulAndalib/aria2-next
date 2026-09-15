@@ -15,22 +15,42 @@
 namespace aria2 {
 
 class Aria2ApiTest {
-protected:
+
 
   Session* session_;
 
 public:
-  Aria2ApiTest()
+  void setUp()
   {
     SessionConfig config;
     KeyVals options = {{"no-conf", "true"}};
     session_ = sessionNew(options, config);
   }
 
-  ~Aria2ApiTest() { sessionFinal(session_); }
+  void tearDown() { sessionFinal(session_); }
+
+  void testAddUri();
+  void testAddMetalink();
+  void testAddTorrent();
+  void testRemovePause();
+  void testChangePosition();
+  void testChangeOption();
+  void testChangeGlobalOption();
+  void testDownloadResultDH();
+  void testGetFilesOutlivesDownloadHandle();
 };
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddUri")
+A2_TEST(Aria2ApiTest, testAddUri)
+A2_TEST(Aria2ApiTest, testAddMetalink)
+A2_TEST(Aria2ApiTest, testAddTorrent)
+A2_TEST(Aria2ApiTest, testRemovePause)
+A2_TEST(Aria2ApiTest, testChangePosition)
+A2_TEST(Aria2ApiTest, testChangeOption)
+A2_TEST(Aria2ApiTest, testChangeGlobalOption)
+A2_TEST(Aria2ApiTest, testDownloadResultDH)
+A2_TEST(Aria2ApiTest, testGetFilesOutlivesDownloadHandle)
+
+void Aria2ApiTest::testAddUri()
 {
   A2Gid gid;
   std::vector<std::string> uris(1);
@@ -51,7 +71,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddUri")
   REQUIRE_EQ(-1, addUri(session_, &gid, uris, options));
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddMetalink")
+void Aria2ApiTest::testAddMetalink()
 {
   std::string metalinkPath = A2_TEST_DIR "/metalink4.xml";
   std::vector<A2Gid> gids;
@@ -68,7 +88,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddMetalink")
 #endif // !ENABLE_METALINK
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddTorrent")
+void Aria2ApiTest::testAddTorrent()
 {
   std::string torrentPath = A2_TEST_DIR "/test.torrent";
   A2Gid gid;
@@ -84,7 +104,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testAddTorrent")
 #endif // !ENABLE_BITTORRENT
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testRemovePause")
+void Aria2ApiTest::testRemovePause()
 {
   A2Gid gid;
   std::vector<std::string> uris(1);
@@ -117,7 +137,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testRemovePause")
   REQUIRE(!hd);
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangePosition")
+void Aria2ApiTest::testChangePosition()
 {
   int N = 10;
   std::vector<A2Gid> gids(N);
@@ -139,7 +159,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangePosition")
                        changePosition(session_, gids[4], -2, OFFSET_MODE_END));
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangeOption")
+void Aria2ApiTest::testChangeOption()
 {
   A2Gid gid;
   std::vector<std::string> uris(1);
@@ -178,7 +198,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangeOption")
   REQUIRE_EQ(-1, changeOption(session_, gid, options));
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangeGlobalOption")
+void Aria2ApiTest::testChangeGlobalOption()
 {
   REQUIRE_EQ(OptionParser::getInstance()
                            ->find(PREF_FILE_ALLOCATION)
@@ -196,7 +216,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testChangeGlobalOption")
   REQUIRE_EQ(-1, changeGlobalOption(session_, options));
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testDownloadResultDH")
+void Aria2ApiTest::testDownloadResultDH()
 {
   std::shared_ptr<DownloadResult> dr1 =
       createDownloadResult(error_code::TIME_OUT, "http://example.org/timeout");
@@ -220,7 +240,7 @@ TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testDownloadResultDH")
   deleteDownloadHandle(hd);
 }
 
-TEST_CASE_FIXTURE(Aria2ApiTest, "Aria2ApiTest.testGetFilesOutlivesDownloadHandle")
+void Aria2ApiTest::testGetFilesOutlivesDownloadHandle()
 {
   A2Gid gid;
   std::vector<std::string> uris(1);

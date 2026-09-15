@@ -33,8 +33,8 @@
  */
 /* copyright --> */
 #include "uri_split.h"
-#include <stddef.h>
-#include <stdint.h>
+
+#include <stdlib.h>
 
 typedef enum {
   URI_BEFORE_SCHEME,

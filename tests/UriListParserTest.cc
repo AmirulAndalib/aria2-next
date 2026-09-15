@@ -1,11 +1,9 @@
-#include <string>
-#include <vector>
 #include "UriListParser.h"
 
 #include "a2doctest.h"
 #include "Option.h"
 #include "prefs.h"
-#include "support/FilePath.h"
+#include "util.h"
 
 namespace aria2 {
 

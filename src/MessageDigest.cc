@@ -33,19 +33,13 @@
  */
 /* copyright --> */
 #include "MessageDigest.h"
-#include <algorithm>
-#include <cstddef>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <sstream>
 #include <iterator>
 
 #include "MessageDigestImpl.h"
-#include "support/Text.h"
-#include "a2functional.h"
+#include "util.h"
+#include "array_fun.h"
 
 namespace aria2 {
 

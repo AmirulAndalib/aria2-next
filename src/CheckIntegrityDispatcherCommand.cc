@@ -33,15 +33,11 @@
  */
 /* copyright --> */
 #include "CheckIntegrityDispatcherCommand.h"
-#include "CheckIntegrityMan.h"
-#include "Command.h"
-#include "SequentialDispatcherCommand.h"
-#include <cinttypes>
-#include <memory>
 #include "CheckIntegrityEntry.h"
 #include "CheckIntegrityCommand.h"
+#include "message.h"
 #include "Log.h"
-#include "a2functional.h"
+#include "util.h"
 #include "fmt.h"
 
 namespace aria2 {
@@ -58,8 +54,8 @@ CheckIntegrityDispatcherCommand::createCommand(CheckIntegrityEntry* entry)
 {
   cuid_t newCUID = getDownloadEngine()->newCUID();
   A2_LOG_DEBUG(fmt("CUID#%" PRId64 " - Dispatching CheckIntegrityCommand "
-                   "CUID#%" PRId64 ".",
-                   getCuid(), newCUID));
+                  "CUID#%" PRId64 ".",
+                  getCuid(), newCUID));
   return make_unique<CheckIntegrityCommand>(newCUID, entry->getRequestGroup(),
                                             getDownloadEngine(), entry);
 }

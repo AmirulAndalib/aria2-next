@@ -33,9 +33,6 @@
  */
 /* copyright --> */
 #include "GZipDecoder.h"
-#include <cstddef>
-#include <string>
-#include <zlib.h>
 #include "fmt.h"
 #include "DlAbortEx.h"
 

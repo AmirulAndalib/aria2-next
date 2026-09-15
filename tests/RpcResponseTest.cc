@@ -1,7 +1,3 @@
-#include "ValueBase.h"
-#include <string>
-#include <utility>
-#include <vector>
 #include "RpcResponse.h"
 
 #include "a2doctest.h"
@@ -11,10 +7,20 @@ namespace aria2 {
 namespace rpc {
 
 class RpcResponseTest {
+
 public:
+  void testToJson();
+#ifdef ENABLE_XML_RPC
+  void testToXml();
+#endif // ENABLE_XML_RPC
 };
 
-TEST_CASE_FIXTURE(RpcResponseTest, "RpcResponseTest.testToJson")
+A2_TEST(RpcResponseTest, testToJson)
+#ifdef ENABLE_XML_RPC
+A2_TEST(RpcResponseTest, testToXml)
+#endif // ENABLE_XML_RPC
+
+void RpcResponseTest::testToJson()
 {
   std::vector<RpcResponse> results;
   {
@@ -25,15 +31,15 @@ TEST_CASE_FIXTURE(RpcResponseTest, "RpcResponseTest.testToJson")
     results.push_back(std::move(res));
     std::string s = toJson(results.back(), "", false);
     REQUIRE_EQ(std::string("{\"id\":\"9\","
-                           "\"jsonrpc\":\"2.0\","
-                           "\"result\":[1]}"),
-               s);
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"result\":[1]}"),
+                         s);
     // with callback
     s = toJson(results.back(), "cb", false);
     REQUIRE_EQ(std::string("cb({\"id\":\"9\","
-                           "\"jsonrpc\":\"2.0\","
-                           "\"result\":[1]})"),
-               s);
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"result\":[1]})"),
+                         s);
   }
   {
     // error response
@@ -44,77 +50,78 @@ TEST_CASE_FIXTURE(RpcResponseTest, "RpcResponseTest.testToJson")
     results.push_back(std::move(res));
     std::string s = toJson(results.back(), "", false);
     REQUIRE_EQ(std::string("{\"id\":null,"
-                           "\"jsonrpc\":\"2.0\","
-                           "\"error\":{\"code\":1,"
-                           "\"message\":\"HELLO ERROR\"}"
-                           "}"),
-               s);
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"error\":{\"code\":1,"
+                                     "\"message\":\"HELLO ERROR\"}"
+                                     "}"),
+                         s);
     // with callback
     s = toJson(results.back(), "cb", false);
     REQUIRE_EQ(std::string("cb({\"id\":null,"
-                           "\"jsonrpc\":\"2.0\","
-                           "\"error\":{\"code\":1,"
-                           "\"message\":\"HELLO ERROR\"}"
-                           "})"),
-               s);
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"error\":{\"code\":1,"
+                                     "\"message\":\"HELLO ERROR\"}"
+                                     "})"),
+                         s);
   }
   {
     // batch response
     std::string s = toJsonBatch(results, "", false);
     REQUIRE_EQ(std::string("["
-                           "{\"id\":\"9\","
-                           "\"jsonrpc\":\"2.0\","
-                           "\"result\":[1]},"
-                           "{\"id\":null,"
-                           "\"jsonrpc\":\"2.0\","
-                           "\"error\":{\"code\":1,"
-                           "\"message\":\"HELLO ERROR\"}"
-                           "}"
-                           "]"),
-               s);
+                                     "{\"id\":\"9\","
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"result\":[1]},"
+                                     "{\"id\":null,"
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"error\":{\"code\":1,"
+                                     "\"message\":\"HELLO ERROR\"}"
+                                     "}"
+                                     "]"),
+                         s);
     // with callback
     s = toJsonBatch(results, "cb", false);
     REQUIRE_EQ(std::string("cb(["
-                           "{\"id\":\"9\","
-                           "\"jsonrpc\":\"2.0\","
-                           "\"result\":[1]},"
-                           "{\"id\":null,"
-                           "\"jsonrpc\":\"2.0\","
-                           "\"error\":{\"code\":1,"
-                           "\"message\":\"HELLO ERROR\"}"
-                           "}"
-                           "])"),
-               s);
+                                     "{\"id\":\"9\","
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"result\":[1]},"
+                                     "{\"id\":null,"
+                                     "\"jsonrpc\":\"2.0\","
+                                     "\"error\":{\"code\":1,"
+                                     "\"message\":\"HELLO ERROR\"}"
+                                     "}"
+                                     "])"),
+                         s);
   }
 }
 
 #ifdef ENABLE_XML_RPC
-TEST_CASE_FIXTURE(RpcResponseTest, "RpcResponseTest.testToXml")
+void RpcResponseTest::testToXml()
 {
   auto param = Dict::g();
   param->put("faultCode", Integer::g(1));
   param->put("faultString", "No such method: make.hamburger");
   RpcResponse res(1, RpcResponse::AUTHORIZED, std::move(param), Null::g());
   std::string s = toXml(res, false);
-  REQUIRE_EQ(std::string("<?xml version=\"1.0\"?>"
-                         "<methodResponse>"
-                         "<fault>"
-                         "<value>"
-                         "<struct>"
-                         "<member>"
-                         "<name>faultCode</name><value><int>1</int></value>"
-                         "</member>"
-                         "<member>"
-                         "<name>faultString</name>"
-                         "<value>"
-                         "<string>No such method: make.hamburger</string>"
-                         "</value>"
-                         "</member>"
-                         "</struct>"
-                         "</value>"
-                         "</fault>"
-                         "</methodResponse>"),
-             s);
+  REQUIRE_EQ(
+      std::string("<?xml version=\"1.0\"?>"
+                  "<methodResponse>"
+                  "<fault>"
+                  "<value>"
+                  "<struct>"
+                  "<member>"
+                  "<name>faultCode</name><value><int>1</int></value>"
+                  "</member>"
+                  "<member>"
+                  "<name>faultString</name>"
+                  "<value>"
+                  "<string>No such method: make.hamburger</string>"
+                  "</value>"
+                  "</member>"
+                  "</struct>"
+                  "</value>"
+                  "</fault>"
+                  "</methodResponse>"),
+      s);
 }
 #endif // ENABLE_XML_RPC
 

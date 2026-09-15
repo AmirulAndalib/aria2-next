@@ -1,18 +1,53 @@
-#include <cstdint>
 #include "Request.h"
 
 #include "a2doctest.h"
 
+#include "uri.h"
+
 namespace aria2 {
 
-TEST_CASE("RequestTest.testSetUri1")
+class RequestTest {
+
+
+public:
+  void testSetUri1();
+  void testSetUri2();
+  void testSetUri7();
+  void testSetUri_supportsPersistentConnection();
+  void testRedirectUri();
+  void testRedirectUri2();
+  void testRedirectUri_supportsPersistentConnection();
+  void testRedirectUri_uriNormalization();
+  void testResetUri();
+  void testResetUri_supportsPersistentConnection();
+  void testInnerLink();
+  void testInnerLinkInReferer();
+  void testGetURIHost();
+};
+
+A2_TEST(RequestTest, testSetUri1)
+A2_TEST(RequestTest, testSetUri2)
+A2_TEST(RequestTest, testSetUri7)
+A2_TEST(RequestTest, testSetUri_supportsPersistentConnection)
+A2_TEST(RequestTest, testRedirectUri)
+A2_TEST(RequestTest, testRedirectUri2)
+A2_TEST(RequestTest, testRedirectUri_supportsPersistentConnection)
+A2_TEST(RequestTest, testRedirectUri_uriNormalization)
+A2_TEST(RequestTest, testResetUri)
+A2_TEST(RequestTest, testResetUri_supportsPersistentConnection)
+A2_TEST(RequestTest, testInnerLink)
+A2_TEST(RequestTest, testInnerLinkInReferer)
+A2_TEST(RequestTest, testGetURIHost)
+
+void RequestTest::testSetUri1()
 {
   Request req;
   bool v = req.setUri("http://aria.rednoah.com/");
 
   REQUIRE(v);
   REQUIRE_EQ(std::string("http://aria.rednoah.com/"), req.getUri());
-  REQUIRE_EQ(std::string("http://aria.rednoah.com/"), req.getCurrentUri());
+  REQUIRE_EQ(std::string("http://aria.rednoah.com/"),
+                       req.getCurrentUri());
   REQUIRE_EQ(std::string(""), req.getReferer());
   REQUIRE_EQ(std::string("http"), req.getProtocol());
   REQUIRE_EQ((uint16_t)80, req.getPort());
@@ -25,7 +60,7 @@ TEST_CASE("RequestTest.testSetUri1")
   REQUIRE(!req.isIPv6LiteralAddress());
 }
 
-TEST_CASE("RequestTest.testSetUri2")
+void RequestTest::testSetUri2()
 {
   Request req;
   bool v = req.setUri("http://aria.rednoah.com:8080/index.html");
@@ -34,7 +69,8 @@ TEST_CASE("RequestTest.testSetUri2")
   REQUIRE(v);
 
   // referer is unchanged
-  REQUIRE_EQ(std::string("http://aria.rednoah.com:8080"), req.getReferer());
+  REQUIRE_EQ(std::string("http://aria.rednoah.com:8080"),
+                       req.getReferer());
   REQUIRE_EQ(std::string("http"), req.getProtocol());
   REQUIRE_EQ((uint16_t)8080, req.getPort());
   REQUIRE_EQ(std::string("aria.rednoah.com"), req.getHost());
@@ -43,7 +79,7 @@ TEST_CASE("RequestTest.testSetUri2")
   REQUIRE_EQ(std::string(""), req.getQuery());
 }
 
-TEST_CASE("RequestTest.testSetUri7")
+void RequestTest::testSetUri7()
 {
   Request req;
   bool v = req.setUri("http://");
@@ -51,7 +87,7 @@ TEST_CASE("RequestTest.testSetUri7")
   REQUIRE(!v);
 }
 
-TEST_CASE("RequestTest.testRedirectUri")
+void RequestTest::testRedirectUri()
 {
   Request req;
   req.supportsPersistentConnection(false);
@@ -60,7 +96,7 @@ TEST_CASE("RequestTest.testRedirectUri")
   // See port number is preserved.
   REQUIRE(req.redirectUri("/foo"));
   REQUIRE_EQ(std::string("http://aria.rednoah.com:8080/foo"),
-             req.getCurrentUri());
+                       req.getCurrentUri());
   REQUIRE_EQ(1, req.getRedirectCount());
 
   REQUIRE(req.redirectUri("http://aria.rednoah.co.jp/"));
@@ -68,10 +104,11 @@ TEST_CASE("RequestTest.testRedirectUri")
   REQUIRE(req.supportsPersistentConnection());
   // uri must be the same
   REQUIRE_EQ(std::string("http://aria.rednoah.com:8080/aria2/"
-                         "index.html"),
-             req.getUri());
+                                   "index.html"),
+                       req.getUri());
   // currentUri must be updated
-  REQUIRE_EQ(std::string("http://aria.rednoah.co.jp/"), req.getCurrentUri());
+  REQUIRE_EQ(std::string("http://aria.rednoah.co.jp/"),
+                       req.getCurrentUri());
   REQUIRE_EQ(std::string("http"), req.getProtocol());
   REQUIRE_EQ(std::string("aria.rednoah.co.jp"), req.getHost());
   REQUIRE_EQ((uint16_t)80, req.getPort());
@@ -84,14 +121,14 @@ TEST_CASE("RequestTest.testRedirectUri")
   // Give absolute path
   REQUIRE(req.redirectUri("/abspath/to/file"));
   REQUIRE_EQ(std::string("http://aria.rednoah.co.jp/abspath/to/file"),
-             req.getCurrentUri());
+                       req.getCurrentUri());
   REQUIRE_EQ(3, req.getRedirectCount());
 
   // Give relative path
   REQUIRE(req.redirectUri("relativepath/to/file"));
   REQUIRE_EQ(std::string("http://aria.rednoah.co.jp/abspath/to/"
-                         "relativepath/to/file"),
-             req.getCurrentUri());
+                                   "relativepath/to/file"),
+                       req.getCurrentUri());
   REQUIRE_EQ(4, req.getRedirectCount());
 
   // Give network-path reference
@@ -102,11 +139,11 @@ TEST_CASE("RequestTest.testRedirectUri")
   // http:// in query part
   REQUIRE(req.redirectUri("/abspath?uri=http://foo"));
   REQUIRE_EQ(std::string("http://host/abspath?uri=http://foo"),
-             req.getCurrentUri());
+                       req.getCurrentUri());
   REQUIRE_EQ(6, req.getRedirectCount());
 }
 
-TEST_CASE("RequestTest.testRedirectUri2")
+void RequestTest::testRedirectUri2()
 {
   Request req;
   req.setUri("http://aria.rednoah.com/download.html");
@@ -114,10 +151,11 @@ TEST_CASE("RequestTest.testRedirectUri2")
   req.redirectUri("http://aria.rednoah.com/403.html");
 
   // referer must not be changed in redirection
-  REQUIRE_EQ(std::string("http://aria.rednoah.com/"), req.getReferer());
+  REQUIRE_EQ(std::string("http://aria.rednoah.com/"),
+                       req.getReferer());
 }
 
-TEST_CASE("RequestTest.testResetUri")
+void RequestTest::testResetUri()
 {
   Request req;
   req.setUri("http://aria.rednoah.com:8080/aria2/index.html");
@@ -127,11 +165,13 @@ TEST_CASE("RequestTest.testResetUri")
   bool v3 = req.resetUri();
   REQUIRE(v3);
   // currentUri must equal to uri
-  REQUIRE_EQ(std::string("http://aria.rednoah.com:8080/aria2/index.html"),
-             req.getUri());
+  REQUIRE_EQ(
+      std::string("http://aria.rednoah.com:8080/aria2/index.html"),
+      req.getUri());
   REQUIRE_EQ(req.getUri(), req.getCurrentUri());
   // referer is unchanged
-  REQUIRE_EQ(std::string("http://aria.rednoah.com:8080/"), req.getReferer());
+  REQUIRE_EQ(std::string("http://aria.rednoah.com:8080/"),
+                       req.getReferer());
   REQUIRE_EQ(std::string("http"), req.getProtocol());
   REQUIRE_EQ((uint16_t)8080, req.getPort());
   REQUIRE_EQ(std::string("aria.rednoah.com"), req.getHost());
@@ -140,29 +180,29 @@ TEST_CASE("RequestTest.testResetUri")
   REQUIRE_EQ(std::string(""), req.getQuery());
 }
 
-TEST_CASE("RequestTest.testInnerLink")
+void RequestTest::testInnerLink()
 {
   Request req;
   bool v = req.setUri("http://aria.rednoah.com/index.html#download");
   REQUIRE(v);
   REQUIRE_EQ(std::string("http://aria.rednoah.com/index.html"
-                         "#download"),
-             req.getUri());
+                                   "#download"),
+                       req.getUri());
   REQUIRE_EQ(std::string("http://aria.rednoah.com/index.html"),
-             req.getCurrentUri());
+                       req.getCurrentUri());
   REQUIRE_EQ(std::string("index.html"), req.getFile());
   REQUIRE_EQ(std::string(""), req.getQuery());
 }
 
-TEST_CASE("RequestTest.testInnerLinkInReferer")
+void RequestTest::testInnerLinkInReferer()
 {
   Request req;
   req.setReferer("http://aria.rednoah.com/home.html#top");
   REQUIRE_EQ(std::string("http://aria.rednoah.com/home.html"),
-             req.getReferer());
+                       req.getReferer());
 }
 
-TEST_CASE("RequestTest.testSetUri_supportsPersistentConnection")
+void RequestTest::testSetUri_supportsPersistentConnection()
 {
   Request req;
   REQUIRE(req.setUri("http://host/file"));
@@ -172,7 +212,7 @@ TEST_CASE("RequestTest.testSetUri_supportsPersistentConnection")
   REQUIRE(req.supportsPersistentConnection());
 }
 
-TEST_CASE("RequestTest.testResetUri_supportsPersistentConnection")
+void RequestTest::testResetUri_supportsPersistentConnection()
 {
   Request req;
   REQUIRE(req.setUri("http://host/file"));
@@ -182,7 +222,7 @@ TEST_CASE("RequestTest.testResetUri_supportsPersistentConnection")
   REQUIRE(req.supportsPersistentConnection());
 }
 
-TEST_CASE("RequestTest.testRedirectUri_supportsPersistentConnection")
+void RequestTest::testRedirectUri_supportsPersistentConnection()
 {
   Request req;
   REQUIRE(req.setUri("http://host/file"));
@@ -192,7 +232,7 @@ TEST_CASE("RequestTest.testRedirectUri_supportsPersistentConnection")
   REQUIRE(req.supportsPersistentConnection());
 }
 
-TEST_CASE("RequestTest.testRedirectUri_uriNormalization")
+void RequestTest::testRedirectUri_uriNormalization()
 {
   Request req;
   REQUIRE(req.setUri("http://host/file?a"));
@@ -201,20 +241,23 @@ TEST_CASE("RequestTest.testRedirectUri_uriNormalization")
   REQUIRE_EQ(std::string("http://host/redir1"), req.getCurrentUri());
 
   REQUIRE(req.redirectUri("/redir2?b"));
-  REQUIRE_EQ(std::string("http://host/redir2?b"), req.getCurrentUri());
+  REQUIRE_EQ(std::string("http://host/redir2?b"),
+                       req.getCurrentUri());
 
   REQUIRE(req.redirectUri("/redir3?c#d"));
-  REQUIRE_EQ(std::string("http://host/redir3?c"), req.getCurrentUri());
+  REQUIRE_EQ(std::string("http://host/redir3?c"),
+                       req.getCurrentUri());
 
   REQUIRE(req.redirectUri("/redir4/gone/.././2nd/foo?a"));
-  REQUIRE_EQ(std::string("http://host/redir4/2nd/foo?a"), req.getCurrentUri());
+  REQUIRE_EQ(std::string("http://host/redir4/2nd/foo?a"),
+                       req.getCurrentUri());
 
   REQUIRE(req.redirectUri("../new2nd/bar?b"));
   REQUIRE_EQ(std::string("http://host/redir4/new2nd/bar?b"),
-             req.getCurrentUri());
+                       req.getCurrentUri());
 }
 
-TEST_CASE("RequestTest.testGetURIHost")
+void RequestTest::testGetURIHost()
 {
   Request req;
   REQUIRE(req.setUri("http://[::1]"));

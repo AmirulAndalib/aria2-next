@@ -16,30 +16,24 @@ sys.path.insert(0, str(SUITE_ROOT))
 
 from core.engine import EngineProcess
 from core.report import run_validation
-from core.runtime import (
-    RunDirectory,
-    create_payload,
-    non_loopback_ipv4,
-    process_options,
-    sha256,
-)
+from core.runtime import RunDirectory, create_payload, non_loopback_ipv4, sha256
 
 
 def md4(path: Path) -> str:
     openssl = shutil.which("openssl")
     if not openssl:
         raise RuntimeError("OpenSSL is required for ED2K fixture hashing")
-    completed = subprocess.run(
+    commands = (
         [openssl, "dgst", "-provider", "legacy", "-md4", str(path)],
-        text=True,
-        capture_output=True,
-        check=True,
-        **process_options(),
+        [openssl, "dgst", "-md4", str(path)],
     )
-    match = re.search(r"([0-9a-fA-F]{32})\s*$", completed.stdout)
-    if not match:
-        raise RuntimeError("OpenSSL returned an invalid MD4 digest")
-    return match.group(1).upper()
+    for command in commands:
+        completed = subprocess.run(command, text=True, capture_output=True)
+        if completed.returncode == 0:
+            match = re.search(r"([0-9a-fA-F]{32})\s*$", completed.stdout)
+            if match:
+                return match.group(1).upper()
+    raise RuntimeError("OpenSSL could not calculate an MD4 digest")
 
 
 def wait_sharing(engine: EngineProcess, gid: str, timeout: float) -> dict[str, object]:
@@ -101,7 +95,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
             "ed2k-node-list": str(nodes),
             "seed-time": "10",
         }
-        seed_gid = seed.add_uri(seed_link, {**common, "dir": str(seed.download_dir)})
+        seed_gid = seed.add_uri(
+            seed_link, {**common, "dir": str(seed.download_dir)}
+        )
         seed.rpc.wait_content_complete(seed_gid, 45)
         seed_status = wait_sharing(seed, seed_gid, 15)
 
@@ -118,10 +114,9 @@ def validate(run: RunDirectory, engine_path: Path | None) -> dict[str, object]:
         leecher_ed2k = leecher_status.get("ed2k", {})
         if not isinstance(seed_ed2k, dict) or not isinstance(leecher_ed2k, dict):
             raise RuntimeError("ED2K RPC state is missing")
-        if (
-            seed_ed2k.get("kadRouterCount") != "0"
-            or leecher_ed2k.get("kadRouterCount") != "0"
-        ):
+        if seed_ed2k.get("kadRouterCount") != "0" or leecher_ed2k.get(
+            "kadRouterCount"
+        ) != "0":
             raise RuntimeError("Inline ED2K sources leaked into the Kad routing table")
         if int(str(leecher_ed2k.get("peerCount", "0"))) < 1:
             raise RuntimeError("Inline ED2K source was not retained as a peer")

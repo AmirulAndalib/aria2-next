@@ -32,7 +32,6 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#include "support/Encoding.h"
 #include "aria2api.h"
 
 #include <functional>
@@ -55,8 +54,7 @@
 #include "PieceStorage.h"
 #include "DownloadContext.h"
 #include "FileEntry.h"
-#include "rpc/RpcMethods.h"
-#include "RequestGroupActions.h"
+#include "RpcMethodImpl.h"
 #include "console.h"
 #include "KeepRunningCommand.h"
 #include "SingletonHolder.h"

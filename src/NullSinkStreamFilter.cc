@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "NullSinkStreamFilter.h"
-#include <string>
 
 namespace aria2 {
 

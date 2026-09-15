@@ -9,8 +9,6 @@ without downloading library dependencies during configuration or compilation.
 | curl | 8.21.0 | Static HTTP, HTTPS, and SFTP transfer engine |
 | doctest | 2.4.12 | Header-only unit test framework |
 | Expat | 2.8.1 | Static XML parser |
-| FFmpeg | 8.1.2 | Static media demuxing, bitstream filters, and MP4/Matroska muxing |
-| GPAC | 26.07.0 | Static native HLS/DASH client |
 | libssh2 | 1.11.1 | Static SFTP transport |
 | libtorrent-rasterbar | 2.1.1 | Static BitTorrent engine |
 | nghttp2 | 1.70.0 | Static HTTP/2 framing library used by curl |
@@ -43,47 +41,3 @@ trees are excluded.
 
 The libtorrent tree carries an aria2-next setting extension for encrypted-first
 peer negotiation with libtorrent's native plaintext fallback.
-
-GPAC is configured without a player, renderer, JavaScript runtime, external
-media codecs, or independent TLS and cryptography backends. Its public DASH client uses aria2-next's
-libcurl I/O adapter. The retained upstream source and build support cover this
-configuration. A local client fix preserves the first queued segment's timing
-and discontinuity and uses parsed HLS media sequence numbers instead of numbers
-inferred from filenames. Terminal manifest I/O errors return to the caller,
-including cancellation, instead of retrying the same xlink indefinitely.
-Its threading header includes the standard integer
-types required by its native atomic helpers.
-
-Client integration fixes apply startup quality before initialization, preserve
-HLS rendition languages and initialization key scope, and retain standalone AAC
-and WebM download support. Explicit MP4 index ranges avoid incremental header
-requests. Fixed HLS downloads refresh only selected renditions. HLS resume
-addresses parsed media sequences; DASH clock synchronization
-uses the clock response's receive time. The superbuild checks GPAC's native
-incremental build on every build and preserves unchanged installed headers.
-
-DASH recovery uses native Period and timeline positions. Client fixes preserve
-individual segment durations, infer closed Period durations on refresh, and wait
-for empty future timelines without timestamp underflow. Native seeking respects
-trimmed timelines and their end. Timeline selection retains the actual segment
-count and handles a first audio sample just after the Period start. The adapter reports delivery outcomes to GPAC;
-bounded live retries cannot silently skip media, and ordinary HLS reloads respect
-the parsed target duration.
-SegmentTimeline recovery retains the MPD/UTC availability epoch. The upstream
-startup heuristic that moved this epoch based on the selected segment is removed:
-with a negative clock correction and an epoch-based MPD, it underflowed the
-unsigned timestamp and scheduled the next request weeks into the future.
-The native WebVTT parser and its timed-text/import dependencies are enabled for
-ISO WebVTT samples. GPAC supplies cue payloads, identifiers and settings to the
-FFmpeg packet adapter; no separate subtitle parser or media executable is used.
-
-On Windows, static-only zlib builds retain the `libz` name used by upstream
-pkg-config metadata and the maintained dependency consumers. A suffix is only
-needed when static and shared zlib are built together.
-
-FFmpeg is built without programs, network protocols, encoders, devices, or
-filters. Only media demuxers, MP4/Matroska muxers, codec parsers, the audio
-decoders and libswresample needed for reliable stream probing, and required bitstream filters
-are enabled. Its upstream makefile support remains intact, while unused FATE
-reference data and integration fixtures are omitted. Dependency source commits
-are recorded in `packaging/dependencies.env`.

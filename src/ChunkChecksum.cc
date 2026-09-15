@@ -33,11 +33,6 @@
  */
 /* copyright --> */
 #include "ChunkChecksum.h"
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <utility>
-#include <vector>
 
 namespace aria2 {
 

@@ -11,11 +11,10 @@
  */
 /* copyright --> */
 #include "ApplicationStatePath.h"
-#include <string>
 
 #include "Option.h"
 #include "prefs.h"
-#include "support/FilePath.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -59,11 +58,6 @@ std::string streamDatabaseFile(const Option* option)
   const auto directory = protocolDirectory(option, "stream");
   return directory.empty() ? std::string()
                            : util::applyDir(directory, "state.db");
-}
-
-std::string mediaDirectory(const Option* option)
-{
-  return protocolDirectory(option, "media");
 }
 
 } // namespace state

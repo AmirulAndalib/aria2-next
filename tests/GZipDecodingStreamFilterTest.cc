@@ -1,7 +1,3 @@
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
 #include "GZipDecodingStreamFilter.h"
 
 #include <cassert>
@@ -10,8 +6,9 @@
 
 #include "a2doctest.h"
 
-#include "support/Encoding.h"
-#include "a2functional.h"
+#include "Exception.h"
+#include "util.h"
+#include "Segment.h"
 #include "ByteArrayDiskWriter.h"
 #include "SinkStreamFilter.h"
 #include "MockSegment.h"
@@ -20,9 +17,10 @@
 namespace aria2 {
 
 class GZipDecodingStreamFilterTest {
-protected:
+
+
   class MockSegment2 : public MockSegment {
-  protected:
+  private:
     int64_t positionToWrite_;
 
   public:
@@ -44,7 +42,7 @@ protected:
   std::shared_ptr<MockSegment2> segment_;
 
 public:
-  GZipDecodingStreamFilterTest()
+  void setUp()
   {
     writer_ = std::make_shared<ByteArrayDiskWriter>();
     auto sinkFilter = make_unique<SinkStreamFilter>();
@@ -53,10 +51,13 @@ public:
     filter_->init();
     segment_ = std::make_shared<MockSegment2>();
   }
+
+  void testTransform();
 };
 
-TEST_CASE_FIXTURE(GZipDecodingStreamFilterTest,
-                  "GZipDecodingStreamFilterTest.testTransform")
+A2_TEST(GZipDecodingStreamFilterTest, testTransform)
+
+void GZipDecodingStreamFilterTest::testTransform()
 {
   unsigned char buf[4_k];
   std::ifstream in(A2_TEST_DIR "/gzip_decode_test.gz", std::ios::binary);
@@ -69,7 +70,7 @@ TEST_CASE_FIXTURE(GZipDecodingStreamFilterTest,
   std::shared_ptr<MessageDigest> sha1(MessageDigest::sha1());
   sha1->update(data.data(), data.size());
   REQUIRE_EQ(std::string("8b577b33c0411b2be9d4fa74c7402d54a8d21f96"),
-             util::toHex(sha1->digest()));
+                       util::toHex(sha1->digest()));
 }
 
 } // namespace aria2

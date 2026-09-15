@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "MetalinkMetaurl.h"
-#include <string>
 #include "MetalinkResource.h"
 
 namespace aria2 {

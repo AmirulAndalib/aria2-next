@@ -33,9 +33,10 @@
  */
 /* copyright --> */
 #include "help_tags.h"
-#include <cstdint>
 
 #include <cstring>
+
+#include "array_fun.h"
 
 namespace aria2 {
 

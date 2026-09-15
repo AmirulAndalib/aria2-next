@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "TimeBasedCommand.h"
-#include "Command.h"
-#include <chrono>
-#include <memory>
-#include <utility>
 #include "DownloadEngine.h"
 #include "wallclock.h"
 

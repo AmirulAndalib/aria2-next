@@ -1,10 +1,3 @@
-#include "TimeA2.h"
-#include "a2functional.h"
-#include <algorithm>
-#include <cstdint>
-#include <ctime>
-#include <memory>
-#include <vector>
 #include "MultiDiskAdaptor.h"
 
 #include <string>
@@ -14,22 +7,44 @@
 #include "a2doctest.h"
 
 #include "FileEntry.h"
+#include "Exception.h"
+#include "a2io.h"
+#include "array_fun.h"
 #include "TestUtil.h"
+#include "DiskWriter.h"
 #include "WrDiskCacheEntry.h"
 
 namespace aria2 {
 
 class MultiDiskAdaptorTest {
-protected:
+
+
+private:
   std::unique_ptr<MultiDiskAdaptor> adaptor;
 
 public:
-  MultiDiskAdaptorTest()
+  void setUp()
   {
     adaptor = make_unique<MultiDiskAdaptor>();
     adaptor->setPieceLength(2);
   }
+
+  void testWriteData();
+  void testReadData();
+  void testCutTrailingGarbage();
+  void testSize();
+  void testUtime();
+  void testResetDiskWriterEntries();
+  void testWriteCache();
 };
+
+A2_TEST(MultiDiskAdaptorTest, testWriteData)
+A2_TEST(MultiDiskAdaptorTest, testReadData)
+A2_TEST(MultiDiskAdaptorTest, testCutTrailingGarbage)
+A2_TEST(MultiDiskAdaptorTest, testSize)
+A2_TEST(MultiDiskAdaptorTest, testUtime)
+A2_TEST(MultiDiskAdaptorTest, testResetDiskWriterEntries)
+A2_TEST(MultiDiskAdaptorTest, testWriteCache)
 
 std::vector<std::shared_ptr<FileEntry>> createEntries()
 {
@@ -62,8 +77,7 @@ std::vector<std::shared_ptr<FileEntry>> createEntries()
   return entries;
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest,
-                  "MultiDiskAdaptorTest.testResetDiskWriterEntries")
+void MultiDiskAdaptorTest::testResetDiskWriterEntries()
 {
   {
     auto fileEntries = createEntries();
@@ -254,15 +268,21 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest,
 }
 
 namespace {
-void readPrefix(const std::string& filename, char* buffer, int length)
+void readFile(const std::string& filename, char* buf, int bufLength)
 {
-  const auto content = aria2::readFile(filename);
-  REQUIRE(content.size() >= static_cast<size_t>(length));
-  std::copy_n(content.data(), length, buffer);
+  FILE* f = fopen(filename.c_str(), "r");
+  if (f == nullptr) {
+    FAIL(strerror(errno));
+  }
+  int retval = fread(buf, 1, bufLength, f);
+  fclose(f);
+  if (retval != bufLength) {
+    FAIL("return value is not 1");
+  }
 }
 } // namespace
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteData")
+void MultiDiskAdaptorTest::testWriteData()
 {
   auto fileEntries = createEntries();
   adaptor->setFileEntries(std::begin(fileEntries), std::end(fileEntries));
@@ -274,7 +294,7 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteData")
 
   REQUIRE(File(A2_TEST_OUT_DIR "/file0.txt").isFile());
   char buf[128];
-  readPrefix(A2_TEST_OUT_DIR "/file1.txt", buf, 5);
+  readFile(A2_TEST_OUT_DIR "/file1.txt", buf, 5);
   buf[5] = '\0';
   REQUIRE_EQ(msg, std::string(buf));
 
@@ -283,10 +303,10 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteData")
   adaptor->writeData((const unsigned char*)msg2.c_str(), msg2.size(), 5);
   adaptor->closeFile();
 
-  readPrefix(A2_TEST_OUT_DIR "/file1.txt", buf, 15);
+  readFile(A2_TEST_OUT_DIR "/file1.txt", buf, 15);
   buf[15] = '\0';
   REQUIRE_EQ(std::string("1234567890ABCDE"), std::string(buf));
-  readPrefix(A2_TEST_OUT_DIR "/file2.txt", buf, 1);
+  readFile(A2_TEST_OUT_DIR "/file2.txt", buf, 1);
   buf[1] = '\0';
   REQUIRE_EQ(std::string("F"), std::string(buf));
 
@@ -295,23 +315,23 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteData")
   adaptor->writeData((const unsigned char*)msg3.c_str(), msg3.size(), 10);
   adaptor->closeFile();
 
-  readPrefix(A2_TEST_OUT_DIR "/file1.txt", buf, 15);
+  readFile(A2_TEST_OUT_DIR "/file1.txt", buf, 15);
   buf[15] = '\0';
   REQUIRE_EQ(std::string("123456789012345"), std::string(buf));
-  readPrefix(A2_TEST_OUT_DIR "/file2.txt", buf, 7);
+  readFile(A2_TEST_OUT_DIR "/file2.txt", buf, 7);
   buf[7] = '\0';
   REQUIRE_EQ(std::string("1234567"), std::string(buf));
 
   REQUIRE(File(A2_TEST_OUT_DIR "/file3.txt").isFile());
 
-  readPrefix(A2_TEST_OUT_DIR "/file4.txt", buf, 2);
+  readFile(A2_TEST_OUT_DIR "/file4.txt", buf, 2);
   buf[2] = '\0';
   REQUIRE_EQ(std::string("12"), std::string(buf));
 
   REQUIRE(File(A2_TEST_OUT_DIR "/file5.txt").isFile());
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testReadData")
+void MultiDiskAdaptorTest::testReadData()
 {
   auto entries = std::vector<std::shared_ptr<FileEntry>>{
       std::make_shared<FileEntry>(A2_TEST_DIR "/file1r.txt", 15, 0),
@@ -333,11 +353,11 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testReadData")
   REQUIRE_EQ(std::string("KLMN"), std::string((char*)buf));
   adaptor->readData(buf, 25, 0);
   buf[25] = '\0';
-  REQUIRE_EQ(std::string("1234567890ABCDEFGHIJKLMNO"), std::string((char*)buf));
+  REQUIRE_EQ(std::string("1234567890ABCDEFGHIJKLMNO"),
+                       std::string((char*)buf));
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest,
-                  "MultiDiskAdaptorTest.testCutTrailingGarbage")
+void MultiDiskAdaptorTest::testCutTrailingGarbage()
 {
   std::string dir = A2_TEST_OUT_DIR;
   std::string prefix = "aria2_MultiDiskAdaptorTest_testCutTrailingGarbage_";
@@ -360,7 +380,7 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest,
   REQUIRE_EQ((int64_t)512, File(fileEntries[1]->getPath()).size());
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testSize")
+void MultiDiskAdaptorTest::testSize()
 {
   std::string dir = A2_TEST_OUT_DIR;
   std::string prefix = "aria2_MultiDiskAdaptorTest_testSize_";
@@ -380,7 +400,7 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testSize")
   REQUIRE_EQ((int64_t)2, adaptor.size());
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testUtime")
+void MultiDiskAdaptorTest::testUtime()
 {
   std::string storeDir =
       A2_TEST_OUT_DIR "/aria2_MultiDiskAdaptorTest_testUtime";
@@ -406,17 +426,20 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testUtime")
 
   REQUIRE_EQ((size_t)2, adaptor.utime(Time(atime), Time(mtime)));
 
-  REQUIRE_EQ((time_t)mtime,
-             File(entries[0]->getPath()).getModifiedTime().getTimeFromEpoch());
+  REQUIRE_EQ(
+      (time_t)mtime,
+      File(entries[0]->getPath()).getModifiedTime().getTimeFromEpoch());
 
-  REQUIRE_EQ((time_t)mtime,
-             File(entries[3]->getPath()).getModifiedTime().getTimeFromEpoch());
+  REQUIRE_EQ(
+      (time_t)mtime,
+      File(entries[3]->getPath()).getModifiedTime().getTimeFromEpoch());
 
-  REQUIRE((time_t)mtime !=
-          File(entries[2]->getPath()).getModifiedTime().getTimeFromEpoch());
+  REQUIRE(
+      (time_t)mtime !=
+      File(entries[2]->getPath()).getModifiedTime().getTimeFromEpoch());
 }
 
-TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteCache")
+void MultiDiskAdaptorTest::testWriteCache()
 {
   std::string storeDir =
       A2_TEST_OUT_DIR "/aria2_MultiDiskAdaptorTest_testWriteCache";
@@ -436,10 +459,13 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteCache")
   adaptor->openFile();
   adaptor->writeCache(&cache);
   for (int i = 0; i < 2; ++i) {
-    REQUIRE_EQ(entries[i]->getLength(), File(entries[i]->getPath()).size());
+    REQUIRE_EQ(entries[i]->getLength(),
+                         File(entries[i]->getPath()).size());
   }
-  REQUIRE_EQ(data1 + data2.substr(0, 2), readFile(entries[0]->getPath()));
-  REQUIRE_EQ(data2.substr(2) + data3, readFile(entries[1]->getPath()));
+  REQUIRE_EQ(data1 + data2.substr(0, 2),
+                       readFile(entries[0]->getPath()));
+  REQUIRE_EQ(data2.substr(2) + data3,
+                       readFile(entries[1]->getPath()));
 
   adaptor->closeFile();
   for (int i = 0; i < 2; ++i) {
@@ -449,7 +475,8 @@ TEST_CASE_FIXTURE(MultiDiskAdaptorTest, "MultiDiskAdaptorTest.testWriteCache")
   cache.cacheData(createDataCell(123, data2.c_str()));
   adaptor->openFile();
   adaptor->writeCache(&cache);
-  REQUIRE_EQ((int64_t)(123 + data2.size()), File(entries[0]->getPath()).size());
+  REQUIRE_EQ((int64_t)(123 + data2.size()),
+                       File(entries[0]->getPath()).size());
   REQUIRE_EQ(data2, readFile(entries[0]->getPath()).substr(123));
 }
 

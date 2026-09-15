@@ -1,6 +1,3 @@
-#include "ValueBase.h"
-#include <cstddef>
-#include <string>
 #include "rpc_helper.h"
 
 #include "a2doctest.h"
@@ -16,15 +13,30 @@ namespace aria2 {
 namespace rpc {
 
 class RpcHelperTest {
+
+
 public:
+  void setUp() {}
+
+  void tearDown() {}
+
 #ifdef ENABLE_XML_RPC
+  void testParseMemory();
+  void testParseMemory_shouldFail();
   void testParseMemory_withoutParams();
+  void testParseMemory_withoutStringTag();
 #endif // ENABLE_XML_RPC
 };
 
 #ifdef ENABLE_XML_RPC
+A2_TEST(RpcHelperTest, testParseMemory)
+A2_TEST(RpcHelperTest, testParseMemory_shouldFail)
+A2_TEST(RpcHelperTest, testParseMemory_withoutStringTag)
+#endif // ENABLE_XML_RPC
 
-TEST_CASE_FIXTURE(RpcHelperTest, "RpcHelperTest.testParseMemory")
+#ifdef ENABLE_XML_RPC
+
+void RpcHelperTest::testParseMemory()
 {
   std::string s =
       "<?xml version=\"1.0\"?>"
@@ -65,19 +77,21 @@ TEST_CASE_FIXTURE(RpcHelperTest, "RpcHelperTest.testParseMemory")
   REQUIRE_EQ(std::string("aria2.addURI"), req.methodName);
   REQUIRE_EQ((size_t)3, req.params->size());
   REQUIRE_EQ((Integer::ValueType)100,
-             downcast<Integer>(req.params->get(0))->i());
+                       downcast<Integer>(req.params->get(0))->i());
   const Dict* dict = downcast<Dict>(req.params->get(1));
   REQUIRE_EQ((Integer::ValueType)65535,
-             downcast<Integer>(dict->get("max-count"))->i());
+                       downcast<Integer>(dict->get("max-count"))->i());
   // Current implementation handles double as string.
   REQUIRE_EQ(std::string("0.99"),
-             downcast<String>(dict->get("seed-ratio"))->s());
+                       downcast<String>(dict->get("seed-ratio"))->s());
   const List* list = downcast<List>(req.params->get(2));
-  REQUIRE_EQ(std::string("pudding"), downcast<String>(list->get(0))->s());
-  REQUIRE_EQ(std::string("hello world"), downcast<String>(list->get(1))->s());
+  REQUIRE_EQ(std::string("pudding"),
+                       downcast<String>(list->get(0))->s());
+  REQUIRE_EQ(std::string("hello world"),
+                       downcast<String>(list->get(1))->s());
 }
 
-TEST_CASE_FIXTURE(RpcHelperTest, "RpcHelperTest.testParseMemory_shouldFail")
+void RpcHelperTest::testParseMemory_shouldFail()
 {
   try {
     std::string s = "<methodCall>"
@@ -114,8 +128,7 @@ void RpcHelperTest::testParseMemory_withoutParams()
   }
 }
 
-TEST_CASE_FIXTURE(RpcHelperTest,
-                  "RpcHelperTest.testParseMemory_withoutStringTag")
+void RpcHelperTest::testParseMemory_withoutStringTag()
 {
   std::string s = "<?xml version=\"1.0\"?>"
                   "<methodCall>"
@@ -154,15 +167,19 @@ TEST_CASE_FIXTURE(RpcHelperTest,
 
   REQUIRE_EQ((size_t)4, req.params->size());
   REQUIRE_EQ(std::string("http://aria2.sourceforge.net"),
-             downcast<String>(req.params->get(0))->s());
+                       downcast<String>(req.params->get(0))->s());
   REQUIRE_EQ(std::string("http://aria2.sourceforge.net"),
-             downcast<String>(req.params->get(1))->s());
+                       downcast<String>(req.params->get(1))->s());
   const Dict* dict = downcast<Dict>(req.params->get(2));
-  REQUIRE_EQ(std::string("world"), downcast<String>(dict->get("hello"))->s());
+  REQUIRE_EQ(std::string("world"),
+                       downcast<String>(dict->get("hello"))->s());
   const List* list = downcast<List>(req.params->get(3));
-  REQUIRE_EQ(std::string("apple"), downcast<String>(list->get(0))->s());
-  REQUIRE_EQ(std::string("banana"), downcast<String>(list->get(1))->s());
-  REQUIRE_EQ(std::string("lemon"), downcast<String>(list->get(2))->s());
+  REQUIRE_EQ(std::string("apple"),
+                       downcast<String>(list->get(0))->s());
+  REQUIRE_EQ(std::string("banana"),
+                       downcast<String>(list->get(1))->s());
+  REQUIRE_EQ(std::string("lemon"),
+                       downcast<String>(list->get(2))->s());
 }
 
 #endif // ENABLE_XML_RPC

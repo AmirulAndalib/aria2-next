@@ -33,12 +33,6 @@
  */
 /* copyright --> */
 #include "ValueBase.h"
-#include "a2functional.h"
-#include <cstddef>
-#include <iterator>
-#include <memory>
-#include <string>
-#include <utility>
 
 namespace aria2 {
 

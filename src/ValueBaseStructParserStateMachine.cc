@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "ValueBaseStructParserStateMachine.h"
-#include "a2functional.h"
-#include <cstdint>
-#include <memory>
-#include <utility>
 
 #include <cstring>
 

@@ -38,7 +38,7 @@ def build_creator() -> Path:
         check=True,
     )
     subprocess.run(["cmake", "--build", str(build)], check=True)
-    return Path((build / "creator-path.txt").read_text(encoding="utf-8").strip())
+    return build / "aria2_next_create_torrent"
 
 
 def wait_seeding(engine: EngineProcess, gid: str, timeout: float) -> dict[str, object]:

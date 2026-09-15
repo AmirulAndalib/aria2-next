@@ -33,18 +33,11 @@
  */
 /* copyright --> */
 #include "ChunkedDecodingStreamFilter.h"
-#include "StreamFilter.h"
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
 
 #include <cassert>
 
-#include "support/Text.h"
-#include "support/Encoding.h"
+#include "util.h"
+#include "message.h"
 #include "DlAbortEx.h"
 
 namespace aria2 {

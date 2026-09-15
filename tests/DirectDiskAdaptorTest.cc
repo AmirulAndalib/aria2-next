@@ -1,9 +1,3 @@
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 #include "DirectDiskAdaptor.h"
 
 #include "a2doctest.h"
@@ -12,7 +6,7 @@
 #include "DefaultDiskWriter.h"
 #include "DiskWriter.h"
 #include "Exception.h"
-#include "a2functional.h"
+#include "util.h"
 #include "TestUtil.h"
 #include "ByteArrayDiskWriter.h"
 #include "WrDiskCacheEntry.h"
@@ -20,7 +14,28 @@
 
 namespace aria2 {
 
-TEST_CASE("DirectDiskAdaptorTest.testCutTrailingGarbage")
+class DirectDiskAdaptorTest {
+
+
+public:
+  void setUp() {}
+
+  void tearDown() {}
+
+  void testCutTrailingGarbage();
+  void testNoAllocationEnablesSparse();
+  void testAdaptiveAllocationUsesPlatformAllocator();
+  void testWriteCache();
+  void testWriteCache_mergesContiguousCells();
+};
+
+A2_TEST(DirectDiskAdaptorTest, testCutTrailingGarbage)
+A2_TEST(DirectDiskAdaptorTest, testNoAllocationEnablesSparse)
+A2_TEST(DirectDiskAdaptorTest, testAdaptiveAllocationUsesPlatformAllocator)
+A2_TEST(DirectDiskAdaptorTest, testWriteCache)
+A2_TEST(DirectDiskAdaptorTest, testWriteCache_mergesContiguousCells)
+
+void DirectDiskAdaptorTest::testCutTrailingGarbage()
 {
   std::string dir = A2_TEST_OUT_DIR;
   auto entry = std::make_shared<FileEntry>(
@@ -35,7 +50,8 @@ TEST_CASE("DirectDiskAdaptorTest.testCutTrailingGarbage")
 
   adaptor.cutTrailingGarbage();
 
-  REQUIRE_EQ((int64_t)entry->getLength(), File(entry->getPath()).size());
+  REQUIRE_EQ((int64_t)entry->getLength(),
+                       File(entry->getPath()).size());
 }
 
 namespace {
@@ -46,7 +62,10 @@ public:
     ++initAndOpenFileCount;
   }
 
-  virtual void openFile(int64_t totalLength = 0) override { ++openFileCount; }
+  virtual void openFile(int64_t totalLength = 0) override
+  {
+    ++openFileCount;
+  }
 
   virtual void closeFile() override {}
 
@@ -66,7 +85,10 @@ public:
     return 0;
   }
 
-  virtual void truncate(int64_t length) override { ++truncateCount; }
+  virtual void truncate(int64_t length) override
+  {
+    ++truncateCount;
+  }
 
   virtual void enableSparse() override { ++enableSparseCount; }
 
@@ -80,11 +102,10 @@ public:
 };
 } // namespace
 
-TEST_CASE("DirectDiskAdaptorTest.testNoAllocationEnablesSparse")
+void DirectDiskAdaptorTest::testNoAllocationEnablesSparse()
 {
   auto entry = std::make_shared<FileEntry>(
-      A2_TEST_OUT_DIR
-      "/aria2_DirectDiskAdaptorTest_testNoAllocationEnablesSparse",
+      A2_TEST_OUT_DIR "/aria2_DirectDiskAdaptorTest_testNoAllocationEnablesSparse",
       256, 0);
   auto fileEntries = std::vector<std::shared_ptr<FileEntry>>{entry};
   DirectDiskAdaptor adaptor;
@@ -102,11 +123,11 @@ TEST_CASE("DirectDiskAdaptorTest.testNoAllocationEnablesSparse")
   REQUIRE_EQ((size_t)0, writerPtr->truncateCount);
 }
 
-TEST_CASE("DirectDiskAdaptorTest.testAdaptiveAllocationUsesPlatformAllocator")
+void DirectDiskAdaptorTest::testAdaptiveAllocationUsesPlatformAllocator()
 {
   auto entry = std::make_shared<FileEntry>(
-      A2_TEST_OUT_DIR "/aria2_DirectDiskAdaptorTest_"
-                      "testAdaptiveAllocationUsesPlatformAllocator",
+      A2_TEST_OUT_DIR
+      "/aria2_DirectDiskAdaptorTest_testAdaptiveAllocationUsesPlatformAllocator",
       256, 0);
   auto fileEntries = std::vector<std::shared_ptr<FileEntry>>{entry};
   DirectDiskAdaptor adaptor;
@@ -122,7 +143,7 @@ TEST_CASE("DirectDiskAdaptorTest.testAdaptiveAllocationUsesPlatformAllocator")
 #endif // HAVE_SOME_FALLOCATE
 }
 
-TEST_CASE("DirectDiskAdaptorTest.testWriteCache")
+void DirectDiskAdaptorTest::testWriteCache()
 {
   auto adaptor = std::make_shared<DirectDiskAdaptor>();
   ByteArrayDiskWriter* dw;
@@ -179,7 +200,7 @@ public:
 };
 } // namespace
 
-TEST_CASE("DirectDiskAdaptorTest.testWriteCache_mergesContiguousCells")
+void DirectDiskAdaptorTest::testWriteCache_mergesContiguousCells()
 {
   auto adaptor = std::make_shared<DirectDiskAdaptor>();
   RecordingDiskWriter* dw;

@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "CUIDCounter.h"
-#include "Command.h"
-#include <cstdint>
 
 namespace aria2 {
 

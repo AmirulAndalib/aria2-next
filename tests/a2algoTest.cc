@@ -1,13 +1,25 @@
-#include <cstddef>
-#include <iterator>
-#include <utility>
 #include "a2algo.h"
 
 #include "a2doctest.h"
 
+#include "array_fun.h"
+
 namespace aria2 {
 
-TEST_CASE("a2algoTest.testSelect")
+class a2algoTest {
+
+
+public:
+  void setUp() {}
+
+  void tearDown() {}
+
+  void testSelect();
+};
+
+A2_TEST(a2algoTest, testSelect)
+
+void a2algoTest::testSelect()
 {
   size_t A[] = {1, 2, 3, 4, 7, 10, 11, 12, 13, 14, 15, 100, 112, 113, 114};
 

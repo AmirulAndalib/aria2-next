@@ -33,7 +33,9 @@
  */
 /* copyright --> */
 #include "DownloadResult.h"
-#include "error_code.h"
+#include "FileEntry.h"
+#include "Option.h"
+#include "MetadataInfo.h"
 
 namespace aria2 {
 

@@ -42,7 +42,7 @@
 #include "Log.h"
 #include "a2functional.h"
 #include "fmt.h"
-#include "platform/Process.h"
+#include "util.h"
 
 namespace aria2 {
 

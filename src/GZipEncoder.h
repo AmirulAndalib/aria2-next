@@ -35,7 +35,6 @@
 #ifndef D_GZIP_ENCODER_H
 #define D_GZIP_ENCODER_H
 #include "common.h"
-#include "support/Numbers.h"
 
 #include <string>
 

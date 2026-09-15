@@ -149,10 +149,10 @@ set(ZLIB_SRCS
     uncompr.c
     zutil.c)
 
-if(WIN32 AND ZLIB_BUILD_SHARED)
+if(WIN32)
     set(zlib_static_suffix "s")
     set(CMAKE_DEBUG_POSTFIX "d")
-endif()
+endif(WIN32)
 
 if(ZLIB_BUILD_SHARED)
     add_library(

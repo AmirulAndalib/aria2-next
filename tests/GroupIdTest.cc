@@ -1,20 +1,32 @@
-#include <cstdint>
-#include <memory>
-#include <string>
 #include "GroupId.h"
 
 #include "a2doctest.h"
 
 #include "TestUtil.h"
+#include "array_fun.h"
 
 namespace aria2 {
 
 class GroupIdTest {
+
+
 public:
-  GroupIdTest() { GroupId::clear(); }
+  void setUp() { GroupId::clear(); }
+
+  void testCreate();
+  void testToNumericId();
+  void testExpandUnique();
+  void testToHex();
+  void testToAbbrevHex();
 };
 
-TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testCreate")
+A2_TEST(GroupIdTest, testCreate)
+A2_TEST(GroupIdTest, testToNumericId)
+A2_TEST(GroupIdTest, testExpandUnique)
+A2_TEST(GroupIdTest, testToHex)
+A2_TEST(GroupIdTest, testToAbbrevHex)
+
+void GroupIdTest::testCreate()
 {
   std::shared_ptr<GroupId> gid = GroupId::create();
   REQUIRE(gid);
@@ -23,12 +35,13 @@ TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testCreate")
   REQUIRE(!GroupId::import(0));
 }
 
-TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testToNumericId")
+void GroupIdTest::testToNumericId()
 {
   a2_gid_t gid;
   std::string hex;
   hex = std::string(16, '0');
-  REQUIRE_EQ((int)GroupId::ERR_INVALID, GroupId::toNumericId(gid, hex.c_str()));
+  REQUIRE_EQ((int)GroupId::ERR_INVALID,
+                       GroupId::toNumericId(gid, hex.c_str()));
 
   hex = std::string(16, 'f');
   REQUIRE_EQ(0, GroupId::toNumericId(gid, hex.c_str()));
@@ -38,15 +51,17 @@ TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testToNumericId")
   REQUIRE_EQ((a2_gid_t)1311768467294899695LL, gid);
 
   hex = std::string(15, 'f');
-  REQUIRE_EQ((int)GroupId::ERR_INVALID, GroupId::toNumericId(gid, hex.c_str()));
-
-  REQUIRE_EQ((int)GroupId::ERR_INVALID, GroupId::toNumericId(gid, ""));
+  REQUIRE_EQ((int)GroupId::ERR_INVALID,
+                       GroupId::toNumericId(gid, hex.c_str()));
 
   REQUIRE_EQ((int)GroupId::ERR_INVALID,
-             GroupId::toNumericId(gid, "1234567890abcdeg"));
+                       GroupId::toNumericId(gid, ""));
+
+  REQUIRE_EQ((int)GroupId::ERR_INVALID,
+                       GroupId::toNumericId(gid, "1234567890abcdeg"));
 }
 
-TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testExpandUnique")
+void GroupIdTest::testExpandUnique()
 {
   a2_gid_t gid;
   std::shared_ptr<GroupId> ids[] = {GroupId::import(0xff80000000010000LL),
@@ -56,17 +71,21 @@ TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testExpandUnique")
     REQUIRE(i);
   }
 
-  REQUIRE_EQ((int)GroupId::ERR_NOT_UNIQUE, GroupId::expandUnique(gid, "ff8"));
-
-  REQUIRE_EQ((int)GroupId::ERR_INVALID, GroupId::expandUnique(gid, "ffg"));
+  REQUIRE_EQ((int)GroupId::ERR_NOT_UNIQUE,
+                       GroupId::expandUnique(gid, "ff8"));
 
   REQUIRE_EQ((int)GroupId::ERR_INVALID,
-             GroupId::expandUnique(gid, std::string(17, 'a').c_str()));
+                       GroupId::expandUnique(gid, "ffg"));
 
-  REQUIRE_EQ((int)GroupId::ERR_INVALID, GroupId::expandUnique(gid, ""));
+  REQUIRE_EQ(
+      (int)GroupId::ERR_INVALID,
+      GroupId::expandUnique(gid, std::string(17, 'a').c_str()));
+
+  REQUIRE_EQ((int)GroupId::ERR_INVALID,
+                       GroupId::expandUnique(gid, ""));
 
   REQUIRE_EQ((int)GroupId::ERR_NOT_UNIQUE,
-             GroupId::expandUnique(gid, "ff800000000"));
+                       GroupId::expandUnique(gid, "ff800000000"));
 
   REQUIRE_EQ(0, GroupId::expandUnique(gid, "ff8000000001"));
   REQUIRE_EQ(std::string("ff80000000010000"), GroupId::toHex(gid));
@@ -78,23 +97,23 @@ TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testExpandUnique")
   REQUIRE_EQ(std::string("fff8000000030000"), GroupId::toHex(gid));
 
   REQUIRE_EQ((int)GroupId::ERR_NOT_FOUND,
-             GroupId::expandUnique(gid, "ff80000000031"));
+                       GroupId::expandUnique(gid, "ff80000000031"));
 }
 
-TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testToHex")
+void GroupIdTest::testToHex()
 {
   REQUIRE_EQ(std::string("1234567890abcdef"),
-             GroupId::toHex(1311768467294899695LL));
+                       GroupId::toHex(1311768467294899695LL));
   REQUIRE_EQ(std::string("0000000000000001"),
-             GroupId::toHex(0000000000000000001LL));
+                       GroupId::toHex(0000000000000000001LL));
 }
 
-TEST_CASE_FIXTURE(GroupIdTest, "GroupIdTest.testToAbbrevHex")
+void GroupIdTest::testToAbbrevHex()
 {
   REQUIRE_EQ(std::string("123456"),
-             GroupId::toAbbrevHex(1311768467294899695LL));
+                       GroupId::toAbbrevHex(1311768467294899695LL));
   REQUIRE_EQ(std::string("000000"),
-             GroupId::toAbbrevHex(0000000000000000001LL));
+                       GroupId::toAbbrevHex(0000000000000000001LL));
 }
 
 } // namespace aria2

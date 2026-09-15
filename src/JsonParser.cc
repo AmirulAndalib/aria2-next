@@ -33,15 +33,11 @@
  */
 /* copyright --> */
 #include "JsonParser.h"
-#include <cstddef>
-#include <cstdint>
 
 #include <cassert>
 
 #include "StructParserStateMachine.h"
-#include "support/Text.h"
-#include "support/Encoding.h"
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 

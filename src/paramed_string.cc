@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "paramed_string.h"
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <string>
 
 namespace aria2 {
 

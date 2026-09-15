@@ -1,7 +1,7 @@
-#include <ctime>
 #include "a2functional.h"
 
 #include <string>
+#include <numeric>
 #include <algorithm>
 #include <vector>
 
@@ -10,7 +10,12 @@
 namespace aria2 {
 
 class a2functionalTest {
+
+
 public:
+  void testStrjoin();
+  void testLeastRecentAccess();
+
   struct LastAccess {
     time_t lastAccess_;
     LastAccess(time_t lastAccess) : lastAccess_(lastAccess) {}
@@ -19,7 +24,10 @@ public:
   };
 };
 
-TEST_CASE_FIXTURE(a2functionalTest, "a2functionalTest.testStrjoin")
+A2_TEST(a2functionalTest, testStrjoin)
+A2_TEST(a2functionalTest, testLeastRecentAccess)
+
+void a2functionalTest::testStrjoin()
 {
   std::vector<std::string> v;
   REQUIRE_EQ(std::string(""), strjoin(v.begin(), v.end(), " "));
@@ -32,10 +40,11 @@ TEST_CASE_FIXTURE(a2functionalTest, "a2functionalTest.testStrjoin")
   v.push_back("is");
   v.push_back("lonely");
 
-  REQUIRE_EQ(std::string("A hero is lonely"), strjoin(v.begin(), v.end(), " "));
+  REQUIRE_EQ(std::string("A hero is lonely"),
+                       strjoin(v.begin(), v.end(), " "));
 }
 
-TEST_CASE_FIXTURE(a2functionalTest, "a2functionalTest.testLeastRecentAccess")
+void a2functionalTest::testLeastRecentAccess()
 {
   std::vector<LastAccess> v;
   for (int i = 99; i >= 0; --i) {

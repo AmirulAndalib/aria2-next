@@ -11,11 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_link.h"
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
-#include <string>
-#include <vector>
 
 #include <algorithm>
 #include <limits>
@@ -24,10 +19,7 @@
 #include "base32.h"
 #include "ed2k_hash.h"
 #include "fmt.h"
-#include "support/Text.h"
-#include "support/Numbers.h"
-#include "support/Encoding.h"
-#include "a2iterator.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -133,14 +125,14 @@ Endpoint parseLinkEndpoint(const std::string& value)
     uint32_t value = 0;
     if (cryptOptions.empty() || !util::parseUIntNoThrow(value, cryptOptions) ||
         value > std::numeric_limits<uint16_t>::max()) {
-      throw DL_ABORT_EX(
-          fmt("Bad ED2K crypt options: %s", cryptOptions.c_str()));
+      throw DL_ABORT_EX(fmt("Bad ED2K crypt options: %s",
+                            cryptOptions.c_str()));
     }
     endpoint.cryptOptions = static_cast<uint16_t>(value);
   }
   if (fields.size() >= 4) {
-    endpoint.userHash =
-        parseHash(std::string(fields[3].first, fields[3].second));
+    endpoint.userHash = parseHash(std::string(fields[3].first,
+                                              fields[3].second));
   }
   return endpoint;
 }
@@ -169,16 +161,15 @@ void parseFileOption(Link& link, const std::string& option)
       throw DL_ABORT_EX("Bad ED2K part hash list.");
     }
     std::vector<Scip> hashes;
-    util::splitIter(option.begin() + 2, option.end(),
-                    std::back_inserter(hashes), ':');
+    util::splitIter(option.begin() + 2, option.end(), std::back_inserter(hashes),
+                    ':');
     for (const auto& hash : hashes) {
-      link.pieceHashes.push_back(
-          parseHash(std::string(hash.first, hash.second)));
+      link.pieceHashes.push_back(parseHash(std::string(hash.first, hash.second)));
     }
   }
   else if (util::startsWith(option, "h=")) {
-    link.aichHash =
-        parseAichHash(std::string(option.begin() + 2, option.end()));
+    link.aichHash = parseAichHash(std::string(option.begin() + 2,
+                                              option.end()));
   }
   else if (util::startsWith(option, "sources,")) {
     std::vector<Scip> sources;
@@ -232,8 +223,8 @@ Link parseServerLink(const std::vector<std::string>& fields)
 Link parseUrlLink(const std::vector<std::string>& fields, LinkType type,
                   const char* name)
 {
-  if (fields.size() != 4 || fields.front() != "ed2k://" || fields[1] != name ||
-      fields.back() != "/") {
+  if (fields.size() != 4 || fields.front() != "ed2k://" ||
+      fields[1] != name || fields.back() != "/") {
     throw DL_ABORT_EX(fmt("Malformed ED2K %s link.", name));
   }
   Link link;

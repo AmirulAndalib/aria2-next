@@ -32,19 +32,7 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#ifdef _WIN32
-#  include <windows.h>
-#endif
 #include "FeatureConfig.h"
-#include "common.h"
-#include <cstdint>
-#include <curl/curlver.h>
-#include <string>
-#include <gpac/setup.h>
-#include <gpac/version.h>
-extern "C" {
-#include <libavutil/avutil.h>
-}
 
 #include <curl/curl.h>
 #include <nghttp2/nghttp2ver.h>
@@ -72,8 +60,7 @@ extern "C" {
 #ifdef ENABLE_BITTORRENT
 #  include <libtorrent/version.hpp>
 #endif
-#include "a2functional.h"
-#include "fmt.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -165,8 +152,6 @@ const char* strSupportedFeature(int feature)
 
   case (FEATURE_SFTP):
     return "SFTP";
-  case FEATURE_MEDIA:
-    return "HLS/DASH";
     break;
 
   default:
@@ -177,8 +162,6 @@ const char* strSupportedFeature(int feature)
 std::string usedLibs()
 {
   std::string res;
-  res += std::string("GPAC/") + GPAC_VERSION + " FFmpeg/" + av_version_info() +
-         " ";
   res += fmt("spdlog/%d.%d.%d ", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR,
              SPDLOG_VER_PATCH);
   res += "libcurl/" LIBCURL_VERSION;

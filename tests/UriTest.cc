@@ -1,4 +1,3 @@
-#include <cstdint>
 #include "uri.h"
 
 #include "a2doctest.h"
@@ -7,7 +6,70 @@ namespace aria2 {
 
 namespace uri {
 
-TEST_CASE("UriTest.testSetUri1")
+class UriTest {
+
+
+public:
+  void testSetUri1();
+  void testSetUri2();
+  void testSetUri3();
+  void testSetUri4();
+  void testSetUri5();
+  void testSetUri6();
+  void testSetUri7();
+  void testSetUri8();
+  void testSetUri9();
+  void testSetUri10();
+  void testSetUri11();
+  void testSetUri12();
+  void testSetUri13();
+  void testSetUri14();
+  void testSetUri15();
+  void testSetUri16();
+  void testSetUri18();
+  void testSetUri19();
+  void testSetUri20();
+  void testSetUri_username();
+  void testSetUri_usernamePassword();
+  void testSetUri_zeroUsername();
+  void testSetUri_ipv6();
+  void testInnerLink();
+  void testConstruct();
+  void testSwap();
+  void testJoinUri();
+  void testJoinPath();
+};
+
+A2_TEST(UriTest, testSetUri1)
+A2_TEST(UriTest, testSetUri2)
+A2_TEST(UriTest, testSetUri3)
+A2_TEST(UriTest, testSetUri4)
+A2_TEST(UriTest, testSetUri5)
+A2_TEST(UriTest, testSetUri6)
+A2_TEST(UriTest, testSetUri7)
+A2_TEST(UriTest, testSetUri8)
+A2_TEST(UriTest, testSetUri9)
+A2_TEST(UriTest, testSetUri10)
+A2_TEST(UriTest, testSetUri11)
+A2_TEST(UriTest, testSetUri12)
+A2_TEST(UriTest, testSetUri13)
+A2_TEST(UriTest, testSetUri14)
+A2_TEST(UriTest, testSetUri15)
+A2_TEST(UriTest, testSetUri16)
+A2_TEST(UriTest, testSetUri18)
+A2_TEST(UriTest, testSetUri19)
+A2_TEST(UriTest, testSetUri20)
+A2_TEST(UriTest, testSetUri_username)
+A2_TEST(UriTest, testSetUri_usernamePassword)
+A2_TEST(UriTest, testSetUri_zeroUsername)
+A2_TEST(UriTest, testSetUri_ipv6)
+A2_TEST(UriTest, testInnerLink)
+A2_TEST(UriTest, testConstruct)
+A2_TEST(UriTest, testSwap)
+A2_TEST(UriTest, testJoinUri)
+A2_TEST(UriTest, testJoinPath)
+
+void UriTest::testSetUri1()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/");
@@ -24,7 +86,7 @@ TEST_CASE("UriTest.testSetUri1")
   REQUIRE(!us.ipv6LiteralAddress);
 }
 
-TEST_CASE("UriTest.testSetUri2")
+void UriTest::testSetUri2()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com:8080/index.html");
@@ -38,7 +100,7 @@ TEST_CASE("UriTest.testSetUri2")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri3")
+void UriTest::testSetUri3()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/aria2/index.html");
@@ -52,7 +114,7 @@ TEST_CASE("UriTest.testSetUri3")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri4")
+void UriTest::testSetUri4()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/aria2/aria3/index.html");
@@ -66,7 +128,7 @@ TEST_CASE("UriTest.testSetUri4")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri5")
+void UriTest::testSetUri5()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/aria2/aria3/");
@@ -80,7 +142,7 @@ TEST_CASE("UriTest.testSetUri5")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri6")
+void UriTest::testSetUri6()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/aria2/aria3");
@@ -94,7 +156,7 @@ TEST_CASE("UriTest.testSetUri6")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri7")
+void UriTest::testSetUri7()
 {
   UriStruct us;
   bool v = parse(us, "http://");
@@ -102,7 +164,7 @@ TEST_CASE("UriTest.testSetUri7")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri8")
+void UriTest::testSetUri8()
 {
   UriStruct us;
   bool v = parse(us, "http:/aria.rednoah.com");
@@ -110,7 +172,7 @@ TEST_CASE("UriTest.testSetUri8")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri9")
+void UriTest::testSetUri9()
 {
   UriStruct us;
   bool v = parse(us, "h");
@@ -118,7 +180,7 @@ TEST_CASE("UriTest.testSetUri9")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri10")
+void UriTest::testSetUri10()
 {
   UriStruct us;
   bool v = parse(us, "");
@@ -126,7 +188,7 @@ TEST_CASE("UriTest.testSetUri10")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri11")
+void UriTest::testSetUri11()
 {
   UriStruct us;
   bool v = parse(us, "http://host?query/");
@@ -139,7 +201,7 @@ TEST_CASE("UriTest.testSetUri11")
   REQUIRE_EQ(std::string("?query/"), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri12")
+void UriTest::testSetUri12()
 {
   UriStruct us;
   bool v = parse(us, "http://host?query");
@@ -152,7 +214,7 @@ TEST_CASE("UriTest.testSetUri12")
   REQUIRE_EQ(std::string("?query"), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri13")
+void UriTest::testSetUri13()
 {
   UriStruct us;
   bool v = parse(us, "http://host/?query");
@@ -165,7 +227,7 @@ TEST_CASE("UriTest.testSetUri13")
   REQUIRE_EQ(std::string("?query"), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri14")
+void UriTest::testSetUri14()
 {
   UriStruct us;
   bool v = parse(us, "http://host:8080/abc?query");
@@ -179,7 +241,7 @@ TEST_CASE("UriTest.testSetUri14")
   REQUIRE_EQ(std::string("?query"), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri15")
+void UriTest::testSetUri15()
 {
   UriStruct us;
   // 2 slashes after host name and dir
@@ -192,7 +254,7 @@ TEST_CASE("UriTest.testSetUri15")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri16")
+void UriTest::testSetUri16()
 {
   UriStruct us;
   // 2 slashes before file
@@ -205,7 +267,7 @@ TEST_CASE("UriTest.testSetUri16")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testSetUri18")
+void UriTest::testSetUri18()
 {
   UriStruct us;
   bool v = parse(us, "http://1/");
@@ -213,7 +275,7 @@ TEST_CASE("UriTest.testSetUri18")
   REQUIRE(v);
 }
 
-TEST_CASE("UriTest.testSetUri19")
+void UriTest::testSetUri19()
 {
   UriStruct us;
   // No host
@@ -222,7 +284,7 @@ TEST_CASE("UriTest.testSetUri19")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri20")
+void UriTest::testSetUri20()
 {
   UriStruct us;
   bool v;
@@ -235,17 +297,18 @@ TEST_CASE("UriTest.testSetUri20")
   REQUIRE(!v);
 }
 
-TEST_CASE("UriTest.testSetUri_zeroUsername")
+void UriTest::testSetUri_zeroUsername()
 {
   UriStruct us;
   REQUIRE(!parse(us, "sftp://@localhost/download/aria2-1.0.0.tar.bz2"));
 
   REQUIRE(!parse(us, "sftp://:@localhost/download/aria2-1.0.0.tar.bz2"));
 
-  REQUIRE(!parse(us, "sftp://:pass@localhost/download/aria2-1.0.0.tar.bz2"));
+  REQUIRE(
+      !parse(us, "sftp://:pass@localhost/download/aria2-1.0.0.tar.bz2"));
 }
 
-TEST_CASE("UriTest.testSetUri_username")
+void UriTest::testSetUri_username()
 {
   UriStruct us;
   REQUIRE(
@@ -259,11 +322,12 @@ TEST_CASE("UriTest.testSetUri_username")
   REQUIRE_EQ(std::string(""), us.password);
 }
 
-TEST_CASE("UriTest.testSetUri_usernamePassword")
+void UriTest::testSetUri_usernamePassword()
 {
   UriStruct us;
-  REQUIRE(parse(us, "sftp://aria2@user%40:aria2@pass%40@localhost/download/"
-                    "aria2-1.0.0.tar.bz2"));
+  REQUIRE(parse(us,
+                       "sftp://aria2@user%40:aria2@pass%40@localhost/download/"
+                       "aria2-1.0.0.tar.bz2"));
   REQUIRE_EQ(std::string("sftp"), us.protocol);
   REQUIRE_EQ((uint16_t)22, us.port);
   REQUIRE_EQ(std::string("pass%40@localhost"), us.host);
@@ -278,7 +342,7 @@ TEST_CASE("UriTest.testSetUri_usernamePassword")
   REQUIRE_EQ(std::string(""), us.password);
 }
 
-TEST_CASE("UriTest.testSetUri_ipv6")
+void UriTest::testSetUri_ipv6()
 {
   UriStruct us;
   REQUIRE(!parse(us, "http://[::1"));
@@ -293,7 +357,7 @@ TEST_CASE("UriTest.testSetUri_ipv6")
   REQUIRE(us.ipv6LiteralAddress);
 }
 
-TEST_CASE("UriTest.testInnerLink")
+void UriTest::testInnerLink()
 {
   UriStruct us;
   bool v = parse(us, "http://aria.rednoah.com/index.html#download");
@@ -302,12 +366,13 @@ TEST_CASE("UriTest.testInnerLink")
   REQUIRE_EQ(std::string(""), us.query);
 }
 
-TEST_CASE("UriTest.testConstruct")
+void UriTest::testConstruct()
 {
   {
     UriStruct us;
     REQUIRE(parse(us, "http://host/dir/file?q=abc#foo"));
-    REQUIRE_EQ(std::string("http://host/dir/file?q=abc"), construct(us));
+    REQUIRE_EQ(std::string("http://host/dir/file?q=abc"),
+                         construct(us));
   }
   {
     UriStruct us;
@@ -354,101 +419,117 @@ TEST_CASE("UriTest.testConstruct")
   {
     UriStruct us;
     REQUIRE(parse(us, "http://[::1]:8000/dir/file"));
-    REQUIRE_EQ(std::string("http://[::1]:8000/dir/file"), construct(us));
+    REQUIRE_EQ(std::string("http://[::1]:8000/dir/file"),
+                         construct(us));
   }
   {
     UriStruct us;
     REQUIRE(parse(us, "sftp://user%40@host/dir/file"));
-    REQUIRE_EQ(std::string("sftp://user%40@host/dir/file"), construct(us));
+    REQUIRE_EQ(std::string("sftp://user%40@host/dir/file"),
+                         construct(us));
   }
   {
     UriStruct us;
     REQUIRE(parse(us, "sftp://user:@host/dir/file"));
-    REQUIRE_EQ(std::string("sftp://user:@host/dir/file"), construct(us));
+    REQUIRE_EQ(std::string("sftp://user:@host/dir/file"),
+                         construct(us));
   }
   {
     UriStruct us;
     REQUIRE(parse(us, "sftp://user:passwd%40@host/dir/file"));
     REQUIRE_EQ(std::string("sftp://user:passwd%40@host/dir/file"),
-               construct(us));
+                         construct(us));
   }
 }
 
-TEST_CASE("UriTest.testSwap")
+void UriTest::testSwap()
 {
   UriStruct us1;
   REQUIRE(parse(us1, "http://u1:p1@[::1]/dir1/file1?k1=v1"));
   UriStruct us2;
   REQUIRE(parse(us2, "sftp://host2/dir2/file2?k2=v2"));
   us1.swap(us2);
-  REQUIRE_EQ(std::string("sftp://host2/dir2/file2?k2=v2"), construct(us1));
+  REQUIRE_EQ(std::string("sftp://host2/dir2/file2?k2=v2"),
+                       construct(us1));
   REQUIRE_EQ(std::string("http://u1:p1@[::1]/dir1/file1?k1=v1"),
-             construct(us2));
+                       construct(us2));
 }
 
-TEST_CASE("UriTest.testJoinUri")
+void UriTest::testJoinUri()
 {
   REQUIRE_EQ(std::string("http://host/dir/file"),
-             joinUri("http://base/d/f", "http://host/dir/file"));
+                       joinUri("http://base/d/f", "http://host/dir/file"));
 
   REQUIRE_EQ(std::string("http://base/dir/file"),
-             joinUri("http://base/d/f", "/dir/file"));
+                       joinUri("http://base/d/f", "/dir/file"));
 
   REQUIRE_EQ(std::string("http://base/d/dir/file"),
-             joinUri("http://base/d/f", "dir/file"));
+                       joinUri("http://base/d/f", "dir/file"));
 
-  REQUIRE_EQ(std::string("http://base/d/"), joinUri("http://base/d/f", ""));
+  REQUIRE_EQ(std::string("http://base/d/"),
+                       joinUri("http://base/d/f", ""));
 
   REQUIRE_EQ(std::string("http://base/d/dir/file?q=k"),
-             joinUri("http://base/d/f", "dir/file?q=k"));
+                       joinUri("http://base/d/f", "dir/file?q=k"));
 
   REQUIRE_EQ(std::string("dir/file"), joinUri("baduri", "dir/file"));
 
   REQUIRE_EQ(std::string("http://base/a/b/d/file"),
-             joinUri("http://base/a/b/c/x", "../d/file"));
+                       joinUri("http://base/a/b/c/x", "../d/file"));
 
   REQUIRE_EQ(std::string("http://base/a/b/file"),
-             joinUri("http://base/c/x", "../../a/b/file"));
+                       joinUri("http://base/c/x", "../../a/b/file"));
 
-  REQUIRE_EQ(std::string("http://base/"), joinUri("http://base/c/x", "../.."));
+  REQUIRE_EQ(std::string("http://base/"),
+                       joinUri("http://base/c/x", "../.."));
 
-  REQUIRE_EQ(std::string("http://base/"), joinUri("http://base/c/x", ".."));
+  REQUIRE_EQ(std::string("http://base/"),
+                       joinUri("http://base/c/x", ".."));
 
   REQUIRE_EQ(std::string("http://base/a/file"),
-             joinUri("http://base/b/c/x", "/a/x/../file"));
+                       joinUri("http://base/b/c/x", "/a/x/../file"));
 
   REQUIRE_EQ(std::string("http://base/file"),
-             joinUri("http://base/f/?q=k", "/file"));
+                       joinUri("http://base/f/?q=k", "/file"));
 
   REQUIRE_EQ(std::string("http://base/file?q=/"),
-             joinUri("http://base/", "/file?q=/"));
+                       joinUri("http://base/", "/file?q=/"));
 
   REQUIRE_EQ(std::string("http://base/file?q=v"),
-             joinUri("http://base/", "/file?q=v#a?q=x"));
+                       joinUri("http://base/", "/file?q=v#a?q=x"));
 
   REQUIRE_EQ(std::string("http://base/file"),
-             joinUri("http://base/", "/file#a?q=x"));
+                       joinUri("http://base/", "/file#a?q=x"));
 }
 
-TEST_CASE("UriTest.testJoinPath")
+void UriTest::testJoinPath()
 {
   REQUIRE_EQ(std::string("/b"), joinPath("/a", "/b"));
-  REQUIRE_EQ(std::string("/alpha/bravo"), joinPath("/alpha", "bravo"));
-  REQUIRE_EQ(std::string("/bravo"), joinPath("/a", "/alpha/../bravo"));
+  REQUIRE_EQ(std::string("/alpha/bravo"),
+                       joinPath("/alpha", "bravo"));
+  REQUIRE_EQ(std::string("/bravo"),
+                       joinPath("/a", "/alpha/../bravo"));
   REQUIRE_EQ(std::string("/alpha/charlie/"),
-             joinPath("/a", "/alpha/bravo/../charlie/"));
-  REQUIRE_EQ(std::string("/alpha/bravo/"), joinPath("/a", "/alpha////bravo//"));
-  REQUIRE_EQ(std::string("/alpha/bravo/"), joinPath("/a", "/alpha/././bravo/"));
-  REQUIRE_EQ(std::string("/alpha/bravo/"), joinPath("/a", "/alpha/bravo/./"));
-  REQUIRE_EQ(std::string("/alpha/bravo/"), joinPath("/a", "/alpha/bravo/."));
-  REQUIRE_EQ(std::string("/alpha/"), joinPath("/a", "/alpha/bravo/.."));
+                       joinPath("/a", "/alpha/bravo/../charlie/"));
+  REQUIRE_EQ(std::string("/alpha/bravo/"),
+                       joinPath("/a", "/alpha////bravo//"));
+  REQUIRE_EQ(std::string("/alpha/bravo/"),
+                       joinPath("/a", "/alpha/././bravo/"));
+  REQUIRE_EQ(std::string("/alpha/bravo/"),
+                       joinPath("/a", "/alpha/bravo/./"));
+  REQUIRE_EQ(std::string("/alpha/bravo/"),
+                       joinPath("/a", "/alpha/bravo/."));
+  REQUIRE_EQ(std::string("/alpha/"),
+                       joinPath("/a", "/alpha/bravo/.."));
   REQUIRE_EQ(std::string("/alpha/"), joinPath("/", "../alpha/"));
   REQUIRE_EQ(std::string("/bravo/"), joinPath("/alpha", "../bravo/"));
-  REQUIRE_EQ(std::string("/bravo/"), joinPath("/alpha", "../../bravo/"));
+  REQUIRE_EQ(std::string("/bravo/"),
+                       joinPath("/alpha", "../../bravo/"));
   // If neither paths do not start with '/', the resulting path also
   // does not start with '/'.
   REQUIRE_EQ(std::string("alpha/bravo"), joinPath("alpha", "bravo"));
-  REQUIRE_EQ(std::string("bravo/"), joinPath("alpha", "../../bravo/"));
+  REQUIRE_EQ(std::string("bravo/"),
+                       joinPath("alpha", "../../bravo/"));
 }
 
 } // namespace uri

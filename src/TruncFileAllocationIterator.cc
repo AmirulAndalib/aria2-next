@@ -33,8 +33,7 @@
  */
 /* copyright --> */
 #include "TruncFileAllocationIterator.h"
-#include "BinaryStream.h"
-#include <cstdint>
+#include "DlAbortEx.h"
 
 namespace aria2 {
 

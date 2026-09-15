@@ -1,5 +1,3 @@
-#include <cstddef>
-#include <cstdint>
 #include "array_fun.h"
 #include "a2doctest.h"
 
@@ -8,16 +6,27 @@ using namespace aria2::expr;
 namespace aria2 {
 
 class array_funTest {
+
+
 public:
   void testBit_negate();
   void testBit_and();
+  void testArray_negate();
+  void testArray_and();
+  void testArrayLength();
+  void testArrayWrapper();
 
   struct X {
     int m;
   };
 };
 
-TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArray_negate")
+A2_TEST(array_funTest, testArray_negate)
+A2_TEST(array_funTest, testArray_and)
+A2_TEST(array_funTest, testArrayLength)
+A2_TEST(array_funTest, testArrayWrapper)
+
+void array_funTest::testArray_negate()
 {
   unsigned char a[] = {0xaa, 0x55};
   REQUIRE_EQ((unsigned char)0x55, (~array(a))[0]);
@@ -27,7 +36,7 @@ TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArray_negate")
   REQUIRE_EQ((unsigned char)0x55, (~~array(a))[1]);
 }
 
-TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArray_and")
+void array_funTest::testArray_and()
 {
   unsigned char a1[] = {0xaa, 0x55};
   unsigned char a2[] = {0x1a, 0x25};
@@ -44,7 +53,7 @@ TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArray_and")
   REQUIRE_EQ((unsigned char)0x8a, (~array(a1) & ~array(a2))[1]);
 }
 
-TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArrayLength")
+void array_funTest::testArrayLength()
 {
   int64_t ia[] = {1, 2, 3, 4, 5};
   REQUIRE_EQ((size_t)5, arraySize(ia));
@@ -69,7 +78,7 @@ void arrayWrapperConst(const array_wrapper<int, 10>& array)
 }
 } // namespace
 
-TEST_CASE_FIXTURE(array_funTest, "array_funTest.testArrayWrapper")
+void array_funTest::testArrayWrapper()
 {
   array_wrapper<int, 10> a1;
   REQUIRE_EQ((size_t)10, a1.size());

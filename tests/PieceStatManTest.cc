@@ -1,12 +1,29 @@
-#include <cstddef>
-#include <vector>
 #include "PieceStatMan.h"
 
 #include "a2doctest.h"
 
 namespace aria2 {
 
-TEST_CASE("PieceStatManTest.testAddPieceStats_index")
+class PieceStatManTest {
+
+
+public:
+  void setUp() {}
+
+  void tearDown() {}
+
+  void testAddPieceStats_index();
+  void testAddPieceStats_bitfield();
+  void testUpdatePieceStats();
+  void testSubtractPieceStats();
+};
+
+A2_TEST(PieceStatManTest, testAddPieceStats_index)
+A2_TEST(PieceStatManTest, testAddPieceStats_bitfield)
+A2_TEST(PieceStatManTest, testUpdatePieceStats)
+A2_TEST(PieceStatManTest, testSubtractPieceStats)
+
+void PieceStatManTest::testAddPieceStats_index()
 {
   PieceStatMan pieceStatMan(10, false);
   pieceStatMan.addPieceStats(1);
@@ -40,7 +57,7 @@ TEST_CASE("PieceStatManTest.testAddPieceStats_index")
   }
 }
 
-TEST_CASE("PieceStatManTest.testAddPieceStats_bitfield")
+void PieceStatManTest::testAddPieceStats_bitfield()
 {
   PieceStatMan pieceStatMan(10, false);
   const unsigned char bitfield[] = {0xaa, 0x80};
@@ -62,7 +79,7 @@ TEST_CASE("PieceStatManTest.testAddPieceStats_bitfield")
   }
 }
 
-TEST_CASE("PieceStatManTest.testUpdatePieceStats")
+void PieceStatManTest::testUpdatePieceStats()
 {
   PieceStatMan pieceStatMan(10, false);
   const unsigned char bitfield[] = {0xff, 0xc0};
@@ -85,7 +102,7 @@ TEST_CASE("PieceStatManTest.testUpdatePieceStats")
   }
 }
 
-TEST_CASE("PieceStatManTest.testSubtractPieceStats")
+void PieceStatManTest::testSubtractPieceStats()
 {
   PieceStatMan pieceStatMan(10, false);
   const unsigned char bitfield[] = {0xf0, 0x00};

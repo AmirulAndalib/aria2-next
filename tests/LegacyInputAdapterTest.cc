@@ -1,4 +1,3 @@
-#include "aria2/aria2.h"
 #include "LegacyInputAdapter.h"
 
 #include <algorithm>
@@ -76,12 +75,12 @@ TEST_CASE("LegacyInputAdapter normalizes retired port and Metalink values")
 
 TEST_CASE("LegacyInputAdapter accepts retired DNS controls")
 {
-  const auto output =
-      normalizeLegacyInput({{"async-dns", "false"},
-                            {"async-dns-server", "1.1.1.1,8.8.8.8"},
-                            {"enable-async-dns6", "true"},
-                            {"dir", "/tmp/downloads"}},
-                           LegacyInputSource::Configuration);
+  const auto output = normalizeLegacyInput(
+      {{"async-dns", "false"},
+       {"async-dns-server", "1.1.1.1,8.8.8.8"},
+       {"enable-async-dns6", "true"},
+       {"dir", "/tmp/downloads"}},
+      LegacyInputSource::Configuration);
 
   CHECK_EQ(1, output.size());
   CHECK_EQ("/tmp/downloads", valueFor(output, "dir"));
@@ -100,9 +99,8 @@ TEST_CASE("LegacyInputAdapter rewrites legacy command-line forms")
   char password[] = "--ftp-passwd=secret";
   char current[] = "--dir=/tmp/downloads";
   char uri[] = "https://example.com/file";
-  char* argv[]{executable,     split,   perServer,
-               perServerValue, retired, resolver,
-               password,       current, uri};
+  char* argv[]{executable, split,   perServer, perServerValue, retired,
+               resolver,   password, current,   uri};
 
   const auto output = normalizeLegacyCommandLine(
       static_cast<int>(std::size(argv)), argv, LegacyInputSource::CommandLine);

@@ -33,19 +33,13 @@
  */
 /* copyright --> */
 #include "BufferedFile.h"
-#include <cstdio>
-#include <stdio.h>
-#ifdef _WIN32
-#  include <io.h>
-#endif
 
 #include <cstring>
 #include <cstdarg>
 #include <ostream>
 
 #include "a2io.h"
-#include "platform/NativeText.h"
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 

@@ -1,8 +1,3 @@
-#include <cstddef>
-#include <iterator>
-#include <memory>
-#include <utility>
-#include <vector>
 #include "MetalinkEntry.h"
 
 #include "a2doctest.h"
@@ -11,6 +6,25 @@
 #include "a2functional.h"
 
 namespace aria2 {
+
+class MetalinkEntryTest {
+
+
+private:
+public:
+  void setUp() {}
+  void tearDown() {}
+
+  void testDropUnsupportedResource();
+  void testReorderResourcesByPriority();
+  void testSetLocationPriority();
+  void testSetProtocolPriority();
+};
+
+A2_TEST(MetalinkEntryTest, testDropUnsupportedResource)
+A2_TEST(MetalinkEntryTest, testReorderResourcesByPriority)
+A2_TEST(MetalinkEntryTest, testSetLocationPriority)
+A2_TEST(MetalinkEntryTest, testSetProtocolPriority)
 
 std::unique_ptr<MetalinkEntry> createTestEntry()
 {
@@ -49,7 +63,7 @@ std::unique_ptr<MetalinkEntry> createTestEntry()
   return entry;
 }
 
-TEST_CASE("MetalinkEntryTest.testDropUnsupportedResource")
+void MetalinkEntryTest::testDropUnsupportedResource()
 {
   auto entry = createTestEntry();
 
@@ -69,7 +83,7 @@ TEST_CASE("MetalinkEntryTest.testDropUnsupportedResource")
   REQUIRE_EQ(MetalinkResource::TYPE_HTTPS, (*itr++)->type);
 }
 
-TEST_CASE("MetalinkEntryTest.testReorderResourcesByPriority")
+void MetalinkEntryTest::testReorderResourcesByPriority()
 {
   auto entry = createTestEntry();
 
@@ -82,7 +96,7 @@ TEST_CASE("MetalinkEntryTest.testReorderResourcesByPriority")
   REQUIRE_EQ(90, entry->resources.at(4)->priority);
 }
 
-TEST_CASE("MetalinkEntryTest.testSetLocationPriority")
+void MetalinkEntryTest::testSetLocationPriority()
 {
   auto entry = createTestEntry();
 
@@ -102,7 +116,7 @@ TEST_CASE("MetalinkEntryTest.testSetLocationPriority")
   REQUIRE_EQ(-90, entry->resources[4]->priority);
 }
 
-TEST_CASE("MetalinkEntryTest.testSetProtocolPriority")
+void MetalinkEntryTest::testSetProtocolPriority()
 {
   auto entry = createTestEntry();
   entry->setProtocolPriority("http", -1);

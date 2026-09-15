@@ -34,19 +34,9 @@
 /* copyright --> */
 
 #include "util_security.h"
-#include "MessageDigest.h"
-#include "a2netcompat.h"
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <memory>
-#include <string>
 
 #include "FatalException.h"
-#include "support/Random.h"
-#include "a2functional.h"
-#include "fmt.h"
+#include "util.h"
 
 namespace {
 using namespace aria2;

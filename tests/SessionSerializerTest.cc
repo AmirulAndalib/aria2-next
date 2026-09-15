@@ -1,9 +1,3 @@
-#include "ed2k_link.h"
-#include "error_code.h"
-#include <cstddef>
-#include <memory>
-#include <string>
-#include <vector>
 #include "SessionSerializer.h"
 
 #include <iostream>
@@ -26,12 +20,25 @@
 #include "Ed2kAttribute.h"
 #include "Ed2kKadState.h"
 #include "Ed2kUploadQueue.h"
-#include "support/Encoding.h"
-#include "fmt.h"
+#include "util.h"
 
 namespace aria2 {
 
-TEST_CASE("SessionSerializerTest.testSave")
+class SessionSerializerTest {
+
+public:
+  void testSave();
+  void testSaveErrorDownload();
+  void testSaveEd2kDownload();
+  void testSaveActiveEd2kSharing();
+};
+
+A2_TEST(SessionSerializerTest, testSave)
+A2_TEST(SessionSerializerTest, testSaveErrorDownload)
+A2_TEST(SessionSerializerTest, testSaveEd2kDownload)
+A2_TEST(SessionSerializerTest, testSaveActiveEd2kSharing)
+
+void SessionSerializerTest::testSave()
 {
 #if defined(ENABLE_BITTORRENT) && defined(ENABLE_METALINK)
   std::vector<std::string> uris{
@@ -128,7 +135,7 @@ TEST_CASE("SessionSerializerTest.testSave")
 #endif // defined(ENABLE_BITTORRENT) && defined(ENABLE_METALINK)
 }
 
-TEST_CASE("SessionSerializerTest.testSaveErrorDownload")
+void SessionSerializerTest::testSaveErrorDownload()
 {
   std::shared_ptr<DownloadResult> dr =
       createDownloadResult(error_code::TIME_OUT, "http://error");
@@ -149,7 +156,7 @@ TEST_CASE("SessionSerializerTest.testSaveErrorDownload")
   REQUIRE_EQ(std::string("http://error\t"), line);
 }
 
-TEST_CASE("SessionSerializerTest.testSaveEd2kDownload")
+void SessionSerializerTest::testSaveEd2kDownload()
 {
   std::vector<std::string> uris{"ed2k://|file|aria2%20next.bin|9728001|"
                                 "0123456789abcdef0123456789abcdef|"
@@ -183,7 +190,7 @@ TEST_CASE("SessionSerializerTest.testSaveEd2kDownload")
   REQUIRE(!in);
 }
 
-TEST_CASE("SessionSerializerTest.testSaveActiveEd2kSharing")
+void SessionSerializerTest::testSaveActiveEd2kSharing()
 {
   std::vector<std::string> uris{"ed2k://|file|aria2%20sharing.bin|9728001|"
                                 "0123456789abcdef0123456789abcdef|/"};

@@ -1,8 +1,3 @@
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <utility>
-#include <vector>
 #include "BtDownload.h"
 
 #include <filesystem>
@@ -48,7 +43,16 @@ std::string createMetainfo(libtorrent::create_flags_t flags, bool multiFile)
 }
 } // namespace
 
-TEST_CASE("BtDownloadTest.testMetainfoInspection")
+class BtDownloadTest {
+public:
+  void testMetainfoInspection();
+  void testInvalidMetainfo();
+};
+
+A2_TEST(BtDownloadTest, testMetainfoInspection)
+A2_TEST(BtDownloadTest, testInvalidMetainfo)
+
+void BtDownloadTest::testMetainfoInspection()
 {
   struct TestCase {
     libtorrent::create_flags_t flags;
@@ -92,7 +96,7 @@ TEST_CASE("BtDownloadTest.testMetainfoInspection")
   }
 }
 
-TEST_CASE("BtDownloadTest.testInvalidMetainfo")
+void BtDownloadTest::testInvalidMetainfo()
 {
   try {
     BtDownload::fromBuffer("not torrent metadata", {});

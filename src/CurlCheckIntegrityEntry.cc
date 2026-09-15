@@ -11,9 +11,6 @@
  */
 /* copyright --> */
 #include "CurlCheckIntegrityEntry.h"
-#include "PieceHashCheckIntegrityEntry.h"
-#include <memory>
-#include <vector>
 
 #include "RequestGroup.h"
 #include "error_code.h"

@@ -1,4 +1,3 @@
-#include <string>
 #include "OptionHandlerImpl.h"
 
 #include "a2doctest.h"
@@ -10,7 +9,40 @@
 
 namespace aria2 {
 
-TEST_CASE("OptionHandlerTest.testBooleanOptionHandler")
+class OptionHandlerTest {
+
+
+public:
+  void testBooleanOptionHandler();
+  void testNumberOptionHandler();
+  void testNumberOptionHandler_min();
+  void testNumberOptionHandler_max();
+  void testNumberOptionHandler_min_max();
+  void testUnitNumberOptionHandler();
+  void testParameterOptionHandler();
+  void testDefaultOptionHandler();
+  void testFloatNumberOptionHandler();
+  void testFloatNumberOptionHandler_min();
+  void testFloatNumberOptionHandler_max();
+  void testFloatNumberOptionHandler_min_max();
+  void testHttpProxyOptionHandler();
+};
+
+A2_TEST(OptionHandlerTest, testBooleanOptionHandler)
+A2_TEST(OptionHandlerTest, testNumberOptionHandler)
+A2_TEST(OptionHandlerTest, testNumberOptionHandler_min)
+A2_TEST(OptionHandlerTest, testNumberOptionHandler_max)
+A2_TEST(OptionHandlerTest, testNumberOptionHandler_min_max)
+A2_TEST(OptionHandlerTest, testUnitNumberOptionHandler)
+A2_TEST(OptionHandlerTest, testParameterOptionHandler)
+A2_TEST(OptionHandlerTest, testDefaultOptionHandler)
+A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler)
+A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_min)
+A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_max)
+A2_TEST(OptionHandlerTest, testFloatNumberOptionHandler_min_max)
+A2_TEST(OptionHandlerTest, testHttpProxyOptionHandler)
+
+void OptionHandlerTest::testBooleanOptionHandler()
 {
   BooleanOptionHandler handler(PREF_DAEMON);
   Option option;
@@ -24,19 +56,21 @@ TEST_CASE("OptionHandlerTest.testBooleanOptionHandler")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("true, false"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("true, false"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testNumberOptionHandler")
+void OptionHandlerTest::testNumberOptionHandler()
 {
   NumberOptionHandler handler(PREF_TIMEOUT);
   Option option;
   handler.parse(option, "0");
   REQUIRE_EQ(std::string("0"), option.get(PREF_TIMEOUT));
-  REQUIRE_EQ(std::string("*-*"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("*-*"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testNumberOptionHandler_min")
+void OptionHandlerTest::testNumberOptionHandler_min()
 {
   NumberOptionHandler handler(PREF_TIMEOUT, "", "", 1);
   Option option;
@@ -48,10 +82,11 @@ TEST_CASE("OptionHandlerTest.testNumberOptionHandler_min")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("1-*"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("1-*"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testNumberOptionHandler_max")
+void OptionHandlerTest::testNumberOptionHandler_max()
 {
   NumberOptionHandler handler(PREF_TIMEOUT, "", "", -1, 100);
   Option option;
@@ -63,10 +98,11 @@ TEST_CASE("OptionHandlerTest.testNumberOptionHandler_max")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("*-100"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("*-100"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testNumberOptionHandler_min_max")
+void OptionHandlerTest::testNumberOptionHandler_min_max()
 {
   NumberOptionHandler handler(PREF_TIMEOUT, "", "", 1, 100);
   Option option;
@@ -86,10 +122,11 @@ TEST_CASE("OptionHandlerTest.testNumberOptionHandler_min_max")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("1-100"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("1-100"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testUnitNumberOptionHandler")
+void OptionHandlerTest::testUnitNumberOptionHandler()
 {
   UnitNumberOptionHandler handler(PREF_TIMEOUT);
   Option option;
@@ -118,7 +155,7 @@ TEST_CASE("OptionHandlerTest.testUnitNumberOptionHandler")
   }
 }
 
-TEST_CASE("OptionHandlerTest.testParameterOptionHandler")
+void OptionHandlerTest::testParameterOptionHandler()
 {
   ParameterOptionHandler handler(PREF_TIMEOUT, "", "", {"value1", "value2"});
   Option option;
@@ -133,10 +170,10 @@ TEST_CASE("OptionHandlerTest.testParameterOptionHandler")
   catch (Exception& e) {
   }
   REQUIRE_EQ(std::string("value1, value2"),
-             handler.createPossibleValuesString());
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testDefaultOptionHandler")
+void OptionHandlerTest::testDefaultOptionHandler()
 {
   DefaultOptionHandler handler(PREF_TIMEOUT);
   Option option;
@@ -155,16 +192,17 @@ TEST_CASE("OptionHandlerTest.testDefaultOptionHandler")
   REQUIRE(!handler.hasTag(TAG_HTTP));
 }
 
-TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler")
+void OptionHandlerTest::testFloatNumberOptionHandler()
 {
   FloatNumberOptionHandler handler(PREF_TIMEOUT);
   Option option;
   handler.parse(option, "1.0");
   REQUIRE_EQ(std::string("1.0"), option.get(PREF_TIMEOUT));
-  REQUIRE_EQ(std::string("*-*"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("*-*"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_min")
+void OptionHandlerTest::testFloatNumberOptionHandler_min()
 {
   FloatNumberOptionHandler handler(PREF_TIMEOUT, "", "", 0.0);
   Option option;
@@ -176,10 +214,11 @@ TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_min")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("0.0-*"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("0.0-*"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_max")
+void OptionHandlerTest::testFloatNumberOptionHandler_max()
 {
   FloatNumberOptionHandler handler(PREF_TIMEOUT, "", "", -1, 10.0);
   Option option;
@@ -191,10 +230,11 @@ TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_max")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("*-10.0"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("*-10.0"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_min_max")
+void OptionHandlerTest::testFloatNumberOptionHandler_min_max()
 {
   FloatNumberOptionHandler handler(PREF_TIMEOUT, "", "", 0.0, 10.0);
   Option option;
@@ -214,18 +254,21 @@ TEST_CASE("OptionHandlerTest.testFloatNumberOptionHandler_min_max")
   }
   catch (Exception& e) {
   }
-  REQUIRE_EQ(std::string("0.0-10.0"), handler.createPossibleValuesString());
+  REQUIRE_EQ(std::string("0.0-10.0"),
+                       handler.createPossibleValuesString());
 }
 
-TEST_CASE("OptionHandlerTest.testHttpProxyOptionHandler")
+void OptionHandlerTest::testHttpProxyOptionHandler()
 {
   HttpProxyOptionHandler handler(PREF_HTTP_PROXY, "", "");
   Option option;
   handler.parse(option, "proxy:65535");
-  REQUIRE_EQ(std::string("http://proxy:65535/"), option.get(PREF_HTTP_PROXY));
+  REQUIRE_EQ(std::string("http://proxy:65535/"),
+                       option.get(PREF_HTTP_PROXY));
 
   handler.parse(option, "http://proxy:8080");
-  REQUIRE_EQ(std::string("http://proxy:8080/"), option.get(PREF_HTTP_PROXY));
+  REQUIRE_EQ(std::string("http://proxy:8080/"),
+                       option.get(PREF_HTTP_PROXY));
 
   handler.parse(option, "");
   REQUIRE(option.defined(PREF_HTTP_PROXY));
@@ -238,14 +281,15 @@ TEST_CASE("OptionHandlerTest.testHttpProxyOptionHandler")
   catch (Exception& e) {
   }
   REQUIRE_EQ(std::string("[http://][USER:PASSWORD@]HOST[:PORT]"),
-             handler.createPossibleValuesString());
+                       handler.createPossibleValuesString());
 
   handler.parse(option, "http://user%40:passwd%40@proxy:8080");
   REQUIRE_EQ(std::string("http://user%40:passwd%40@proxy:8080/"),
-             option.get(PREF_HTTP_PROXY));
+                       option.get(PREF_HTTP_PROXY));
 
   handler.parse(option, "http://[::1]:8080");
-  REQUIRE_EQ(std::string("http://[::1]:8080/"), option.get(PREF_HTTP_PROXY));
+  REQUIRE_EQ(std::string("http://[::1]:8080/"),
+                       option.get(PREF_HTTP_PROXY));
 }
 
 } // namespace aria2

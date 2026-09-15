@@ -1,15 +1,25 @@
-#include "Exception.h"
-#include <cstddef>
-#include <iterator>
-#include <string>
-#include <vector>
 #include "paramed_string.h"
+
+#include <iostream>
 
 #include "a2doctest.h"
 
 namespace aria2 {
 
-TEST_CASE("ParamedStringTest.testExpand")
+class ParamedStringTest {
+
+
+public:
+  void testExpand();
+  void testExpandAcceptsWideNumericRangeValues();
+  void testExpandReportsNumericRangeOverflow();
+};
+
+A2_TEST(ParamedStringTest, testExpand)
+A2_TEST(ParamedStringTest, testExpandAcceptsWideNumericRangeValues)
+A2_TEST(ParamedStringTest, testExpandReportsNumericRangeOverflow)
+
+void ParamedStringTest::testExpand()
 {
   std::vector<std::string> res;
 
@@ -196,7 +206,7 @@ TEST_CASE("ParamedStringTest.testExpand")
   res.clear();
 }
 
-TEST_CASE("ParamedStringTest.testExpandAcceptsWideNumericRangeValues")
+void ParamedStringTest::testExpandAcceptsWideNumericRangeValues()
 {
   std::vector<std::string> res;
   std::string s = "alpha:[1234567890-1234567892]:bravo";
@@ -209,7 +219,7 @@ TEST_CASE("ParamedStringTest.testExpandAcceptsWideNumericRangeValues")
   REQUIRE_EQ(std::string("alpha:1234567892:bravo"), res[2]);
 }
 
-TEST_CASE("ParamedStringTest.testExpandReportsNumericRangeOverflow")
+void ParamedStringTest::testExpandReportsNumericRangeOverflow()
 {
   std::vector<std::string> res;
   std::string s = "alpha:[1234567890-9876543210]:bravo";
@@ -219,7 +229,8 @@ TEST_CASE("ParamedStringTest.testExpandReportsNumericRangeOverflow")
     FAIL("Exception must be thrown.");
   }
   catch (const Exception& e) {
-    REQUIRE_EQ(std::string("Loop range overflow."), std::string(e.what()));
+    REQUIRE_EQ(std::string("Loop range overflow."),
+                         std::string(e.what()));
   }
 }
 

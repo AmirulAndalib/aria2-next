@@ -1,20 +1,46 @@
-#include "TimerA2.h"
-#include "URIResult.h"
-#include "error_code.h"
-#include <cstddef>
-#include <deque>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 #include "FileEntry.h"
 
 #include "a2doctest.h"
 
 #include "InorderURISelector.h"
-#include "common.h"
+#include "util.h"
 
 namespace aria2 {
+
+class FileEntryTest {
+
+
+public:
+  void setUp() {}
+
+  void testRemoveURIWhoseHostnameIs();
+  void testExtractURIResult();
+  void testGetRequest();
+  void testGetRequest_withoutUriReuse();
+  void testGetRequest_withUniqueProtocol();
+  void testGetRequest_withReferer();
+  void testGetRequest_resetsTryCountAfterWake();
+  void testReuseUri();
+  void testAddUri();
+  void testAddUris();
+  void testInsertUri();
+  void testRemoveUri();
+  void testPutBackRequest();
+};
+
+A2_TEST(FileEntryTest, testRemoveURIWhoseHostnameIs)
+A2_TEST(FileEntryTest, testExtractURIResult)
+A2_TEST(FileEntryTest, testGetRequest)
+A2_TEST(FileEntryTest, testGetRequest_withoutUriReuse)
+A2_TEST(FileEntryTest, testGetRequest_withUniqueProtocol)
+A2_TEST(FileEntryTest, testGetRequest_withReferer)
+A2_TEST(FileEntryTest, testGetRequest_resetsTryCountAfterWake)
+A2_TEST(FileEntryTest, testReuseUri)
+A2_TEST(FileEntryTest, testAddUri)
+A2_TEST(FileEntryTest, testAddUris)
+A2_TEST(FileEntryTest, testInsertUri)
+A2_TEST(FileEntryTest, testRemoveUri)
+A2_TEST(FileEntryTest, testPutBackRequest)
 
 namespace {
 std::shared_ptr<FileEntry> createFileEntry()
@@ -27,16 +53,16 @@ std::shared_ptr<FileEntry> createFileEntry()
 }
 } // namespace
 
-TEST_CASE("FileEntryTest.testRemoveURIWhoseHostnameIs")
+void FileEntryTest::testRemoveURIWhoseHostnameIs()
 {
   auto fileEntry = createFileEntry();
   fileEntry->removeURIWhoseHostnameIs("localhost");
   REQUIRE_EQ((size_t)1, fileEntry->getRemainingUris().size());
   REQUIRE_EQ(std::string("http://mirror/aria2.zip"),
-             fileEntry->getRemainingUris()[0]);
+                       fileEntry->getRemainingUris()[0]);
 }
 
-TEST_CASE("FileEntryTest.testExtractURIResult")
+void FileEntryTest::testExtractURIResult()
 {
   FileEntry fileEntry;
   fileEntry.addURIResult("http://timeout/file", error_code::TIME_OUT);
@@ -52,9 +78,9 @@ TEST_CASE("FileEntryTest.testExtractURIResult")
 
   REQUIRE_EQ((size_t)2, fileEntry.getURIResults().size());
   REQUIRE_EQ(std::string("http://finished/file"),
-             fileEntry.getURIResults()[0].getURI());
+                       fileEntry.getURIResults()[0].getURI());
   REQUIRE_EQ(std::string("http://unknownerror/file"),
-             fileEntry.getURIResults()[1].getURI());
+                       fileEntry.getURIResults()[1].getURI());
 
   res.clear();
 
@@ -63,7 +89,7 @@ TEST_CASE("FileEntryTest.testExtractURIResult")
   REQUIRE_EQ((size_t)2, fileEntry.getURIResults().size());
 }
 
-TEST_CASE("FileEntryTest.testGetRequest")
+void FileEntryTest::testGetRequest()
 {
   auto fileEntry = createFileEntry();
   InorderURISelector selector{};
@@ -98,7 +124,7 @@ TEST_CASE("FileEntryTest.testGetRequest")
   REQUIRE(!req7th);
 }
 
-TEST_CASE("FileEntryTest.testGetRequest_withoutUriReuse")
+void FileEntryTest::testGetRequest_withoutUriReuse()
 {
   std::vector<std::pair<size_t, std::string>> usedHosts;
   auto fileEntry = createFileEntry();
@@ -120,7 +146,7 @@ TEST_CASE("FileEntryTest.testGetRequest_withoutUriReuse")
   REQUIRE(!req4th);
 }
 
-TEST_CASE("FileEntryTest.testGetRequest_withUniqueProtocol")
+void FileEntryTest::testGetRequest_withUniqueProtocol()
 {
   std::vector<std::pair<size_t, std::string>> usedHosts;
   auto fileEntry = createFileEntry();
@@ -139,12 +165,12 @@ TEST_CASE("FileEntryTest.testGetRequest_withUniqueProtocol")
 
   REQUIRE_EQ((size_t)2, fileEntry->getRemainingUris().size());
   REQUIRE_EQ(std::string("https://localhost/aria2.zip"),
-             fileEntry->getRemainingUris()[0]);
+                       fileEntry->getRemainingUris()[0]);
   REQUIRE_EQ(std::string("http://mirror/aria2.zip"),
-             fileEntry->getRemainingUris()[1]);
+                       fileEntry->getRemainingUris()[1]);
 }
 
-TEST_CASE("FileEntryTest.testGetRequest_withReferer")
+void FileEntryTest::testGetRequest_withReferer()
 {
   auto fileEntry = createFileEntry();
   InorderURISelector selector{};
@@ -157,7 +183,7 @@ TEST_CASE("FileEntryTest.testGetRequest_withReferer")
   REQUIRE_EQ(req->getUri(), req->getReferer());
 }
 
-TEST_CASE("FileEntryTest.testGetRequest_resetsTryCountAfterWake")
+void FileEntryTest::testGetRequest_resetsTryCountAfterWake()
 {
   FileEntry fileEntry;
   fileEntry.addUri("http://example.org/file");
@@ -172,11 +198,12 @@ TEST_CASE("FileEntryTest.testGetRequest_resetsTryCountAfterWake")
 
   auto reused = fileEntry.getRequest(&selector, true, usedHosts);
 
-  REQUIRE_EQ(std::string("http://example.org/file"), reused->getUri());
+  REQUIRE_EQ(std::string("http://example.org/file"),
+                       reused->getUri());
   REQUIRE_EQ(0, reused->getTryCount());
 }
 
-TEST_CASE("FileEntryTest.testReuseUri")
+void FileEntryTest::testReuseUri()
 {
   InorderURISelector selector{};
   auto fileEntry = createFileEntry();
@@ -207,30 +234,30 @@ TEST_CASE("FileEntryTest.testReuseUri")
   REQUIRE_EQ(std::string("https://localhost/aria2.zip"), uris[0]);
 }
 
-TEST_CASE("FileEntryTest.testAddUri")
+void FileEntryTest::testAddUri()
 {
   FileEntry file;
   REQUIRE(file.addUri("http://good"));
   REQUIRE(!file.addUri("bad"));
   // Test for percent-encode
   REQUIRE(file.addUri("http://host:80/file<with%2 %20space/"
-                      "file with space;param%?a=/?"));
+                             "file with space;param%?a=/?"));
 
   REQUIRE_EQ(std::string("http://host:80"
-                         "/file%3Cwith%2%20%20space/"
-                         "file%20with%20space;param%"
-                         "?a=/?"),
-             file.getRemainingUris()[1]);
+                                   "/file%3Cwith%2%20%20space/"
+                                   "file%20with%20space;param%"
+                                   "?a=/?"),
+                       file.getRemainingUris()[1]);
 }
 
-TEST_CASE("FileEntryTest.testAddUris")
+void FileEntryTest::testAddUris()
 {
   FileEntry file;
   std::string uris[] = {"bad", "http://good"};
   REQUIRE_EQ((size_t)1, file.addUris(&uris[0], &uris[2]));
 }
 
-TEST_CASE("FileEntryTest.testInsertUri")
+void FileEntryTest::testInsertUri()
 {
   FileEntry file;
   REQUIRE(file.insertUri("http://example.org/1", 0));
@@ -244,17 +271,17 @@ TEST_CASE("FileEntryTest.testInsertUri")
   REQUIRE_EQ(std::string("http://example.org/4"), uris[3]);
   // Test for percent-encode
   REQUIRE(file.insertUri("http://host:80/file<with%2 %20space/"
-                         "file with space;param%?a=/?",
-                         0));
+                                "file with space;param%?a=/?",
+                                0));
 
   REQUIRE_EQ(std::string("http://host:80"
-                         "/file%3Cwith%2%20%20space/"
-                         "file%20with%20space;param%"
-                         "?a=/?"),
-             file.getRemainingUris()[0]);
+                                   "/file%3Cwith%2%20%20space/"
+                                   "file%20with%20space;param%"
+                                   "?a=/?"),
+                       file.getRemainingUris()[0]);
 }
 
-TEST_CASE("FileEntryTest.testRemoveUri")
+void FileEntryTest::testRemoveUri()
 {
   std::vector<std::pair<size_t, std::string>> usedHosts;
   InorderURISelector selector{};
@@ -286,7 +313,7 @@ TEST_CASE("FileEntryTest.testRemoveUri")
   REQUIRE(!file.removeUri("http://example.net"));
 }
 
-TEST_CASE("FileEntryTest.testPutBackRequest")
+void FileEntryTest::testPutBackRequest()
 {
   auto fileEntry = createFileEntry();
   InorderURISelector selector{};

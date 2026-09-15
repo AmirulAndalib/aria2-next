@@ -1,5 +1,3 @@
-#include <cstdint>
-#include <iterator>
 #include "FeatureConfig.h"
 
 #include <algorithm>
@@ -9,10 +7,25 @@
 
 #include "a2functional.h"
 #include "array_fun.h"
+#include "util.h"
 
 namespace aria2 {
 
-TEST_CASE("FeatureConfigTest.testGetDefaultPort")
+class FeatureConfigTest {
+
+public:
+  void testGetDefaultPort();
+  void testStrSupportedFeature();
+  void testFeatureSummary();
+  void testCurlResolver();
+};
+
+A2_TEST(FeatureConfigTest, testGetDefaultPort)
+A2_TEST(FeatureConfigTest, testStrSupportedFeature)
+A2_TEST(FeatureConfigTest, testFeatureSummary)
+A2_TEST(FeatureConfigTest, testCurlResolver)
+
+void FeatureConfigTest::testGetDefaultPort()
 {
   REQUIRE_EQ((uint16_t)80, getDefaultPort("http"));
   REQUIRE_EQ((uint16_t)443, getDefaultPort("https"));
@@ -20,7 +33,7 @@ TEST_CASE("FeatureConfigTest.testGetDefaultPort")
   REQUIRE_EQ((uint16_t)22, getDefaultPort("sftp"));
 }
 
-TEST_CASE("FeatureConfigTest.testStrSupportedFeature")
+void FeatureConfigTest::testStrSupportedFeature()
 {
   REQUIRE(strSupportedFeature(FEATURE_HTTPS));
   REQUIRE(!strSupportedFeature(MAX_FEATURE));
@@ -28,7 +41,7 @@ TEST_CASE("FeatureConfigTest.testStrSupportedFeature")
   REQUIRE(strSupportedFeature(FEATURE_SFTP));
 }
 
-TEST_CASE("FeatureConfigTest.testFeatureSummary")
+void FeatureConfigTest::testFeatureSummary()
 {
   const std::string features[] = {
 
@@ -56,7 +69,7 @@ TEST_CASE("FeatureConfigTest.testFeatureSummary")
       "XML-RPC",
 #endif // ENABLE_XML_RPC
 
-      "SFTP",           "HLS/DASH",
+      "SFTP",
   };
 
   std::string featuresString =
@@ -64,7 +77,7 @@ TEST_CASE("FeatureConfigTest.testFeatureSummary")
   REQUIRE_EQ(featuresString, featureSummary());
 }
 
-TEST_CASE("FeatureConfigTest.testCurlResolver")
+void FeatureConfigTest::testCurlResolver()
 {
   const auto* version = curl_version_info(CURLVERSION_NOW);
   REQUIRE(version != nullptr);

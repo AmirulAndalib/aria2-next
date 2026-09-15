@@ -1,16 +1,23 @@
-#include "FileEntry.h"
-#include "a2functional.h"
-#include <memory>
 #include "ShareRatioSeedCriteria.h"
 
 #include "a2doctest.h"
 
 #include "DownloadContext.h"
 #include "MockPieceStorage.h"
+#include "FileEntry.h"
 
 namespace aria2 {
 
-TEST_CASE("ShareRatioSeedCriteriaTest.testEvaluate")
+class ShareRatioSeedCriteriaTest {
+
+
+public:
+  void testEvaluate();
+};
+
+A2_TEST(ShareRatioSeedCriteriaTest, testEvaluate)
+
+void ShareRatioSeedCriteriaTest::testEvaluate()
 {
   std::shared_ptr<DownloadContext> dctx(new DownloadContext(1_m, 1000000));
   dctx->getNetStat().updateUpload(1000000);

@@ -11,9 +11,6 @@
  */
 /* copyright --> */
 #include "CurlDownload.h"
-#include <cstddef>
-#include <string>
-#include <vector>
 
 #include <utility>
 
@@ -34,7 +31,17 @@ CurlDownload::CurlDownload(std::vector<std::string> uris)
   }
 }
 
-CurlDownload::~CurlDownload() = default;
+CurlDownload::~CurlDownload()
+{
+  for (auto& handle : impl_->handles) {
+    if (handle->headers) {
+      curl_slist_free_all(handle->headers);
+    }
+    if (handle->value) {
+      curl_easy_cleanup(handle->value);
+    }
+  }
+}
 
 void CurlDownload::synchronizeUris(const std::vector<std::string>& uris)
 {

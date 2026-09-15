@@ -11,13 +11,9 @@
  */
 /* copyright --> */
 #include "Ed2kSharedResponder.h"
-#include "ed2k_link.h"
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -35,8 +31,7 @@ namespace aria2 {
 
 namespace ed2k {
 
-SharedResponder::SharedResponder(UploadQueue* uploadQueue,
-                                 RequestGroupMan* rgman,
+SharedResponder::SharedResponder(UploadQueue* uploadQueue, RequestGroupMan* rgman,
                                  const Endpoint& endpoint,
                                  const std::string& userHash,
                                  PacketSink packetSink)
@@ -48,8 +43,8 @@ SharedResponder::SharedResponder(UploadQueue* uploadQueue,
 {
 }
 
-std::unique_ptr<SharedSource>
-SharedResponder::findFile(const std::string& hash) const
+std::unique_ptr<SharedSource> SharedResponder::findFile(
+    const std::string& hash) const
 {
   return rgman_ ? findSharedSource(rgman_, hash) : nullptr;
 }
@@ -136,7 +131,8 @@ bool SharedResponder::queueAichFileHashAnswer(const std::string& fileHash)
     return false;
   }
   queuePacket(PROTO_EMULE, OP_AICHFILEHASHANS,
-              createAichFileHashAnswerPayload(fileHash, file->aichRootHash()));
+              createAichFileHashAnswerPayload(fileHash,
+                                              file->aichRootHash()));
   return true;
 }
 
@@ -153,8 +149,8 @@ bool SharedResponder::queueMultipacketAnswer(const std::string& requestPayload,
   auto fileHash = readBytes(requestPayload, offset, HASH_LENGTH);
   auto file = findFile(fileHash);
   if (extendedMultipacket && offset + 8 <= requestPayload.size()) {
-    const auto requestedSize = static_cast<int64_t>(
-        readUInt64(readBytes(requestPayload, offset, 8).data()));
+    const auto requestedSize =
+        static_cast<int64_t>(readUInt64(readBytes(requestPayload, offset, 8).data()));
     if (file && requestedSize != file->size()) {
       queueNoFile(fileHash);
       return false;
@@ -289,11 +285,13 @@ bool SharedResponder::queuePartAnswers(const std::string& requestPayload,
   }
   for (const auto& range : ranges) {
     std::string payload;
-    if (!createSharedFilePartPayload(payload, *file, range, use64BitOffsets)) {
+    if (!createSharedFilePartPayload(payload, *file, range,
+                                     use64BitOffsets)) {
       continue;
     }
     queuePacket(PROTO_EDONKEY,
-                use64BitOffsets ? OP_SENDINGPART_I64 : OP_SENDINGPART, payload);
+                use64BitOffsets ? OP_SENDINGPART_I64 : OP_SENDINGPART,
+                payload);
     if (uploadQueue_) {
       uploadQueue_->noteUploaded(endpoint_, range.end - range.begin);
     }

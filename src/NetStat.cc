@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "NetStat.h"
-#include "TransferStat.h"
-#include <cstddef>
 #include "wallclock.h"
 
 namespace aria2 {

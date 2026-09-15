@@ -1,13 +1,24 @@
-#include "a2functional.h"
-#include <cstdint>
-#include <memory>
 #include "GrowSegment.h"
 #include "Piece.h"
 #include "a2doctest.h"
 
 namespace aria2 {
 
-TEST_CASE("GrowSegmentTest.testUpdateWrittenLength")
+class GrowSegmentTest {
+
+
+private:
+public:
+  void setUp() {}
+
+  void testUpdateWrittenLength();
+  void testClear();
+};
+
+A2_TEST(GrowSegmentTest, testUpdateWrittenLength)
+A2_TEST(GrowSegmentTest, testClear)
+
+void GrowSegmentTest::testUpdateWrittenLength()
 {
   GrowSegment segment(std::shared_ptr<Piece>(new Piece()));
   segment.updateWrittenLength(32_k);
@@ -17,7 +28,7 @@ TEST_CASE("GrowSegmentTest.testUpdateWrittenLength")
   REQUIRE(segment.getPiece()->pieceComplete());
 }
 
-TEST_CASE("GrowSegmentTest.testClear")
+void GrowSegmentTest::testClear()
 {
   GrowSegment segment(std::shared_ptr<Piece>(new Piece()));
   segment.updateWrittenLength(32_k);

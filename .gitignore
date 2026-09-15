@@ -9,14 +9,6 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Python developer tools
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
 # Local build trees
 build/
 build-*/
@@ -57,33 +49,37 @@ _CPack_Packages/
 *.dSYM/
 
 # Generated project binaries and metadata
-/aria2-next
-/src/aria2-next
+/aria2c
+/aria2c.exe
+/src/aria2c
+/src/aria2c.exe
 /src/libaria2.pc
 /src/includes/aria2/aria2.h
 
 # Documentation outputs
 /aria2c.1
 /aria2c.1.html
-/docs/manual/**/conf.py
-/docs/manual/**/input
+/docs/manual/*/conf.py
+/docs/manual/*/_build/
 /third_party/wslay/docs/man/
+/third_party/wslay/docs/sphinx/_build/
 
 # Tests and runtime side effects
+/tests/aria2c
+/tests/aria2c.exe
 /tests/*.log
 /tests/*.trs
-test_outdir/
+/tests/test-suite.log
+/tests/test_outdir/
+/test_outdir/
 *.aria2
-*.db-journal
-*.db-shm
-*.db-wal
-*.sqlite-journal
+!/tests/load*.aria2
 *.sqlite-shm
 *.sqlite-wal
-*.media-partial
-/caddy/
 
 # Release and packaging outputs
+packaging/out/
+packaging/dist/
 *.tar
 *.tar.*
 *.zip

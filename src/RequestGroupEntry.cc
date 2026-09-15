@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "RequestGroupEntry.h"
-#include <memory>
-#include <utility>
 #include "RequestGroup.h"
 #include "Command.h"
 #include "DownloadContext.h"

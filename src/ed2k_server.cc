@@ -11,12 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_server.h"
-#include "ed2k_link.h"
-#include <cstddef>
-#include <cstdint>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <limits>
 
@@ -210,7 +204,8 @@ std::vector<Endpoint> parseServerMet(const std::string& data)
 }
 
 std::string createLoginRequestPayload(const std::string& clientHash,
-                                      uint32_t clientId, uint16_t listenPort,
+                                      uint32_t clientId,
+                                      uint16_t listenPort,
                                       const std::string& clientName)
 {
   validateHashLength(clientHash);
@@ -473,7 +468,8 @@ bool parseServerIdChangePayload(ServerIdChange& idChange,
   return true;
 }
 
-bool parseServerStatusPayload(ServerStatus& status, const std::string& payload)
+bool parseServerStatusPayload(ServerStatus& status,
+                              const std::string& payload)
 {
   if (payload.size() < 8) {
     return false;
@@ -521,7 +517,8 @@ bool parseServerUdpStatusPayload(ServerStatus& status,
   return true;
 }
 
-bool parseServerMessagePayload(std::string& message, const std::string& payload)
+bool parseServerMessagePayload(std::string& message,
+                               const std::string& payload)
 {
   if (payload.size() < 2) {
     return false;
@@ -684,7 +681,8 @@ bool parseServerStatePayload(ServerState& state, const std::string& payload)
     }
     if (version >= 4) {
       parsed.lastSourceResponseTime = readInt64(payload, offset);
-      parsed.lastSourceCount = readUInt32(readBytes(payload, offset, 4).data());
+      parsed.lastSourceCount =
+          readUInt32(readBytes(payload, offset, 4).data());
       parsed.lastUdpSourceRequestTime = readInt64(payload, offset);
     }
     parsed.failCount = readUInt32(readBytes(payload, offset, 4).data());

@@ -34,9 +34,6 @@
 /* copyright --> */
 
 #include "ColorizedStream.h"
-#include <cstddef>
-#include <sstream>
-#include <string>
 
 #include <cstdint>
 #include <utility>

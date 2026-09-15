@@ -1,10 +1,7 @@
-#include <cstddef>
-#include <memory>
-#include <string>
-#include <utility>
 #include "ChunkedDecodingStreamFilter.h"
 
 #include <cstdlib>
+#include <iostream>
 #include "a2doctest.h"
 
 #include "DlAbortEx.h"
@@ -22,11 +19,15 @@ const unsigned char* asBytes(const char* s)
   return reinterpret_cast<const unsigned char*>(s);
 }
 
-const unsigned char* asBytes(const std::string& s) { return asBytes(s.data()); }
+const unsigned char* asBytes(const std::string& s)
+{
+  return asBytes(s.data());
+}
 } // namespace
 
 class ChunkedDecodingStreamFilterTest {
-protected:
+
+
   std::unique_ptr<ChunkedDecodingStreamFilter> filter_;
   std::shared_ptr<ByteArrayDiskWriter> writer_;
   std::shared_ptr<Segment> segment_;
@@ -34,7 +35,7 @@ protected:
   void clearWriter() { writer_->setString(""); }
 
 public:
-  ChunkedDecodingStreamFilterTest()
+  void setUp()
   {
     writer_ = std::make_shared<ByteArrayDiskWriter>();
     auto sinkFilter = make_unique<SinkStreamFilter>();
@@ -43,10 +44,25 @@ public:
     filter_->init();
     segment_ = std::make_shared<MockSegment>();
   }
+
+  void testTransform();
+  void testTransform_withoutTrailer();
+  void testTransform_with2Trailers();
+  void testTransform_largeChunkSize();
+  void testTransform_tooLargeChunkSize();
+  void testTransform_chunkSizeMismatch();
+  void testGetName();
 };
 
-TEST_CASE_FIXTURE(ChunkedDecodingStreamFilterTest,
-                  "ChunkedDecodingStreamFilterTest.testTransform")
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform)
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform_withoutTrailer)
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform_with2Trailers)
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform_largeChunkSize)
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform_tooLargeChunkSize)
+A2_TEST(ChunkedDecodingStreamFilterTest, testTransform_chunkSizeMismatch)
+A2_TEST(ChunkedDecodingStreamFilterTest, testGetName)
+
+void ChunkedDecodingStreamFilterTest::testTransform()
 {
   try {
     std::string msg = "a\r\n1234567890\r\n";
@@ -185,27 +201,22 @@ TEST_CASE_FIXTURE(ChunkedDecodingStreamFilterTest,
   REQUIRE(filter_->finished());
 }
 
-TEST_CASE_FIXTURE(
-    ChunkedDecodingStreamFilterTest,
-    "ChunkedDecodingStreamFilterTest.testTransform_withoutTrailer")
+void ChunkedDecodingStreamFilterTest::testTransform_withoutTrailer()
 {
-  REQUIRE_EQ((ssize_t)0,
-             filter_->transform(writer_, segment_, asBytes("0\r\n\r\n"), 5));
+  REQUIRE_EQ(
+      (ssize_t)0, filter_->transform(writer_, segment_, asBytes("0\r\n\r\n"), 5));
   REQUIRE(filter_->finished());
 }
 
-TEST_CASE_FIXTURE(ChunkedDecodingStreamFilterTest,
-                  "ChunkedDecodingStreamFilterTest.testTransform_with2Trailers")
+void ChunkedDecodingStreamFilterTest::testTransform_with2Trailers()
 {
-  REQUIRE_EQ((ssize_t)0,
-             filter_->transform(writer_, segment_,
-                                asBytes("0\r\nt1\r\nt2\r\n\r\n"), 13));
+  REQUIRE_EQ(
+      (ssize_t)0,
+      filter_->transform(writer_, segment_, asBytes("0\r\nt1\r\nt2\r\n\r\n"), 13));
   REQUIRE(filter_->finished());
 }
 
-TEST_CASE_FIXTURE(
-    ChunkedDecodingStreamFilterTest,
-    "ChunkedDecodingStreamFilterTest.testTransform_largeChunkSize")
+void ChunkedDecodingStreamFilterTest::testTransform_largeChunkSize()
 {
   // chunkSize should be under 2^63-1
   {
@@ -214,9 +225,7 @@ TEST_CASE_FIXTURE(
   }
 }
 
-TEST_CASE_FIXTURE(
-    ChunkedDecodingStreamFilterTest,
-    "ChunkedDecodingStreamFilterTest.testTransform_tooLargeChunkSize")
+void ChunkedDecodingStreamFilterTest::testTransform_tooLargeChunkSize()
 {
   // chunkSize 2^64 causes error
   {
@@ -231,9 +240,7 @@ TEST_CASE_FIXTURE(
   }
 }
 
-TEST_CASE_FIXTURE(
-    ChunkedDecodingStreamFilterTest,
-    "ChunkedDecodingStreamFilterTest.testTransform_chunkSizeMismatch")
+void ChunkedDecodingStreamFilterTest::testTransform_chunkSizeMismatch()
 {
   std::string msg = "3\r\n1234\r\n";
   try {
@@ -245,10 +252,10 @@ TEST_CASE_FIXTURE(
   }
 }
 
-TEST_CASE_FIXTURE(ChunkedDecodingStreamFilterTest,
-                  "ChunkedDecodingStreamFilterTest.testGetName")
+void ChunkedDecodingStreamFilterTest::testGetName()
 {
-  REQUIRE_EQ(std::string("ChunkedDecodingStreamFilter"), filter_->getName());
+  REQUIRE_EQ(std::string("ChunkedDecodingStreamFilter"),
+                       filter_->getName());
 }
 
 } // namespace aria2

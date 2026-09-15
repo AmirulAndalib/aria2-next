@@ -1,15 +1,26 @@
-#include <cstddef>
-#include <iterator>
-#include <string>
 #include "ValueBaseJsonParser.h"
 
 #include "a2doctest.h"
 
+#include "RecoverableException.h"
+#include "array_fun.h"
 #include "ValueBase.h"
 
 namespace aria2 {
 
-TEST_CASE("ValueBaseJsonParserTest.testParseUpdate")
+class ValueBaseJsonParserTest {
+
+
+private:
+public:
+  void testParseUpdate();
+  void testParseUpdate_error();
+};
+
+A2_TEST(ValueBaseJsonParserTest, testParseUpdate)
+A2_TEST(ValueBaseJsonParserTest, testParseUpdate_error)
+
+void ValueBaseJsonParserTest::testParseUpdate()
 {
   json::ValueBaseJsonParser parser;
   ssize_t error;
@@ -209,7 +220,7 @@ void checkDecodeError(const std::string& src)
 }
 } // namespace
 
-TEST_CASE("ValueBaseJsonParserTest.testParseUpdate_error")
+void ValueBaseJsonParserTest::testParseUpdate_error()
 {
   // object
   checkDecodeError("{");

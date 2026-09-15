@@ -33,12 +33,6 @@
  */
 /* copyright --> */
 #include "SpeedCalc.h"
-#include "TimerA2.h"
-#include "a2functional.h"
-#include <chrono>
-#include <cstddef>
-#include <deque>
-#include <utility>
 
 #include <algorithm>
 #include <cstdint>

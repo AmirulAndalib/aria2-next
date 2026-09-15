@@ -33,9 +33,6 @@
  */
 /* copyright --> */
 #include "FatalException.h"
-#include "Exception.h"
-#include <memory>
-#include <string>
 
 namespace aria2 {
 

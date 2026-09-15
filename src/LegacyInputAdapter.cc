@@ -11,12 +11,6 @@
  */
 /* copyright --> */
 #include "LegacyInputAdapter.h"
-#include "aria2/aria2.h"
-#include <cstdint>
-#include <iterator>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <algorithm>
 #include <array>
@@ -33,7 +27,7 @@
 #include "error_code.h"
 #include "fmt.h"
 #include "prefs.h"
-#include "support/Numbers.h"
+#include "util.h"
 
 namespace aria2 {
 

@@ -33,11 +33,6 @@
  */
 /* copyright --> */
 #include "WebSocketResponseCommand.h"
-#include "AbstractHttpServerResponseCommand.h"
-#include "Command.h"
-#include "a2functional.h"
-#include <memory>
-#include <utility>
 #include "SocketCore.h"
 #include "DownloadEngine.h"
 #include "HttpServer.h"

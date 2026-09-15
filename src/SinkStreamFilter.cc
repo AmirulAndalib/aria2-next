@@ -33,11 +33,6 @@
  */
 /* copyright --> */
 #include "SinkStreamFilter.h"
-#include "a2functional.h"
-#include <algorithm>
-#include <cstddef>
-#include <memory>
-#include <string>
 
 #include <cstring>
 #include <cassert>

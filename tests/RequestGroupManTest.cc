@@ -1,12 +1,3 @@
-#include "FileEntry.h"
-#include "GroupId.h"
-#include "aria2/aria2.h"
-#include "error_code.h"
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <utility>
-#include <vector>
 #include "RequestGroupMan.h"
 
 #include <fstream>
@@ -16,16 +7,20 @@
 
 #include "TestUtil.h"
 #include "Ed2kAttribute.h"
+#include "DiskAdaptor.h"
 #include "prefs.h"
 #include "DownloadContext.h"
 #include "RequestGroup.h"
 #include "Option.h"
 #include "DownloadResult.h"
+#include "FileEntry.h"
+#include "PieceStorage.h"
 #include "ServerStatMan.h"
 #include "ServerStat.h"
 #include "File.h"
+#include "array_fun.h"
 #include "RecoverableException.h"
-#include "a2functional.h"
+#include "util.h"
 #include "DownloadEngine.h"
 #include "SelectEventPoll.h"
 #include "UriListParser.h"
@@ -49,18 +44,23 @@ public:
 
   ~ActiveDownloadCommand() { requestGroup_->decreaseNumCommand(); }
 
-  bool execute() override { return requestGroup_->isHaltRequested(); }
+  bool execute() override
+  {
+    return requestGroup_->isHaltRequested();
+  }
 };
 } // namespace
 
 class RequestGroupManTest {
-protected:
+
+
+private:
   std::unique_ptr<DownloadEngine> e_;
   std::shared_ptr<Option> option_;
   RequestGroupMan* rgman_;
 
 public:
-  RequestGroupManTest()
+  void setUp()
   {
     option_ = std::make_shared<Option>();
     option_->put(PREF_PIECE_LENGTH, "1048576");
@@ -75,16 +75,33 @@ public:
     rgman_ = rgman.get();
     e_->setRequestGroupMan(std::move(rgman));
   }
+
+  void testIsSameFileBeingDownloaded();
+  void testGetInitialCommands();
   void testLoadServerStat();
+  void testSaveServerStat();
+  void testChangeReservedGroupPosition();
+  void testFillRequestGroupFromReserver();
+  void testFillRequestGroupFromReserver_uriParser();
+  void testReduceMaxConcurrentDownloads();
+  void testInsertReservedGroup();
+  void testAddDownloadResult();
+  void testMergedTransferStat();
 };
 
-TEST_CASE_FIXTURE(RequestGroupManTest, "RequestGroupManTest.testLoadServerStat")
-{
-  testLoadServerStat();
-}
+A2_TEST(RequestGroupManTest, testIsSameFileBeingDownloaded)
+A2_TEST(RequestGroupManTest, testGetInitialCommands)
+A2_TEST(RequestGroupManTest, testLoadServerStat)
+A2_TEST(RequestGroupManTest, testSaveServerStat)
+A2_TEST(RequestGroupManTest, testChangeReservedGroupPosition)
+A2_TEST(RequestGroupManTest, testFillRequestGroupFromReserver)
+A2_TEST(RequestGroupManTest, testFillRequestGroupFromReserver_uriParser)
+A2_TEST(RequestGroupManTest, testReduceMaxConcurrentDownloads)
+A2_TEST(RequestGroupManTest, testInsertReservedGroup)
+A2_TEST(RequestGroupManTest, testAddDownloadResult)
+A2_TEST(RequestGroupManTest, testMergedTransferStat)
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testMergedTransferStat")
+void RequestGroupManTest::testMergedTransferStat()
 {
   global::wallclock().reset(24_h);
   RequestGroupMan manager({}, 1, option_.get());
@@ -114,13 +131,12 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   REQUIRE(!manager.doesOverallUploadSpeedExceed());
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testIsSameFileBeingDownloaded")
+void RequestGroupManTest::testIsSameFileBeingDownloaded()
 {
   std::shared_ptr<RequestGroup> rg1(
-      new RequestGroup(GroupId::create(), std::make_shared<Option>(*option_)));
+      new RequestGroup(GroupId::create(), util::copy(option_)));
   std::shared_ptr<RequestGroup> rg2(
-      new RequestGroup(GroupId::create(), std::make_shared<Option>(*option_)));
+      new RequestGroup(GroupId::create(), util::copy(option_)));
 
   std::shared_ptr<DownloadContext> dctx1(
       new DownloadContext(0, 0, "aria2.tar.bz2"));
@@ -143,13 +159,12 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   REQUIRE(!gm.isSameFileBeingDownloaded(rg1.get()));
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testGetInitialCommands")
+void RequestGroupManTest::testGetInitialCommands()
 {
   // TODO implement later
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest, "RequestGroupManTest.testSaveServerStat")
+void RequestGroupManTest::testSaveServerStat()
 {
   RequestGroupMan rm(std::vector<std::shared_ptr<RequestGroup>>(), 0,
                      option_.get());
@@ -185,52 +200,47 @@ void RequestGroupManTest::testLoadServerStat()
   REQUIRE_EQ(std::string("localhost"), ss_localhost->getHostname());
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testChangeReservedGroupPosition")
+void RequestGroupManTest::testChangeReservedGroupPosition()
 {
   std::vector<std::shared_ptr<RequestGroup>> gs{
-      std::make_shared<RequestGroup>(GroupId::create(),
-                                     std::make_shared<Option>(*option_)),
-      std::make_shared<RequestGroup>(GroupId::create(),
-                                     std::make_shared<Option>(*option_)),
-      std::make_shared<RequestGroup>(GroupId::create(),
-                                     std::make_shared<Option>(*option_)),
-      std::make_shared<RequestGroup>(GroupId::create(),
-                                     std::make_shared<Option>(*option_))};
+      std::make_shared<RequestGroup>(GroupId::create(), util::copy(option_)),
+      std::make_shared<RequestGroup>(GroupId::create(), util::copy(option_)),
+      std::make_shared<RequestGroup>(GroupId::create(), util::copy(option_)),
+      std::make_shared<RequestGroup>(GroupId::create(), util::copy(option_))};
   RequestGroupMan rm(gs, 0, option_.get());
 
-  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(gs[0]->getGID(), 0,
-                                                       OFFSET_MODE_SET));
-  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(gs[0]->getGID(), 1,
-                                                       OFFSET_MODE_SET));
-  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(gs[0]->getGID(), 10,
-                                                       OFFSET_MODE_SET));
-  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(gs[0]->getGID(), -10,
-                                                       OFFSET_MODE_SET));
+  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(
+                                      gs[0]->getGID(), 0, OFFSET_MODE_SET));
+  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(
+                                      gs[0]->getGID(), 1, OFFSET_MODE_SET));
+  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(
+                                      gs[0]->getGID(), 10, OFFSET_MODE_SET));
+  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(
+                                      gs[0]->getGID(), -10, OFFSET_MODE_SET));
 
-  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(gs[1]->getGID(), 0,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)2, rm.changeReservedGroupPosition(gs[1]->getGID(), 1,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(gs[1]->getGID(), -1,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(gs[1]->getGID(), -10,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(gs[1]->getGID(), 1,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(gs[1]->getGID(), 10,
-                                                       OFFSET_MODE_CUR));
-  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(gs[1]->getGID(), -2,
-                                                       OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), 0, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)2, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), 1, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), -1, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), -10, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), 1, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), 10, OFFSET_MODE_CUR));
+  REQUIRE_EQ((size_t)1, rm.changeReservedGroupPosition(
+                                      gs[1]->getGID(), -2, OFFSET_MODE_CUR));
 
-  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(gs[3]->getGID(), 0,
-                                                       OFFSET_MODE_END));
-  REQUIRE_EQ((size_t)2, rm.changeReservedGroupPosition(gs[3]->getGID(), -1,
-                                                       OFFSET_MODE_END));
-  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(gs[3]->getGID(), -10,
-                                                       OFFSET_MODE_END));
-  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(gs[3]->getGID(), 10,
-                                                       OFFSET_MODE_END));
+  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(
+                                      gs[3]->getGID(), 0, OFFSET_MODE_END));
+  REQUIRE_EQ((size_t)2, rm.changeReservedGroupPosition(
+                                      gs[3]->getGID(), -1, OFFSET_MODE_END));
+  REQUIRE_EQ((size_t)0, rm.changeReservedGroupPosition(
+                                      gs[3]->getGID(), -10, OFFSET_MODE_END));
+  REQUIRE_EQ((size_t)3, rm.changeReservedGroupPosition(
+                                      gs[3]->getGID(), 10, OFFSET_MODE_END));
 
   REQUIRE_EQ((size_t)4, rm.getReservedGroups().size());
 
@@ -244,24 +254,19 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   }
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testFillRequestGroupFromReserver")
+void RequestGroupManTest::testFillRequestGroupFromReserver()
 {
   std::shared_ptr<RequestGroup> rgs[] = {
-      createRequestGroup(0, 0, "foo1", "http://host/foo1",
-                         std::make_shared<Option>(*option_)),
-      createRequestGroup(0, 0, "foo2", "http://host/foo2",
-                         std::make_shared<Option>(*option_)),
-      createRequestGroup(0, 0, "foo3", "http://host/foo3",
-                         std::make_shared<Option>(*option_)),
+      createRequestGroup(0, 0, "foo1", "http://host/foo1", util::copy(option_)),
+      createRequestGroup(0, 0, "foo2", "http://host/foo2", util::copy(option_)),
+      createRequestGroup(0, 0, "foo3", "http://host/foo3", util::copy(option_)),
       // Intentionally same path/URI for first RequestGroup and set
       // length explicitly to do duplicate filename check.
       createRequestGroup(0, 10, "foo1", "http://host/foo1",
-                         std::make_shared<Option>(*option_)),
-      createRequestGroup(0, 0, "foo4", "http://host/foo4",
-                         std::make_shared<Option>(*option_)),
+                         util::copy(option_)),
+      createRequestGroup(0, 0, "foo4", "http://host/foo4", util::copy(option_)),
       createRequestGroup(0, 0, "foo5", "http://host/foo5",
-                         std::make_shared<Option>(*option_))};
+                         util::copy(option_))};
   rgs[1]->setPauseRequested(true);
   for (const auto& i : rgs) {
     rgman_->addReservedGroup(i);
@@ -271,15 +276,11 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   REQUIRE_EQ((size_t)1, rgman_->getReservedGroups().size());
 }
 
-TEST_CASE_FIXTURE(
-    RequestGroupManTest,
-    "RequestGroupManTest.testFillRequestGroupFromReserver_uriParser")
+void RequestGroupManTest::testFillRequestGroupFromReserver_uriParser()
 {
   std::shared_ptr<RequestGroup> rgs[] = {
-      createRequestGroup(0, 0, "mem1", "http://mem1",
-                         std::make_shared<Option>(*option_)),
-      createRequestGroup(0, 0, "mem2", "http://mem2",
-                         std::make_shared<Option>(*option_)),
+      createRequestGroup(0, 0, "mem1", "http://mem1", util::copy(option_)),
+      createRequestGroup(0, 0, "mem2", "http://mem2", util::copy(option_)),
   };
   rgs[0]->setPauseRequested(true);
   for (const auto& i : rgs) {
@@ -299,16 +300,15 @@ TEST_CASE_FIXTURE(
   REQUIRE_EQ((size_t)3, rgman_->getRequestGroups().size());
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testReduceMaxConcurrentDownloads")
+void RequestGroupManTest::testReduceMaxConcurrentDownloads()
 {
   std::vector<std::shared_ptr<RequestGroup>> rgs{
       createRequestGroup(0, 0, "active1", "http://host/active1",
-                         std::make_shared<Option>(*option_)),
+                         util::copy(option_)),
       createRequestGroup(0, 0, "active2", "http://host/active2",
-                         std::make_shared<Option>(*option_)),
+                         util::copy(option_)),
       createRequestGroup(0, 0, "active3", "http://host/active3",
-                         std::make_shared<Option>(*option_))};
+                         util::copy(option_))};
   for (const auto& rg : rgs) {
     rg->setRequestGroupMan(rgman_);
     rg->setState(RequestGroup::STATE_ACTIVE);
@@ -335,19 +335,18 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   REQUIRE(!rgs[2]->isPauseRequested());
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testInsertReservedGroup")
+void RequestGroupManTest::testInsertReservedGroup()
 {
   std::vector<std::shared_ptr<RequestGroup>> rgs1{
-      std::shared_ptr<RequestGroup>(new RequestGroup(
-          GroupId::create(), std::make_shared<Option>(*option_))),
-      std::shared_ptr<RequestGroup>(new RequestGroup(
-          GroupId::create(), std::make_shared<Option>(*option_)))};
+      std::shared_ptr<RequestGroup>(
+          new RequestGroup(GroupId::create(), util::copy(option_))),
+      std::shared_ptr<RequestGroup>(
+          new RequestGroup(GroupId::create(), util::copy(option_)))};
   std::vector<std::shared_ptr<RequestGroup>> rgs2{
-      std::shared_ptr<RequestGroup>(new RequestGroup(
-          GroupId::create(), std::make_shared<Option>(*option_))),
-      std::shared_ptr<RequestGroup>(new RequestGroup(
-          GroupId::create(), std::make_shared<Option>(*option_)))};
+      std::shared_ptr<RequestGroup>(
+          new RequestGroup(GroupId::create(), util::copy(option_))),
+      std::shared_ptr<RequestGroup>(
+          new RequestGroup(GroupId::create(), util::copy(option_)))};
   rgman_->insertReservedGroup(0, rgs1);
   REQUIRE_EQ((size_t)2, rgman_->getReservedGroups().size());
   RequestGroupList::const_iterator itr;
@@ -363,8 +362,7 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   REQUIRE_EQ(rgs2[1]->getGID(), (*itr++)->getGID());
 }
 
-TEST_CASE_FIXTURE(RequestGroupManTest,
-                  "RequestGroupManTest.testAddDownloadResult")
+void RequestGroupManTest::testAddDownloadResult()
 {
   std::string uri = "http://example.org";
   rgman_->setMaxDownloadResult(3);
@@ -374,7 +372,7 @@ TEST_CASE_FIXTURE(RequestGroupManTest,
   rgman_->addDownloadResult(createDownloadResult(error_code::FINISHED, uri));
   rgman_->addDownloadResult(createDownloadResult(error_code::FINISHED, uri));
   REQUIRE_EQ(error_code::TIME_OUT,
-             rgman_->getDownloadStat().getLastErrorResult());
+                       rgman_->getDownloadStat().getLastErrorResult());
 }
 
 } // namespace aria2

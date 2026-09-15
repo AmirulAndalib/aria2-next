@@ -34,7 +34,6 @@
 /* copyright --> */
 
 #include "ARC4Encryptor.h"
-#include <cstddef>
 
 namespace aria2 {
 

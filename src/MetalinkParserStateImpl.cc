@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "MetalinkParserStateImpl.h"
-#include <vector>
 
 #include <cstring>
 #include <algorithm>

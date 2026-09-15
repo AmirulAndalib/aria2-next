@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "ShareRatioSeedCriteria.h"
-#include <cstdint>
-#include <memory>
 #include "DownloadContext.h"
 #include "PieceStorage.h"
 
@@ -56,8 +54,7 @@ bool ShareRatioSeedCriteria::evaluate()
   if (completedLength == 0) {
     return true;
   }
-  int64_t uploadLength =
-      downloadContext_->getNetStat().getSessionUploadLength();
+  int64_t uploadLength = downloadContext_->getNetStat().getSessionUploadLength();
   return ratio_ <= 1.0 * uploadLength / completedLength;
 }
 

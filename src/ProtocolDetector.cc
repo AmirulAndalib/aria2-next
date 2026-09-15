@@ -33,16 +33,13 @@
  */
 /* copyright --> */
 #include "ProtocolDetector.h"
-#include "uri_split.h"
-#include <string>
 
 #include <cstring>
 #include <iomanip>
 
 #include "Request.h"
 #include "File.h"
-#include "support/Text.h"
-#include "a2functional.h"
+#include "util.h"
 #include "RecoverableException.h"
 #include "uri.h"
 #include "BufferedFile.h"

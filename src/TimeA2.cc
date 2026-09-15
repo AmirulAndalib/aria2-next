@@ -34,13 +34,11 @@
 /* copyright --> */
 
 #include "TimeA2.h"
-#include "strptime.h"
-#include "timegm.h"
-#include <cstdint>
-#include <ctime>
-#include <string>
 
 #include <cstring>
+
+#include "util.h"
+#include "array_fun.h"
 
 namespace aria2 {
 

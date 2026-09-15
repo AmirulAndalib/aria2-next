@@ -33,18 +33,6 @@
  */
 /* copyright --> */
 #include "Context.h"
-#include "a2netcompat.h"
-#include "aria2/aria2.h"
-#include "error_code.h"
-#include "timegm.h"
-#include <cinttypes>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <memory>
-#include <string>
-#include <utility>
-#include "platform/SocketAddress.h"
 
 #include "ApplicationStatePath.h"
 
@@ -61,18 +49,13 @@
 #include <iostream>
 
 #include "Log.h"
-#include "support/Text.h"
-#include "support/Storage.h"
-#include "platform/Process.h"
-#include "a2functional.h"
-#include "fmt.h"
-#include "message.h"
-#include "DlAbortEx.h"
-#include "prefs.h"
+#include "util.h"
 #include "FeatureConfig.h"
 #include "MultiUrlRequestInfo.h"
 #include "SimpleRandomizer.h"
 #include "File.h"
+#include "message.h"
+#include "prefs.h"
 #include "Option.h"
 #include "a2algo.h"
 #include "a2io.h"
@@ -86,6 +69,7 @@
 #include "RecoverableException.h"
 #include "SocketCore.h"
 #include "DownloadContext.h"
+#include "fmt.h"
 #include "console.h"
 #include "UriListParser.h"
 #include "message_digest_helper.h"
@@ -327,7 +311,7 @@ Context::Context(bool standalone, int argc, char** argv, const KeyVals& options)
   else {
     if (!requestGroups.empty()) {
       A2_LOG_INFO(fmt("Downloading %" PRId64 " item(s)",
-                      static_cast<uint64_t>(requestGroups.size())));
+                        static_cast<uint64_t>(requestGroups.size())));
     }
     reqinfo = std::make_shared<MultiUrlRequestInfo>(std::move(requestGroups),
                                                     op, uriListParser);

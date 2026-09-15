@@ -33,6 +33,8 @@
  */
 /* copyright --> */
 #include "DiskAdaptor.h"
+#include "FileEntry.h"
+#include "OpenedFileCounter.h"
 
 namespace aria2 {
 

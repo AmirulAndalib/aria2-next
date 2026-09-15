@@ -1,20 +1,49 @@
-#include "aria2/aria2.h"
-#include <cstddef>
-#include <iterator>
-#include <memory>
-#include <string>
 #include "IndexedList.h"
 
 #include <vector>
 #include <deque>
+#include <iostream>
 
 #include "a2doctest.h"
 
 #include "TestUtil.h"
+#include "array_fun.h"
+#include "TimerA2.h"
 
 namespace aria2 {
 
-TEST_CASE("IndexedListTest.testPushBack")
+class IndexedListTest {
+
+
+public:
+  void setUp() {}
+
+  void testPushBack();
+  void testPushFront();
+  void testRemove();
+  void testErase();
+  void testPopFront();
+  void testMove();
+  void testGet();
+  void testInsert();
+  void testInsert_keyFunc();
+  void testIterator();
+  void testRemoveIf();
+};
+
+A2_TEST(IndexedListTest, testPushBack)
+A2_TEST(IndexedListTest, testPushFront)
+A2_TEST(IndexedListTest, testRemove)
+A2_TEST(IndexedListTest, testErase)
+A2_TEST(IndexedListTest, testPopFront)
+A2_TEST(IndexedListTest, testMove)
+A2_TEST(IndexedListTest, testGet)
+A2_TEST(IndexedListTest, testInsert)
+A2_TEST(IndexedListTest, testInsert_keyFunc)
+A2_TEST(IndexedListTest, testIterator)
+A2_TEST(IndexedListTest, testRemoveIf)
+
+void IndexedListTest::testPushBack()
 {
   int a[] = {1, 2, 3, 4, 5};
   IndexedList<int, int*> list;
@@ -31,7 +60,7 @@ TEST_CASE("IndexedListTest.testPushBack")
   }
 }
 
-TEST_CASE("IndexedListTest.testPushFront")
+void IndexedListTest::testPushFront()
 {
   int a[] = {1, 2, 3, 4, 5};
   IndexedList<int, int*> list;
@@ -48,7 +77,7 @@ TEST_CASE("IndexedListTest.testPushFront")
   }
 }
 
-TEST_CASE("IndexedListTest.testRemove")
+void IndexedListTest::testRemove()
 {
   int a[] = {1, 2, 3, 4, 5};
   IndexedList<int, int*> list;
@@ -64,7 +93,7 @@ TEST_CASE("IndexedListTest.testRemove")
   }
 }
 
-TEST_CASE("IndexedListTest.testErase")
+void IndexedListTest::testErase()
 {
   int a[] = {1, 2, 3, 4, 5};
   IndexedList<int, int*> list;
@@ -84,7 +113,7 @@ TEST_CASE("IndexedListTest.testErase")
   }
 }
 
-TEST_CASE("IndexedListTest.testPopFront")
+void IndexedListTest::testPopFront()
 {
   int a[] = {1, 2, 3, 4, 5};
   IndexedList<int, int*> list;
@@ -105,11 +134,11 @@ TEST_CASE("IndexedListTest.testPopFront")
     int ai = 0;                                                                \
     for (IndexedList<int, int*>::iterator i = list.begin(); i != list.end();   \
          ++i) {                                                                \
-      REQUIRE_EQ(a[ai++], **i);                                                \
+      REQUIRE_EQ(a[ai++], **i);                                      \
     }                                                                          \
   }
 
-TEST_CASE("IndexedListTest.testMove")
+void IndexedListTest::testMove()
 {
   int a[] = {0, 1, 2, 3, 4};
   IndexedList<int, int*> list;
@@ -190,7 +219,7 @@ TEST_CASE("IndexedListTest.testMove")
   LIST_CHECK(a17, list);
 }
 
-TEST_CASE("IndexedListTest.testGet")
+void IndexedListTest::testGet()
 {
   IndexedList<int, int*> list;
   int a = 1000;
@@ -209,7 +238,7 @@ struct KeyFunc {
 };
 } // namespace
 
-TEST_CASE("IndexedListTest.testInsert_keyFunc")
+void IndexedListTest::testInsert_keyFunc()
 {
   std::shared_ptr<std::string> s[] = {
       std::shared_ptr<std::string>(new std::string("a")),
@@ -248,7 +277,7 @@ TEST_CASE("IndexedListTest.testInsert_keyFunc")
   REQUIRE_EQ(std::string("a"), *(*itr++));
 }
 
-TEST_CASE("IndexedListTest.testInsert")
+void IndexedListTest::testInsert()
 {
   int a[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   IndexedList<int, int*> list;
@@ -277,7 +306,7 @@ TEST_CASE("IndexedListTest.testInsert")
   REQUIRE(list.end() == list.insert(list.end(), 2, &a[2]));
 }
 
-TEST_CASE("IndexedListTest.testIterator")
+void IndexedListTest::testIterator()
 {
   int a[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   IndexedList<int, int*> list;
@@ -374,7 +403,7 @@ struct RemoveOdd {
   bool operator()(int* p) const { return *p % 2 == 1; }
 };
 } // namespace
-TEST_CASE("IndexedListTest.testRemoveIf")
+void IndexedListTest::testRemoveIf()
 {
   int a[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   IndexedList<int, int*> list;

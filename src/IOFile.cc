@@ -33,14 +33,14 @@
  */
 /* copyright --> */
 #include "IOFile.h"
-#include <string>
 
 #include <array>
 #include <cstring>
 #include <cstdarg>
 #include <ostream>
 
-#include "a2functional.h"
+#include "a2io.h"
+#include "util.h"
 
 namespace aria2 {
 

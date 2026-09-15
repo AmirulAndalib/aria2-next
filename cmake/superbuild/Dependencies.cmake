@@ -377,8 +377,6 @@ if(ARIA2_ENABLE_BITTORRENT)
     TEST_COMMAND "")
 endif()
 
-include(${CMAKE_CURRENT_LIST_DIR}/Media.cmake)
-
 set(ARIA2_INNER_CMAKE_ARGS
   ${ARIA2_EXTERNAL_CMAKE_ARGS}
   -DARIA2_SUPERBUILD=OFF
@@ -394,7 +392,6 @@ set(ARIA2_INNER_CMAKE_ARGS
 
 foreach(variable
     BUILD_TESTING
-    CMAKE_EXPORT_COMPILE_COMMANDS
     ARIA2_ENABLE_BITTORRENT
     ARIA2_ENABLE_METALINK
     ARIA2_ENABLE_WEBSOCKET
@@ -415,14 +412,10 @@ set(ARIA2_PROJECT_DEPENDENCIES
   openssl_project
   libssh2_project
   nghttp2_project
-  curl_project
-  ffmpeg_project
-  gpac_project)
+  curl_project)
 if(ARIA2_ENABLE_BITTORRENT)
   list(APPEND ARIA2_PROJECT_DEPENDENCIES libtorrent_project)
 endif()
-
-add_custom_target(aria2_dependencies DEPENDS ${ARIA2_PROJECT_DEPENDENCIES})
 
 ExternalProject_Add(aria2_project
   DEPENDS ${ARIA2_PROJECT_DEPENDENCIES}

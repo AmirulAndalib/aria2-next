@@ -1,5 +1,3 @@
-#include <cstdint>
-#include <memory>
 #include "Option.h"
 
 #include <string>
@@ -10,7 +8,33 @@
 
 namespace aria2 {
 
-TEST_CASE("OptionTest.testPutAndGet")
+class OptionTest {
+
+
+private:
+public:
+  void setUp() {}
+
+  void testPutAndGet();
+  void testPutAndGetAsInt();
+  void testPutAndGetAsDouble();
+  void testDefined();
+  void testBlank();
+  void testMerge();
+  void testParent();
+  void testRemove();
+};
+
+A2_TEST(OptionTest, testPutAndGet)
+A2_TEST(OptionTest, testPutAndGetAsInt)
+A2_TEST(OptionTest, testPutAndGetAsDouble)
+A2_TEST(OptionTest, testDefined)
+A2_TEST(OptionTest, testBlank)
+A2_TEST(OptionTest, testMerge)
+A2_TEST(OptionTest, testParent)
+A2_TEST(OptionTest, testRemove)
+
+void OptionTest::testPutAndGet()
 {
   Option op;
   op.put(PREF_TIMEOUT, "value");
@@ -19,7 +43,7 @@ TEST_CASE("OptionTest.testPutAndGet")
   REQUIRE_EQ(std::string("value"), op.get(PREF_TIMEOUT));
 }
 
-TEST_CASE("OptionTest.testPutAndGetAsInt")
+void OptionTest::testPutAndGetAsInt()
 {
   Option op;
   op.put(PREF_TIMEOUT, "1000");
@@ -28,7 +52,7 @@ TEST_CASE("OptionTest.testPutAndGetAsInt")
   REQUIRE_EQ((int32_t)1000, op.getAsInt(PREF_TIMEOUT));
 }
 
-TEST_CASE("OptionTest.testPutAndGetAsDouble")
+void OptionTest::testPutAndGetAsDouble()
 {
   Option op;
   op.put(PREF_TIMEOUT, "10.0");
@@ -36,7 +60,7 @@ TEST_CASE("OptionTest.testPutAndGetAsDouble")
   REQUIRE_EQ(10.0, op.getAsDouble(PREF_TIMEOUT));
 }
 
-TEST_CASE("OptionTest.testDefined")
+void OptionTest::testDefined()
 {
   Option op;
   op.put(PREF_TIMEOUT, "v");
@@ -46,7 +70,7 @@ TEST_CASE("OptionTest.testDefined")
   REQUIRE(!op.defined(PREF_DAEMON));
 }
 
-TEST_CASE("OptionTest.testBlank")
+void OptionTest::testBlank()
 {
   Option op;
   op.put(PREF_TIMEOUT, "v");
@@ -56,7 +80,7 @@ TEST_CASE("OptionTest.testBlank")
   REQUIRE(op.blank(PREF_DAEMON));
 }
 
-TEST_CASE("OptionTest.testMerge")
+void OptionTest::testMerge()
 {
   Option src;
   src.put(PREF_TIMEOUT, "100");
@@ -71,7 +95,7 @@ TEST_CASE("OptionTest.testMerge")
   REQUIRE(!dest.defined(PREF_OUT));
 }
 
-TEST_CASE("OptionTest.testParent")
+void OptionTest::testParent()
 {
   Option child;
   std::shared_ptr<Option> parent(new Option());
@@ -99,7 +123,7 @@ TEST_CASE("OptionTest.testParent")
   REQUIRE(!child.definedLocal(PREF_TIMEOUT));
 }
 
-TEST_CASE("OptionTest.testRemove")
+void OptionTest::testRemove()
 {
   Option child;
   auto parent = std::make_shared<Option>();

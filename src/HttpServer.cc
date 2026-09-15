@@ -33,12 +33,6 @@
  */
 /* copyright --> */
 #include "HttpServer.h"
-#include <algorithm>
-#include <cstddef>
-#include <iterator>
-#include <memory>
-#include <utility>
-#include <vector>
 
 #include <sstream>
 
@@ -47,12 +41,10 @@
 #include "HttpHeaderProcessor.h"
 #include "DlAbortEx.h"
 #include "message.h"
-#include "support/Text.h"
-#include "support/Numbers.h"
+#include "util.h"
+#include "Log.h"
 #include "a2functional.h"
 #include "fmt.h"
-#include "a2iterator.h"
-#include "Log.h"
 #include "SocketRecvBuffer.h"
 #include "TimeA2.h"
 #include "array_fun.h"
@@ -186,10 +178,10 @@ bool HttpServer::receiveRequest()
   if (headerProcessor_->parse(socketRecvBuffer_->getBuffer(),
                               socketRecvBuffer_->getBufferLength())) {
     lastRequestHeader_ = headerProcessor_->getResult();
-    A2_LOG_TRACE(
-        fmt("HTTP server received request: %s",
-            logging::summarizeHttpMessage(headerProcessor_->getHeaderString())
-                .c_str()));
+    A2_LOG_TRACE(fmt("HTTP server received request: %s",
+                     logging::summarizeHttpMessage(
+                         headerProcessor_->getHeaderString())
+                         .c_str()));
     socketRecvBuffer_->drain(headerProcessor_->getLastBytesProcessed());
     bodyConsumed_ = 0;
     if (setupResponseRecv() < 0) {

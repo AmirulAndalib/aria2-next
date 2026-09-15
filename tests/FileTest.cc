@@ -1,11 +1,3 @@
-#include "TimeA2.h"
-#include "a2io.h"
-#include <cstdint>
-#include <ctime>
-#include <ios>
-#ifdef _WIN32
-#  include <io.h>
-#endif
 #include "File.h"
 #include "TestUtil.h"
 #include <sys/types.h>
@@ -15,13 +7,41 @@
 #include <fstream>
 #include "a2doctest.h"
 
-#include "support/FilePath.h"
-#include "platform/NativeText.h"
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 
-TEST_CASE("FileTest.testExists")
+class FileTest {
+
+
+private:
+public:
+  void setUp() {}
+
+  void testExists();
+  void testIsFile();
+  void testIsDir();
+  void testRemove();
+  void testSize();
+  void testMkdir();
+  void testGetDirname();
+  void testGetBasename();
+  void testRenameTo();
+  void testUtime();
+};
+
+A2_TEST(FileTest, testExists)
+A2_TEST(FileTest, testIsFile)
+A2_TEST(FileTest, testIsDir)
+A2_TEST(FileTest, testRemove)
+A2_TEST(FileTest, testSize)
+A2_TEST(FileTest, testMkdir)
+A2_TEST(FileTest, testGetDirname)
+A2_TEST(FileTest, testGetBasename)
+A2_TEST(FileTest, testRenameTo)
+A2_TEST(FileTest, testUtime)
+
+void FileTest::testExists()
 {
   File f(A2_TEST_DIR "/FileTest.cc");
   REQUIRE(f.exists());
@@ -33,7 +53,7 @@ TEST_CASE("FileTest.testExists")
   REQUIRE(d1.exists());
 }
 
-TEST_CASE("FileTest.testIsFile")
+void FileTest::testIsFile()
 {
   File f(A2_TEST_DIR "/FileTest.cc");
   REQUIRE(f.isFile());
@@ -45,7 +65,7 @@ TEST_CASE("FileTest.testIsFile")
   REQUIRE(!d1.isFile());
 }
 
-TEST_CASE("FileTest.testIsDir")
+void FileTest::testIsDir()
 {
   File f(A2_TEST_DIR "/FileTest.cc");
   REQUIRE(!f.isDir());
@@ -57,7 +77,7 @@ TEST_CASE("FileTest.testIsDir")
   REQUIRE(d1.isDir());
 }
 
-TEST_CASE("FileTest.testRemove")
+void FileTest::testRemove()
 {
   int fd;
   std::string name = A2_TEST_OUT_DIR "/aria2_FileTest_testRemove_testregfile";
@@ -87,13 +107,13 @@ TEST_CASE("FileTest.testRemove")
   REQUIRE(!d.remove());
 }
 
-TEST_CASE("FileTest.testSize")
+void FileTest::testSize()
 {
   File f(A2_TEST_DIR "/4096chunk.txt");
   REQUIRE_EQ((int64_t)4_k, f.size());
 }
 
-TEST_CASE("FileTest.testMkdir")
+void FileTest::testMkdir()
 {
   {
     std::string dir = A2_TEST_OUT_DIR "/aria2_FileTest_testMkdir/test";
@@ -130,7 +150,7 @@ TEST_CASE("FileTest.testMkdir")
   }
 }
 
-TEST_CASE("FileTest.testGetDirname")
+void FileTest::testGetDirname()
 {
   {
     File f("/usr/lib");
@@ -168,7 +188,7 @@ TEST_CASE("FileTest.testGetDirname")
 #endif // __MINGW32__
 }
 
-TEST_CASE("FileTest.testGetBasename")
+void FileTest::testGetBasename()
 {
   {
     File f("/usr/lib");
@@ -210,7 +230,7 @@ TEST_CASE("FileTest.testGetBasename")
 #endif // __MINGW32__
 }
 
-TEST_CASE("FileTest.testRenameTo")
+void FileTest::testRenameTo()
 {
   std::string fname = A2_TEST_OUT_DIR "/aria2_FileTest_testRenameTo.txt";
   std::ofstream of(fname.c_str(), std::ios::binary);
@@ -230,7 +250,7 @@ TEST_CASE("FileTest.testRenameTo")
   REQUIRE(f.renameTo(fname));
 }
 
-TEST_CASE("FileTest.testUtime")
+void FileTest::testUtime()
 {
   File f(A2_TEST_OUT_DIR "/aria2_FileTest_testUTime");
   createFile(f.getPath(), 0);

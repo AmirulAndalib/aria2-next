@@ -41,7 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 

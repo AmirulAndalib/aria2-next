@@ -1,20 +1,36 @@
-#include "a2netcompat.h"
-#include <algorithm>
-#include <cstddef>
-#include <memory>
-#include <string>
 #include "SocketCore.h"
-#include "platform/SocketAddress.h"
 
 #include <cstring>
 #include <iostream>
 #include "a2doctest.h"
 
+#include "a2functional.h"
 #include "Exception.h"
 
 namespace aria2 {
 
-TEST_CASE("SocketCoreTest.testWriteAndReadDatagram")
+class SocketCoreTest {
+
+
+public:
+  void setUp() {}
+
+  void tearDown() {}
+
+  void testWriteAndReadDatagram();
+  void testGetSocketError();
+  void testInetNtop();
+  void testInetPton();
+  void testGetBinAddr();
+};
+
+A2_TEST(SocketCoreTest, testWriteAndReadDatagram)
+A2_TEST(SocketCoreTest, testGetSocketError)
+A2_TEST(SocketCoreTest, testInetNtop)
+A2_TEST(SocketCoreTest, testInetPton)
+A2_TEST(SocketCoreTest, testGetBinAddr)
+
+void SocketCoreTest::testWriteAndReadDatagram()
 {
   try {
     SocketCore s(SOCK_DGRAM);
@@ -57,7 +73,7 @@ TEST_CASE("SocketCoreTest.testWriteAndReadDatagram")
   }
 }
 
-TEST_CASE("SocketCoreTest.testGetSocketError")
+void SocketCoreTest::testGetSocketError()
 {
   SocketCore s;
   s.bind(0);
@@ -65,36 +81,38 @@ TEST_CASE("SocketCoreTest.testGetSocketError")
   REQUIRE_EQ(std::string(""), s.getSocketError());
 }
 
-TEST_CASE("SocketCoreTest.testInetNtop")
+void SocketCoreTest::testInetNtop()
 {
   char dest[NI_MAXHOST];
   {
     std::string s = "192.168.0.1";
     addrinfo* res;
     REQUIRE_EQ(0, callGetaddrinfo(&res, s.c_str(), nullptr, AF_INET,
-                                  SOCK_STREAM, 0, 0));
+                                            SOCK_STREAM, 0, 0));
     std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> resDeleter(res,
                                                                   freeaddrinfo);
     sockaddr_in addr;
     memcpy(&addr, res->ai_addr, sizeof(addr));
-    REQUIRE_EQ(0, inetNtop(AF_INET, &addr.sin_addr, dest, sizeof(dest)));
+    REQUIRE_EQ(0,
+                         inetNtop(AF_INET, &addr.sin_addr, dest, sizeof(dest)));
     REQUIRE_EQ(s, std::string(dest));
   }
   {
     std::string s = "2001:db8::2:1";
     addrinfo* res;
     REQUIRE_EQ(0, callGetaddrinfo(&res, s.c_str(), nullptr, AF_INET6,
-                                  SOCK_STREAM, 0, 0));
+                                            SOCK_STREAM, 0, 0));
     std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> resDeleter(res,
                                                                   freeaddrinfo);
     sockaddr_in6 addr;
     memcpy(&addr, res->ai_addr, sizeof(addr));
-    REQUIRE_EQ(0, inetNtop(AF_INET6, &addr.sin6_addr, dest, sizeof(dest)));
+    REQUIRE_EQ(
+        0, inetNtop(AF_INET6, &addr.sin6_addr, dest, sizeof(dest)));
     REQUIRE_EQ(s, std::string(dest));
   }
 }
 
-TEST_CASE("SocketCoreTest.testInetPton")
+void SocketCoreTest::testInetPton()
 {
   {
     const char ipaddr[] = "192.168.0.1";
@@ -117,7 +135,7 @@ TEST_CASE("SocketCoreTest.testInetPton")
   REQUIRE_EQ(-1, inetPton(AF_INET6, "localhost", &dest));
 }
 
-TEST_CASE("SocketCoreTest.testGetBinAddr")
+void SocketCoreTest::testGetBinAddr()
 {
   struct DefaultAIFlagsReset {
     ~DefaultAIFlagsReset() { setDefaultAIFlags(0); }

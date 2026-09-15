@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "GeomStreamPieceSelector.h"
-#include <cstddef>
 #include "BitfieldMan.h"
 
 namespace aria2 {

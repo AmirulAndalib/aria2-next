@@ -1,5 +1,3 @@
-#include <ios>
-#include <string>
 #include "StreamStore.h"
 
 #include <fstream>
@@ -11,7 +9,16 @@
 
 namespace aria2 {
 
-TEST_CASE("StreamStoreTest.testResumeLookupAndCleanup")
+class StreamStoreTest {
+public:
+  void testResumeLookupAndCleanup();
+  void testPrunesMissingPayloads();
+};
+
+A2_TEST(StreamStoreTest, testResumeLookupAndCleanup)
+A2_TEST(StreamStoreTest, testPrunesMissingPayloads)
+
+void StreamStoreTest::testResumeLookupAndCleanup()
 {
   const std::string path = A2_TEST_OUT_DIR "/stream-state.db";
   File(path).remove();
@@ -46,7 +53,7 @@ TEST_CASE("StreamStoreTest.testResumeLookupAndCleanup")
   REQUIRE(!store.load(restored, saved.gid, saved.path));
 }
 
-TEST_CASE("StreamStoreTest.testPrunesMissingPayloads")
+void StreamStoreTest::testPrunesMissingPayloads()
 {
   const std::string database = A2_TEST_OUT_DIR "/stream-prune.db";
   const std::string payload = A2_TEST_OUT_DIR "/stream-prune.bin";

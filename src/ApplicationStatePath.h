@@ -26,7 +26,6 @@ std::string btSessionFile(const Option* option);
 std::string btTorrentDirectory(const Option* option);
 std::string ed2kDatabaseFile(const Option* option);
 std::string streamDatabaseFile(const Option* option);
-std::string mediaDirectory(const Option* option);
 
 } // namespace state
 

@@ -33,15 +33,6 @@
  */
 /* copyright --> */
 #include "MetalinkParserStateMachine.h"
-#include "MetalinkParserController.h"
-#include "MetalinkParserState.h"
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <sstream>
 #include <iterator>
@@ -50,6 +41,7 @@
 #include "MetalinkParserStateV3Impl.h"
 #include "MetalinkParserStateV4Impl.h"
 #include "Metalinker.h"
+#include "MetalinkEntry.h"
 #include "a2functional.h"
 
 namespace aria2 {

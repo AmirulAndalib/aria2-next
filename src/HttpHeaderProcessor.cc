@@ -33,15 +33,15 @@
  */
 /* copyright --> */
 #include "HttpHeaderProcessor.h"
-#include <cstddef>
-#include <memory>
-#include <string>
-#include <utility>
+
+#include <vector>
 
 #include "HttpHeader.h"
-#include "support/Text.h"
-#include "a2functional.h"
+#include "message.h"
+#include "util.h"
+#include "DlRetryEx.h"
 #include "DlAbortEx.h"
+#include "error_code.h"
 
 namespace aria2 {
 

@@ -1,5 +1,3 @@
-#include <cstddef>
-#include <memory>
 #include "RarestPieceSelector.h"
 
 #include "a2doctest.h"
@@ -11,14 +9,23 @@
 namespace aria2 {
 
 class RarestPieceSelectorTest {
+
+
 public:
+  void setUp() {}
+
+  void tearDown() {}
+
   void testAddPieceStats_index();
   void testAddPieceStats_bitfield();
   void testUpdatePieceStats();
   void testSubtractPieceStats();
+  void testSelect();
 };
 
-TEST_CASE_FIXTURE(RarestPieceSelectorTest, "RarestPieceSelectorTest.testSelect")
+A2_TEST(RarestPieceSelectorTest, testSelect)
+
+void RarestPieceSelectorTest::testSelect()
 {
   std::shared_ptr<PieceStatMan> pieceStatMan(new PieceStatMan(10, false));
   RarestPieceSelector selector(pieceStatMan);

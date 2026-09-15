@@ -1,15 +1,3 @@
-#include "DiskAdaptor.h"
-#include "ContextAttribute.h"
-#include "GroupId.h"
-#include "ed2k_link.h"
-#include "ed2k_packet.h"
-#include <cstddef>
-#include <cstdint>
-#include <ios>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 #include "Ed2kShareIndex.h"
 
 #include <fstream>
@@ -17,19 +5,36 @@
 #include "a2doctest.h"
 
 #include "DefaultPieceStorage.h"
+#include "DiskAdaptor.h"
 #include "DownloadContext.h"
 #include "Ed2kAttribute.h"
+#include "FileEntry.h"
 #include "Option.h"
 #include "Piece.h"
 #include "RequestGroup.h"
 #include "RequestGroupMan.h"
 #include "TestUtil.h"
 #include "ed2k_hash.h"
+#include "ed2k_peer.h"
 #include "prefs.h"
 
 namespace aria2 {
 
 namespace ed2k {
+
+class Ed2kShareIndexTest {
+
+public:
+  void testActiveSourceExposesVerifiedPiecesOnly();
+  void testActiveSourceRejectsUnverifiedRange();
+  void testRequestGroupManFindsActiveSource();
+  void testOfferFilesPayloadSkipsLargeFilesWithoutServerSupport();
+};
+
+A2_TEST(Ed2kShareIndexTest, testActiveSourceExposesVerifiedPiecesOnly)
+A2_TEST(Ed2kShareIndexTest, testActiveSourceRejectsUnverifiedRange)
+A2_TEST(Ed2kShareIndexTest, testRequestGroupManFindsActiveSource)
+A2_TEST(Ed2kShareIndexTest, testOfferFilesPayloadSkipsLargeFilesWithoutServerSupport)
 
 namespace {
 
@@ -63,7 +68,8 @@ public:
   {
     return std::vector<bool>(1, true);
   }
-  bool readRange(std::string& data, int64_t begin, int64_t end) const override
+  bool readRange(std::string& data, int64_t begin,
+                 int64_t end) const override
   {
     data.assign(static_cast<size_t>(end - begin), '\0');
     return true;
@@ -71,8 +77,9 @@ public:
   void recordUpload(size_t bytes) override {}
 };
 
-std::shared_ptr<DownloadContext>
-createEd2kContext(const std::string& path, int64_t size, int32_t pieceLength)
+std::shared_ptr<DownloadContext> createEd2kContext(const std::string& path,
+                                                   int64_t size,
+                                                   int32_t pieceLength)
 {
   auto dctx = std::make_shared<DownloadContext>(pieceLength, size, path);
   auto attrs = std::make_shared<Ed2kAttribute>();
@@ -98,7 +105,7 @@ createPieceStorage(const std::shared_ptr<DownloadContext>& dctx,
 
 } // namespace
 
-TEST_CASE("Ed2kShareIndexTest.testActiveSourceExposesVerifiedPiecesOnly")
+void Ed2kShareIndexTest::testActiveSourceExposesVerifiedPiecesOnly()
 {
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, ".");
@@ -119,7 +126,7 @@ TEST_CASE("Ed2kShareIndexTest.testActiveSourceExposesVerifiedPiecesOnly")
   REQUIRE(!bitfield[1]);
 }
 
-TEST_CASE("Ed2kShareIndexTest.testActiveSourceRejectsUnverifiedRange")
+void Ed2kShareIndexTest::testActiveSourceRejectsUnverifiedRange()
 {
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, ".");
@@ -141,7 +148,7 @@ TEST_CASE("Ed2kShareIndexTest.testActiveSourceRejectsUnverifiedRange")
   REQUIRE(!source->readRange(data, 2, 6));
 }
 
-TEST_CASE("Ed2kShareIndexTest.testRequestGroupManFindsActiveSource")
+void Ed2kShareIndexTest::testRequestGroupManFindsActiveSource()
 {
   auto option = std::make_shared<Option>();
   option->put(PREF_DIR, ".");
@@ -170,8 +177,7 @@ TEST_CASE("Ed2kShareIndexTest.testRequestGroupManFindsActiveSource")
   REQUIRE_EQ((size_t)1, listSharedSources(&rgman).size());
 }
 
-TEST_CASE("Ed2kShareIndexTest."
-          "testOfferFilesPayloadSkipsLargeFilesWithoutServerSupport")
+void Ed2kShareIndexTest::testOfferFilesPayloadSkipsLargeFilesWithoutServerSupport()
 {
   std::vector<std::shared_ptr<SharedSource>> sources;
   sources.push_back(std::make_shared<TestSharedSource>(
@@ -183,13 +189,15 @@ TEST_CASE("Ed2kShareIndexTest."
   std::string payload;
   REQUIRE(createOfferFilesPayload(payload, sources, false, 10, 0, 0));
   size_t offset = 0;
-  REQUIRE_EQ((uint32_t)1, readUInt32(readBytes(payload, offset, 4).data()));
+  REQUIRE_EQ((uint32_t)1,
+                       readUInt32(readBytes(payload, offset, 4).data()));
   REQUIRE_EQ(std::string(HASH_LENGTH, '\x40'),
-             readBytes(payload, offset, HASH_LENGTH));
+                       readBytes(payload, offset, HASH_LENGTH));
 
   REQUIRE(createOfferFilesPayload(payload, sources, true, 10, 0, 0));
   offset = 0;
-  REQUIRE_EQ((uint32_t)2, readUInt32(readBytes(payload, offset, 4).data()));
+  REQUIRE_EQ((uint32_t)2,
+                       readUInt32(readBytes(payload, offset, 4).data()));
 }
 
 } // namespace ed2k

@@ -36,7 +36,6 @@
 #define D_DOWNLOAD_CONTEXT_H
 
 #include "common.h"
-#include "support/FilePath.h"
 
 #include <cassert>
 #include <string>

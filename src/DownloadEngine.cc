@@ -33,20 +33,6 @@
  */
 /* copyright --> */
 #include "DownloadEngine.h"
-#include "CheckIntegrityMan.h"
-#include "DNSCache.h"
-#include "FileAllocationMan.h"
-#include "TimerA2.h"
-#include "a2netcompat.h"
-#include "a2time.h"
-#include "common.h"
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <deque>
-#include <memory>
-#include <utility>
-#include <vector>
 
 #include <signal.h>
 
@@ -59,9 +45,8 @@
 #include "DownloadResult.h"
 #include "Log.h"
 #include "SocketCore.h"
-#include "support/Random.h"
+#include "util.h"
 #include "a2functional.h"
-#include "prefs.h"
 #include "EventPoll.h"
 #include "Command.h"
 #include "CurlSession.h"
@@ -201,8 +186,8 @@ int DownloadEngine::run(bool oneshot)
     executeCommand(routineCommands_, Command::STATUS_ALL);
     afterEachIteration();
     if (systemResolver_->hasPending()) {
-      refreshInterval_ =
-          std::min(refreshInterval_, std::chrono::milliseconds(25));
+      refreshInterval_ = std::min(refreshInterval_,
+                                  std::chrono::milliseconds(25));
     }
     if (!noWait_ && oneshot) {
       return 1;
@@ -221,7 +206,8 @@ void DownloadEngine::rebalanceGlobalDownloadLimit()
   auto curlLimit = overall;
   auto btLimit = overall;
 #ifdef ENABLE_BITTORRENT
-  const auto btActive = btSession_ && btSession_->downloadSpeed() > 0;
+  const auto btActive =
+      btSession_ && btSession_->downloadSpeed() > 0;
 #else
   const auto btActive = false;
 #endif
@@ -298,7 +284,8 @@ bool DownloadEngine::addSocketForWriteCheck(sock_t socket, Command* command)
   return eventPoll_->addEvents(socket, command, EventPoll::EVENT_WRITE);
 }
 
-bool DownloadEngine::deleteSocketForWriteCheck(sock_t socket, Command* command)
+bool DownloadEngine::deleteSocketForWriteCheck(sock_t socket,
+                                               Command* command)
 {
   return eventPoll_->deleteEvents(socket, command, EventPoll::EVENT_WRITE);
 }

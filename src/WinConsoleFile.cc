@@ -11,13 +11,7 @@
  */
 /* copyright --> */
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
 #include "WinConsoleFile.h"
-#include <consoleapi.h>
-#include <cstdarg>
-#include <processenv.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -25,7 +19,7 @@
 #include <limits>
 #include <vector>
 
-#include "platform/NativeText.h"
+#include "util.h"
 
 namespace aria2 {
 
@@ -46,8 +40,8 @@ size_t WinConsoleFile::write(const char* str)
 
   DWORD written = 0;
   if (!console_) {
-    const auto count = static_cast<DWORD>(std::min(
-        length, static_cast<size_t>(std::numeric_limits<DWORD>::max())));
+    const auto count = static_cast<DWORD>(
+        std::min(length, static_cast<size_t>(std::numeric_limits<DWORD>::max())));
     return WriteFile(handle_, str, count, &written, nullptr) ? written : 0;
   }
 
@@ -56,7 +50,8 @@ size_t WinConsoleFile::write(const char* str)
   while (offset < wide.size()) {
     const auto remaining = wide.size() - offset;
     const auto count = static_cast<DWORD>(std::min(
-        remaining, static_cast<size_t>(std::numeric_limits<DWORD>::max())));
+        remaining,
+        static_cast<size_t>(std::numeric_limits<DWORD>::max())));
     written = 0;
     if (!WriteConsoleW(handle_, wide.data() + offset, count, &written,
                        nullptr) ||

@@ -33,14 +33,6 @@
  */
 /* copyright --> */
 #include "metalink_helper.h"
-#include "ExpatXmlParser.h"
-#include "error_code.h"
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <array>
 

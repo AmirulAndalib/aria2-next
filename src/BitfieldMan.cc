@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "BitfieldMan.h"
-#include <algorithm>
-#include <cstdint>
-#include <iterator>
-#include <vector>
 
 #include <cassert>
 #include <cstring>

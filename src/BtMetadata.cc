@@ -33,7 +33,6 @@
  */
 /* copyright --> */
 #include "BtMetadata.h"
-#include "aria2/aria2.h"
 
 namespace aria2 {
 

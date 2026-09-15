@@ -11,9 +11,6 @@
  */
 /* copyright --> */
 #include "ed2k_endpoint.h"
-#include <cstddef>
-#include <cstdint>
-#include <string>
 
 #include <sstream>
 
@@ -21,7 +18,7 @@
 #include "ed2k_link.h"
 #include "ed2k_packet.h"
 #include "fmt.h"
-#include "support/Numbers.h"
+#include "util.h"
 
 namespace aria2 {
 

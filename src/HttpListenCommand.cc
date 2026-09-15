@@ -33,21 +33,17 @@
  */
 /* copyright --> */
 #include "HttpListenCommand.h"
-#include "Command.h"
-#include "a2netcompat.h"
-#include "common.h"
-#include <cstdint>
-#include <memory>
 #include "DownloadEngine.h"
 #include "RecoverableException.h"
 #include "message.h"
 #include "Log.h"
 #include "SocketCore.h"
 #include "HttpServerCommand.h"
+#include "CUIDCounter.h"
 #include "RequestGroupMan.h"
 #include "prefs.h"
 #include "Option.h"
-#include "a2functional.h"
+#include "util.h"
 #include "fmt.h"
 
 namespace aria2 {

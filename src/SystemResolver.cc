@@ -11,14 +11,6 @@
  */
 /* copyright --> */
 #include "SystemResolver.h"
-#include <boost/asio/ip/resolver_base.hpp>
-#include <boost/system/detail/error_code.hpp>
-#include <chrono>
-#include <cstdint>
-#include <exception>
-#include <memory>
-#include <string>
-#include <vector>
 
 #include <algorithm>
 #include <unordered_map>
@@ -76,9 +68,9 @@ SystemResolver::~SystemResolver()
   impl_->context.stop();
 }
 
-SystemResolver::RequestId SystemResolver::resolve(const std::string& hostname,
-                                                  uint16_t port, bool allowIPv6,
-                                                  std::chrono::seconds timeout)
+SystemResolver::RequestId
+SystemResolver::resolve(const std::string& hostname, uint16_t port,
+                        bool allowIPv6, std::chrono::seconds timeout)
 {
   if (impl_->context.stopped()) {
     impl_->context.restart();
@@ -93,18 +85,17 @@ SystemResolver::RequestId SystemResolver::resolve(const std::string& hostname,
 
   if (timeout.count() > 0) {
     operation->timer.expires_after(timeout);
-    operation->timer.async_wait(
-        [operation](const boost::system::error_code& ec) {
-          if (!ec && !operation->complete && !operation->cancelled) {
-            operation->timedOut = true;
-            operation->resolver.cancel();
-          }
-        });
+    operation->timer.async_wait([operation](const boost::system::error_code& ec) {
+      if (!ec && !operation->complete && !operation->cancelled) {
+        operation->timedOut = true;
+        operation->resolver.cancel();
+      }
+    });
   }
 
-  auto complete = [this,
-                   operation](const boost::system::error_code& ec,
-                              asio::ip::tcp::resolver::results_type results) {
+  auto complete = [this, operation](
+                      const boost::system::error_code& ec,
+                      asio::ip::tcp::resolver::results_type results) {
     operation->timer.cancel();
     if (operation->cancelled) {
       return;
@@ -142,7 +133,8 @@ SystemResolver::RequestId SystemResolver::resolve(const std::string& hostname,
   const auto service = std::to_string(port);
   try {
     if (allowIPv6) {
-      operation->resolver.async_resolve(hostname, service, std::move(complete));
+      operation->resolver.async_resolve(hostname, service,
+                                        std::move(complete));
     }
     else {
       operation->resolver.async_resolve(
@@ -163,9 +155,9 @@ SystemResolver::RequestId SystemResolver::resolve(const std::string& hostname,
   return id;
 }
 
-SystemResolver::Status SystemResolver::take(RequestId id,
-                                            std::vector<std::string>& addresses,
-                                            std::string& error)
+SystemResolver::Status
+SystemResolver::take(RequestId id, std::vector<std::string>& addresses,
+                     std::string& error)
 {
   const auto found = impl_->operations.find(id);
   if (found == impl_->operations.end()) {
@@ -203,8 +195,9 @@ bool SystemResolver::poll()
 
 bool SystemResolver::hasPending() const
 {
-  return std::any_of(impl_->operations.begin(), impl_->operations.end(),
-                     [](const auto& entry) { return !entry.second->complete; });
+  return std::any_of(
+      impl_->operations.begin(), impl_->operations.end(),
+      [](const auto& entry) { return !entry.second->complete; });
 }
 
 } // namespace aria2

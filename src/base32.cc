@@ -33,9 +33,7 @@
  */
 /* copyright --> */
 #include "base32.h"
-#include <cstddef>
-#include <cstdint>
-#include <string>
+#include "util.h"
 
 namespace aria2 {
 

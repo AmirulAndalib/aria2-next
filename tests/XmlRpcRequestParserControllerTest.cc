@@ -1,5 +1,3 @@
-#include "ValueBase.h"
-#include <cstddef>
 #include "XmlRpcRequestParserController.h"
 
 #include "a2doctest.h"
@@ -8,7 +6,30 @@ namespace aria2 {
 
 namespace rpc {
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame")
+class XmlRpcRequestParserControllerTest {
+
+
+public:
+  void setUp() {}
+
+  void tearDown() {}
+
+  void testPopStructFrame();
+  void testPopStructFrame_noName();
+  void testPopStructFrame_noValue();
+  void testPopArrayFrame();
+  void testPopArrayFrame_noValue();
+  void testPopArrayFrame_compound();
+};
+
+A2_TEST(XmlRpcRequestParserControllerTest, testPopStructFrame)
+A2_TEST(XmlRpcRequestParserControllerTest, testPopStructFrame_noName)
+A2_TEST(XmlRpcRequestParserControllerTest, testPopStructFrame_noValue)
+A2_TEST(XmlRpcRequestParserControllerTest, testPopArrayFrame)
+A2_TEST(XmlRpcRequestParserControllerTest, testPopArrayFrame_noValue)
+A2_TEST(XmlRpcRequestParserControllerTest, testPopArrayFrame_compound)
+
+void XmlRpcRequestParserControllerTest::testPopStructFrame()
 {
   XmlRpcRequestParserController controller;
   controller.setCurrentFrameValue(Dict::g());
@@ -19,10 +40,10 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame")
   const Dict* structValue = downcast<Dict>(controller.getCurrentFrameValue());
   REQUIRE_EQ((size_t)1, structValue->size());
   REQUIRE_EQ(std::string("Hello, aria2"),
-             downcast<String>(structValue->get("greeting"))->s());
+                       downcast<String>(structValue->get("greeting"))->s());
 }
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame_noName")
+void XmlRpcRequestParserControllerTest::testPopStructFrame_noName()
 {
   XmlRpcRequestParserController controller;
   controller.setCurrentFrameValue(Dict::g());
@@ -33,7 +54,7 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame_noName")
   REQUIRE(structValue->empty());
 }
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame_noValue")
+void XmlRpcRequestParserControllerTest::testPopStructFrame_noValue()
 {
   XmlRpcRequestParserController controller;
   controller.setCurrentFrameValue(Dict::g());
@@ -44,7 +65,7 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopStructFrame_noValue")
   REQUIRE(structValue->empty());
 }
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame")
+void XmlRpcRequestParserControllerTest::testPopArrayFrame()
 {
   XmlRpcRequestParserController controller;
   controller.setCurrentFrameValue(List::g());
@@ -53,10 +74,11 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame")
   controller.popArrayFrame();
   const List* array = downcast<List>(controller.getCurrentFrameValue());
   REQUIRE_EQ((size_t)1, array->size());
-  REQUIRE_EQ((Integer::ValueType)100, downcast<Integer>(array->get(0))->i());
+  REQUIRE_EQ((Integer::ValueType)100,
+                       downcast<Integer>(array->get(0))->i());
 }
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame_noValue")
+void XmlRpcRequestParserControllerTest::testPopArrayFrame_noValue()
 {
   XmlRpcRequestParserController controller;
   controller.setCurrentFrameValue(List::g());
@@ -66,7 +88,7 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame_noValue")
   REQUIRE(array->empty());
 }
 
-TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame_compound")
+void XmlRpcRequestParserControllerTest::testPopArrayFrame_compound()
 {
   XmlRpcRequestParserController controller;
 
@@ -127,10 +149,11 @@ TEST_CASE("XmlRpcRequestParserControllerTest.testPopArrayFrame_compound")
   const Dict* options = downcast<Dict>(dict->get("options"));
   const List* countryList = downcast<List>(result->get(1));
   REQUIRE_EQ(std::string("http://aria2.sf.net/"),
-             downcast<String>(uris->get(1))->s());
+                       downcast<String>(uris->get(1))->s());
   REQUIRE_EQ((Integer::ValueType)120,
-             downcast<Integer>(options->get("timeout"))->i());
-  REQUIRE_EQ(std::string("jp"), downcast<String>(countryList->get(0))->s());
+                       downcast<Integer>(options->get("timeout"))->i());
+  REQUIRE_EQ(std::string("jp"),
+                       downcast<String>(countryList->get(0))->s());
 }
 
 } // namespace rpc

@@ -33,10 +33,6 @@
  */
 /* copyright --> */
 #include "SocketRecvBuffer.h"
-#include <cstddef>
-#include <iterator>
-#include <memory>
-#include <utility>
 
 #include <cstring>
 #include <cassert>

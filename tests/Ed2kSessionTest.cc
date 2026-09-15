@@ -1,32 +1,20 @@
-#include "DiskAdaptor.h"
-#include "Piece.h"
-#include "PieceStorage.h"
-#include "ContextAttribute.h"
-#include "Ed2kStore.h"
-#include "a2functional.h"
-#include "ed2k_kad.h"
-#include "ed2k_link.h"
-#include "ed2k_peer.h"
-#include "ed2k_server.h"
-#include "prefs.h"
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
 #include "Ed2kSession.h"
 
 #include "a2doctest.h"
 
 #include "DownloadContext.h"
+#include "DiskAdaptor.h"
 #include "Ed2kAttribute.h"
 #include "Ed2kUploadQueue.h"
 #include "File.h"
 #include "GroupId.h"
 #include "Option.h"
+#include "Piece.h"
+#include "PieceStorage.h"
 #include "RequestGroup.h"
 #include "TestUtil.h"
 #include "download_helper.h"
+#include "ed2k_constants.h"
 #include "ed2k_hash.h"
 #include "wallclock.h"
 
@@ -56,7 +44,20 @@ std::shared_ptr<RequestGroup> createEd2kGroup(const std::string& clientHash)
 
 } // namespace
 
-TEST_CASE("Ed2kSessionTest.testRestoresRuntimeStateAcrossRestart")
+class Ed2kSessionTest {
+public:
+  void testRestoresRuntimeStateAcrossRestart();
+  void testRestoresPartialDownloadAfterPause();
+  void testRestoresSharingLifecycleWithoutControlFile();
+  void testSelectsAlternativeDownloadForPeer();
+};
+
+A2_TEST(Ed2kSessionTest, testRestoresRuntimeStateAcrossRestart)
+A2_TEST(Ed2kSessionTest, testRestoresPartialDownloadAfterPause)
+A2_TEST(Ed2kSessionTest, testRestoresSharingLifecycleWithoutControlFile)
+A2_TEST(Ed2kSessionTest, testSelectsAlternativeDownloadForPeer)
+
+void Ed2kSessionTest::testRestoresRuntimeStateAcrossRestart()
 {
   const std::string stateFile = A2_TEST_OUT_DIR "/ed2k-runtime.db";
   File(stateFile).remove();
@@ -141,7 +142,7 @@ TEST_CASE("Ed2kSessionTest.testRestoresRuntimeStateAcrossRestart")
   File(stateFile).remove();
 }
 
-TEST_CASE("Ed2kSessionTest.testRestoresPartialDownloadAfterPause")
+void Ed2kSessionTest::testRestoresPartialDownloadAfterPause()
 {
   const std::string database = A2_TEST_OUT_DIR "/ed2k-partial.db";
   const std::string output = A2_TEST_OUT_DIR "/ed2k-partial.bin";
@@ -204,7 +205,7 @@ TEST_CASE("Ed2kSessionTest.testRestoresPartialDownloadAfterPause")
   File(output).remove();
 }
 
-TEST_CASE("Ed2kSessionTest.testRestoresSharingLifecycleWithoutControlFile")
+void Ed2kSessionTest::testRestoresSharingLifecycleWithoutControlFile()
 {
   global::wallclock().reset(24_h);
   const std::string database = A2_TEST_OUT_DIR "/ed2k-progress.db";
@@ -296,7 +297,7 @@ TEST_CASE("Ed2kSessionTest.testRestoresSharingLifecycleWithoutControlFile")
   global::wallclock().reset();
 }
 
-TEST_CASE("Ed2kSessionTest.testSelectsAlternativeDownloadForPeer")
+void Ed2kSessionTest::testSelectsAlternativeDownloadForPeer()
 {
   const std::string clientHash(HASH_LENGTH, '\x31');
   auto current = createEd2kGroup(clientHash);

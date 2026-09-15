@@ -32,13 +32,7 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#include "a2functional.h"
-#include "error_code.h"
-#include <memory>
-#include <string.h>
-#include <vector>
 #include "common.h"
-#include "platform/NativeText.h"
 
 #include <unistd.h>
 

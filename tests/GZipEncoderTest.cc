@@ -1,16 +1,24 @@
-#include <cstdint>
-#include <string>
-#include <vector>
 #include "GZipEncoder.h"
 
 #include "a2doctest.h"
 
 #include "GZipDecoder.h"
-#include "a2functional.h"
+#include "util.h"
 
 namespace aria2 {
 
-TEST_CASE("GZipEncoderTest.testEncode")
+class GZipEncoderTest {
+
+
+public:
+  void testEncode();
+  void testEncodeBinaryChunk();
+};
+
+A2_TEST(GZipEncoderTest, testEncode)
+A2_TEST(GZipEncoderTest, testEncodeBinaryChunk)
+
+void GZipEncoderTest::testEncode()
 {
   GZipEncoder encoder;
   encoder.init();
@@ -32,10 +40,11 @@ TEST_CASE("GZipEncoderTest.testEncode")
       decoder.decode(reinterpret_cast<const unsigned char*>(gzippedData.data()),
                      gzippedData.size());
   REQUIRE(decoder.finished());
-  REQUIRE_EQ(strjoin(inputs.begin(), inputs.end(), ""), gunzippedData);
+  REQUIRE_EQ(strjoin(inputs.begin(), inputs.end(), ""),
+                       gunzippedData);
 }
 
-TEST_CASE("GZipEncoderTest.testEncodeBinaryChunk")
+void GZipEncoderTest::testEncodeBinaryChunk()
 {
   GZipEncoder encoder;
   encoder.init();

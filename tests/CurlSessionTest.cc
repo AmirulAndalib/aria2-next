@@ -1,20 +1,4 @@
-#include "GroupId.h"
-#include "a2netcompat.h"
-#include "error_code.h"
-#include "stream/CurlHandle.h"
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <curl/curl.h>
-#include <curl/easy.h>
-#include <curl/multi.h>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 #include "CurlSession.h"
-#include "transport/CurlOptions.h"
-#include "support/OutputName.h"
 
 #include <algorithm>
 
@@ -25,6 +9,7 @@
 #include "DownloadContext.h"
 #include "DiskWriter.h"
 #include "DownloadEngine.h"
+#include "FileEntry.h"
 #include "DownloadFailureException.h"
 #include "Option.h"
 #include "RequestGroup.h"
@@ -36,40 +21,6 @@
 #include "wallclock.h"
 
 namespace aria2 {
-
-TEST_CASE("Output names preserve text and follow source precedence")
-{
-  Option option;
-  CHECK_EQ(std::string(236, 'a') + ".zip",
-           output::safeName(std::string(300, 'a') + ".zip"));
-  const std::string url = "https://example.test/a%2520b.zip";
-  CHECK_EQ("a%20b.zip", output::suggestedName(option, url));
-  CHECK_EQ("report%20.zip", output::suggestedName(
-      option, url, "attachment; filename=\"report%20.zip\""));
-  CHECK_EQ("report%20.zip", output::suggestedName(
-      option, url, "attachment; filename=plain.zip; filename*=UTF-8''report%2520.zip"));
-  CHECK_EQ("résumé.pdf", output::suggestedName(
-      option, url, "attachment; filename=\"=?UTF-8?Q?r=C3=A9sum=C3=A9.pdf?=\""));
-  CHECK_EQ("Итоги_2026.docx", output::suggestedName(
-      option, url, "attachment; filename=\"=?UTF-8?B?0JjRgtC+0LPQuF8yMDI2LmRvY3g=?=\""));
-  CHECK_EQ("%3D%3FUTF-8%3FQ%3Freport.pdf%3F%3D", output::suggestedName(
-      option, url,
-      "attachment; filename*=UTF-8''%253D%253FUTF-8%253FQ%253Freport.pdf%253F%253D"));
-  option.put(PREF_FILENAME_HINT, "browser%20.zip");
-  CHECK_EQ("server.zip", output::suggestedName(
-      option, url, "attachment; filename=server.zip"));
-  option.put(PREF_FILENAME_HINT_SOURCE, "browser");
-  CHECK_EQ("browser%20.zip", output::suggestedName(
-      option, url, "attachment; filename=server.zip"));
-  option.put(PREF_MEDIA_FORMAT, "mkv");
-  CHECK_EQ("browser%20.mkv", output::mediaName(option, url));
-  option.put(PREF_OUT, "chosen.mp4");
-  CHECK_EQ("chosen.mkv", output::mediaName(option, url));
-  option.remove(PREF_OUT);
-  option.put(PREF_FILENAME_HINT, "Episode 1.5");
-  option.put(PREF_FILENAME_HINT_SOURCE, "title");
-  CHECK_EQ("Episode 1.5.mkv", output::mediaName(option, url));
-}
 
 namespace {
 
@@ -92,11 +43,8 @@ public:
 
 } // namespace
 
-// Friendship is not inherited by doctest's generated fixtures. Keep private
-// state access in this adapter rather than exposing engine internals publicly.
 class CurlSessionTest {
 public:
-  void testAbandonedNativeRequest();
   void testWriteErrorBoundary();
   void testOutputFilename();
   void testResponseIdentity();
@@ -117,90 +65,21 @@ public:
                const std::string& date = {});
 };
 
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testAbandonedNativeRequest")
-{
-  testAbandonedNativeRequest();
-}
-
-void CurlSessionTest::testAbandonedNativeRequest()
-{
-  // Preparation can abandon a request before registration with the session.
-  // The task and its handle must not both release the same native resources.
-  CurlDownload download({"https://example.test/abandoned"});
-  auto handle = std::make_unique<CurlHandle>();
-  handle->value = curl_easy_init();
-  REQUIRE(handle->value);
-  handle->headers = curl_slist_append(nullptr, "Accept: */*");
-  REQUIRE(handle->headers);
-  download.impl_->handles.push_back(std::move(handle));
-}
-
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testWriteErrorBoundary")
-{
-  testWriteErrorBoundary();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testOutputFilename")
-{
-  testOutputFilename();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testResponseIdentity")
-{
-  testResponseIdentity();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testRangeOwnershipAndResponseBoundaries")
-{
-  testRangeOwnershipAndResponseBoundaries();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testNonzeroRangeRejectsCompleteResponse")
-{
-  testNonzeroRangeRejectsCompleteResponse();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testUnsatisfiedRangeResponseForms")
-{
-  testUnsatisfiedRangeResponseForms();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testExistingFileDecision")
-{
-  testExistingFileDecision();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testRetryableFailureClassification")
-{
-  testRetryableFailureClassification();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testFailureMessageUsesTheFailureLayer")
-{
-  testFailureMessageUsesTheFailureLayer();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testShutdownWithLiveSocket")
-{
-  testShutdownWithLiveSocket();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testTailRecovery")
-{
-  testTailRecovery();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testConnectionRecovery")
-{
-  testConnectionRecovery();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testEndpointOrigin")
-{
-  testEndpointOrigin();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testValidatedEndpoint")
-{
-  testValidatedEndpoint();
-}
-TEST_CASE_FIXTURE(CurlSessionTest,
-                  "CurlSessionTest.testNativeTimerPreservesEarlierWakeup")
-{
-  testNativeTimerPreservesEarlierWakeup();
-}
+A2_TEST(CurlSessionTest, testWriteErrorBoundary)
+A2_TEST(CurlSessionTest, testOutputFilename)
+A2_TEST(CurlSessionTest, testResponseIdentity)
+A2_TEST(CurlSessionTest, testRangeOwnershipAndResponseBoundaries)
+A2_TEST(CurlSessionTest, testNonzeroRangeRejectsCompleteResponse)
+A2_TEST(CurlSessionTest, testUnsatisfiedRangeResponseForms)
+A2_TEST(CurlSessionTest, testExistingFileDecision)
+A2_TEST(CurlSessionTest, testRetryableFailureClassification)
+A2_TEST(CurlSessionTest, testFailureMessageUsesTheFailureLayer)
+A2_TEST(CurlSessionTest, testShutdownWithLiveSocket)
+A2_TEST(CurlSessionTest, testTailRecovery)
+A2_TEST(CurlSessionTest, testConnectionRecovery)
+A2_TEST(CurlSessionTest, testEndpointOrigin)
+A2_TEST(CurlSessionTest, testValidatedEndpoint)
+A2_TEST(CurlSessionTest, testNativeTimerPreservesEarlierWakeup)
 
 void CurlSessionTest::testNativeTimerPreservesEarlierWakeup()
 {
@@ -222,7 +101,7 @@ void CurlSessionTest::testNativeTimerPreservesEarlierWakeup()
   CurlSession session(&option);
   session.engine_ = &engine;
   engine.setRefreshInterval(std::chrono::milliseconds(50));
-  session.transport_.updateTimeout(10000);
+  session.updateTimeout(10000);
   session.armTimeout();
   engine.setNoWait(false);
   engine.addCommand(make_unique<FinishCommand>());
@@ -233,14 +112,17 @@ void CurlSessionTest::testNativeTimerPreservesEarlierWakeup()
 
 void CurlSessionTest::testEndpointOrigin()
 {
-  CHECK(http::sameOrigin("https://origin.test/a",
-                         "https://ORIGIN.test:443/b?token=next"));
-  CHECK(http::sameOrigin("http://origin.test/a", "http://origin.test:80/b"));
-  CHECK(!http::sameOrigin("https://origin.test/a", "http://origin.test/a"));
+  CHECK(CurlSession::sameOrigin("https://origin.test/a",
+                                "https://ORIGIN.test:443/b?token=next"));
+  CHECK(CurlSession::sameOrigin("http://origin.test/a",
+                                "http://origin.test:80/b"));
+  CHECK(!CurlSession::sameOrigin("https://origin.test/a",
+                                 "http://origin.test/a"));
+  CHECK(!CurlSession::sameOrigin("https://origin.test/a",
+                                 "https://origin.test:444/a"));
   CHECK(
-      !http::sameOrigin("https://origin.test/a", "https://origin.test:444/a"));
-  CHECK(!http::sameOrigin("https://origin.test/a", "https://cdn.test/a"));
-  CHECK(!http::sameOrigin("invalid", "https://origin.test/a"));
+      !CurlSession::sameOrigin("https://origin.test/a", "https://cdn.test/a"));
+  CHECK(!CurlSession::sameOrigin("invalid", "https://origin.test/a"));
 }
 
 void CurlSessionTest::testValidatedEndpoint()
@@ -256,23 +138,23 @@ void CurlSessionTest::testValidatedEndpoint()
   REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_URL,
                                         "https://cdn.test/file?token=one"));
   CurlHandle handle;
-  handle.value = easy.release();
+  handle.value = easy.get();
   handle.download = &download;
   handle.ranged = true;
   handle.lease = {0, 4096};
   respond(handle, 206, "bytes 1-4095/8192", "\"one\"");
-  CurlHandle::rememberEndpoint(handle);
+  CurlSession::rememberEndpoint(handle);
   CHECK(endpoint.uri.empty());
   CHECK(endpoint.resolving);
   respond(handle, 206, "bytes 0-4095/8192", "\"one\"");
-  CurlHandle::rememberEndpoint(handle);
+  CurlSession::rememberEndpoint(handle);
   CHECK_EQ("https://cdn.test/file?token=one", endpoint.uri);
   CHECK(!endpoint.resolving);
   CHECK_EQ("https://origin.test/file", impl.uris.front());
   ++endpoint.generation;
   endpoint.uri.clear();
   endpoint.resolving = true;
-  CurlHandle::rememberEndpoint(handle);
+  CurlSession::rememberEndpoint(handle);
   CHECK(endpoint.uri.empty());
   CHECK(endpoint.resolving);
 }
@@ -379,7 +261,6 @@ void CurlSessionTest::testTailRecovery()
   engine->setOption(option.get());
   auto* session = engine->getCurlSession();
   session->engine_ = engine.get();
-  session->transport_.bind(engine.get());
   auto download = std::make_shared<CurlDownload>(
       std::vector<std::string>{"http://example.test/payload"});
   auto& impl = *download->impl_;
@@ -426,7 +307,7 @@ void CurlSessionTest::testTailRecovery()
 
   std::string body(static_cast<size_t>(1_m - donor->writeOffset), 'x');
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
-           CurlHandle::writeData(body.data(), 1, body.size(), donor));
+           CurlSession::writeData(body.data(), 1, body.size(), donor));
   CHECK_EQ(lease->begin, donor->writeOffset);
   CHECK_EQ(lease->begin, impl.writer->size());
   CHECK_EQ(error_code::UNDEFINED, download->snapshot_.errorCode);
@@ -476,7 +357,6 @@ void CurlSessionTest::testShutdownWithLiveSocket()
   engine->setOption(&option);
   auto* session = engine->getCurlSession();
   session->engine_ = engine.get();
-  session->transport_.bind(engine.get());
   auto easy = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(
       curl_easy_init(), curl_easy_cleanup);
   REQUIRE(easy);
@@ -484,10 +364,9 @@ void CurlSessionTest::testShutdownWithLiveSocket()
       "http://127.0.0.1:" + std::to_string(listener.getAddrInfo().port) + "/";
   REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_URL, url.c_str()));
   REQUIRE_EQ(CURLE_OK, curl_easy_setopt(easy.get(), CURLOPT_PROXY, ""));
-  REQUIRE_EQ(CURLM_OK,
-             curl_multi_add_handle(session->transport_.get(), easy.get()));
-  session->transport_.socketAction(CURL_SOCKET_TIMEOUT, 0);
-  REQUIRE(session->transport_.socketCount() > 0);
+  REQUIRE_EQ(CURLM_OK, curl_multi_add_handle(session->multi_, easy.get()));
+  session->socketAction(CURL_SOCKET_TIMEOUT, 0);
+  REQUIRE(!session->sockets_.empty());
   // Destroying the engine must unregister native callbacks before deleting
   // the commands they reference. AddressSanitizer detects the reversed order.
   engine.reset();
@@ -506,7 +385,7 @@ void CurlSessionTest::respond(CurlHandle& handle, long code,
   handle.rangeAccepted = false;
   handle.fullResponseAccepted = false;
   handle.unsatisfiedTotalLength = -1;
-  CurlHandle::validateResponse(handle, range);
+  CurlSession::validateResponse(handle, range);
 }
 
 void CurlSessionTest::testWriteErrorBoundary()
@@ -517,7 +396,7 @@ void CurlSessionTest::testWriteErrorBoundary()
   handle.download = &download;
   char data[] = "data";
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
-           CurlHandle::writeData(data, 1, sizeof(data) - 1, &handle));
+           CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
   CHECK_EQ(CurlSnapshot::State::Error, download.snapshot().state);
   CHECK_EQ(error_code::NOT_ENOUGH_DISK_SPACE, download.snapshot().errorCode);
   CHECK_EQ(std::string("Disk is full"), download.snapshot().error);
@@ -653,7 +532,7 @@ void CurlSessionTest::testNonzeroRangeRejectsCompleteResponse()
   char data[] = "data";
   CHECK(!handle.fullResponseAccepted);
   CHECK_EQ(CURL_WRITEFUNC_ERROR,
-           CurlHandle::writeData(data, 1, sizeof(data) - 1, &handle));
+           CurlSession::writeData(data, 1, sizeof(data) - 1, &handle));
   download.impl_->etag = "\"same\"";
   handle.rangeValidator = "\"same\"";
   respond(handle, 200);
@@ -713,9 +592,9 @@ void CurlSessionTest::testFailureMessageUsesTheFailureLayer()
   std::copy(detail.begin(), detail.end(), handle.errorBuffer.begin());
 
   CHECK_EQ(detail,
-           CurlHandle::failureMessage(handle, CURLE_SSL_CONNECT_ERROR, 302));
+           CurlSession::failureMessage(handle, CURLE_SSL_CONNECT_ERROR, 302));
   CHECK_EQ(std::string("HTTP 503: ") + detail,
-           CurlHandle::failureMessage(handle, CURLE_HTTP_RETURNED_ERROR, 503));
+           CurlSession::failureMessage(handle, CURLE_HTTP_RETURNED_ERROR, 503));
 }
 
 } // namespace aria2

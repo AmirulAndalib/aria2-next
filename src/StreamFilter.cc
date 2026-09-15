@@ -33,8 +33,6 @@
  */
 /* copyright --> */
 #include "StreamFilter.h"
-#include <memory>
-#include <utility>
 
 namespace aria2 {
 
