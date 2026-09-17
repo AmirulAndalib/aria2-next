@@ -54,7 +54,7 @@ void showVersion()
 {
   std::cout
       << PACKAGE << _(" version ") << PACKAGE_VERSION << "\n"
-      << "Maintained since 2026 by AnInsomniacy for Motrix Next and "
+      << "Maintained since 2026 by AnInsomniacy for Rayburst and "
          "standalone users."
       << "\n"
       << "Original aria2 copyright: 2006, 2019 Tatsuhiro Tsujikawa."

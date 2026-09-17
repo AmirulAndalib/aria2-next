@@ -7,8 +7,8 @@ body:
     attributes:
       value: |
         Please search existing issues before submitting a request.
-        Motrix Next desktop UI requests belong in https://github.com/AnInsomniacy/motrix-next.
-        Browser extension requests belong in https://github.com/AnInsomniacy/motrix-next-extension.
+        Rayburst desktop UI requests belong in https://github.com/AnInsomniacy/rayburst.
+        Browser extension requests belong in https://github.com/AnInsomniacy/rayburst-connect.
 
   - type: textarea
     id: problem
@@ -66,7 +66,7 @@ body:
       options:
         - label: I searched existing issues and did not find this request.
           required: true
-        - label: This request belongs to aria2-next, not Motrix Next desktop UI or the browser extension.
+        - label: This request belongs to aria2-next, not Rayburst desktop UI or the browser extension.
           required: true
         - label: I understand large features need maintainer agreement before implementation.
           required: true

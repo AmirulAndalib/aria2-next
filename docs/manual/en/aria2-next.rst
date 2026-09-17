@@ -2315,7 +2315,7 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   struct with ``gid``, ``moreResults``, and ``results``. ``moreResults`` is
   ``true`` when a server indicates more search results are available.
 
-  Each entry in ``results`` contains stable fields for Motrix Next and other RPC
+  Each entry in ``results`` contains stable fields for Rayburst and other RPC
   clients: ``hash``, ``name``, ``length``, ``sourceCount``,
   ``completeSourceCount``, ``fileType``, ``extension``, ``mediaArtist``,
   ``mediaAlbum``, ``mediaTitle``, ``mediaLength``, ``mediaBitrate``,
@@ -4699,7 +4699,7 @@ The Metalink Download Description Format: :rfc:`5854`
 
 COPYRIGHT
 ---------
-Aria2 Next is maintained since 2026 by AnInsomniacy for Motrix Next and
+Aria2 Next is maintained since 2026 by AnInsomniacy for Rayburst and
 standalone users.
 
 Original aria2 copyright: 2006, 2015 Tatsuhiro Tsujikawa.

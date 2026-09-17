@@ -28,7 +28,7 @@ build/default/aria2-next --version
 
 aria2-next is a command-line engine and library with a libtorrent-backed BitTorrent implementation. The repository owns the C and C++ engine, protocol integrations, CMake build, tests, release packaging, Docker image definition, and maintenance records.
 
-Motrix Next desktop UI issues belong in [motrix-next](https://github.com/AnInsomniacy/motrix-next). Browser download interception issues belong in [motrix-next-extension](https://github.com/AnInsomniacy/motrix-next-extension).
+Rayburst desktop UI issues belong in [rayburst](https://github.com/AnInsomniacy/rayburst). Browser download interception issues belong in [rayburst-connect](https://github.com/AnInsomniacy/rayburst-connect).
 
 ## Code Quality
 

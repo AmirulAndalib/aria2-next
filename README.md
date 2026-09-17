@@ -18,7 +18,7 @@ aria2 is remarkable open source software. For over a decade it has been one of t
 
 But upstream development has slowed dramatically in recent years. Dependencies grew stale, builds broke on modern platforms, and a backlog of bugs went unaddressed. We picked up the baton: migrated the codebase to a modern build framework, triaged and fixed a substantial number of upstream issues, and introduced ED2K protocol support for the first time. A full audit trail is preserved in [`docs/maintenance/upstream-issue-review/matrix.csv`](docs/maintenance/upstream-issue-review/matrix.csv).
 
-Aria2 Next is an actively maintained download engine and the embedded engine used by [Motrix Next](https://github.com/AnInsomniacy/motrix-next). HTTP, HTTPS, SFTP, Metalink, ED2K, RPC, and libaria2 remain supported. HTTP, HTTPS, SFTP, and Metalink payload transfers use libcurl 8.21 with nghttp2. BitTorrent uses libtorrent-rasterbar 2.1. FTP and the former custom stream protocol stacks have been removed.
+Aria2 Next is an actively maintained download engine and the embedded engine used by [Rayburst](https://github.com/AnInsomniacy/rayburst). HTTP, HTTPS, SFTP, Metalink, ED2K, RPC, and libaria2 remain supported. HTTP, HTTPS, SFTP, and Metalink payload transfers use libcurl 8.21 with nghttp2. BitTorrent uses libtorrent-rasterbar 2.1. FTP and the former custom stream protocol stacks have been removed.
 
 Stream, BitTorrent, and ED2K resume state is stored under `--state-dir`. Payload directories no longer receive adjacent `.aria2` control files. HTTP cookies, authentication, proxies, TLS, SFTP, resume validation, and HTTP/2 use their native library implementations. HTTP and HTTPS transfers use libcurl's event-driven multi-socket API, adaptive verified byte ranges, HTTP/2 multiplexing, shared cookies and TLS sessions, and range-aware SQLite resume state.
 
@@ -77,7 +77,7 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 | RPC | Maintained aria2 JSON-RPC methods, retired option normalization, and native extensions |
 | Library | Public libaria2 headers with retired option normalization |
 
-Motrix Next embeds this engine, and release artifacts are standalone binaries.
+Rayburst embeds this engine, and release artifacts are standalone binaries.
 Recognized retired aria2 options are mapped when a current equivalent exists or
 skipped with one warning when the native engine owns or removed the behavior.
 Unknown option names remain errors. Legacy task state and adjacent `.aria2`
@@ -121,7 +121,7 @@ aria2-next --help=#ed2k
 | Area | Status |
 | --- | --- |
 | Engine | Multi-protocol `aria2-next` binary |
-| Primary consumer | Motrix Next sidecar engine |
+| Primary consumer | Rayburst sidecar engine |
 | External consumers | Existing aria2 scripts, frontends, RPC clients, and automation |
 | Build system | CMake 3.25+ with Ninja presets |
 | Release targets | macOS, Windows, Linux, and Android on maintained CPU architectures |

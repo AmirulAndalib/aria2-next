@@ -8,8 +8,8 @@ body:
       value: |
         Please search existing issues before creating a new one.
         Reproduce the issue on the latest aria2-next release when possible.
-        Motrix Next desktop UI issues belong in https://github.com/AnInsomniacy/motrix-next.
-        Browser extension issues belong in https://github.com/AnInsomniacy/motrix-next-extension.
+        Rayburst desktop UI issues belong in https://github.com/AnInsomniacy/rayburst.
+        Browser extension issues belong in https://github.com/AnInsomniacy/rayburst-connect.
 
   - type: textarea
     id: description
@@ -50,7 +50,7 @@ body:
     id: install-source
     attributes:
       label: Install Source
-      description: Official release binary, Docker image, Motrix sidecar, source build, distribution package, or other source.
+      description: Official release binary, Docker image, Rayburst sidecar, source build, distribution package, or other source.
       placeholder: "Official release binary"
     validations:
       required: true
@@ -123,5 +123,5 @@ body:
           required: true
         - label: I reproduced this on the latest aria2-next release when possible.
           required: true
-        - label: This is an aria2-next engine issue, not a Motrix Next desktop UI or browser extension issue.
+        - label: This is an aria2-next engine issue, not a Rayburst desktop UI or browser extension issue.
           required: true

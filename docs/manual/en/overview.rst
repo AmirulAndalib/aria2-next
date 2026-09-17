@@ -5,7 +5,7 @@ Aria2 Next maintenance note
 ---------------------------
 
 Aria2 Next is maintained by AnInsomniacy since 2026 as the ``aria2-next``
-engine for Motrix Next and other consumers. BitTorrent uses
+engine for Rayburst and other consumers. BitTorrent uses
 libtorrent-rasterbar 2.1. Maintenance focuses on reliability, current
 dependency baselines, and reproducible cross-platform releases. CMake is the
 only supported build system, and Ninja is the default generator.
