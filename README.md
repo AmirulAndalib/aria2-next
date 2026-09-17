@@ -78,6 +78,9 @@ Aria2 Next includes native ED2K/eMule support aligned with aMule's network behav
 | Library | Public libaria2 headers with retired option normalization |
 
 Rayburst embeds this engine, and release artifacts are standalone binaries.
+
+Linux release binaries require glibc 2.35 or newer and a compatible system C++
+runtime, matching the Ubuntu 22.04 build and container baseline.
 Recognized retired aria2 options are mapped when a current equivalent exists or
 skipped with one warning when the native engine owns or removed the behavior.
 Unknown option names remain errors. Legacy task state and adjacent `.aria2`

@@ -5,7 +5,7 @@ option(ARIA2_ENABLE_BITTORRENT "Enable BitTorrent support" ON)
 option(ARIA2_ENABLE_WEBSOCKET "Enable WebSocket support" ON)
 
 if(ARIA2_SUPERBUILD)
-  project(aria2-superbuild LANGUAGES NONE)
+  project(aria2-superbuild LANGUAGES C CXX)
   include(cmake/superbuild/Dependencies.cmake)
   return()
 endif()

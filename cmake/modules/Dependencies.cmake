@@ -42,7 +42,8 @@ aria2_import_dependency(aria2::expat expat.h
 aria2_import_dependency(aria2::sqlite sqlite3.h
   LIBRARIES sqlite3)
 aria2_import_dependency(aria2::gpac gpac/dash.h
-  LIBRARIES gpac_static)
+  LIBRARIES gpac_static
+  DEFINITIONS "$<$<COMPILE_LANGUAGE:CXX>:GPAC_ALLOW_UNSAFE_STRFUNC>")
 foreach(component avformat avcodec swresample avutil)
   # FFmpeg's C headers require integer constant macros for C++ consumers.
   aria2_import_dependency(aria2::${component} lib${component}/version.h

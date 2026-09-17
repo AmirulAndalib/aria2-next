@@ -23,6 +23,10 @@
  *
  */
 
+#if defined(_WIN32) && !defined(_WIN32_WCE)
+#include <winsock2.h>
+#endif
+
 #include <gpac/tools.h>
 #include <gpac/network.h>
 #include <gpac/config_file.h>
@@ -338,8 +342,6 @@ s32 __gettimeofday(struct timeval *tp, void *tz)
 
 
 #elif defined(WIN32)
-
-#include <WinSock2.h>
 
 static s32 gettimeofday(struct timeval *tp, void *tz)
 {

@@ -53,6 +53,10 @@ inferred from filenames. Terminal manifest I/O errors return to the caller,
 including cancellation, instead of retrying the same xlink indefinitely.
 Its threading header includes the standard integer
 types required by its native atomic helpers.
+The Windows socket header uses the MinGW filename casing for cross-compilation
+on case-sensitive hosts. C++ consumers use GPAC's `GPAC_ALLOW_UNSAFE_STRFUNC`
+option to keep its string-function macros out of standard library headers;
+GPAC's own C build retains its checks.
 
 Client integration fixes apply startup quality before initialization, preserve
 HLS rendition languages and initialization key scope, and retain standalone AAC

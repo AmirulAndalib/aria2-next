@@ -6,6 +6,10 @@ This directory owns release packaging, cross-compilation helpers, container reso
 
 ## Layout
 
+Linux releases target Ubuntu 22.04 and require glibc 2.35 or newer, with a
+compatible system C++ runtime. The Docker image uses the same baseline.
+Runtime checks inspect ELF version requirements with `readelf` before upload.
+
 | Path | Purpose |
 | --- | --- |
 | `docker/` | Linux runtime container image definition |
