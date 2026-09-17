@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="docs/media/aria2-next-icon.png" alt="Aria2 Next icon" width="144" height="144" />
-  <h1>Aria2 Next</h1>
+  <img src="docs/media/banner.png" alt="Aria2 Next — Redefining the next generation of aria2" width="800" />
   <p>Maintained aria2 fork with extensive bug fixes and modernized architecture.</p>
 
 [![CI](https://github.com/AnInsomniacy/aria2-next/actions/workflows/ci.yml/badge.svg)](https://github.com/AnInsomniacy/aria2-next/actions/workflows/ci.yml)
