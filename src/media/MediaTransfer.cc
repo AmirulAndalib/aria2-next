@@ -67,6 +67,14 @@ MediaJob::SegmentResult MediaJob::consumeSegment(int group)
                                           &start, &duration, nullptr);
   if (info < 0)
     throw std::runtime_error(gf_error_to_string(info));
+  const auto endTime = option->getAsLLInt(PREF_MEDIA_END_TIME);
+  const auto position =
+      start.den ? gf_timestamp_rescale_signed(start.num, start.den, 1000) : 0;
+  if (!live && endTime > 0 &&
+      position + gf_dash_get_period_start(dash) >= endTime * 1000) {
+    gf_dash_set_group_done(dash, group, GF_TRUE);
+    return SegmentResult::Complete;
+  }
   if (switchingInit && *switchingInit)
     groups[group].init =
         localResource(switchingInit, initFirst,
@@ -82,8 +90,17 @@ MediaJob::SegmentResult MediaJob::consumeSegment(int group)
     return SegmentResult::Waiting;
   }
   if (!path.empty()) {
-    if (key && *key)
-      path = transport.decrypt(path, key, iv, !live);
+    if ((key && *key) || transport.hasCustomKeys()) {
+      if (!key || !*key) {
+        auto sequence = number;
+        for (int index = 15; index >= 0 && sequence; --index) {
+          iv[index] = sequence & 0xff;
+          sequence >>= 8;
+        }
+      }
+      path = transport.decrypt(path, key ? key : "", iv, !live,
+                               groups[group].init);
+    }
     commit(describe(group, number, start, duration, path, discontinuity));
     gf_dash_set_group_download_state(dash, group, 0, GF_OK);
     gf_dash_group_store_stats(dash, group, 0, 0,
@@ -99,6 +116,10 @@ void MediaJob::run()
 {
   if (recoverPublication())
     return;
+  if (option->get(PREF_MEDIA) == "collection") {
+    runCollection();
+    return;
+  }
   auto result = control->finish ? GF_OK : gf_dash_open(dash, uri.c_str());
   if (result < 0)
     throw Failure(failureKind,

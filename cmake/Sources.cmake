@@ -47,6 +47,8 @@ set(ARIA2_SOURCES_BASE
   src/media/MediaSession.cc
   src/media/DashFileIo.cc
   src/media/MediaJob.cc
+  src/media/MediaInput.cc
+  src/media/MediaCollection.cc
   src/media/MediaSegments.cc
   src/media/MediaPublication.cc
   src/media/MediaSelection.cc

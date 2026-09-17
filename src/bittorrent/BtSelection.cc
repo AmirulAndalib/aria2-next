@@ -259,7 +259,7 @@ void BtSession::requestProgressRefresh(BtDownload* download)
       !download->impl_->handle.in_session()) {
     return;
   }
-  download->beginProgressRefresh();
+  download->invalidateCompletion();
   download->impl_->handle.post_status(lt::torrent_handle::query_pieces |
                                       lt::torrent_handle::query_name |
                                       lt::torrent_handle::query_save_path);

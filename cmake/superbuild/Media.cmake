@@ -64,8 +64,8 @@ ExternalProject_Add(ffmpeg_project
     --disable-avdevice --disable-avfilter --disable-swscale
     --enable-avformat --enable-avcodec --enable-avutil
     --enable-protocol=file
-    --enable-demuxer=mov,mpegts,aac,ac3,eac3,mp3,flac,ogg,matroska,webvtt
-    --enable-muxer=mp4,matroska
+    --enable-demuxer=mov,mpegts,aac,ac3,eac3,mp3,flac,ogg,matroska,webvtt,flv,avi,asf,mpegps,mpegvideo,srt,ass
+    --enable-muxer=mp4,matroska,webvtt
     --enable-parser=aac,aac_latm,ac3,h264,hevc,av1,vp9,opus,vorbis,flac,mpegaudio
     --enable-decoder=aac,aac_latm,ac3,eac3,mp3,flac,opus,vorbis
     --enable-bsf=aac_adtstoasc,extract_extradata

@@ -7,6 +7,7 @@
 #include <vector>
 
 namespace aria2::media {
+bool isMediaHttpUrl(const std::string& value);
 
 struct RequestContext {
   std::string url;

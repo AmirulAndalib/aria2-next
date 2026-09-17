@@ -308,29 +308,23 @@ TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testBtResumeProgressAuthority")
   assertProgress(250, {200, 50}, "0.650000");
   download->prepareStart();
   group->setPauseRequested(false);
-  download->beginProgressVerification();
-  download->applyFileProgress({0, 0});
-  assertProgress(250, {200, 50}, "0.650000");
-
-  download->beginProgressRefresh();
+  download->invalidateCompletion();
   download->applyFileProgress({0, 0});
   assertProgress(0, {0, 0}, "0.000000");
 
-  download->beginProgressRefresh();
   download->applyFileProgress({220, 80});
   assertProgress(300, {220, 80}, "0.781250");
 
-  download->beginProgressVerification();
+  // A rejected piece invalidates completion, not subsequent native progress.
+  download->invalidateCompletion();
   download->applyFileProgress({0, 0});
-  assertProgress(300, {220, 80}, "0.781250");
+  assertProgress(0, {0, 0}, "0.000000");
 
-  download->beginProgressRefresh();
   download->applyFileProgress({100, 20});
   assertProgress(120, {100, 20}, "0.312500");
 
   const auto firstLength = snapshot.files[0].length;
   const auto secondLength = snapshot.files[1].length;
-  download->beginProgressRefresh();
   download->applyNativeCompletion(false, false);
   download->applyFileProgress({firstLength, secondLength});
   assertProgress(firstLength + secondLength, {firstLength, secondLength},

@@ -184,7 +184,7 @@ void BtSession::forceRecheck(const std::shared_ptr<BtDownload>& download)
       !download->impl_->handle.in_session()) {
     throw DL_ABORT_EX("BitTorrent task is not present in the session");
   }
-  download->beginProgressVerification();
+  download->invalidateCompletion();
   download->applyTransportState(BtSnapshot::State::Checking);
   download->impl_->handle.force_recheck();
 }

@@ -70,7 +70,7 @@ void BtSession::prepareFreshAdd(BtDownload* download)
   download->impl_->appliedPiecePriorities.clear();
   download->impl_->recheckAfterAdd = true;
   download->impl_->resumeAfterRecheck = download->impl_->runRequested;
-  download->beginProgressVerification();
+  download->invalidateCompletion();
   download->snapshot_.complete = false;
   download->snapshot_.selectedComplete = false;
   download->snapshot_.state = BtSnapshot::State::Recovering;
@@ -264,7 +264,7 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
         ~(lt::torrent_flags::paused | lt::torrent_flags::auto_managed);
     download->impl_->params.flags |= lt::torrent_flags::stop_when_ready;
     download->snapshot_.state = BtSnapshot::State::Paused;
-    download->beginProgressVerification();
+    download->invalidateCompletion();
   }
   download->impl_->desiredFilePriorities =
       download->impl_->params.file_priorities;

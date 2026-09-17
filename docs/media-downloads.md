@@ -23,8 +23,8 @@ aria2-next --media-record-time=3600 'https://example.org/live/index.m3u8'
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `media` | `auto` | `auto`, `file`, `hls`, or `dash`. Auto recognizes manifest URL suffixes and HTTP content types; explicit HLS/DASH also supports extensionless endpoints. File saves the resource unchanged. |
-| `media-format` | `mp4` | Output container: `mp4` or `mkv`. |
+| `media` | `auto` | `auto`, `file`, `hls`, `dash`, or `collection`. Auto recognizes manifest URL suffixes and HTTP content types; explicit HLS/DASH also supports extensionless endpoints. File saves the resource unchanged. |
+| `media-format` | `mp4` | Output container: `mp4`, `mkv`, or compatible subtitle-only `vtt`. |
 | `media-video` | `best` | Highest bandwidth video source, `none`, or an opaque track ID. |
 | `media-audio` | `best` | Audio source: `best`, `none`, a language, or an opaque track ID. |
 | `media-subtitles` | `none` | Subtitle source: `none`, `best`, a language, or an opaque track ID. |
@@ -33,7 +33,7 @@ aria2-next --media-record-time=3600 'https://example.org/live/index.m3u8'
 | `media-record-time` | `0` | Live media duration limit in seconds; zero records until stopped or the source ends. Stops at a complete segment boundary. |
 
 Only representations supported by the native client can be selected. Multiplexed
-HLS sources can contain both video and audio; at least one audio/video source
+HLS sources can contain both video and audio; at least one audio/video/subtitle source
 is required, and a multiplexed source cannot be combined with another rendition; packet filtering applies the
 requested output track types. Download quality is fixed, not dynamically reduced
 to follow network speed. DRM and unsupported encryption modes fail explicitly.
@@ -224,3 +224,28 @@ FFmpeg/ffprobe and OpenSSL executables are developer-only fixture/oracle depende
 No public streaming service is used by the local module or CTest. Run the separate
 public suite with `python3 tools/transfer_validation/media/public.py`; see the
 [public E2E plan](media-e2e.md) for sources and acceptance criteria.
+
+## Captured inputs
+
+The `captured-inputs` capability adds `media-input`, a bounded JSON object with
+`manifests`, `tracks` and `keys`. Inline manifests retain their original URLs;
+subsequent live refreshes use HTTP. Track inputs have stable IDs, declared content
+types, ordered HTTP URLs and optional millisecond start offsets. `media=collection`
+inspects this composition without fetching payload, then downloads and remuxes its
+tracks through the existing native transport. Ordered URLs represent compatible
+fragments of one byte stream, not arbitrary complete files for concatenation.
+
+Keys and IVs are 16-byte hexadecimal values. A key URL restricts a candidate to that
+manifest key; an empty URL supplies a fallback. OpenSSL performs AES-128-CBC and
+FFmpeg verifies candidate outputs. No decryption algorithm is implemented in the
+browser or desktop. DRM and unsupported sample-encryption schemes remain explicit
+errors. Keep input plans and scoped credentials out of application history.
+
+`media-start-time` and `media-end-time` select finite HLS/DASH boundaries in seconds;
+zero means the source boundary. Native GPAC seeking and segment completion determine
+the actual range. Collections and live sources reject these options. This is lossless
+segment selection, not frame-accurate editing or transcoding.
+
+The media build enables FLV, AVI, ASF, MPEG-PS, MPEG video and subtitle demuxers plus
+the WebVTT muxer for compatible browser inputs. Browser MediaRecorder codec support
+and output-container compatibility still determine which captures can be remuxed.

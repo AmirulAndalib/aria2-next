@@ -82,14 +82,11 @@ public:
   };
 
 private:
-  enum class ProgressState { Stable, Verifying, Selecting, Refreshing };
-
   std::unique_ptr<Impl> impl_;
   BtSnapshot snapshot_;
   Source source_;
   StopReason stopReason_ = StopReason::None;
   ShutdownStage shutdownStage_ = ShutdownStage::Idle;
-  ProgressState progressState_ = ProgressState::Stable;
   bool nativeFinished_ = false;
   bool completionNotified_ = false;
   RequestGroup* group_ = nullptr;
@@ -162,9 +159,7 @@ public:
   void failFileSelectionApply();
   void applyTransportState(BtSnapshot::State state);
   void applyNativeCompletion(bool finished, bool seeding);
-  void beginProgressVerification();
-  void beginSelectionProgressHold();
-  void beginProgressRefresh();
+  void invalidateCompletion();
   void applyFileProgress(const std::vector<int64_t>& completedLengths);
   void setError(std::string message);
   void setError(BtErrorSnapshot error);

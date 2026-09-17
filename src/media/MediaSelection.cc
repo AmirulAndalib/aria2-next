@@ -55,10 +55,11 @@ bool hasAudioRendition(GF_DashClient* dash)
   for (u32 group = 0; group < gf_dash_get_group_count(dash); ++group) {
     if (!gf_dash_is_group_selectable(dash, group))
       continue;
-    for (u32 quality = 0; quality < gf_dash_group_get_num_qualities(dash, group);
-         ++quality) {
+    for (u32 quality = 0;
+         quality < gf_dash_group_get_num_qualities(dash, group); ++quality) {
       GF_DASHQualityInfo info{};
-      if (gf_dash_group_get_quality_info(dash, group, quality, &info) == GF_OK &&
+      if (gf_dash_group_get_quality_info(dash, group, quality, &info) ==
+              GF_OK &&
           !info.disabled && trackType(info, true) == "audio")
         return true;
     }
@@ -186,6 +187,13 @@ void MediaJob::selectTrack(const Track& track)
   if (gf_dash_group_select_quality(dash, group, nullptr, quality) != GF_OK)
     throw Failure(FailureCode::UnsupportedSelection,
                   "Cannot select the requested media quality");
+  const auto start = option->getAsInt(PREF_MEDIA_START_TIME);
+  const auto end = option->getAsInt(PREF_MEDIA_END_TIME);
+  if (end && end <= start)
+    throw Failure(FailureCode::UnsupportedSelection,
+                  "Media range must end after its start");
+  if (!live && start > 0 && !option->getAsBool(PREF_MEDIA_PAUSE_AFTER_PROBE))
+    gf_dash_group_seek(dash, group, start);
   selected.push_back(group);
   const auto& identity = track.id;
   u64 offset = 0;
@@ -236,7 +244,7 @@ GF_Err MediaJob::selectGroups()
     selectTrack(track);
   }
   if (!chosen.count("video") && !chosen.count("audio") &&
-      !chosen.count("muxed"))
+      !chosen.count("muxed") && !chosen.count("subtitle"))
     throw Failure(FailureCode::UnsupportedSelection,
                   "Select at least one audio or video track");
   store.saveTracks(value.tracks);

@@ -48,7 +48,9 @@ void remux(Output& out, std::vector<std::unique_ptr<Input>>& inputs,
   const bool firstEpoch = !out.context;
   if (firstEpoch) {
     check(avformat_alloc_output_context2(&out.context, nullptr,
-                                         format == "mkv" ? "matroska" : "mp4",
+                                         format == "mkv"   ? "matroska"
+                                         : format == "vtt" ? "webvtt"
+                                                           : "mp4",
                                          path.c_str()));
     if (!out.context)
       throw std::bad_alloc();

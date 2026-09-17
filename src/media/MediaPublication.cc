@@ -75,12 +75,12 @@ void MediaJob::finalize()
   auto value = snapshot();
   value.state = "finalizing";
   publish(value);
-  auto staging = Muxer::stage(store.segments(), value.path, taskDirectory,
-                              option->get(PREF_MEDIA_FORMAT),
-                              option->get(PREF_MEDIA_VIDEO) != "none",
-                              option->get(PREF_MEDIA_AUDIO) != "none",
-                              option->get(PREF_MEDIA_SUBTITLES) != "none",
-                              control, value.duration, value.live);
+  auto staging = Muxer::stage(
+      store.segments(), value.path, taskDirectory,
+      option->get(PREF_MEDIA_FORMAT), option->get(PREF_MEDIA_VIDEO) != "none",
+      option->get(PREF_MEDIA_AUDIO) != "none",
+      option->get(PREF_MEDIA_SUBTITLES) != "none", control, value.duration,
+      value.live, value.protocol == "collection");
   Publication publication{
       value.path, staging, Transport::digest(staging),
       static_cast<int64_t>(std::filesystem::file_size(nativePath(staging)))};

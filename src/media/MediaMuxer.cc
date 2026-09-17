@@ -58,13 +58,12 @@ int64_t Muxer::startTime(const Segment& segment,
             clock, AV_TIME_BASE_Q);
   return av_rescale_q(timestamp, AV_TIME_BASE_Q, AVRational{1, 1000});
 }
-std::string Muxer::stage(const std::vector<Segment>& segments,
-                         const std::string& output,
-                         const std::string& directory,
-                         const std::string& format, bool video, bool audio,
-                         bool subtitles,
-                         const std::shared_ptr<Control>& control,
-                         int64_t presentationDuration, bool live)
+std::string
+Muxer::stage(const std::vector<Segment>& segments, const std::string& output,
+             const std::string& directory, const std::string& format,
+             bool video, bool audio, bool subtitles,
+             const std::shared_ptr<Control>& control,
+             int64_t presentationDuration, bool live, bool collection)
 {
   if (segments.empty())
     throw std::runtime_error("No complete media segments were received");
@@ -122,7 +121,21 @@ std::string Muxer::stage(const std::vector<Segment>& segments,
         end = std::max(end, segment.start + segment.duration);
       inputs.push_back(std::move(input));
     }
-    if (inputs.front()->segments.front().hls) {
+    if (collection) {
+      int64_t origin = INT64_MAX;
+      for (const auto& input : inputs)
+        if (input->context->start_time != AV_NOPTS_VALUE)
+          origin =
+              std::min(origin, input->context->start_time + input->clockOffset);
+      if (origin == INT64_MAX)
+        origin = 0;
+      for (auto& input : inputs) {
+        input->shift = -origin;
+        input->boundary = 0;
+        input->end = INT64_MAX;
+      }
+    }
+    else if (inputs.front()->segments.front().hls) {
       int64_t nextBoundary = INT64_MAX;
       const auto next = periods.upper_bound(period.first);
       if (next != periods.end())
@@ -153,6 +166,8 @@ std::string Muxer::stage(const std::vector<Segment>& segments,
             (boundary > 0 ? std::min(period.first.first + end, boundary)
                           : period.first.first + end) *
             1000;
+        if (boundary <= 0 && end <= 0)
+          input->end = INT64_MAX;
         if (live) {
           input->shift = -liveOrigin * 1000;
           input->boundary -= liveOrigin * 1000;

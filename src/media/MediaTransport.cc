@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 aria2-next contributors. GPL-2.0-or-later. */
 #include "MediaTransport.h"
+#include "MuxInput.h"
 #include "media/MediaDownload.h"
 #include <algorithm>
 #include <cstddef>
@@ -94,7 +95,8 @@ Transport::Transport(const Option* option, std::string source,
       source_(std::move(source)),
       directory_(std::move(directory)),
       control_(std::move(control)),
-      contexts_(parseRequestContexts(option->get(PREF_MEDIA_REQUEST_CONTEXTS)))
+      contexts_(parseRequestContexts(option->get(PREF_MEDIA_REQUEST_CONTEXTS))),
+      input_(parseInputPlan(option->get(PREF_MEDIA_INPUT)))
 {
   std::filesystem::create_directories(nativePath(directory_));
   multi_ = curl_multi_init();
@@ -124,6 +126,22 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
         "Media manifests may reference HTTP(S) resources only");
   if (begin < 0 || (end >= 0 && end < begin))
     throw std::runtime_error("Invalid media byte range");
+  const auto manifest = input_.manifests.find(url);
+  if (manifest != input_.manifests.end() &&
+      (cached || !suppliedManifests_.count(url))) {
+    if (begin != 0 || end != -1)
+      throw std::runtime_error("A captured manifest cannot be byte-ranged");
+    const auto path =
+        (nativePath(directory_) / fingerprint(url + manifest->second))
+            .u8string();
+    std::ofstream output(nativePath(path), std::ios::binary | std::ios::trunc);
+    output.write(manifest->second.data(), manifest->second.size());
+    output.close();
+    if (!output)
+      throw std::runtime_error("Cannot store captured manifest");
+    suppliedManifests_.insert(url);
+    return {path, url, "", static_cast<int64_t>(manifest->second.size())};
+  }
   const auto key = fingerprint(url + "\n" + std::to_string(begin) + "\n" +
                                std::to_string(end));
   auto path = (nativePath(directory_) / key).u8string();
@@ -168,23 +186,12 @@ Resource Transport::get(const std::string& url, int64_t begin, int64_t end,
   }
 }
 
-std::string Transport::decrypt(const std::string& path,
-                               const std::string& keyUrl,
-                               const unsigned char* iv, bool cacheKey)
+namespace {
+std::string decryptFile(const std::string& path,
+                        const std::array<unsigned char, 16>& bytes,
+                        const unsigned char* iv,
+                        const std::shared_ptr<Control>& control)
 {
-  auto key = get(keyUrl, 0, -1, cacheKey);
-  if (key.size != 16)
-    throw std::runtime_error("HLS AES-128 key must contain 16 bytes");
-  std::array<unsigned char, 16> bytes{};
-  std::ifstream keyFile(nativePath(key.path), std::ios::binary);
-  keyFile.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-  if (keyFile.gcount() != 16)
-    throw std::runtime_error("Cannot read HLS AES-128 key");
-  keyFile.close();
-  if (cacheKey)
-    retain(key.path);
-  else
-    std::filesystem::remove(nativePath(key.path));
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(
       EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
   if (!ctx || !EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_cbc(), nullptr,
@@ -196,7 +203,7 @@ std::string Transport::decrypt(const std::string& path,
                        std::ios::binary | std::ios::trunc);
   std::array<unsigned char, 65536> in{};
   std::array<unsigned char, 65552> out{};
-  while (input && !control_->cancel) {
+  while (input && !control->cancel) {
     input.read(reinterpret_cast<char*>(in.data()), in.size());
     int size = 0;
     if (!EVP_DecryptUpdate(ctx.get(), out.data(), &size, in.data(),
@@ -205,7 +212,7 @@ std::string Transport::decrypt(const std::string& path,
     output.write(reinterpret_cast<char*>(out.data()), size);
   }
   int size = 0;
-  if (control_->cancel || !input.eof())
+  if (control->cancel || !input.eof())
     throw std::runtime_error("HLS decryption interrupted or unreadable input");
   if (!EVP_DecryptFinal_ex(ctx.get(), out.data(), &size))
     throw std::runtime_error("Invalid HLS AES-128 padding");
@@ -213,8 +220,98 @@ std::string Transport::decrypt(const std::string& path,
   output.close();
   if (!output)
     throw std::runtime_error("Cannot write decrypted media fragment");
+  std::filesystem::remove(nativePath(clear));
   std::filesystem::rename(nativePath(clear + ".partial"), nativePath(clear));
   return clear;
+}
+} // namespace
+
+std::string Transport::decrypt(const std::string& path,
+                               const std::string& keyUrl,
+                               const unsigned char* iv, bool cacheKey,
+                               const std::string& init)
+{
+  auto verified = verifiedKeys_.find(keyUrl);
+  std::vector<InputKey> candidates;
+  if (cacheKey && verified != verifiedKeys_.end())
+    candidates.push_back(verified->second);
+  for (const auto& key : input_.keys)
+    if ((key.url.empty() || key.url == keyUrl) &&
+        std::none_of(
+            candidates.begin(), candidates.end(), [&](const auto& candidate) {
+              return candidate.key == key.key && candidate.iv == key.iv;
+            }))
+      candidates.push_back(key);
+  auto readable = [&](const std::string& file, bool packets) {
+    muxing::Input probe;
+    probe.control = control_.get();
+    if (!init.empty())
+      probe.files.push_back(init);
+    probe.files.push_back(file);
+    probe.open();
+    if (!probe.context->nb_streams ||
+        probe.context->probe_score < AVPROBE_SCORE_EXTENSION)
+      throw std::runtime_error("Media does not have a recognizable container");
+    if (packets)
+      muxing::check(av_read_frame(probe.context, probe.packet));
+  };
+  if (keyUrl.empty()) {
+    if (candidates.empty())
+      return path;
+    try {
+      readable(path, false);
+      return path;
+    }
+    catch (...) {
+      if (control_->cancel)
+        throw;
+    }
+  }
+  if (!candidates.empty()) {
+    for (const auto& key : candidates) {
+      auto bytes = decodeMediaKey(key.key);
+      const auto overrideIv = key.iv.empty() ? std::array<unsigned char, 16>{}
+                                             : decodeMediaKey(key.iv);
+      try {
+        auto clear = decryptFile(
+            path, bytes, key.iv.empty() ? iv : overrideIv.data(), control_);
+        OPENSSL_cleanse(bytes.data(), bytes.size());
+        if (candidates.size() > 1)
+          readable(clear, true);
+        if (cacheKey)
+          verifiedKeys_[keyUrl] = key;
+        return clear;
+      }
+      catch (...) {
+        OPENSSL_cleanse(bytes.data(), bytes.size());
+        std::error_code ignored;
+        std::filesystem::remove(nativePath(path + ".clear"), ignored);
+        std::filesystem::remove(nativePath(path + ".clear.partial"), ignored);
+        if (control_->cancel || candidates.size() == 1)
+          throw;
+      }
+    }
+    throw Failure(FailureCode::UnsupportedSource,
+                  "No supplied AES key produced readable media");
+  }
+  auto key = get(keyUrl, 0, -1, cacheKey);
+  if (key.size != 16)
+    throw std::runtime_error("HLS AES-128 key must contain 16 bytes");
+  std::array<unsigned char, 16> bytes{};
+  std::ifstream file(nativePath(key.path), std::ios::binary);
+  file.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+  if (file.gcount() != 16)
+    throw std::runtime_error("Cannot read HLS AES-128 key");
+  file.close();
+  if (cacheKey)
+    retain(key.path);
+  else
+    std::filesystem::remove(nativePath(key.path));
+  struct Erase {
+    std::array<unsigned char, 16>& bytes;
+    ~Erase() { OPENSSL_cleanse(bytes.data(), bytes.size()); }
+  } erase{bytes};
+  return decryptFile(path, bytes, iv, control_);
 }
 } // namespace media
 } // namespace aria2

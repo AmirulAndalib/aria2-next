@@ -111,7 +111,7 @@ bool Download::handles(const std::string& uri, const Option* option)
   const auto& mode = option->get(PREF_MEDIA);
   if (mode == "file")
     return false;
-  if (mode == "hls" || mode == "dash")
+  if (mode == "hls" || mode == "dash" || mode == "collection")
     return true;
   if (uri.rfind("http://", 0) != 0 && uri.rfind("https://", 0) != 0)
     return false;
@@ -165,7 +165,8 @@ try {
   if (snapshot_.protocol.empty()) {
     const auto path = urlPath(uri_);
     snapshot_.protocol =
-        option->get(PREF_MEDIA) == "dash" ||
+        option->get(PREF_MEDIA) == "collection" ? "collection"
+        : option->get(PREF_MEDIA) == "dash" ||
                 (path.size() >= 4 &&
                  curl_strequal(path.c_str() + path.size() - 4, ".mpd"))
             ? "dash"

@@ -45,8 +45,8 @@ void MediaJob::createPlayback()
                     "Encrypted sample media is not supported");
     auto path =
         localResource(init, first, last ? static_cast<int64_t>(last) : -1);
-    if (crypto == 1 && key)
-      path = transport.decrypt(path, key, iv, !live);
+    if (!path.empty() && ((crypto == 1 && key) || transport.hasCustomKeys()))
+      path = transport.decrypt(path, key ? key : "", iv, !live);
     if (gf_dash_group_init_segment_is_media(dash, group)) {
       u32 number = 0, duration = 0, discontinuity = 0;
       GF_Fraction64 start{};

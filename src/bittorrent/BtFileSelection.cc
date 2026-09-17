@@ -174,7 +174,8 @@ void BtDownload::validateFileSelection(const Option* option) const
 void BtDownload::beginFileSelectionPause()
 {
   stopReason_ = StopReason::FileSelection;
-  beginSelectionProgressHold();
+  invalidateCompletion();
+  snapshot_.complete = false;
   if (fileSelectionError(group_ ? group_->getOption().get() : nullptr)
           .empty()) {
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
@@ -210,8 +211,9 @@ void BtDownload::beginFileSelectionApply()
   }
   validateFileSelection(group_->getOption().get());
   group_->getOption()->put(PREF_PAUSE_METADATA, A2_V_FALSE);
-  beginSelectionProgressHold();
+  invalidateCompletion();
   snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Applying;
+  snapshot_.complete = false;
   snapshot_.state = BtSnapshot::State::Adding;
 }
 
@@ -228,7 +230,6 @@ void BtDownload::completeFileSelectionApply()
 void BtDownload::failFileSelectionApply()
 {
   if (fileSelectionApplying()) {
-    progressState_ = ProgressState::Stable;
     snapshot_.fileSelectionState = BtSnapshot::FileSelectionState::Ready;
     snapshot_.state = BtSnapshot::State::Paused;
     snapshot_.selectedComplete = false;

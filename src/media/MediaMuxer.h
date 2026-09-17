@@ -16,7 +16,8 @@ public:
   stage(const std::vector<Segment>& segments, const std::string& output,
         const std::string& directory, const std::string& format, bool video,
         bool audio, bool subtitles, const std::shared_ptr<Control>& control,
-        int64_t presentationDuration = 0, bool live = false);
+        int64_t presentationDuration = 0, bool live = false,
+        bool collection = false);
   static void publish(const std::string& staging, const std::string& output,
                       bool overwrite);
 };

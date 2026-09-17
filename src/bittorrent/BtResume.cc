@@ -133,7 +133,7 @@ void BtDownload::loadResume(BtStateStore& stateStore)
   completionNotified_ = impl_->params.completed_time != 0 ||
                         impl_->params.finished_time > 0 ||
                         impl_->params.seeding_time > 0;
-  beginProgressVerification();
+  invalidateCompletion();
   snapshot_.allTimeDownload =
       std::max<int64_t>(0, impl_->params.total_downloaded);
   snapshot_.allTimeUpload = std::max<int64_t>(0, impl_->params.total_uploaded);

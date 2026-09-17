@@ -106,30 +106,15 @@ void BtDownload::refreshLogicalProgress()
   }
   updateSelection(group_->getDownloadContext());
   snapshot_.selectedComplete =
-      progressState_ == ProgressState::Stable && nativeFinished_ &&
+      nativeFinished_ &&
       snapshot_.fileSelectionState == BtSnapshot::FileSelectionState::None &&
       !snapshot_.error.present && snapshot_.totalLength > 0 &&
       snapshot_.completedLength == snapshot_.totalLength;
 }
 
-void BtDownload::beginProgressVerification()
+void BtDownload::invalidateCompletion()
 {
-  progressState_ = ProgressState::Verifying;
   nativeFinished_ = false;
-  snapshot_.selectedComplete = false;
-}
-
-void BtDownload::beginSelectionProgressHold()
-{
-  progressState_ = ProgressState::Selecting;
-  nativeFinished_ = false;
-  snapshot_.selectedComplete = false;
-  snapshot_.complete = false;
-}
-
-void BtDownload::beginProgressRefresh()
-{
-  progressState_ = ProgressState::Refreshing;
   snapshot_.selectedComplete = false;
 }
 
@@ -142,17 +127,11 @@ void BtDownload::applyNativeCompletion(bool finished, bool seeding)
 
 void BtDownload::applyFileProgress(const std::vector<int64_t>& completedLengths)
 {
-  if (progressState_ == ProgressState::Verifying ||
-      progressState_ == ProgressState::Selecting) {
-    return;
-  }
-
   const auto count = std::min(snapshot_.files.size(), completedLengths.size());
   for (size_t i = 0; i < count; ++i) {
     snapshot_.files[i].completedLength =
         std::clamp<int64_t>(completedLengths[i], 0, snapshot_.files[i].length);
   }
-  progressState_ = ProgressState::Stable;
   refreshLogicalProgress();
 }
 

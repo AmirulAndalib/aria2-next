@@ -25,7 +25,9 @@ std::string stringField(const Dict* object, const char* name, size_t maximum)
   return field->s();
 }
 
-bool validUrl(const std::string& value)
+} // namespace
+
+bool isMediaHttpUrl(const std::string& value)
 {
   std::unique_ptr<CURLU, decltype(&curl_url_cleanup)> url(curl_url(),
                                                           curl_url_cleanup);
@@ -43,6 +45,7 @@ bool validUrl(const std::string& value)
   return valid;
 }
 
+namespace {
 bool validHeader(const std::string& name, const std::string& value)
 {
   constexpr std::string_view token =
@@ -82,7 +85,7 @@ std::vector<RequestContext> parseRequestContexts(const std::string& payload)
     context.url = stringField(object, "url", 16384);
     const auto* headers =
         object ? downcast<List>(object->get("headers")) : nullptr;
-    if (!validUrl(context.url) || !headers || object->size() != 2 ||
+    if (!isMediaHttpUrl(context.url) || !headers || object->size() != 2 ||
         headers->size() > 32 ||
         std::any_of(contexts.begin(), contexts.end(),
                     [&](const auto& previous) {

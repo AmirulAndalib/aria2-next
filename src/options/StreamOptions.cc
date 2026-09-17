@@ -63,7 +63,8 @@ void addStreamOptions(OptionHandlers& handlers)
   {
     auto op = std::make_unique<ParameterOptionHandler>(
         PREF_FILENAME_HINT_SOURCE,
-        " --filename-hint-source=browser|title|suggested  Browser names precede "
+        " --filename-hint-source=browser|title|suggested  Browser names "
+        "precede "
         "response headers; other hints follow them.",
         "suggested", std::vector<std::string>{"browser", "title", "suggested"});
     op->addTag(TAG_HTTP);
@@ -202,11 +203,12 @@ void addStreamOptions(OptionHandlers& handlers)
     handlers.push_back(std::move(op));
   }
   {
-    auto op = std::unique_ptr<ParameterOptionHandler>(
-        new ParameterOptionHandler(PREF_MEDIA,
-                                   " --media=auto|file|hls|dash     Select "
-                                   "media handling (auto detects manifests).",
-                                   "auto", {"auto", "file", "hls", "dash"}));
+    auto op =
+        std::unique_ptr<ParameterOptionHandler>(new ParameterOptionHandler(
+            PREF_MEDIA,
+            " --media=auto|file|hls|dash|collection  Select "
+            "media handling (auto detects manifests).",
+            "auto", {"auto", "file", "hls", "dash", "collection"}));
     op->addTag(TAG_HTTP);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);
@@ -217,8 +219,8 @@ void addStreamOptions(OptionHandlers& handlers)
     auto op =
         std::unique_ptr<ParameterOptionHandler>(new ParameterOptionHandler(
             PREF_MEDIA_FORMAT,
-            " --media-format=mp4|mkv       Select the media output container.",
-            "mp4", {"mp4", "mkv"}));
+            " --media-format=mp4|mkv|vtt   Select the media output container.",
+            "mp4", {"mp4", "mkv", "vtt"}));
     op->addTag(TAG_HTTP);
     op->setInitialOption(true);
     op->setChangeGlobalOption(true);
@@ -235,6 +237,26 @@ void addStreamOptions(OptionHandlers& handlers)
     op->setInitialOption(true);
     op->setChangeOptionForReserved(true);
     op->setEraseAfterParse(true);
+    handlers.push_back(std::move(op));
+  }
+  {
+    auto op = std::make_unique<DefaultOptionHandler>(
+        PREF_MEDIA_INPUT,
+        " --media-input=JSON  Captured manifests, source tracks and AES keys.",
+        "");
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
+    op->setEraseAfterParse(true);
+    handlers.push_back(std::move(op));
+  }
+  for (auto pref : {PREF_MEDIA_START_TIME, PREF_MEDIA_END_TIME}) {
+    auto op = std::make_unique<NumberOptionHandler>(
+        pref, " Media range boundary in seconds (zero: source boundary).", "0",
+        0, 31536000);
+    op->addTag(TAG_HTTP);
+    op->setInitialOption(true);
+    op->setChangeOptionForReserved(true);
     handlers.push_back(std::move(op));
   }
   for (auto pref : {PREF_MEDIA_VIDEO, PREF_MEDIA_AUDIO, PREF_MEDIA_SUBTITLES}) {

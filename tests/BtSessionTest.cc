@@ -144,7 +144,7 @@ TEST_CASE("BtSessionTest.testFileSelectionResumeState")
   REQUIRE_EQ(selectedLength, awaiting->getBtDownload()->snapshot().totalLength);
   REQUIRE_EQ((int64_t)0, awaiting->getBtDownload()->snapshot().completedLength);
   awaiting->getBtDownload()->completeFileSelectionApply();
-  awaiting->getBtDownload()->beginProgressRefresh();
+  awaiting->getBtDownload()->invalidateCompletion();
   awaiting->getBtDownload()->applyFileProgress({0, 0});
   REQUIRE(!awaiting->getBtDownload()->fileSelectionApplying());
   const auto selectedSession =

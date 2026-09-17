@@ -79,6 +79,7 @@ std::unique_ptr<ValueBase> GetVersionRpcMethod::process(const RpcRequest& req,
   mediaFeatures->append("request-contexts");
   mediaFeatures->append("stable-track-ids");
   mediaFeatures->append("structured-errors");
+  mediaFeatures->append("captured-inputs");
   result->put("mediaFeatures", std::move(mediaFeatures));
   auto downloadFeatures = List::g();
   downloadFeatures->append("filename-hints");

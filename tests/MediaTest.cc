@@ -22,6 +22,7 @@ extern "C" {
 #include "media/MediaStore.h"
 #include "media/MediaTransport.h"
 #include "media/MediaRequestContext.h"
+#include "media/MediaInput.h"
 
 extern "C" {
 #include <gpac/mpd.h>
@@ -99,6 +100,45 @@ std::vector<int64_t> timestamps(const std::string& path)
   return result;
 }
 } // namespace
+
+TEST_CASE("Captured media input validates native URLs, identity and key bytes")
+{
+  const auto plan = media::parseInputPlan(
+      R"({"manifests":[{"url":"https://example.com/manifest","content":"#EXTM3U\n"}],"tracks":[{"id":"audio","type":"audio","urls":["https://example.com/part"],"offsetMs":125}],"keys":[{"url":"","key":"00112233445566778899aabbccddeeff","iv":""}]})");
+  REQUIRE(plan.manifests.size() == 1);
+  REQUIRE(plan.tracks.front().offsetMs == 125);
+  const auto bytes = media::decodeMediaKey(plan.keys.front().key);
+  REQUIRE(bytes.front() == 0);
+  REQUIRE(bytes.back() == 255);
+  for (
+      const auto* invalid :
+      {R"({"manifests":[],"tracks":[{"id":"a","type":"audio","urls":["file:///private"]}],"keys":[]})",
+       R"({"manifests":[],"tracks":[{"id":"a","type":"audio","urls":["https://user:password@example.com/file"]}],"keys":[]})",
+       R"({"manifests":[],"tracks":[{"id":"a","type":"audio","urls":["https://example.com/a"],"offsetMs":-1}],"keys":[]})",
+       R"({"manifests":[],"tracks":[],"keys":[{"url":"","key":"invalid","iv":""}]})",
+       R"({"manifests":[],"tracks":[],"keys":[],"legacy":true})"})
+    REQUIRE_THROWS_AS(media::parseInputPlan(invalid), media::Failure);
+  REQUIRE_THROWS_AS(media::decodeMediaKey("00112233445566778899aabbccddeefg"),
+                    media::Failure);
+}
+
+TEST_CASE("Captured tracks preserve their relative start times")
+{
+  MediaFixture fixture("media-capture-clock");
+  auto first = fixture.subtitle(0);
+  auto second = fixture.subtitle(1);
+  first.hls = second.hls = false;
+  first.track = "first";
+  second.track = "second";
+  first.start = second.start = 0;
+  first.duration = second.duration = 0;
+  second.timeOffset = -500000;
+  const auto staging = media::Muxer::stage(
+      {first, second}, (fixture.root / "capture.mkv").u8string(),
+      fixture.root.u8string(), "mkv", false, false, true,
+      std::make_shared<media::Control>(), 0, false, true);
+  REQUIRE(timestamps(staging) == std::vector<int64_t>{0, 500});
+}
 
 TEST_CASE("Media request contexts preserve origin-scoped credentials")
 {

@@ -84,7 +84,7 @@ void BtSession::handleAlert(lt::add_torrent_alert* added)
   }
   else if (download->impl_->recheckAfterAdd) {
     download->impl_->initialRecheckStarted = true;
-    download->beginProgressVerification();
+    download->invalidateCompletion();
     download->snapshot_.state = BtSnapshot::State::Recovering;
     download->impl_->handle.force_recheck();
   }
@@ -141,7 +141,7 @@ void BtSession::handleAlert(lt::fastresume_rejected_alert* rejected)
 {
   auto download = findDownload(rejected->handle);
   if (download) {
-    download->beginProgressVerification();
+    download->invalidateCompletion();
   }
   A2_LOG_WARN(rejected->message());
 }
@@ -150,7 +150,7 @@ void BtSession::handleAlert(lt::hash_failed_alert* failed)
 {
   auto download = findDownload(failed->handle);
   if (download) {
-    download->beginProgressVerification();
+    download->applyNativeCompletion(false, false);
   }
 }
 
@@ -160,7 +160,7 @@ void BtSession::handleAlert(lt::state_changed_alert* changed)
   if (download &&
       (changed->state == lt::torrent_status::checking_files ||
        changed->state == lt::torrent_status::checking_resume_data)) {
-    download->beginProgressVerification();
+    download->invalidateCompletion();
   }
 }
 

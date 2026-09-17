@@ -118,6 +118,9 @@ void BtSession::handleAlert(lt::state_update_alert* update)
         !snapshot.error.present) {
       download->applyNativeCompletion(status.is_finished, status.is_seeding);
     }
+    else {
+      download->invalidateCompletion();
+    }
   }
 }
 

@@ -73,6 +73,7 @@ private:
   void resumeLive();
   SegmentResult consumeSegment(int group);
   void finalize();
+  void runCollection();
 };
 } // namespace aria2::media
 
