@@ -184,6 +184,35 @@ TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testReplaceBtTrackers")
              announceList[1][0]);
 }
 
+TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.globalBtPolicyPreservesTaskDirectory")
+{
+  auto taskOptions = std::make_shared<Option>(*option_);
+  taskOptions->put(PREF_DIR, A2_TEST_OUT_DIR "/chosen");
+  taskOptions->put(PREF_MAX_DOWNLOAD_LIMIT, "1024");
+  auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+  auto context = std::make_shared<DownloadContext>();
+  download->populateDownloadContext(context, taskOptions.get());
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), taskOptions);
+  group->setDownloadContext(context);
+  group->setBtDownload(download);
+  download->initialize(group.get());
+  e_->getRequestGroupMan()->addReservedGroup(group);
+  e_->setBtSession(make_unique<BtSession>(option_.get()));
+
+  ChangeGlobalOptionRpcMethod method;
+  auto request = createReq(ChangeGlobalOptionRpcMethod::getMethodName());
+  auto options = Dict::g();
+  options->put(PREF_DIR->k, A2_TEST_OUT_DIR "/default");
+  options->put(PREF_MAX_DOWNLOAD_LIMIT->k, "2048");
+  options->put(PREF_BT_MAX_PEERS->k, "42");
+  request.params->append(std::move(options));
+  REQUIRE_EQ(0, method.execute(std::move(request), e_.get()).code);
+  CHECK_EQ(std::string(A2_TEST_OUT_DIR "/default"), e_->getOption()->get(PREF_DIR));
+  CHECK_EQ(std::string(A2_TEST_OUT_DIR "/chosen"), taskOptions->get(PREF_DIR));
+  CHECK_EQ(1024, taskOptions->getAsInt(PREF_MAX_DOWNLOAD_LIMIT));
+  CHECK_EQ(42, taskOptions->getAsInt(PREF_BT_MAX_PEERS));
+}
+
 TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testGetBtSessionStatus")
 {
   e_->setBtSession(make_unique<BtSession>(option_.get()));

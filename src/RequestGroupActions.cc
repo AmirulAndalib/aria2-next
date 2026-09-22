@@ -186,24 +186,25 @@ void changeGlobalOption(const Option& option, DownloadEngine* e)
 #ifdef ENABLE_BITTORRENT
   if (e->getBtSession()) {
     e->getBtSession()->applyGlobalOptions(e->getOption());
-    const bool updateTorrents =
-        option.defined(PREF_BT_TRACKER) ||
-        option.defined(PREF_BT_EXCLUDE_TRACKER) ||
-        option.defined(PREF_BT_MAX_PEERS) ||
-        option.defined(PREF_BT_MAX_UPLOADS_PER_TORRENT) ||
-        option.defined(PREF_BT_FIRST_LAST_PIECE_FIRST) ||
-        option.defined(PREF_BT_SUPER_SEEDING) ||
-        option.defined(PREF_ENABLE_DHT) ||
-        option.defined(PREF_ENABLE_PEER_EXCHANGE) ||
-        option.defined(PREF_BT_ENABLE_LPD) ||
-        option.defined(PREF_FORCE_SEQUENTIAL);
-    if (updateTorrents) {
+    // Only live BT policy applies to existing tasks. Global defaults such as
+    // dir must never replace task-owned options or move restored payloads.
+    Option torrentOptions;
+    for (auto pref : {PREF_BT_TRACKER, PREF_BT_EXCLUDE_TRACKER,
+                      PREF_BT_MAX_PEERS, PREF_BT_MAX_UPLOADS_PER_TORRENT,
+                      PREF_BT_FIRST_LAST_PIECE_FIRST, PREF_BT_SUPER_SEEDING,
+                      PREF_ENABLE_DHT, PREF_ENABLE_PEER_EXCHANGE,
+                      PREF_BT_ENABLE_LPD, PREF_FORCE_SEQUENTIAL}) {
+      if (option.definedLocal(pref)) {
+        torrentOptions.put(pref, option.get(pref));
+      }
+    }
+    if (!torrentOptions.emptyLocal()) {
       auto apply = [&](auto& groups) {
         for (const auto& group : groups) {
           if (!group->getBtDownload()) {
             continue;
           }
-          group->getOption()->merge(option);
+          group->getOption()->merge(torrentOptions);
           e->getBtSession()->applyDownloadOptions(group->getBtDownload(),
                                                   group->getOption().get());
         }

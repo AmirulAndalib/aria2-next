@@ -3647,6 +3647,10 @@ For information on the *secret* parameter, see :ref:`rpc_auth`.
   :option:`pause <--pause>` and
   :option:`select-file <--select-file>`.
 
+  Download defaults such as :option:`dir <-d>` apply to new tasks. Updating
+  live BitTorrent settings does not replace the directory or per-task speed
+  limits of existing tasks. Use :func:`aria2.changeOption` to change a task.
+
   With the :option:`log <-l>` option, you can dynamically start logging or
   change log file. To stop logging, specify an empty string("") as the parameter
   value. Log path, size, file-count, console level, and file level changes take
