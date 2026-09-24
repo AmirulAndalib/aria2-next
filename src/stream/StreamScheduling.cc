@@ -101,7 +101,11 @@ void CurlSession::configurePlanner(
   }
   const auto quantum = std::max<int64_t>(
       1_m, impl.group->getOption()->getAsInt(PREF_PIECE_LENGTH));
-  const auto rangeSize = adaptiveRangeSize(total, impl.maxConnections, quantum);
+  const auto naturalSize =
+      adaptiveRangeSize(total, impl.maxConnections, quantum);
+  const auto rangeSize = impl.maxRangeSize > 0
+                             ? std::min(naturalSize, impl.maxRangeSize)
+                             : naturalSize;
   auto active = activeLeases(download);
   if (retainedLease && !retainedLease->empty()) {
     active.push_back(*retainedLease);

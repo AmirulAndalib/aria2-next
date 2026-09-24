@@ -452,6 +452,18 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     return;
   }
   if (responseFailure != CurlResponseFailure::None) {
+    const bool identityChanged =
+        responseFailure == CurlResponseFailure::EtagChanged ||
+        responseFailure == CurlResponseFailure::ModifiedChanged ||
+        responseFailure == CurlResponseFailure::LengthChanged ||
+        responseFailure == CurlResponseFailure::ValidatorUnavailable;
+    if (ranged && identityChanged &&
+        (responseCode == 200 || responseCode == 206) && impl.allowFullRestart &&
+        !impl.fullDownload && impl.maxRangeSize == 0) {
+      restartFullDownload(download,
+                          stream::responseFailureName(responseFailure));
+      return;
+    }
     failTask(download,
              responseFailure == CurlResponseFailure::InvalidRange
                  ? error_code::HTTP_PROTOCOL_ERROR

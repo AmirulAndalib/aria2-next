@@ -40,6 +40,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <vector>
 #include "common.h" // IWYU pragma: keep
 
 #include "RpcMethods.h"
@@ -85,10 +86,14 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
       else {
         group->setHaltRequested(true, RequestGroup::USER_REQUEST);
       }
+      if (!e->getRequestGroupMan()->saveSession()) {
+        throw DL_ABORT_EX("Unable to commit task removal");
+      }
       e->setRefreshInterval(std::chrono::milliseconds(0));
     }
     else {
       if (group->isDependencyResolved()) {
+        e->getRequestGroupMan()->removeReservedGroup(gid);
 #ifdef ENABLE_BITTORRENT
         if (group->getBtDownload() && e->getBtSession()) {
           e->getBtSession()->discard(group->getBtDownload());
@@ -96,6 +101,7 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
 #endif
         if (group->getCurlDownload() && e->getCurlSession()) {
           e->getCurlSession()->stop(group->getCurlDownload(), false);
+          e->getCurlSession()->discardRecovery(group->getCurlDownload());
         }
         if (group->getDownloadContext()->hasAttribute(CTX_ATTR_ED2K)) {
           e->getRequestGroupMan()->getEd2kSession()->discardDownload(
@@ -103,7 +109,6 @@ std::unique_ptr<ValueBase> removeDownload(const RpcRequest& req,
         }
         if (group->getMediaDownload())
           group->getMediaDownload()->stop(false);
-        e->getRequestGroupMan()->removeReservedGroup(gid);
       }
       else {
         throw DL_ABORT_EX(
@@ -142,6 +147,9 @@ std::unique_ptr<ValueBase> pauseDownload(const RpcRequest& req,
   if (group) {
     bool reserved = group->getState() == RequestGroup::STATE_WAITING;
     if (pauseRequestGroup(group, reserved, forcePause)) {
+      if (!e->getRequestGroupMan()->saveSession()) {
+        throw DL_ABORT_EX("Unable to commit paused task state");
+      }
       e->setRefreshInterval(std::chrono::milliseconds(0));
       return createGIDResponse(gid);
     }
@@ -183,6 +191,9 @@ std::unique_ptr<ValueBase> pauseAllDownloads(const RpcRequest& req,
   auto& reservedGroups = e->getRequestGroupMan()->getReservedGroups();
   pauseRequestGroups(reservedGroups.begin(), reservedGroups.end(), true,
                      forcePause);
+  if (!e->getRequestGroupMan()->saveSession()) {
+    throw DL_ABORT_EX("Unable to commit paused task state");
+  }
   return createOKResponse();
 }
 } // namespace
@@ -218,6 +229,10 @@ std::unique_ptr<ValueBase> UnpauseRpcMethod::process(const RpcRequest& req,
     }
 #endif
     group->setPauseRequested(false);
+    if (!e->getRequestGroupMan()->saveSession()) {
+      group->setPauseRequested(true);
+      throw DL_ABORT_EX("Unable to commit resumed task state");
+    }
     e->getRequestGroupMan()->requestQueueCheck();
   }
   return createGIDResponse(gid);
@@ -236,7 +251,11 @@ std::unique_ptr<ValueBase> UnpauseAllRpcMethod::process(const RpcRequest& req,
     }
   }
 #endif // ENABLE_BITTORRENT
+  std::vector<std::shared_ptr<RequestGroup>> resumed;
   for (auto& group : groups) {
+    if (group->isPauseRequested()) {
+      resumed.push_back(group);
+    }
 #ifdef ENABLE_BITTORRENT
     if (group->getBtDownload()) {
       group->getBtDownload()->beginFileSelectionApply();
@@ -245,6 +264,12 @@ std::unique_ptr<ValueBase> UnpauseAllRpcMethod::process(const RpcRequest& req,
     group->setPauseRequested(false);
   }
   e->getRequestGroupMan()->requestQueueCheck();
+  if (!e->getRequestGroupMan()->saveSession()) {
+    for (auto& group : resumed) {
+      group->setPauseRequested(true);
+    }
+    throw DL_ABORT_EX("Unable to commit resumed tasks");
+  }
   return createOKResponse();
 }
 

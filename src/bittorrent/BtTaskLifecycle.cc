@@ -161,6 +161,7 @@ void BtSession::finishNativeDelete(const std::string& key,
 
   if (pending.intent == DeleteIntent::Replace) {
     download->impl_->nativeState = BtNativeState::Adding;
+    download->impl_->params.userdata = lt::client_data_t(download.get());
     impl_->session->async_add_torrent(download->impl_->params);
     return;
   }
@@ -272,6 +273,8 @@ void BtSession::attach(const std::shared_ptr<BtDownload>& download,
       download->impl_->params.file_priorities;
   download->impl_->appliedPiecePriorities.clear();
   download->impl_->nativeState = BtNativeState::Adding;
+  // An info hash identifies content, not this particular asynchronous add.
+  download->impl_->params.userdata = lt::client_data_t(download.get());
   impl_->session->async_add_torrent(download->impl_->params);
 }
 

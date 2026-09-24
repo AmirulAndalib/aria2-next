@@ -27,6 +27,7 @@
 #include "DownloadEngine.h"
 #include "DownloadFailureException.h"
 #include "Option.h"
+#include "OptionParser.h"
 #include "RequestGroup.h"
 #include "SelectEventPoll.h"
 #include "SocketCore.h"
@@ -96,6 +97,7 @@ public:
 // state access in this adapter rather than exposing engine internals publicly.
 class CurlSessionTest {
 public:
+  void testBoundedInitialRequest();
   void testAbandonedNativeRequest();
   void testWriteErrorBoundary();
   void testOutputFilename();
@@ -116,6 +118,39 @@ public:
                const std::string& etag = {}, const std::string& modified = {},
                const std::string& date = {});
 };
+
+TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testBoundedInitialRequest")
+{
+  testBoundedInitialRequest();
+}
+
+void CurlSessionTest::testBoundedInitialRequest()
+{
+  auto option = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*option);
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/curl-bounded-state");
+  option->put(PREF_DIR, A2_TEST_OUT_DIR);
+  option->put(PREF_OUT, "bounded.bin");
+  option->put(PREF_STREAM_MAX_CONNECTIONS, "1");
+  option->put(PREF_STREAM_MAX_RANGE_SIZE, std::to_string(1_m));
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  CurlSession session(option.get());
+  auto download = std::make_shared<CurlDownload>(
+      std::vector<std::string>{"http://127.0.0.1:9/bounded"});
+  auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
+  group->setDownloadContext(std::make_shared<DownloadContext>(1_m, 0));
+  group->setCurlDownload(download);
+  auto command = session.start(download, group.get(), &engine);
+  REQUIRE_EQ(1, download->impl_->handles.size());
+  auto& handle = *download->impl_->handles.front();
+  CHECK(handle.ranged);
+  CHECK_LE(handle.lease.length(), 1_m);
+  respond(handle, 200);
+  CHECK_EQ(CurlResponseFailure::RangeUnsupported, handle.responseFailure);
+  session.stop(download, false);
+  session.discardRecovery(download);
+}
 
 TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testAbandonedNativeRequest")
 {

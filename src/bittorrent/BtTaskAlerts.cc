@@ -32,9 +32,9 @@ using namespace bt_session;
 void BtSession::handleAlert(lt::add_torrent_alert* added)
 {
   std::shared_ptr<BtDownload> download;
-  const auto addedKey = hashKey(added->params.info_hashes);
+  const auto owner = added->params.userdata.get<BtDownload>();
   for (const auto& entry : impl_->downloads) {
-    if (hashKey(entry.second->impl_->params.info_hashes) == addedKey) {
+    if (entry.second.get() == owner) {
       download = entry.second;
       break;
     }
@@ -49,7 +49,7 @@ void BtSession::handleAlert(lt::add_torrent_alert* added)
   if (added->error) {
     A2_LOG_ERROR(fmt("component=bittorrent event=task_add_failed gid=%s "
                      "category=%s code=%d message=%s",
-                     GroupId::toHex(download->group()->getGID()).c_str(),
+                     GroupId::toHex(download->impl_->gid).c_str(),
                      added->error.category().name(), added->error.value(),
                      logging::sanitizeText(added->error.message()).c_str()));
     download->impl_->nativeState = BtNativeState::Detached;
@@ -67,7 +67,7 @@ void BtSession::handleAlert(lt::add_torrent_alert* added)
   impl_->handles[added->handle] = download;
   A2_LOG_INFO(fmt("component=bittorrent event=task_attached gid=%s "
                   "metadata=%s",
-                  GroupId::toHex(download->group()->getGID()).c_str(),
+                  GroupId::toHex(download->impl_->gid).c_str(),
                   download->hasMetadata() ? "ready" : "pending"));
   if (removalPending) {
     const auto managed = impl_->downloads.find(download->impl_->gid);

@@ -22,6 +22,7 @@ enum class CurlResponseFailure {
   ModifiedChanged,
   LengthChanged,
   InvalidRange,
+  RangeUnsupported,
   PreconditionFailed
 };
 // Owns one native request and its response/write progress on the engine thread.

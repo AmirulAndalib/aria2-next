@@ -198,14 +198,13 @@ void CurlSession::cancelHandles(const std::shared_ptr<CurlDownload>& download)
 }
 
 void CurlSession::restartFullDownload(
-    const std::shared_ptr<CurlDownload>& download)
+    const std::shared_ptr<CurlDownload>& download, const char* reason)
 {
   auto& impl = *download->impl_;
-  if (!impl.allowFullRestart || impl.fullDownload) {
-    failTask(
-        download, error_code::CANNOT_RESUME,
-        "The server ignored the byte range; restarting requires permission "
-        "to overwrite the existing file");
+  if (impl.maxRangeSize > 0 || !impl.allowFullRestart || impl.fullDownload) {
+    failTask(download, error_code::CANNOT_RESUME,
+             "The resource cannot be resumed safely; the existing file and "
+             "range policy were preserved");
     return;
   }
   cancelHandles(download);
@@ -215,6 +214,11 @@ void CurlSession::restartFullDownload(
   impl.plannerConfigured = false;
   impl.rangeValidated = false;
   impl.fullDownload = true;
+  impl.etag.clear();
+  impl.lastModified.clear();
+  impl.maxConnections = 1;
+  impl.connectionLimit = 1;
+  download->snapshot_.totalLength = 0;
   download->snapshot_.completedLength = 0;
   if (!openOutput(download.get(), false)) {
     failTask(download, download->snapshot_.errorCode, download->snapshot_.error,
@@ -235,8 +239,8 @@ void CurlSession::restartFullDownload(
   checkpoint(download, true);
   engine_->setNoWait(true);
   A2_LOG_INFO(fmt("component=stream event=full_download_restart gid=%s "
-                  "reason=range_ignored",
-                  CurlHandle::gid(download.get()).c_str()));
+                  "reason=%s",
+                  CurlHandle::gid(download.get()).c_str(), reason));
 }
 
 void CurlSession::poll()
@@ -339,13 +343,15 @@ void CurlSession::stop(const std::shared_ptr<CurlDownload>& download,
       download->snapshot_.state = CurlSnapshot::State::Paused;
     }
     else {
-      if (impl.group) {
-        store_.removePath(impl.path);
-      }
       download->snapshot_.state = CurlSnapshot::State::Stopped;
     }
   }
   eraseTask(download.get());
+}
+
+void CurlSession::discardRecovery(const std::shared_ptr<CurlDownload>& download)
+{
+  store_.removePath(download->impl_->path);
 }
 
 bool CurlSession::refreshConnectionPoolLimits()

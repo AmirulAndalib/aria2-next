@@ -186,7 +186,12 @@ size_t RequestGroupMan::changeReservedGroupPosition(a2_gid_t gid, int pos,
 
 bool RequestGroupMan::removeReservedGroup(a2_gid_t gid)
 {
+  auto group = reservedGroups_.get(gid);
   const auto removed = reservedGroups_.remove(gid);
+  if (removed && !saveSession()) {
+    reservedGroups_.push_front(gid, group);
+    throw DL_ABORT_EX("Unable to commit task removal; task was retained");
+  }
 #ifdef ENABLE_BITTORRENT
   if (removed) {
     collectBtStateGarbage();

@@ -72,6 +72,7 @@ private:
 
   FILE* fp_;
   bool supportsColor_;
+  bool syncOnClose_ = false;
 };
 
 } // namespace aria2

@@ -108,12 +108,23 @@ void markUriUsed(RequestGroup* group, const std::string& uriValue)
 } // namespace
 
 bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
-                               const RangeLease& lease, bool primary,
-                               bool ranged, CurlHandlePurpose purpose,
-                               long addressFamily)
+                               RangeLease lease, bool primary, bool ranged,
+                               CurlHandlePurpose purpose, long addressFamily)
 {
   auto& impl = *download->impl_;
   const auto taskOption = impl.group->getOption().get();
+  if (impl.http && impl.maxRangeSize > 0 &&
+      purpose != CurlHandlePurpose::HeadProbe) {
+    ranged = true;
+    if (lease.length() > impl.maxRangeSize) {
+      auto remainder = lease;
+      lease.end = lease.begin + impl.maxRangeSize;
+      remainder.begin = lease.end;
+      if (impl.plannerConfigured && purpose == CurlHandlePurpose::Payload) {
+        impl.planner.enqueue(remainder);
+      }
+    }
+  }
   auto transfer = std::unique_ptr<CurlHandle>(new CurlHandle());
   transfer->download = download.get();
   transfer->lease = lease;

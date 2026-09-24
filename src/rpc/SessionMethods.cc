@@ -52,7 +52,6 @@
 #include "Option.h"
 #include "FeatureConfig.h"
 #include "TimedHaltCommand.h"
-#include "SessionSerializer.h"
 #include "Log.h"
 
 namespace aria2::rpc {
@@ -142,8 +141,7 @@ std::unique_ptr<ValueBase> SaveSessionRpcMethod::process(const RpcRequest& req,
   if (filename.empty()) {
     throw DL_ABORT_EX("Filename is not given.");
   }
-  SessionSerializer sessionSerializer(e->getRequestGroupMan().get());
-  if (sessionSerializer.save(filename)) {
+  if (e->getRequestGroupMan()->saveSession()) {
     A2_LOG_DEBUG(
         fmt(_("Serialized session to '%s' successfully."), filename.c_str()));
     return createOKResponse();

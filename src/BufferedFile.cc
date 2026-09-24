@@ -59,7 +59,8 @@ BufferedFile::BufferedFile(const char* filename, const char* mode)
               a2fopen(filename, mode)
 #endif // !__MINGW32__
               ),
-      supportsColor_(fp_ ? isatty(fileno(fp_)) : false)
+      supportsColor_(fp_ ? isatty(fileno(fp_)) : false),
+      syncOnClose_(mode[0] == 'w' || mode[0] == 'a' || std::strchr(mode, '+'))
 {
 }
 
@@ -86,14 +87,22 @@ int BufferedFile::onClose()
 {
   int rv = 0;
   if (fp_) {
-    fflush(fp_);
+    if (fflush(fp_) != 0) {
+      rv = EOF;
+    }
 #ifndef __MINGW32__
-    fsync(fileno(fp_));
+    if (syncOnClose_ && fp_ != stdin && fsync(fileno(fp_)) != 0) {
+      rv = EOF;
+    }
 #else  // __MINGW32__
-    _commit(fileno(fp_));
+    if (syncOnClose_ && fp_ != stdin && _commit(fileno(fp_)) != 0) {
+      rv = EOF;
+    }
 #endif // __MINGW32__
     if (fp_ != stdin && fp_ != stderr) {
-      rv = fclose(fp_);
+      if (fclose(fp_) != 0) {
+        rv = EOF;
+      }
     }
     fp_ = nullptr;
   }

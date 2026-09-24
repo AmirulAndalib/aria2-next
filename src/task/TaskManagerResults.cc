@@ -44,6 +44,7 @@
 #include "FileEntry.h"
 #include "media/MediaDownload.h"
 #include "DlAbortEx.h"
+#include "RecoverableException.h"
 #include "Log.h"
 #include "prefs.h"
 #include "fmt.h"
@@ -110,8 +111,21 @@ void discardMediaResult(const std::shared_ptr<DownloadResult>& result)
 
 bool RequestGroupMan::removeDownloadResult(a2_gid_t gid)
 {
-  discardMediaResult(downloadResults_.get(gid));
+  const auto result = downloadResults_.get(gid);
   const auto removed = downloadResults_.remove(gid);
+  if (removed && !saveSession()) {
+    downloadResults_.push_back(gid, result);
+    throw DL_ABORT_EX("Unable to commit result removal; result was retained");
+  }
+  if (removed) {
+    try {
+      discardMediaResult(result);
+    }
+    catch (const RecoverableException& error) {
+      A2_LOG_WARN(
+          fmt("Task removed; recovery cleanup failed: %s", error.what()));
+    }
+  }
 #ifdef ENABLE_BITTORRENT
   if (removed) {
     collectBtStateGarbage();
@@ -180,12 +194,9 @@ void RequestGroupMan::addDownloadResult(
 
 void RequestGroupMan::purgeDownloadResult()
 {
-  for (const auto& result : downloadResults_)
-    discardMediaResult(result);
-  downloadResults_.clear();
-#ifdef ENABLE_BITTORRENT
-  collectBtStateGarbage();
-#endif
+  while (!downloadResults_.empty()) {
+    removeDownloadResult(downloadResults_[0]->gid->getNumericId());
+  }
 }
 
 #ifdef ENABLE_BITTORRENT

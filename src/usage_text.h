@@ -55,6 +55,9 @@
     "                              A longer HTTP Retry-After delay takes precedence.")
 #define TEXT_STREAM_MAX_CONNECTIONS                                     \
   _(" --stream-max-connections=N  Set the per-file HTTP connection ceiling.")
+#define TEXT_STREAM_MAX_RANGE_SIZE                                      \
+  _(" --stream-max-range-size=SIZE Limit each HTTP byte-range request.\n" \
+    "                              0 uses automatic sizing; K and M suffixes are supported.")
 #define TEXT_TIMEOUT                                            \
   _(" -t, --timeout=SEC            Set timeout in seconds.")
 #define TEXT_MAX_TRIES                                                  \

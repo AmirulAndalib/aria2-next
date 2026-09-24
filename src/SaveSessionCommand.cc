@@ -41,11 +41,6 @@
 #include <utility>
 #include "DownloadEngine.h"
 #include "RequestGroupMan.h"
-#include "SessionSerializer.h"
-#include "prefs.h"
-#include "fmt.h"
-#include "Log.h"
-#include "Option.h"
 
 namespace aria2 {
 
@@ -67,31 +62,7 @@ void SaveSessionCommand::preProcess()
 
 void SaveSessionCommand::process()
 {
-  const std::string& filename =
-      getDownloadEngine()->getOption()->get(PREF_SAVE_SESSION);
-  if (!filename.empty()) {
-    auto& rgman = getDownloadEngine()->getRequestGroupMan();
-
-    SessionSerializer sessionSerializer(rgman.get());
-
-    auto sessionHash = sessionSerializer.calculateHash();
-    if (rgman->getLastSessionHash() == sessionHash) {
-      A2_LOG_DEBUG("No change since last serialization or startup. "
-                   "No serialization is necessary this time.");
-      return;
-    }
-
-    rgman->setLastSessionHash(std::move(sessionHash));
-
-    if (sessionSerializer.save(filename)) {
-      A2_LOG_DEBUG(
-          fmt(_("Serialized session to '%s' successfully."), filename.c_str()));
-    }
-    else {
-      A2_LOG_ERROR(
-          fmt(_("Failed to serialize session to '%s'."), filename.c_str()));
-    }
-  }
+  getDownloadEngine()->getRequestGroupMan()->saveSession();
 }
 
 } // namespace aria2

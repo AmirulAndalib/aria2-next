@@ -61,6 +61,12 @@ bool FillRequestGroupCommand::execute()
     return true;
   }
   auto& rgman = e_->getRequestGroupMan();
+  if (rgman->sessionSaveRetryDue()) {
+    if (rgman->saveSession()) {
+      rgman->requestQueueCheck();
+    }
+    e_->setRefreshInterval(std::chrono::seconds(1));
+  }
   if (rgman->queueCheckRequested()) {
     while (rgman->queueCheckRequested()) {
       try {

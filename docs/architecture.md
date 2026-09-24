@@ -37,7 +37,15 @@ feature guards live in `cmake/Sources.cmake` and `cmake/TestSources.cmake`.
   endpoints are inclusive. Keep conversions explicit at the protocol boundary.
 - Persist completed output and recovery state before releasing task runtime
   resources or publishing final results. A pause returns a task to the waiting
-  queue with its recovery identity intact.
+  queue with its recovery identity intact. Queue mutations commit through
+  `RequestGroupMan::saveSession`; failed writes retain the previous hash and
+  retry without replaying stop hooks. Stream recovery survives completion until
+  the session no longer references the task.
+- BitTorrent add alerts carry `add_torrent_params::userdata` back to their owning
+  `BtDownload`. An info hash identifies content, not an asynchronous request.
+- `stream-max-range-size` caps requests at the libcurl handle boundary. Validator
+  changes can restart an owned partial file once, with a fresh full request;
+  they never join old bytes to a new representation or override a range cap.
 - Each media worker owns its GPAC client, transport cache and publication
   transaction. `DashFileIo` borrows that worker. Only the shared `Control` crosses
   threads; its snapshot is protected by its mutex.

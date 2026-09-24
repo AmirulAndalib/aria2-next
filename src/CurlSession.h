@@ -56,6 +56,7 @@ public:
   void armTimeout() { transport_.armTimeout(); }
   void advance(const std::shared_ptr<CurlDownload>& download);
   void stop(const std::shared_ptr<CurlDownload>& download, bool retainState);
+  void discardRecovery(const std::shared_ptr<CurlDownload>& download);
   void restorePaused(const std::shared_ptr<CurlDownload>& download,
                      RequestGroup* group);
 
@@ -77,7 +78,7 @@ private:
                RequestGroup* group);
   void activate(const std::shared_ptr<CurlDownload>& download);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
-                    const RangeLease& lease, bool primary, bool ranged,
+                    RangeLease lease, bool primary, bool ranged,
                     CurlHandlePurpose purpose,
                     long addressFamily = CURL_IPRESOLVE_WHATEVER);
   bool startProbe(const std::shared_ptr<CurlDownload>& download,
@@ -87,7 +88,7 @@ private:
                    curl_off_t reportedLength, curl_off_t reportedFileTime);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
-  void checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
+  bool checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
   void configurePlanner(const std::shared_ptr<CurlDownload>& download,
                         const RangeLease* retainedLease = nullptr);
   void schedule(const std::shared_ptr<CurlDownload>& download);
@@ -107,7 +108,8 @@ private:
                 error_code::Value errorCode, const std::string& message,
                 bool retainState = true);
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
-  void restartFullDownload(const std::shared_ptr<CurlDownload>& download);
+  void restartFullDownload(const std::shared_ptr<CurlDownload>& download,
+                           const char* reason = "range_ignored");
   static bool openOutput(CurlDownload* download, bool preserveExisting);
   static bool resolveOutput(CurlDownload* download, CURL* easy);
   void closeOutput(CurlDownload* download) noexcept;

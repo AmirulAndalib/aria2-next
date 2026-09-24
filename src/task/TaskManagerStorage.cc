@@ -38,6 +38,12 @@
 #include <memory>
 #include <vector>
 #include "RequestGroupMan.h"
+#include "SessionSerializer.h"
+#include "Option.h"
+#include "prefs.h"
+#include "wallclock.h"
+#include <chrono>
+#include <utility>
 #include "RecoverableException.h"
 #include "DownloadContext.h"
 #include "FileEntry.h"
@@ -50,6 +56,35 @@
 #include <functional>
 
 namespace aria2 {
+
+bool RequestGroupMan::saveSession()
+{
+  const auto& path = option_->get(PREF_SAVE_SESSION);
+  if (path.empty()) {
+    return true;
+  }
+  SessionSerializer serializer(this);
+  auto hash = serializer.calculateHash();
+  if (hash == lastSessionHash_ && !sessionSavePending_) {
+    return true;
+  }
+  lastSessionSaveAttempt_ = global::wallclock();
+  if (!serializer.save(path)) {
+    sessionSavePending_ = true;
+    A2_LOG_ERROR(fmt("Failed to commit download session '%s'.", path.c_str()));
+    return false;
+  }
+  lastSessionHash_ = std::move(hash);
+  sessionSavePending_ = false;
+  return true;
+}
+
+bool RequestGroupMan::sessionSaveRetryDue() const
+{
+  return sessionSavePending_ &&
+         lastSessionSaveAttempt_.difference(global::wallclock()) >=
+             std::chrono::seconds(1);
+}
 
 void RequestGroupMan::checkpointActiveDownloads()
 {

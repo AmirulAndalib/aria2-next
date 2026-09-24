@@ -94,6 +94,7 @@ struct CurlDownloadImpl {
   RequestGroup* group = nullptr;
   int maxConnections = 1;
   int connectionLimit = 1;
+  int64_t maxRangeSize = 0;
   uint64_t connectionEpoch = 0;
   int64_t lastRecoveryDownloadLength = 0;
   std::chrono::steady_clock::time_point recoverConnectionsAt{};

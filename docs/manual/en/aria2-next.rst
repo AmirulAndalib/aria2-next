@@ -345,6 +345,23 @@ HTTP/SFTP Options
   transfer. An existing partial file is retained unless
   :option:`--allow-overwrite` permits restarting it from zero.
 
+.. option:: --stream-max-range-size=<SIZE>
+
+  Limit each HTTP byte-range request, including the initial request and
+  retries. Accepts bytes or a ``K``, ``M`` or ``G`` suffix, up to ``1G``.
+  ``0`` leaves range sizing automatic. Default: ``0``
+
+  For a server that rejects ranges above 5 MiB, use ``5M``. This also applies
+  with one connection and does not change torrent piece sizes. If the server
+  ignores Range, the download stops instead of bypassing this limit with a
+  whole-file request. SFTP and media segment requests are unaffected.
+
+  A changed ETag or Last-Modified value never permits appending a different
+  representation. With the default unrestricted range policy, Aria2 Next may
+  restart its own partial output once as a single full transfer. Existing
+  files without matching recovery ownership remain protected.
+
+
 .. option:: -t, --timeout=<SEC>
 
   Set timeout in seconds.

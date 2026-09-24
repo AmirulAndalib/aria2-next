@@ -50,6 +50,42 @@
 
 namespace aria2 {
 
+TEST_CASE("BtSessionTest.duplicateAddDoesNotFailTheOriginal")
+{
+  auto option = std::make_shared<Option>();
+  OptionParser::getInstance()->parseDefaultValues(*option);
+  option->put(PREF_DIR, A2_TEST_OUT_DIR "/bt-duplicate");
+  option->put(PREF_STATE_DIR, A2_TEST_OUT_DIR "/bt-duplicate-state");
+  option->put(PREF_ENABLE_DHT, A2_V_FALSE);
+  option->put(PREF_BT_ENABLE_LPD, A2_V_FALSE);
+  option->put(PREF_ENABLE_PEER_EXCHANGE, A2_V_FALSE);
+  DownloadEngine engine(make_unique<SelectEventPoll>());
+  engine.setOption(option.get());
+  BtSession session(option.get());
+  std::vector<std::shared_ptr<RequestGroup>> groups;
+  std::vector<std::unique_ptr<Command>> commands;
+  for (int i = 0; i < 2; ++i) {
+    auto group = std::make_shared<RequestGroup>(GroupId::create(), option);
+    auto download = BtDownload::fromFile(A2_TEST_DIR "/test.torrent", {});
+    auto context = std::make_shared<DownloadContext>();
+    download->configure(option.get());
+    download->populateDownloadContext(context, option.get());
+    group->setDownloadContext(context);
+    group->setBtDownload(download);
+    download->initialize(group.get());
+    commands.push_back(session.start(download, group.get(), &engine));
+    groups.push_back(group);
+  }
+  for (int attempt = 0; attempt < 3000 && !groups[1]->getBtDownload()->failed();
+       ++attempt) {
+    global::wallclock().reset();
+    session.poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  CHECK_FALSE(groups[0]->getBtDownload()->failed());
+  CHECK(groups[1]->getBtDownload()->failed());
+}
+
 TEST_CASE("BtSessionTest.testFileSelectionResumeState")
 {
   Option option;

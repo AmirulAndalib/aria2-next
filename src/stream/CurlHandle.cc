@@ -69,6 +69,8 @@ const char* responseFailureName(CurlResponseFailure failure)
     return "length_changed";
   case CurlResponseFailure::InvalidRange:
     return "invalid_range";
+  case CurlResponseFailure::RangeUnsupported:
+    return "range_limit_unsupported";
   case CurlResponseFailure::PreconditionFailed:
     return "precondition_failed";
   default:
@@ -91,6 +93,9 @@ const char* responseFailureMessage(CurlResponseFailure failure)
     return "The remote resource length changed; existing data was preserved";
   case CurlResponseFailure::InvalidRange:
     return "The server returned an invalid Content-Range response";
+  case CurlResponseFailure::RangeUnsupported:
+    return "The server ignored the requested byte range; the configured range "
+           "limit cannot be honored";
   case CurlResponseFailure::PreconditionFailed:
     return "HTTP 412: the server rejected a request precondition; existing "
            "data was preserved";
@@ -455,6 +460,10 @@ void CurlHandle::validateResponse(CurlHandle& handle,
     }
   }
   else if (handle.responseCode == 200) {
+    if (handle.ranged && impl.maxRangeSize > 0) {
+      handle.responseFailure = CurlResponseFailure::RangeUnsupported;
+      return;
+    }
     if (!handle.rangeValidator.empty() &&
         ((!impl.etag.empty() && handle.responseEtag.empty()) ||
          (impl.etag.empty() && handle.responseLastModified.empty()))) {

@@ -222,7 +222,7 @@ bool StreamStore::open()
   }
   const char* schema =
       "PRAGMA journal_mode=WAL;"
-      "PRAGMA synchronous=NORMAL;"
+      "PRAGMA synchronous=FULL;"
       "PRAGMA auto_vacuum=INCREMENTAL;"
       "CREATE TABLE IF NOT EXISTS downloads("
       "gid TEXT PRIMARY KEY, uri TEXT NOT NULL, path TEXT NOT NULL, "

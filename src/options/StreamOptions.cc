@@ -184,6 +184,16 @@ void addStreamOptions(OptionHandlers& handlers)
     handlers.push_back(std::move(op));
   }
   {
+    std::unique_ptr<OptionHandler> op(new UnitNumberOptionHandler(
+        PREF_STREAM_MAX_RANGE_SIZE, TEXT_STREAM_MAX_RANGE_SIZE, "0", 0, 1_g));
+    op->addTag(TAG_HTTP);
+    op->addTag(TAG_ADVANCED);
+    op->setInitialOption(true);
+    op->setChangeGlobalOption(true);
+    op->setChangeOptionForReserved(true);
+    handlers.push_back(std::move(op));
+  }
+  {
     std::unique_ptr<OptionHandler> op(new ParameterOptionHandler(
         PREF_ED2K_PIECE_SELECTOR, TEXT_ED2K_PIECE_SELECTOR, A2_V_DEFAULT,
         {A2_V_DEFAULT, V_INORDER, A2_V_RANDOM, A2_V_GEOM}));

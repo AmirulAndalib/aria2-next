@@ -147,6 +147,8 @@ private:
 
   // SHA1 hash value of the content of last session serialization.
   std::string lastSessionHash_;
+  bool sessionSavePending_ = false;
+  Timer lastSessionSaveAttempt_ = Timer::zero();
 
   void formatDownloadResultFull(
       OutputFile& out, const char* status,
@@ -174,6 +176,10 @@ public:
   bool downloadFinished();
 
   void checkpointActiveDownloads();
+
+  // Commit the current task set before acknowledging lifecycle mutations.
+  bool saveSession();
+  bool sessionSaveRetryDue() const;
 
   void closeFile();
 
@@ -384,11 +390,6 @@ public:
   bool getKeepRunning() const { return keepRunning_; }
 
   size_t getNumStoppedTotal() const { return numStoppedTotal_; }
-
-  void setLastSessionHash(std::string lastSessionHash)
-  {
-    lastSessionHash_ = std::move(lastSessionHash);
-  }
 
   const std::string& getLastSessionHash() const { return lastSessionHash_; }
 

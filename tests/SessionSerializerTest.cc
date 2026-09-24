@@ -28,8 +28,26 @@
 #include "Ed2kUploadQueue.h"
 #include "support/Encoding.h"
 #include "fmt.h"
+#include <filesystem>
 
 namespace aria2 {
+
+TEST_CASE("SessionSerializerTest.failedCommitDoesNotAdvanceHash")
+{
+  const auto root =
+      std::filesystem::path(A2_TEST_OUT_DIR) / "session-commit-retry";
+  std::filesystem::remove_all(root);
+  Option option;
+  option.put(PREF_SAVE_SESSION, (root / "session.txt").string());
+  RequestGroupMan manager({}, 1, &option);
+  CHECK_FALSE(manager.saveSession());
+  CHECK(manager.getLastSessionHash().empty());
+  std::filesystem::create_directories(root);
+  REQUIRE(manager.saveSession());
+  CHECK_FALSE(manager.getLastSessionHash().empty());
+  CHECK(std::filesystem::exists(root / "session.txt"));
+  std::filesystem::remove_all(root);
+}
 
 TEST_CASE("SessionSerializerTest.testSave")
 {

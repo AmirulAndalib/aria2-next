@@ -38,10 +38,12 @@
 #include "common.h"
 #include <cstddef>
 #include <memory>
+#include <chrono>
 #include <vector>
 #include "RequestGroupMan.h"
 #include "RecoverableException.h"
 #include "DownloadEngine.h"
+#include "CurlSession.h"
 #include "DownloadContext.h"
 #include "Ed2kSession.h"
 #include "SegmentMan.h"
@@ -197,6 +199,12 @@ bool RequestGroupMan::processStoppedGroup(
   if (group->getNumCommand() != 0) {
     return false;
   }
+  // The active snapshot already carries its terminal/paused intent. Commit it
+  // before releasing recovery data or emitting completion to external clients.
+  if (!saveSession()) {
+    e->setRefreshInterval(std::chrono::seconds(1));
+    return false;
+  }
   collectStat(group, *this);
   const std::shared_ptr<DownloadContext>& dctx = group->getDownloadContext();
 
@@ -243,6 +251,18 @@ bool RequestGroupMan::processStoppedGroup(
     addDownloadResult(dr);
     executeStopHook(group, e->getOption(), dr->result);
     group->releaseRuntimeResource(e);
+  }
+
+  // Pending option changes are applied only after native handles have stopped.
+  // Retry a failed commit through the normal session retry, without re-running
+  // this group's stop hooks or inserting it into the waiting queue twice.
+  saveSession();
+
+  if (group->getCurlDownload() && e->getCurlSession() &&
+      !group->isPauseRequested() && !group->isRestartRequested() &&
+      (group->isUserRequestedHalt() || group->downloadFinished()) &&
+      !group->getOption()->getAsBool(PREF_FORCE_SAVE)) {
+    e->getCurlSession()->discardRecovery(group->getCurlDownload());
   }
 
   group->setRestartRequested(false);

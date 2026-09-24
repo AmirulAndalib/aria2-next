@@ -228,6 +228,8 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.startMode = CurlStartMode::Transfer;
   impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
   impl.connectionLimit = impl.maxConnections;
+  impl.maxRangeSize =
+      group->getOption()->getAsLLInt(PREF_STREAM_MAX_RANGE_SIZE);
   impl.connectionEpoch = 0;
   impl.lastRecoveryDownloadLength = 0;
   impl.recoverConnectionsAt = {};
@@ -287,6 +289,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     store_.removePath(impl.path);
   }
   impl.allowFullRestart = existingLength == 0 ||
+                          (restoreState && state.gid == taskId) ||
                           group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE);
   if (restoreState) {
     impl.planner.restore(state.completedRanges);
@@ -372,7 +375,7 @@ void CurlSession::restorePaused(const std::shared_ptr<CurlDownload>& download,
   context->markTotalLengthIsKnown();
 }
 
-void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
+bool CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
                              bool force)
 {
   auto& impl = *download->impl_;
@@ -380,7 +383,7 @@ void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
       (!force && !impl.lastCheckpoint.isZero() &&
        impl.lastCheckpoint.difference(global::wallclock()) <
            std::chrono::seconds(1))) {
-    return;
+    return true;
   }
   StreamState state;
   state.gid = GroupId::toHex(impl.group->getGID());
@@ -393,7 +396,9 @@ void CurlSession::checkpoint(const std::shared_ptr<CurlDownload>& download,
   state.completedRanges = impl.planner.completedRanges();
   if (store_.save(state)) {
     impl.lastCheckpoint = global::wallclock();
+    return true;
   }
+  return false;
 }
 
 void CurlSession::finalize(const std::shared_ptr<CurlDownload>& download,
@@ -418,9 +423,13 @@ void CurlSession::finalize(const std::shared_ptr<CurlDownload>& download,
     impl.group->initPieceStorage();
     impl.group->getPieceStorage()->getDiskAdaptor()->openExistingFile();
   }
-  impl.group->getPieceStorage()->markAllPiecesDone();
   context->resetDownloadStopTime();
-  store_.removePath(impl.path);
+  if (!checkpoint(download, true)) {
+    failTask(download, error_code::FILE_IO_ERROR,
+             "Unable to persist completed download state");
+    return;
+  }
+  impl.group->getPieceStorage()->markAllPiecesDone();
   download->snapshot_.state = CurlSnapshot::State::Complete;
   eraseTask(download.get());
   if (context->isPieceHashVerificationAvailable()) {

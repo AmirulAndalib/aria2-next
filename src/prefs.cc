@@ -302,6 +302,7 @@ PrefPtr PREF_MAX_DOWNLOAD_RESULT = makePref("max-download-result");
 // value: 1*digit
 PrefPtr PREF_RETRY_WAIT = makePref("retry-wait");
 PrefPtr PREF_STREAM_MAX_CONNECTIONS = makePref("stream-max-connections");
+PrefPtr PREF_STREAM_MAX_RANGE_SIZE = makePref("stream-max-range-size");
 PrefPtr PREF_MEDIA = makePref("media");
 PrefPtr PREF_MEDIA_FORMAT = makePref("media-format");
 PrefPtr PREF_MEDIA_VIDEO = makePref("media-video");

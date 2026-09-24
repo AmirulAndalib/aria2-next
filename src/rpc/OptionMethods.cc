@@ -87,6 +87,9 @@ std::unique_ptr<ValueBase> ChangeOptionRpcMethod::process(const RpcRequest& req,
       gatherChangeableOptionForReserved(&option, optsParam);
     }
     changeOption(group, option, e);
+    if (!e->getRequestGroupMan()->saveSession()) {
+      throw DL_ABORT_EX("Unable to commit task options");
+    }
   }
   else {
     throw DL_ABORT_EX(
