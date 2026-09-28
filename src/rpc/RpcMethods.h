@@ -540,6 +540,13 @@ public:
   static const char* getMethodName() { return "aria2.changeGlobalOption"; }
 };
 
+class ResolveFilenameRpcMethod : public RpcMethod {
+protected:
+  std::unique_ptr<ValueBase> process(const RpcRequest& req, DownloadEngine* e) override;
+public:
+  static const char* getMethodName() { return "aria2.resolveFilename"; }
+};
+
 class GetVersionRpcMethod : public RpcMethod {
 protected:
   virtual std::unique_ptr<ValueBase> process(const RpcRequest& req,

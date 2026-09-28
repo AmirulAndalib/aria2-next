@@ -102,6 +102,7 @@ const MethodEntry methods[] = {
     method<PurgeDownloadResultRpcMethod>(),
     method<RemoveDownloadResultRpcMethod>(),
     method<GetVersionRpcMethod>(),
+    method<ResolveFilenameRpcMethod>(),
     method<GetSessionInfoRpcMethod>(),
     method<ShutdownRpcMethod>(),
     method<ForceShutdownRpcMethod>(),

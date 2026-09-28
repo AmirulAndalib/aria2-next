@@ -14,7 +14,6 @@
 namespace aria2 {
 class CurlDownload;
 struct CurlDownloadImpl;
-enum class CurlHandlePurpose { Payload, RangeProbe, HeadProbe };
 enum class CurlResponseFailure {
   None,
   EtagChanged,
@@ -74,7 +73,6 @@ struct CurlHandle {
   bool headersComplete = false;
   bool primary = false;
   CurlResponseFailure responseFailure = CurlResponseFailure::None;
-  CurlHandlePurpose purpose = CurlHandlePurpose::Payload;
   std::string responseEtag;
   std::string responseLastModified;
   std::string responseDate;

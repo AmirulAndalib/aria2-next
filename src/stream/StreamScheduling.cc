@@ -119,9 +119,6 @@ void CurlSession::configurePlanner(
     impl.idleWorkers.push_back(impl.families[i % impl.families.size()]);
   }
   for (const auto& handle : impl.handles) {
-    if (handle->purpose != CurlHandlePurpose::Payload) {
-      continue;
-    }
     const auto worker =
         std::find(impl.idleWorkers.begin(), impl.idleWorkers.end(),
                   handle->addressFamily);
@@ -165,8 +162,7 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
       if (auto lease = impl.planner.takeReady(now)) {
         const bool ranged =
             impl.http && (impl.maxConnections > 1 || lease->begin > 0);
-        if (!createHandle(download, *lease, true, ranged,
-                          CurlHandlePurpose::Payload)) {
+        if (!createHandle(download, *lease, true, ranged)) {
           failTask(download, error_code::NETWORK_PROBLEM,
                    "Unable to restart the stream transfer");
           return;
@@ -222,8 +218,7 @@ void CurlSession::schedule(const std::shared_ptr<CurlDownload>& download)
         }
         continue;
       }
-      if (!createHandle(download, *lease, false, true,
-                        CurlHandlePurpose::Payload, family)) {
+      if (!createHandle(download, *lease, false, true, family)) {
         failTask(download, error_code::NETWORK_PROBLEM,
                  "Unable to create a ranged transfer");
         return;

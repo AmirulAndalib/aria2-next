@@ -271,6 +271,14 @@ void AbstractDiskWriter::createFile(int addFlags)
                           error_code::FILE_CREATE_ERROR);
 }
 
+void AbstractDiskWriter::openNewFile()
+{
+  assert(!filename_.empty());
+  util::mkdirs(File(filename_).getDirname());
+  fd_ = openFileWithFlags(filename_, O_CREAT | O_EXCL | O_RDWR | O_BINARY,
+                          error_code::FILE_CREATE_ERROR);
+}
+
 ssize_t AbstractDiskWriter::writeDataInternal(const unsigned char* data,
                                               size_t len, int64_t offset)
 {

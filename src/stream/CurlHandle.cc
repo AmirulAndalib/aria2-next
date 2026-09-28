@@ -318,14 +318,6 @@ size_t CurlHandle::writeData(char* data, size_t size, size_t count,
       return CURL_WRITEFUNC_ERROR;
     }
     auto length = size * count;
-    if (handle->purpose == CurlHandlePurpose::RangeProbe) {
-      return handle->responseCode == 206 && handle->rangeAccepted
-                 ? length
-                 : CURL_WRITEFUNC_ERROR;
-    }
-    if (handle->purpose == CurlHandlePurpose::HeadProbe) {
-      return CURL_WRITEFUNC_ERROR;
-    }
     if (handle->responseFailure != CurlResponseFailure::None ||
         (handle->ranged && handle->headersComplete && !handle->rangeAccepted &&
          !handle->fullResponseAccepted)) {
@@ -450,13 +442,11 @@ void CurlHandle::validateResponse(CurlHandle& handle,
     if (handle.responseFailure == CurlResponseFailure::None) {
       handle.lease.end = std::min(handle.lease.end, handle.responseTotalLength);
       handle.rangeAccepted = true;
-      if (handle.purpose == CurlHandlePurpose::Payload) {
-        impl.rangeValidated = true;
-        download.snapshot_.totalLength = handle.responseTotalLength;
-        stream::rememberIdentity(impl, handle.responseEtag,
-                                 handle.responseLastModified,
-                                 handle.responseDate);
-      }
+      impl.rangeValidated = true;
+      download.snapshot_.totalLength = handle.responseTotalLength;
+      stream::rememberIdentity(impl, handle.responseEtag,
+                               handle.responseLastModified,
+                               handle.responseDate);
     }
   }
   else if (handle.responseCode == 200) {
@@ -478,11 +468,9 @@ void CurlHandle::validateResponse(CurlHandle& handle,
         handle.lease.begin == 0 && impl.planner.completedLength() == 0 &&
         !impl.plannerConfigured) {
       handle.fullResponseAccepted = true;
-      if (handle.purpose == CurlHandlePurpose::Payload) {
-        stream::rememberIdentity(impl, handle.responseEtag,
-                                 handle.responseLastModified,
-                                 handle.responseDate);
-      }
+      stream::rememberIdentity(impl, handle.responseEtag,
+                               handle.responseLastModified,
+                               handle.responseDate);
     }
   }
 }
@@ -513,7 +501,7 @@ size_t CurlHandle::receiveHeader(char* data, size_t size, size_t count,
           http::responseHeader(handle->value, "Content-Length"),
           handle->responseContentLength);
       if (handle->responseCode >= 200 && handle->responseCode < 300 &&
-          handle->lease.begin == 0 && download->impl_->existingLength == 0 &&
+          handle->lease.begin == 0 &&
           download->impl_->group->getOption()->get(PREF_MEDIA) == "auto" &&
           media::Download::manifestMime(
               http::responseHeader(handle->value, "Content-Type"))) {
@@ -529,7 +517,6 @@ size_t CurlHandle::receiveHeader(char* data, size_t size, size_t count,
                        http::responseHeader(handle->value, "Content-Range"));
       if (!download->snapshot_.mediaManifest &&
           handle->responseCode >= 200 && handle->responseCode < 300 &&
-          handle->purpose == CurlHandlePurpose::Payload &&
           handle->responseFailure == CurlResponseFailure::None &&
           !CurlSession::resolveOutput(download, handle->value)) {
         return CURL_WRITEFUNC_ERROR;

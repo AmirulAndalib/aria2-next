@@ -140,140 +140,15 @@ bool CurlSession::retryableFailure(CURLcode result, long responseCode,
          retryableTransportFailure(result, applicationConnected);
 }
 
-ExistingFileDecision CurlSession::decideExistingFile(int64_t localLength,
-                                                     int64_t remoteLength,
-                                                     bool rangeSupported)
-{
-  if (localLength == remoteLength) {
-    return ExistingFileDecision::Complete;
-  }
-  if (localLength < remoteLength && rangeSupported) {
-    return ExistingFileDecision::Resume;
-  }
-  return ExistingFileDecision::Reject;
-}
-
-void CurlSession::finishProbe(const std::shared_ptr<CurlDownload>& download,
-                              CurlHandle* handle, CURLcode result,
-                              long responseCode, curl_off_t reportedLength,
-                              curl_off_t reportedFileTime)
-{
-  auto& impl = *download->impl_;
-  const auto purpose = handle->purpose;
-  const auto nativeFailure =
-      CurlHandle::failureMessage(*handle, result, responseCode);
-  const auto contentLength = handle->responseContentLength >= 0
-                                 ? handle->responseContentLength
-                                 : static_cast<int64_t>(reportedLength);
-  int64_t remoteLength = -1;
-  bool rangeSupported = false;
-  if (purpose == CurlHandlePurpose::RangeProbe) {
-    if (responseCode == 206 && handle->rangeAccepted) {
-      remoteLength = handle->responseTotalLength;
-      rangeSupported = true;
-    }
-    else if (responseCode == 200 && handle->fullResponseAccepted &&
-             contentLength >= 0) {
-      remoteLength = contentLength;
-    }
-    else if (responseCode == 416 && handle->unsatisfiedTotalLength >= 0) {
-      remoteLength = handle->unsatisfiedTotalLength;
-    }
-  }
-  else if (responseCode >= 200 && responseCode < 300 && contentLength >= 0) {
-    remoteLength = contentLength;
-  }
-
-  const auto responseEtag = handle->responseEtag;
-  const auto responseLastModified = handle->responseLastModified;
-  const auto responseDate = handle->responseDate;
-  const bool invalidRange =
-      handle->responseFailure == CurlResponseFailure::InvalidRange;
-  handle->reset();
-  impl.eraseHandle(handle);
-
-  if (remoteLength < 0 && purpose == CurlHandlePurpose::RangeProbe) {
-    if (startProbe(download, CurlHandlePurpose::HeadProbe)) {
-      return;
-    }
-    failTask(download, error_code::NETWORK_PROBLEM,
-             "Unable to inspect the remote file", false);
-    return;
-  }
-  if (remoteLength < 0) {
-    failTask(download,
-             responseCode >= 400 ? curlErrorCode(result, responseCode)
-                                 : error_code::CANNOT_RESUME,
-             responseCode >= 400 ? nativeFailure
-                                 : "The remote file length is unavailable",
-             false);
-    return;
-  }
-  if (invalidRange) {
-    failTask(download, error_code::HTTP_PROTOCOL_ERROR,
-             "The server returned an invalid Content-Range response", false);
-    return;
-  }
-
-  stream::rememberIdentity(impl, responseEtag, responseLastModified,
-                           responseDate);
-  download->snapshot_.totalLength = remoteLength;
-
-  switch (
-      decideExistingFile(impl.existingLength, remoteLength, rangeSupported)) {
-  case ExistingFileDecision::Complete:
-    impl.planner.clear();
-    impl.planner.commit(0, remoteLength);
-    impl.planner.configure(remoteLength, std::max<int64_t>(1, remoteLength),
-                           {});
-    impl.plannerConfigured = true;
-    finalize(download, reportedFileTime);
-    return;
-  case ExistingFileDecision::Resume:
-    if (!openOutput(download.get(), true)) {
-      failTask(download, download->snapshot_.errorCode,
-               download->snapshot_.error, false);
-      return;
-    }
-    impl.planner.clear();
-    impl.planner.commit(0, impl.existingLength);
-    impl.rangeValidated = true;
-    impl.startMode = CurlStartMode::Transfer;
-    download->snapshot_.completedLength = impl.existingLength;
-    configurePlanner(download);
-    if (download->failed()) {
-      return;
-    }
-    checkpoint(download, true);
-    schedule(download);
-    engine_->setNoWait(true);
-    return;
-  case ExistingFileDecision::Reject:
-    break;
-  }
-
-  const auto message = impl.existingLength > remoteLength
-                           ? "The local file is larger than the remote file"
-                           : "The server does not support resuming this file";
-  failTask(download, error_code::CANNOT_RESUME, message, false);
-}
-
 void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
                          CurlHandle* handle, CURLcode result)
 {
   auto& impl = *download->impl_;
-  if (impl.restartForOutput) {
-    cancelHandles(download);
-    if (prepare(download, impl.group)) {
-      activate(download);
-    }
-    return;
-  }
   long responseCode = handle->responseCode;
   if (download->snapshot_.mediaManifest) {
     cancelHandles(download);
     closeOutput(download.get());
-    store_.removePath(impl.path);
+    store_.remove(CurlHandle::gid(download.get()));
     if (impl.createdOutput && File(impl.path).size() == 0)
       File(impl.path).remove();
     download->snapshot_.state = CurlSnapshot::State::Stopped;
@@ -322,7 +197,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
     curl_easy_getinfo(handle->value, CURLINFO_EFFECTIVE_URL, &effectiveUri);
   }
   if (result == CURLE_WRITE_ERROR &&
-      handle->purpose == CurlHandlePurpose::Payload && handle->rangeAccepted &&
+      handle->rangeAccepted &&
       handle->writeOffset == handle->lease.end &&
       handle->lease.end < handle->responseRangeEnd &&
       download->snapshot_.errorCode == error_code::UNDEFINED) {
@@ -336,11 +211,6 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
       logging::sanitizeText(primaryIp ? primaryIp : "unknown");
   const auto safeEffectiveUri =
       logging::sanitizeUri(effectiveUri ? effectiveUri : impl.currentUri);
-  if (handle->purpose != CurlHandlePurpose::Payload) {
-    finishProbe(download, handle, result, responseCode, reportedLength,
-                reportedFileTime);
-    return;
-  }
   try {
     stream::flushWriteBuffer(impl, *handle);
     download->snapshot_.completedLength =
@@ -441,7 +311,7 @@ void CurlSession::finish(const std::shared_ptr<CurlDownload>& download,
   if (impl.dryRun) {
     download->snapshot_.totalLength = std::max<curl_off_t>(0, reportedLength);
     download->snapshot_.state = CurlSnapshot::State::Complete;
-    store_.removePath(impl.path);
+    store_.remove(CurlHandle::gid(download.get()));
     eraseTask(download.get());
     return;
   }

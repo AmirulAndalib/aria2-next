@@ -45,6 +45,7 @@
 #include "RequestGroup.h"
 #include "support/Numbers.h"
 #include "support/Encoding.h"
+#include "support/OutputName.h"
 #include "a2functional.h"
 #include "fmt.h"
 #include "DlAbortEx.h"
@@ -58,6 +59,26 @@ namespace aria2::rpc {
 
 using namespace fields;
 using namespace detail;
+
+std::unique_ptr<ValueBase> ResolveFilenameRpcMethod::process(
+    const RpcRequest& req, DownloadEngine*)
+{
+  const auto url = checkRequiredParam<String>(req, 0);
+  const auto bytes = checkRequiredParam<List>(req, 1);
+  if (url->s().size() > 16384 || bytes->size() > 8192) {
+    throw DL_ABORT_EX("Filename metadata exceeds the size limit");
+  }
+  std::string disposition;
+  for (const auto& value : *bytes) {
+    const auto byte = downcast<Integer>(value);
+    if (!byte || byte->i() < 0 || byte->i() > 255) {
+      throw DL_ABORT_EX("Content-Disposition must be an array of bytes");
+    }
+    disposition.push_back(static_cast<char>(byte->i()));
+  }
+  Option options;
+  return String::g(output::suggestedName(options, url->s(), disposition));
+}
 
 std::unique_ptr<ValueBase> GetVersionRpcMethod::process(const RpcRequest& req,
                                                         DownloadEngine* e)
@@ -82,6 +103,7 @@ std::unique_ptr<ValueBase> GetVersionRpcMethod::process(const RpcRequest& req,
   result->put("mediaFeatures", std::move(mediaFeatures));
   auto downloadFeatures = List::g();
   downloadFeatures->append("filename-hints");
+  downloadFeatures->append("filename-resolution");
   result->put("downloadFeatures", std::move(downloadFeatures));
   return std::move(result);
 }

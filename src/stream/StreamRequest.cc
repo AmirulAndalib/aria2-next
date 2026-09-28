@@ -109,18 +109,17 @@ void markUriUsed(RequestGroup* group, const std::string& uriValue)
 
 bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
                                RangeLease lease, bool primary, bool ranged,
-                               CurlHandlePurpose purpose, long addressFamily)
+                               long addressFamily)
 {
   auto& impl = *download->impl_;
   const auto taskOption = impl.group->getOption().get();
-  if (impl.http && impl.maxRangeSize > 0 &&
-      purpose != CurlHandlePurpose::HeadProbe) {
+  if (impl.http && impl.maxRangeSize > 0) {
     ranged = true;
     if (lease.length() > impl.maxRangeSize) {
       auto remainder = lease;
       lease.end = lease.begin + impl.maxRangeSize;
       remainder.begin = lease.end;
-      if (impl.plannerConfigured && purpose == CurlHandlePurpose::Payload) {
+      if (impl.plannerConfigured) {
         impl.planner.enqueue(remainder);
       }
     }
@@ -134,7 +133,6 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
       256_k, std::min<int64_t>(1_m, 32_m / impl.maxConnections)));
   transfer->writeBuffer.reserve(transfer->bufferLimit);
   transfer->primary = primary;
-  transfer->purpose = purpose;
   transfer->ranged = impl.http && ranged && !impl.dryRun;
   auto* easy = curl_easy_init();
   if (!easy) {
@@ -219,8 +217,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   SET_CURL_OPTION(CURLOPT_SOCKOPTDATA, const_cast<Option*>(taskOption));
   SET_CURL_OPTION(CURLOPT_HTTPAUTH, CURLAUTH_ANY);
   SET_CURL_OPTION(CURLOPT_NOBODY,
-                  impl.dryRun || purpose == CurlHandlePurpose::HeadProbe ? 1L
-                                                                         : 0L);
+                  impl.dryRun ? 1L : 0L);
   SET_CURL_OPTION(CURLOPT_FILETIME,
                   taskOption->getAsBool(PREF_REMOTE_TIME) ? 1L : 0L);
   SET_CURL_OPTION(CURLOPT_WRITEFUNCTION, CurlHandle::writeData);
@@ -349,7 +346,7 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   // Range validators qualify the requested representation, not a token or
   // redirect endpoint. libcurl owns redirects; response validation prevents a
   // full 200 response from being written at the requested range offset.
-  if (transfer->ranged && purpose == CurlHandlePurpose::Payload) {
+  if (transfer->ranged) {
     transfer->rangeValidator =
         !impl.etag.empty() ? impl.etag : impl.lastModified;
     if (!transfer->rangeValidator.empty() &&
@@ -382,26 +379,6 @@ bool CurlSession::createHandle(const std::shared_ptr<CurlDownload>& download,
   }
 #undef SET_CURL_OPTION
   return result;
-}
-
-bool CurlSession::startProbe(const std::shared_ptr<CurlDownload>& download,
-                             CurlHandlePurpose purpose)
-{
-  const bool rangeProbe = purpose == CurlHandlePurpose::RangeProbe;
-  const RangeLease lease{0,
-                         rangeProbe ? 1 : std::numeric_limits<int64_t>::max(),
-                         0, download->impl_->preferredUriIndex};
-  if (!createHandle(download, lease, true, rangeProbe, purpose)) {
-    return false;
-  }
-  auto* handle = download->impl_->handles.back().get();
-  downloads_[handle->value] = std::make_pair(download, handle);
-  download->impl_->kickPending = true;
-  rebalanceLimits();
-  if (engine_) {
-    engine_->setNoWait(true);
-  }
-  return true;
 }
 
 int CurlSession::socketOptionCallback(void* userData, curl_socket_t socket,

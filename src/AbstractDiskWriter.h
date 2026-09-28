@@ -79,6 +79,8 @@ public:
 
   virtual void openExistingFile(int64_t totalLength = 0) override;
 
+  void openNewFile() override;
+
   virtual void writeData(const unsigned char* data, size_t len,
                          int64_t offset) override;
 

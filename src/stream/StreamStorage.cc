@@ -33,7 +33,6 @@
 #include <curl/curl.h>
 #include <curl/system.h>
 #include <exception>
-#include <filesystem>
 #include <limits>
 #include <memory>
 #include <string>
@@ -85,10 +84,11 @@ std::string outputPath(RequestGroup* group, const std::string& uriValue)
 }
 } // namespace
 
-bool CurlSession::openOutput(CurlDownload* download, bool preserveExisting)
+bool CurlSession::openOutput(CurlDownload* download, bool preserveExisting,
+                             bool truncateOwned)
 {
   auto& impl = *download->impl_;
-  impl.createdOutput = !File(impl.path).exists();
+  impl.createdOutput = false;
   const auto fallbackError = preserveExisting ? error_code::FILE_OPEN_ERROR
                                               : error_code::FILE_CREATE_ERROR;
   impl.writer.reset();
@@ -108,8 +108,13 @@ bool CurlSession::openOutput(CurlDownload* download, bool preserveExisting)
     if (preserveExisting) {
       impl.writer->openExistingFile();
     }
-    else {
+    else if (truncateOwned ||
+             impl.group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE)) {
       impl.writer->initAndOpenFile();
+    }
+    else {
+      impl.writer->openNewFile();
+      impl.createdOutput = true;
     }
     return true;
   }
@@ -146,29 +151,15 @@ bool CurlSession::resolveOutput(CurlDownload* download, CURL* easy)
   impl.path = util::applyDir(option->get(PREF_DIR), name);
   auto context = impl.group->getDownloadContext();
   context->getFirstFileEntry()->setPath(impl.path);
-  if (!impl.dryRun && File(impl.path).exists() &&
-      !option->getAsBool(PREF_CONTINUE)) {
+  if (!impl.dryRun) {
     impl.group->shouldCancelDownloadForSafety();
     impl.path = impl.group->getFirstFilePath();
   }
   context->setBasePath(impl.path);
-  option->put(PREF_OUT, std::filesystem::u8path(impl.path).filename().u8string());
+  option->put(PREF_OUT, impl.path);
   impl.filenamePending = false;
   if (impl.dryRun) {
     return true;
-  }
-  if (auto* manager = impl.group->getRequestGroupMan();
-      manager && manager->isSameFileBeingDownloaded(impl.group)) {
-    CurlHandle::fail(download, error_code::FILE_ALREADY_EXISTS,
-                     "Another task is writing the output path");
-    return false;
-  }
-  if (File(impl.path).isFile() && option->getAsBool(PREF_CONTINUE) &&
-      !option->getAsBool(PREF_ALLOW_OVERWRITE)) {
-    // Re-enter the existing native inspection/recovery path. Never append a
-    // response that started at zero to a file discovered by response naming.
-    impl.restartForOutput = true;
-    return false;
   }
   return openOutput(download, false);
 }
@@ -224,8 +215,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   impl.fileNotFoundCount = 0;
   impl.rangeValidated = false;
   impl.fullDownload = false;
-  impl.existingLength = 0;
-  impl.startMode = CurlStartMode::Transfer;
   impl.maxConnections = effectiveStreamMaxConnections(group->getOption().get());
   impl.connectionLimit = impl.maxConnections;
   impl.maxRangeSize =
@@ -239,7 +228,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   const auto& configured = group->getFirstFilePath();
   const bool namedByCaller = !configured.empty() && configured != impl.path;
   impl.path = outputPath(group, uriValue);
-  impl.restartForOutput = false;
 
   auto context = group->getDownloadContext();
   context->setBasePath(impl.path);
@@ -269,15 +257,7 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     return true;
   }
   File output(impl.path);
-  auto existingLength = output.isFile() ? output.size() : 0;
-  if (!hasState && existingLength > 0 &&
-      !group->getOption()->getAsBool(PREF_CONTINUE) &&
-      !group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE)) {
-    group->shouldCancelDownloadForSafety();
-    impl.path = group->getFirstFilePath();
-    output = File(impl.path);
-    existingLength = output.isFile() ? output.size() : 0;
-  }
+  const auto existingLength = output.isFile() ? output.size() : 0;
   const bool rangesFit =
       std::all_of(state.completedRanges.begin(), state.completedRanges.end(),
                   [existingLength](const auto& range) {
@@ -286,26 +266,20 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
   const bool restoreState = hasState && output.isFile() && rangesFit &&
                             existingLength >= state.completedLength;
   if (hasState && !restoreState) {
-    store_.removePath(impl.path);
+    store_.remove(taskId);
   }
-  impl.allowFullRestart = existingLength == 0 ||
-                          (restoreState && state.gid == taskId) ||
-                          group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE);
+  impl.allowFullRestart = true;
   if (restoreState) {
     impl.planner.restore(state.completedRanges);
     impl.etag = http::normalizeStrongEtag(state.etag);
     impl.lastModified = state.lastModified;
     download->snapshot_.totalLength = state.totalLength;
   }
-  else if (output.isFile() && group->getOption()->getAsBool(PREF_CONTINUE) &&
-           !group->getOption()->getAsBool(PREF_ALLOW_OVERWRITE)) {
-    impl.existingLength = existingLength;
-    if (impl.http) {
-      impl.startMode = CurlStartMode::InspectExisting;
-    }
-    else {
-      impl.planner.commit(0, existingLength);
-    }
+  else if (!impl.dryRun) {
+    group->shouldCancelDownloadForSafety();
+    impl.path = group->getFirstFilePath();
+    context->setBasePath(impl.path);
+    group->getOption()->put(PREF_OUT, impl.path);
   }
   if (impl.dryRun) {
     impl.planner.clear();
@@ -314,14 +288,6 @@ bool CurlSession::prepare(const std::shared_ptr<CurlDownload>& download,
     download->snapshot_.state = CurlSnapshot::State::Active;
     return true;
   }
-
-  if (impl.startMode == CurlStartMode::InspectExisting) {
-    download->snapshot_.completedLength = 0;
-    download->snapshot_.sessionDownloadLength = 0;
-    download->snapshot_.state = CurlSnapshot::State::Active;
-    return true;
-  }
-
   const bool preserveExisting =
       restoreState || impl.planner.completedLength() > 0;
   if (!openOutput(download.get(), preserveExisting)) {
@@ -474,7 +440,7 @@ void CurlSession::failTask(const std::shared_ptr<CurlDownload>& download,
     checkpoint(download, true);
   }
   else if (impl.group) {
-    store_.removePath(impl.path);
+    store_.remove(CurlHandle::gid(download.get()));
   }
   cancelHandles(download);
   closeOutput(download.get());

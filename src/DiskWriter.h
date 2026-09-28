@@ -53,6 +53,10 @@ public:
    */
   virtual void initAndOpenFile(int64_t totalLength = 0) = 0;
 
+  // Create an output without replacing an existing file. Memory writers may
+  // use their ordinary initialization; filesystem writers must be exclusive.
+  virtual void openNewFile() { initAndOpenFile(); }
+
   virtual void openFile(int64_t totalLength = 0) = 0;
 
   /**

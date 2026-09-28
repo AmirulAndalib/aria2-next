@@ -105,7 +105,6 @@ public:
   void testRangeOwnershipAndResponseBoundaries();
   void testNonzeroRangeRejectsCompleteResponse();
   void testUnsatisfiedRangeResponseForms();
-  void testExistingFileDecision();
   void testRetryableFailureClassification();
   void testFailureMessageUsesTheFailureLayer();
   void testShutdownWithLiveSocket();
@@ -196,10 +195,6 @@ TEST_CASE_FIXTURE(CurlSessionTest,
                   "CurlSessionTest.testUnsatisfiedRangeResponseForms")
 {
   testUnsatisfiedRangeResponseForms();
-}
-TEST_CASE_FIXTURE(CurlSessionTest, "CurlSessionTest.testExistingFileDecision")
-{
-  testExistingFileDecision();
 }
 TEST_CASE_FIXTURE(CurlSessionTest,
                   "CurlSessionTest.testRetryableFailureClassification")
@@ -711,17 +706,6 @@ void CurlSessionTest::testUnsatisfiedRangeResponseForms()
   CHECK_EQ(-1, handle.unsatisfiedTotalLength);
 }
 
-void CurlSessionTest::testExistingFileDecision()
-{
-  CHECK_EQ(ExistingFileDecision::Complete,
-           CurlSession::decideExistingFile(4096, 4096, false));
-  CHECK_EQ(ExistingFileDecision::Resume,
-           CurlSession::decideExistingFile(1024, 4096, true));
-  CHECK_EQ(ExistingFileDecision::Reject,
-           CurlSession::decideExistingFile(1024, 4096, false));
-  CHECK_EQ(ExistingFileDecision::Reject,
-           CurlSession::decideExistingFile(8192, 4096, true));
-}
 
 void CurlSessionTest::testRetryableFailureClassification()
 {

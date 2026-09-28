@@ -32,7 +32,8 @@ TEST_CASE("StreamStoreTest.testResumeLookupAndCleanup")
   REQUIRE(store.save(saved));
 
   StreamState restored;
-  REQUIRE(store.load(restored, "0000000000000002", saved.path));
+  REQUIRE_FALSE(store.load(restored, "0000000000000002", saved.path));
+  REQUIRE(store.load(restored, saved.gid, saved.path));
   REQUIRE_EQ(saved.gid, restored.gid);
   REQUIRE_EQ(saved.completedLength, restored.completedLength);
   REQUIRE_EQ(saved.completedRanges, restored.completedRanges);
@@ -42,7 +43,9 @@ TEST_CASE("StreamStoreTest.testResumeLookupAndCleanup")
   saved.completedRanges = {{0, 2048}};
   REQUIRE(store.save(saved));
   REQUIRE(!store.load(restored, "0000000000000001", ""));
-  REQUIRE(store.removePath(saved.path));
+  REQUIRE(store.remove("0000000000000001"));
+  REQUIRE(store.load(restored, saved.gid, saved.path));
+  REQUIRE(store.remove(saved.gid));
   REQUIRE(!store.load(restored, saved.gid, saved.path));
 }
 

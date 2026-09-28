@@ -72,8 +72,11 @@ range downloads intentionally have different request and retry policies.
 `stream/StreamStorage` binds the chosen name to the real output and native recovery
 state. New implicit HTTP names wait for the final payload headers; redirects and
 rejected responses never create provisional files. libcurl's native header and
-URL information provide the accepted response metadata. Existing outputs re-enter
-the normal conflict/resume decision before any response body can be written.
+URL information provide the accepted response metadata. New tasks reserve an unused
+path, including active-task reservations, and create it exclusively. Recovery requires
+the same persisted GID, URL and path; matching file sizes never establish ownership.
+`continue` does not adopt an unrelated file. A full restart can truncate only an
+output created or recovered by that task (or an explicitly permitted overwrite).
 
 Precedence is explicit `out` or persisted path, browser-resolved hint, final
 Content-Disposition, suggested hint, final URL basename, then the default.
@@ -83,7 +86,10 @@ native task options so restart does not choose another path.
 
 Media titles append the selected container extension; filename hints replace their
 extension. The media worker retains ownership of collision handling and publication.
-`aria2.getVersion` advertises `downloadFeatures: ["filename-hints"]` so consumers
+`aria2.resolveFilename(url, contentDispositionBytes)` returns a suggested basename
+through the same resolver without creating a task or downloading a body. The second
+parameter contains the original header bytes (integers 0–255, up to 8192 bytes).
+`aria2.getVersion` advertises `filename-hints` and `filename-resolution` in `downloadFeatures` so consumers
 can require this contract before handing off a task. The public aria2 adapter and
 its option/link mappings remain intact.
 

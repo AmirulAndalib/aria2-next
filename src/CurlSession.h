@@ -38,9 +38,7 @@ class DownloadEngine;
 class Option;
 class RequestGroup;
 struct CurlHandle;
-enum class CurlHandlePurpose;
 
-enum class ExistingFileDecision { Complete, Resume, Reject };
 
 class CurlSession {
 public:
@@ -79,13 +77,7 @@ private:
   void activate(const std::shared_ptr<CurlDownload>& download);
   bool createHandle(const std::shared_ptr<CurlDownload>& download,
                     RangeLease lease, bool primary, bool ranged,
-                    CurlHandlePurpose purpose,
                     long addressFamily = CURL_IPRESOLVE_WHATEVER);
-  bool startProbe(const std::shared_ptr<CurlDownload>& download,
-                  CurlHandlePurpose purpose);
-  void finishProbe(const std::shared_ptr<CurlDownload>& download,
-                   CurlHandle* handle, CURLcode result, long responseCode,
-                   curl_off_t reportedLength, curl_off_t reportedFileTime);
   void finish(const std::shared_ptr<CurlDownload>& download, CurlHandle* handle,
               CURLcode result);
   bool checkpoint(const std::shared_ptr<CurlDownload>& download, bool force);
@@ -110,15 +102,14 @@ private:
   void cancelHandles(const std::shared_ptr<CurlDownload>& download);
   void restartFullDownload(const std::shared_ptr<CurlDownload>& download,
                            const char* reason = "range_ignored");
-  static bool openOutput(CurlDownload* download, bool preserveExisting);
+  static bool openOutput(CurlDownload* download, bool preserveExisting,
+                         bool truncateOwned = false);
   static bool resolveOutput(CurlDownload* download, CURL* easy);
   void closeOutput(CurlDownload* download) noexcept;
   static bool retryableFailure(CURLcode result, long responseCode,
                                int fileNotFoundCount, int maxFileNotFound,
                                bool validatedRange, bool applicationConnected);
-  static ExistingFileDecision decideExistingFile(int64_t localLength,
-                                                 int64_t remoteLength,
-                                                 bool rangeSupported);
+
   void rebalanceLimits();
   bool refreshConnectionPoolLimits();
   void eraseTask(CurlDownload* download);

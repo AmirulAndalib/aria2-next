@@ -38,7 +38,6 @@ namespace aria2 {
 class RequestGroup;
 class CurlDownload;
 
-enum class CurlStartMode { Transfer, InspectExisting };
 
 struct CurlEndpoint {
   static long alternateFamily(long family)
@@ -56,8 +55,7 @@ struct CurlEndpoint {
 struct CurlDownloadImpl {
   void eraseHandle(CurlHandle* handle)
   {
-    if (plannerConfigured && !fullDownload &&
-        handle->purpose == CurlHandlePurpose::Payload) {
+    if (plannerConfigured && !fullDownload) {
       idleWorkers.push_back(handle->addressFamily);
     }
     handles.erase(
@@ -99,8 +97,6 @@ struct CurlDownloadImpl {
   int64_t lastRecoveryDownloadLength = 0;
   std::chrono::steady_clock::time_point recoverConnectionsAt{};
   int fileNotFoundCount = 0;
-  int64_t existingLength = 0;
-  CurlStartMode startMode = CurlStartMode::Transfer;
   bool dryRun = false;
   bool http = false;
   bool rangeValidated = false;
@@ -111,7 +107,6 @@ struct CurlDownloadImpl {
   bool stopRequested = false;
   bool createdOutput = false;
   bool filenamePending = false;
-  bool restartForOutput = false;
   Timer lastCheckpoint = Timer::zero();
 };
 

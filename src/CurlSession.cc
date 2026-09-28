@@ -133,13 +133,6 @@ void CurlSession::activate(const std::shared_ptr<CurlDownload>& download)
 {
   constexpr int64_t probeSize = 4_m;
   auto& impl = *download->impl_;
-  if (impl.startMode == CurlStartMode::InspectExisting) {
-    if (!startProbe(download, CurlHandlePurpose::RangeProbe)) {
-      failTask(download, error_code::NETWORK_PROBLEM,
-               "Unable to inspect the existing output file", false);
-    }
-    return;
-  }
   if (impl.planner.complete()) {
     finalize(download, -1);
     return;
@@ -158,8 +151,7 @@ void CurlSession::activate(const std::shared_ptr<CurlDownload>& download)
   }
   rangeEnd = impl.planner.gapEnd(rangeStart, rangeEnd);
   const RangeLease lease{rangeStart, rangeEnd, 0, impl.preferredUriIndex};
-  if (!createHandle(download, lease, true, ranged,
-                    CurlHandlePurpose::Payload)) {
+  if (!createHandle(download, lease, true, ranged)) {
     CurlHandle::fail(download.get(), error_code::NETWORK_PROBLEM,
                      "Unable to start the curl transfer");
     eraseTask(download.get());
@@ -209,7 +201,7 @@ void CurlSession::restartFullDownload(
   }
   cancelHandles(download);
   closeOutput(download.get());
-  store_.removePath(impl.path);
+  store_.remove(CurlHandle::gid(download.get()));
   impl.planner.clear();
   impl.plannerConfigured = false;
   impl.rangeValidated = false;
@@ -220,14 +212,14 @@ void CurlSession::restartFullDownload(
   impl.connectionLimit = 1;
   download->snapshot_.totalLength = 0;
   download->snapshot_.completedLength = 0;
-  if (!openOutput(download.get(), false)) {
+  if (!openOutput(download.get(), false, true)) {
     failTask(download, download->snapshot_.errorCode, download->snapshot_.error,
              false);
     return;
   }
   const RangeLease lease{0, std::numeric_limits<int64_t>::max(), 0,
                          impl.preferredUriIndex};
-  if (!createHandle(download, lease, true, false, CurlHandlePurpose::Payload)) {
+  if (!createHandle(download, lease, true, false)) {
     failTask(download, error_code::NETWORK_PROBLEM,
              "Unable to restart the complete transfer");
     return;
@@ -351,7 +343,7 @@ void CurlSession::stop(const std::shared_ptr<CurlDownload>& download,
 
 void CurlSession::discardRecovery(const std::shared_ptr<CurlDownload>& download)
 {
-  store_.removePath(download->impl_->path);
+  store_.remove(CurlHandle::gid(download.get()));
 }
 
 bool CurlSession::refreshConnectionPoolLimits()

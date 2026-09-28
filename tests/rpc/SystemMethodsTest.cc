@@ -106,6 +106,28 @@ TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testGetVersion")
   REQUIRE_EQ(featureSummary() + ", ", features);
 }
 
+TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.resolveFilenameUsesDownloadNamingRules")
+{
+  ResolveFilenameRpcMethod method;
+  auto req = createReq(ResolveFilenameRpcMethod::getMethodName());
+  req.params->append("https://example.test/download");
+  auto bytes = List::g();
+  for (unsigned char byte : std::string("attachment; filename*=UTF-8''report%20final.zip")) {
+    bytes->append(Integer::g(byte));
+  }
+  req.params->append(std::move(bytes));
+  auto result = method.execute(std::move(req), e_.get());
+  REQUIRE_EQ(0, result.code);
+  REQUIRE_EQ(std::string("report final.zip"), downcast<String>(result.param)->s());
+
+  auto invalid = createReq(ResolveFilenameRpcMethod::getMethodName());
+  invalid.params->append("https://example.test/download");
+  auto invalidBytes = List::g();
+  invalidBytes->append(Integer::g(256));
+  invalid.params->append(std::move(invalidBytes));
+  REQUIRE(method.execute(std::move(invalid), e_.get()).code != 0);
+}
+
 TEST_CASE_FIXTURE(RpcMethodTest, "RpcMethodTest.testGetSessionInfo")
 {
   GetSessionInfoRpcMethod m;

@@ -44,4 +44,23 @@ TEST_CASE("DefaultDiskWriterTest.testUtf8PathAndResume")
   File(path).remove();
 }
 
+TEST_CASE("DefaultDiskWriterTest.exclusiveCreationPreservesExistingBytes")
+{
+  const std::string path = A2_TEST_OUT_DIR "/exclusive-output.bin";
+  File(path).remove();
+  {
+    DefaultDiskWriter writer(path);
+    writer.openNewFile();
+    writer.writeData(reinterpret_cast<const unsigned char*>("original"), 8, 0);
+  }
+  DefaultDiskWriter contender(path);
+  CHECK_THROWS(contender.openNewFile());
+  contender.openExistingFile();
+  std::array<unsigned char, 8> bytes{};
+  REQUIRE_EQ(8, contender.readData(bytes.data(), bytes.size(), 0));
+  CHECK_EQ("original", std::string(bytes.begin(), bytes.end()));
+  contender.closeFile();
+  File(path).remove();
+}
+
 } // namespace aria2

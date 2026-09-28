@@ -43,7 +43,6 @@ public:
             const std::string& path) const;
   bool save(const StreamState& state);
   bool remove(const std::string& gid);
-  bool removePath(const std::string& path);
   const std::string& path() const { return path_; }
 
 private:

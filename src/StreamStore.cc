@@ -251,20 +251,20 @@ bool StreamStore::open()
 
 void StreamStore::pruneMissingFiles()
 {
-  Statement query(db_, "SELECT path FROM downloads");
+  Statement query(db_, "SELECT gid,path FROM downloads");
   if (!query) {
     return;
   }
   std::vector<std::string> missing;
   int queryResult;
   while ((queryResult = step(query.get(), "prune_scan")) == SQLITE_ROW) {
-    auto path = textColumn(query.get(), 0);
+    auto path = textColumn(query.get(), 1);
     if (!path.empty() && !File(path).exists()) {
-      missing.push_back(std::move(path));
+      missing.push_back(textColumn(query.get(), 0));
     }
   }
-  for (const auto& path : missing) {
-    removePath(path);
+  for (const auto& gid : missing) {
+    remove(gid);
   }
   if (!missing.empty()) {
     sqlite3_exec(db_,
@@ -284,8 +284,7 @@ bool StreamStore::load(StreamState& state, const std::string& gid,
       db_,
       "SELECT gid,uri,path,etag,last_modified,total_length,completed_length "
       ",completed_ranges "
-      "FROM downloads WHERE gid=?1 OR path=?2 "
-      "ORDER BY gid=?1 DESC,updated_at DESC LIMIT 1");
+      "FROM downloads WHERE gid=?1 AND path=?2");
   if (!statement || !bindText(statement.get(), 1, gid) ||
       !bindText(statement.get(), 2, path) ||
       step(statement.get(), "load") != SQLITE_ROW) {
@@ -361,16 +360,6 @@ bool StreamStore::remove(const std::string& gid)
   Statement statement(db_, "DELETE FROM downloads WHERE gid=?1");
   return statement && bindText(statement.get(), 1, gid) &&
          step(statement.get(), "remove_gid") == SQLITE_DONE;
-}
-
-bool StreamStore::removePath(const std::string& path)
-{
-  if (!db_) {
-    return false;
-  }
-  Statement statement(db_, "DELETE FROM downloads WHERE path=?1");
-  return statement && bindText(statement.get(), 1, path) &&
-         step(statement.get(), "remove_path") == SQLITE_DONE;
 }
 
 } // namespace aria2

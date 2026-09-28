@@ -136,11 +136,11 @@ bool RequestGroup::downloadFinishedByFileLength()
 
 void RequestGroup::shouldCancelDownloadForSafety()
 {
-  if (option_->getAsBool(PREF_ALLOW_OVERWRITE)) {
-    return;
-  }
   File outfile(getFirstFilePath());
-  if (!outfile.exists()) {
+  const bool inUse = requestGroupMan_ &&
+                     requestGroupMan_->isSameFileBeingDownloaded(this);
+  if (!inUse &&
+      (!outfile.exists() || option_->getAsBool(PREF_ALLOW_OVERWRITE))) {
     return;
   }
 
@@ -186,9 +186,13 @@ void RequestGroup::tryAutoFileRenaming()
     File newfile(newfilename);
     if (!newfile.exists()) {
       downloadContext_->getFirstFileEntry()->setPath(newfile.getPath());
-      return;
+      if (!requestGroupMan_ ||
+          !requestGroupMan_->isSameFileBeingDownloaded(this)) {
+        return;
+      }
     }
   }
+  downloadContext_->getFirstFileEntry()->setPath(filepath);
   throw DOWNLOAD_FAILURE_EXCEPTION2(
       fmt("File renaming failed: %s", getFirstFilePath().c_str()),
       error_code::FILE_RENAMING_FAILED);
